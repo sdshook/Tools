@@ -1,0 +1,167 @@
+{
+  "timestamp": "20251021_205651",
+  "context_extension": {
+    "total_turns": 8,
+    "context_window_limit": 2048,
+    "memory_retrievals": 2,
+    "successful_recalls": 2,
+    "memory_efficiency": 1.0,
+    "total_tokens": 85,
+    "context_windows_needed": 1,
+    "memory_compression_ratio": 0.09411764705882353
+  },
+  "cognitive_awareness": {
+    "scenarios_tested": 5,
+    "empathy_adjustments": [
+      0.25062647461891174,
+      0.1984308362007141,
+      0.08339736610651016,
+      0.22370539605617523,
+      0.05428016558289528
+    ],
+    "confidence_modulations": [
+      0.39954274892807007,
+      0.48651304841041565,
+      0.39065122604370117,
+      0.4302358031272888,
+      0.4085959196090698
+    ],
+    "response_adaptations": [
+      "standard",
+      "standard",
+      "standard",
+      "standard",
+      "standard"
+    ],
+    "emotional_intelligence_score": 0.11533469502584186
+  },
+  "continuous_learning": {
+    "learning_episodes": 13,
+    "valence_progression": [
+      0.0,
+      -0.4,
+      0.06,
+      0.509,
+      0.77635,
+      0.9164525,
+      0.43746787499999995,
+      0.66562018125,
+      0.9498430271875,
+      1.0,
+      1.0,
+      0.55,
+      0.9825
+    ],
+    "confidence_evolution": [
+      0.5,
+      0.4,
+      0.4,
+      0.48000000000000004,
+      0.56,
+      0.64,
+      0.64,
+      0.72,
+      0.7999999999999999,
+      0.8799999999999999,
+      0.9599999999999999,
+      1.0,
+      1.0
+    ],
+    "knowledge_retention": [
+      0.5,
+      0.416,
+      0.42554,
+      0.54075215,
+      0.747612548375,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "performance_improvement": [
+      0.0,
+      -0.08400000000000002,
+      -0.07446000000000003,
+      0.04075214999999999,
+      0.24761254837500002,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "forgetting_resistance": [
+      0.832,
+      0.85108,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "learning_phases": [
+      "baseline",
+      "error_feedback",
+      "error_recognition",
+      "improvement",
+      "validation",
+      "consolidation",
+      "challenge",
+      "context_mastery",
+      "innovation",
+      "expertise",
+      "knowledge_transfer",
+      "transfer_learning",
+      "cross_domain_mastery"
+    ],
+    "valence_recovery_events": 0,
+    "breakthrough_moments": 5,
+    "adaptation_speed": 0.041666666666666664,
+    "final_performance": 1.0,
+    "final_confidence": 1.0,
+    "final_valence": 0.9825,
+    "total_improvement": 0.5,
+    "avg_retention": 0.9735900000000001,
+    "valence_range": 1.4,
+    "learning_momentum": 0.19262371874999998,
+    "progression_quality": 0.6666666666666666
+  },
+  "architectural_advantages": {
+    "architectural_advantages": [
+      "Semantic Processing",
+      "Persistent Memory",
+      "Cognitive Mesh",
+      "Valence Learning",
+      "Cognitive Awareness"
+    ],
+    "efficiency_categories": [
+      "No tokenization overhead",
+      "Unlimited context without reprocessing",
+      "Parallel distributed reasoning",
+      "Continuous adaptation without retraining",
+      "Context-aware processing"
+    ],
+    "advantage_descriptions": [
+      "Direct semantic representation eliminates tokenization/detokenization costs",
+      "PSI eliminates context window limitations and reprocessing overhead",
+      "CMNN enables parallel processing across cognitive nodes",
+      "BDH enables learning from experience without full model retraining",
+      "Self-awareness reduces unnecessary processing and improves relevance"
+    ],
+    "analysis_note": "BHSM represents a fundamentally different architecture from tokenized transformers",
+    "comparison_limitation": "Direct cost comparison is misleading - different processing paradigms",
+    "architectural_paradigm": "Semantic-cognitive vs Token-statistical processing"
+  }
+}
