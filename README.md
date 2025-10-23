@@ -64,7 +64,7 @@ Scripts to automate collection of security posture information for incident tria
 ### Forensic Analysis Tools
 Advanced forensic analysis and AI-assisted investigation tools:
 
-* **[FORAI.py](FORAI/FORAI.py)** - Forensic Operations and Rapid Analysis Intelligence
+* **[FORAI.py](FORAI/FORAI.py)** - An AI project for Computer Forensics
   - End-to-end Windows triage, analysis, and reporting pipeline
   - Automated collection using KAPE and Eric Zimmerman's Tools
   - Deterministic layer: CSV to SQLite with evidence indexing and FTS
