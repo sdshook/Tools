@@ -74,7 +74,7 @@ BHSM addresses these limitations by replacing static context windows with dynami
 
 #### Plasticity Over Context (Pathway Research Integration)
 
-Drawing from recent research on neural plasticity ([Pathway, 2024](https://arxiv.org/pdf/2509.26507)), BHSM implements:
+Drawing from recent research on biologically-inspired neural architectures ([Kosowski et al., 2024](https://arxiv.org/pdf/2509.26507)), BHSM implements:
 
 - **Dynamic Weight Updates**: Model parameters adapt continuously during inference
 - **Selective Plasticity**: Only relevant connections are modified, preserving stable knowledge
@@ -468,9 +468,9 @@ The future of AI lies not in simply scaling existing architectures, but in funda
 
 ## References
 
-1. Pathway Research Team. "Neural Plasticity in Large Language Models." arXiv:2509.26507, 2024. https://arxiv.org/pdf/2509.26507
-2. Anthropic. "Context Management for Large Language Models." Anthropic News, 2024. https://www.anthropic.com/news/context-management
-3. Thinking Machines AI. "Defeating Nondeterminism in LLM Inference." Blog Post, 2024. https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/
-4. Hebb, D.O. "The Organization of Behavior." Wiley, 1949.
-5. Kandel, E.R. "The Molecular Biology of Memory Storage." Science, 2001.
-6. Vaswani, A. et al. "Attention Is All You Need." NIPS, 2017.
+1. Kosowski, A., Uznański, P., Chorowski, J., Stamirowska, Z., & Bartoszkiewicz, M. "The Dragon Hatchling: The Missing Link Between the Transformer and Models of the Brain." arXiv:2509.26507, 2024. https://arxiv.org/pdf/2509.26507
+2. Anthropic. "Managing context on the Claude Developer Platform." Anthropic News, September 29, 2025. https://www.anthropic.com/news/context-management
+3. He, H. and Thinking Machines Lab. "Defeating Nondeterminism in LLM Inference." Thinking Machines Lab: Connectionism, September 2025. https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/
+4. Hebb, D.O. "The Organization of Behavior: A Neuropsychological Theory." John Wiley & Sons, 1949.
+5. Kandel, E.R. "The molecular biology of memory storage: a dialogue between genes and synapses." Science, Vol. 294, Issue 5544, pp. 1030-1038, November 2, 2001.
+6. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.N., Kaiser, Ł., and Polosukhin, I. "Attention Is All You Need." Advances in Neural Information Processing Systems (NIPS), 2017.
