@@ -1,3 +1,5 @@
+-- Chrome / Edge Browser History Compilation 
+-- (c) Shane D Shook, 2025
 CREATE TABLE foundall AS
 
 WITH
@@ -149,4 +151,5 @@ SELECT
   e.initial_url
 FROM events e
 ORDER BY e.event_time, e.event_type
+
 ;
