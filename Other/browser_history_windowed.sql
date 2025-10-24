@@ -1,6 +1,8 @@
 create table found as 
 
 -- =====================================================================
+-- Chrome / Edge Browser History Compilation 
+-- (c) Shane D Shook, 2025
 -- COMPREHENSIVE USER ACTIVITY VIEW (VISITS + DOWNLOADS) AROUND TARGET(S)
 -- Works on Chromium/Chrome/Edge History DBs.
 -- Notes:
@@ -229,3 +231,4 @@ SELECT
 FROM events e
 JOIN target_visits tv ON tv.target_visit_id = e.target_visit_id
 ORDER BY e.target_visit_id, e.event_time, e.event_type;
+
