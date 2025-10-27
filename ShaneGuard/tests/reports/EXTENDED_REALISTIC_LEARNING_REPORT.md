@@ -1,6 +1,6 @@
 # ShaneGuard Extended Realistic Learning Test Results
 
-**Generated:** 2025-10-27 21:14:32 UTC
+**Generated:** 2025-10-27 21:26:45 UTC
 **Test Type:** Extended Realistic Learning (95% Benign / 5% Malicious)
 **Total Events:** 30,000 (950 benign + 50 attacks per iteration × 30 iterations)
 
@@ -14,7 +14,7 @@
 ## Learning Evidence
 
 ### Accuracy Progression
-- **Initial Overall Accuracy**: 36.7%
+- **Initial Overall Accuracy**: 35.9%
 - **Final Overall Accuracy**: NaN%
 - **Improvement**: +NaN%
 
