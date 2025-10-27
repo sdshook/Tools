@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use serde::{Serialize, Deserialize};
 use tracing::{info, debug};
-use uuid::Uuid;
+
 
 use crate::memory_engine::bdh_memory::{BdhMemory, EMBED_DIM};
 use crate::memory_engine::psi_index::{PsiIndex, PsiEntry};
@@ -109,17 +109,22 @@ impl HostMeshCognition {
                     // Check if this pattern is novel for the target service
                     let max_sim = bdh.max_similarity(vector);
                     if max_sim < 0.7 { // Novel pattern threshold
-                        let trace_id = bdh.add_trace(*vector, dampened_valence);
+                        let _trace_id = bdh.add_trace(*vector, dampened_valence);
                         debug!("Cross-service learning: {} -> {} (valence: {:.3}, similarity: {:.3})", 
                                source_service_id, service_id, dampened_valence, max_sim);
                         propagated_count += 1;
                     } else {
                         // Update existing similar traces
-                        let similar = bdh.retrieve_similar(vector, 3);
-                        for (trace, similarity) in similar {
-                            if similarity > 0.7 {
-                                bdh.reward_update(&trace.id, dampened_reward * similarity, 0.05);
-                            }
+                        let similar_traces: Vec<(String, f32)> = {
+                            let similar = bdh.retrieve_similar(vector, 3);
+                            similar.into_iter()
+                                .filter(|(_, similarity)| *similarity > 0.7)
+                                .map(|(trace, similarity)| (trace.id.clone(), similarity))
+                                .collect()
+                        };
+                        
+                        for (trace_id, similarity) in similar_traces {
+                            bdh.reward_update(&trace_id, dampened_reward * similarity, 0.05);
                         }
                     }
                 }
@@ -137,9 +142,10 @@ impl HostMeshCognition {
             if let Ok(bdh) = service.bdh_memory.try_lock() {
                 let candidates = bdh.promote_candidates(promote_threshold);
                 
+                let candidate_count = candidates.len();
                 if !candidates.is_empty() {
                     if let Ok(mut psi) = self.shared_psi.try_lock() {
-                        for trace in candidates {
+                        for trace in &candidates {
                             let psi_entry = PsiEntry {
                                 id: format!("{}_{}", source_service_id, trace.id),
                                 vec: trace.vec,
@@ -154,7 +160,7 @@ impl HostMeshCognition {
                             psi.add(psi_entry);
                         }
                         info!("Consolidated {} patterns from {} to shared PSI", 
-                              candidates.len(), source_service_id);
+                              candidate_count, source_service_id);
                     }
                 }
             }

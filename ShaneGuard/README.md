@@ -10,8 +10,8 @@ This project introduces a novel adaptive cybersecurity web service protection ag
 
 ### The Unique Combination
 The system fuses four key components that have rarely been integrated:
-- **Bidirectional Hebbian Learning**: Weight updates propagate both forward and backward between nodes, enabling reciprocal reinforcement
-- **Reinforcement Learning Signals**: Reward/punishment feedback modulates Hebbian weight changes in real-time
+- **True Bidirectional Hebbian Learning**: "Neurons that fire together, wire together" - explicit connection weights between memory traces that strengthen with co-activation and reward
+- **Reinforcement-Modulated Plasticity**: Reward/punishment signals directly modulate Hebbian learning rates and connection strengths in real-time
 - **Persistent Semantic Index (PSI)**: Long-term memory structure storing reinforced associations across unlimited time horizons
 - **Host-Based Mesh Cognition**: Cross-service learning between web processes on the same host, enabling collaborative defense
 
@@ -19,11 +19,13 @@ The system fuses four key components that have rarely been integrated:
 
 ### Learning Mechanism
 - **Host-standalone learning** on each endpoint without cloud or network dependencies
+- **True Hebbian Plasticity**: Each memory trace maintains bidirectional connection weights that strengthen when patterns co-occur with positive rewards
+- **Reinforcement-Modulated Learning**: Reward signals directly scale Hebbian learning rates - stronger rewards create stronger synaptic changes
 - **Multi-service Hebbian memory** with individual BDH instances per web service (Apache, NGINX, IIS)
 - **Cross-service knowledge sharing** where attack patterns learned by one service protect others on the same host
 - **Shared long-term memory** (PSI) consolidating significant patterns across all host services
 - **Collective valence control** coordinating aggression levels across all web services
-- **Contextual bandit policy** for action selection with memory updates from observed rewards
+- **Enhanced retrieval** using Hebbian connection weights to boost similarity matching
 
 ### Key Components
 1. **Featurizer**: Produces L2-normalized semantic vectors representing per-process behavior windows including:
@@ -151,12 +153,20 @@ ShaneGuard implements a novel **host-based mesh cognition** system adapted from 
 - **Resource Efficiency**: Shared long-term memory, distributed short-term learning
 - **Coordinated MTD**: Moving Target Defense strategies across all host services
 
-### **Learning Flow Example:**
-1. **Apache** detects deserialization attack → negative valence in BDH-A
-2. **Mesh Signal** propagates pattern to NGINX and IIS with dampened strength
-3. **Shared PSI** consolidates significant attack patterns from all services
-4. **Host Valence** adjusts collective aggression based on overall threat level
-5. **Future Attack** on NGINX already has defensive knowledge from Apache's experience
+### **Reinforced Hebbian Learning Flow:**
+1. **Pattern Detection**: Apache detects deserialization attack → creates memory trace with negative valence
+2. **Hebbian Connection Formation**: New trace forms bidirectional connections with similar existing patterns
+3. **Reinforcement Modulation**: Negative reward strengthens connections to defensive responses, weakens connections to permissive responses
+4. **Cross-Service Propagation**: Pattern propagates to NGINX and IIS with dampened Hebbian weights
+5. **Synaptic Strengthening**: Repeated co-activation of attack pattern + defensive response strengthens their Hebbian connection
+6. **Enhanced Retrieval**: Future similar attacks benefit from strengthened Hebbian connections for faster, more accurate recognition
+
+### **True Hebbian Implementation:**
+- **Connection Weights**: Explicit bidirectional weights between memory traces (not just similarity)
+- **Co-activation Rule**: Δw = η × activation_pre × activation_post × reward_modulation
+- **Synaptic Decay**: Unused connections gradually weaken to prevent memory saturation
+- **Reinforcement Scaling**: Reward magnitude directly modulates learning rate and connection strength
+- **Bidirectional Propagation**: Weight updates flow both forward and backward between connected traces
 
 ## Impact
 

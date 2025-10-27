@@ -30,6 +30,9 @@ uuid = { version = "1.0", features = ["v4"] }
 # Random number generation
 rand = "0.8"
 
+# Date/time handling
+chrono = { version = "0.4", features = ["serde"] }
+
 [dev-dependencies]
 # Testing and development dependencies
 

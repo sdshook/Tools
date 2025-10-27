@@ -56,7 +56,21 @@ async fn main() -> Result<()> {
                 if let Ok(m) = mesh_clone.try_lock() {
                     let stats = m.get_service_stats();
                     let aggression = m.get_host_aggression();
-                    info!("Host Status - Aggression: {:.3}, Services: {:?}", aggression, stats);
+                    let services = m.get_active_services();
+                    
+                    // Get Hebbian learning stats for each service
+                    let mut hebbian_summary = Vec::new();
+                    for service_id in &services {
+                        if let Some(service_memory) = m.get_service_memory(service_id) {
+                            if let Ok(bdh) = service_memory.try_lock() {
+                                let (conn_count, avg_weight, _avg_self) = bdh.get_hebbian_stats();
+                                hebbian_summary.push(format!("{}:{}c/{:.2}w", service_id, conn_count, avg_weight));
+                            }
+                        }
+                    }
+                    
+                    info!("Host Status - Aggression: {:.3} | Services: {:?} | Hebbian: [{}]", 
+                          aggression, stats, hebbian_summary.join(", "));
                 }
             }
         });

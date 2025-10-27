@@ -1,6 +1,7 @@
 
 use rand::Rng;
 
+#[derive(Debug)]
 pub enum Action {
     Log,
     Notify,

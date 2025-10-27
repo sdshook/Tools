@@ -88,7 +88,7 @@ pub async fn start_simulator(bdh: Arc<Mutex<BdhMemory>>, psi: Arc<Mutex<PsiIndex
         }
 
         // Simplified reward logic
-        let write_remote = telemetry["write_remote"].as_i64().unwrap() as i32;
+        let _write_remote = telemetry["write_remote"].as_i64().unwrap() as i32;
         let mut reward = 0.0_f32;
         if telemetry["admin_api_flag"].as_i64().unwrap() == 1 && action_str=="isolate" {
             reward = 1.0;
@@ -104,10 +104,17 @@ pub async fn start_simulator(bdh: Arc<Mutex<BdhMemory>>, psi: Arc<Mutex<PsiIndex
                 let init_val = reward.max(-1.0).min(1.0);
                 let _id = b.add_trace(qarr, init_val);
             } else {
-                let sims = b.retrieve_similar(&qarr, 5);
-                for (t, s) in sims.iter().take(5) {
-                    let scaled = reward * *s;
-                    b.reward_update(&t.id, scaled, cfg.eta);
+                let similar_traces: Vec<(String, f32)> = {
+                    let sims = b.retrieve_similar(&qarr, 5);
+                    sims.into_iter()
+                        .take(5)
+                        .map(|(trace, similarity)| (trace.id.clone(), similarity))
+                        .collect()
+                };
+                
+                for (trace_id, similarity) in similar_traces {
+                    let scaled = reward * similarity;
+                    b.reward_update(&trace_id, scaled, cfg.eta);
                 }
             }
             let prom = b.promote_candidates(cfg.promote_threshold);
@@ -228,9 +235,10 @@ pub async fn start_multi_service_simulator(mesh: Arc<Mutex<HostMeshCognition>>) 
         for i in 0..vec.len().min(32) { qarr[i] = vec[i]; }
         
         // Process through mesh cognition system
-        if let Ok(mut m) = mesh.try_lock() {
-            // Get service memory
-            if let Some(service_memory) = m.get_service_memory(service_id) {
+        let (service_memory_opt, action_str_owned, top_sim, avg_valence, conn_count, avg_conn_weight, avg_self_weight) = {
+            if let Ok(m) = mesh.try_lock() {
+                // Get service memory
+                if let Some(service_memory) = m.get_service_memory(service_id) {
                 let (top_sim, avg_valence) = {
                     let bdh = service_memory.lock().unwrap();
                     let sims = bdh.retrieve_similar(&qarr, 5);
@@ -248,7 +256,7 @@ pub async fn start_multi_service_simulator(mesh: Arc<Mutex<HostMeshCognition>>) 
                 let action = policy::choose_action(top_sim, avg_valence, host_aggression, 
                                                  cfg.beta, cfg.gamma, cfg.eps_explore);
                 
-                let pid = telemetry["pid"].as_i64().unwrap() as i32;
+                let _pid = telemetry["pid"].as_i64().unwrap() as i32;
                 let action_str = match action {
                     policy::Action::Log => "log",
                     policy::Action::Notify => "notify", 
@@ -258,63 +266,85 @@ pub async fn start_multi_service_simulator(mesh: Arc<Mutex<HostMeshCognition>>) 
                     policy::Action::SnapshotAndKill => "snapshot",
                 };
                 
-                info!("Service: {} | PID: {} | Sim: {:.3} | Valence: {:.3} | Action: {} | Suspicious: {}", 
-                      service_id, pid, top_sim, avg_valence, action_str, is_suspicious);
+                // Get Hebbian learning stats
+                let (conn_count, avg_conn_weight, avg_self_weight) = {
+                    let bdh = service_memory.lock().unwrap();
+                    bdh.get_hebbian_stats()
+                };
                 
-                // Apply mitigation
-                let _ = actuators::apply_nginx_mitigation(pid, action_str).await;
-                if action_str == "snapshot" {
+                    (Some(service_memory.clone()), action_str.to_string(), top_sim, avg_valence, conn_count, avg_conn_weight, avg_self_weight)
+                } else {
+                    (None, "log".to_string(), 0.0, 0.0, 0, 0.0, 0.0)
+                }
+            } else {
+                (None, "log".to_string(), 0.0, 0.0, 0, 0.0, 0.0)
+            }
+        };
+        
+        if let Some(service_memory_clone) = service_memory_opt {
+            let pid = telemetry["pid"].as_i64().unwrap() as i32;
+            info!("Service: {} | PID: {} | Sim: {:.3} | Valence: {:.3} | Action: {} | Suspicious: {} | Hebbian: {}conn/{:.3}w/{:.3}sw", 
+                  service_id, pid, top_sim, avg_valence, &action_str_owned, is_suspicious, 
+                  conn_count, avg_conn_weight, avg_self_weight);
+            
+            // Apply mitigation
+            let _ = actuators::apply_nginx_mitigation(pid, &action_str_owned).await;
+                if &action_str_owned == "snapshot" {
                     let _ = evidence::snapshot_evidence(pid, "mesh_policy_snapshot").await;
                 }
                 
                 // Calculate reward based on action appropriateness
-                let mut reward = 0.0_f32;
-                if is_suspicious {
-                    reward = match action_str {
+                let reward: f32 = if is_suspicious {
+                    match action_str_owned.as_str() {
                         "isolate" | "snapshot" => 1.0,
                         "throttle" => 0.5,
                         "notify" => 0.2,
                         "log" => -0.3,
                         _ => 0.0,
-                    };
+                    }
                 } else {
-                    reward = match action_str {
+                    match action_str_owned.as_str() {
                         "log" => 0.1,
                         "notify" => -0.1,
                         "throttle" => -0.5,
                         "isolate" | "snapshot" => -1.0,
                         _ => 0.0,
-                    };
-                }
+                    }
+                };
                 
                 // Update service memory
                 {
-                    let mut bdh = service_memory.lock().unwrap();
+                    let mut bdh = service_memory_clone.lock().unwrap();
                     let maxsim = bdh.max_similarity(&qarr);
                     if maxsim < cfg.tau_novel {
                         let init_val = reward.max(-1.0).min(1.0);
                         let _id = bdh.add_trace(qarr, init_val);
                     } else {
-                        let sims = bdh.retrieve_similar(&qarr, 5);
-                        for (t, s) in sims.iter().take(5) {
-                            let scaled = reward * *s;
-                            bdh.reward_update(&t.id, scaled, cfg.eta);
+                        let similar_traces: Vec<(String, f32)> = {
+                            let sims = bdh.retrieve_similar(&qarr, 5);
+                            sims.into_iter()
+                                .take(5)
+                                .map(|(trace, similarity)| (trace.id.clone(), similarity))
+                                .collect()
+                        };
+                        
+                        for (trace_id, similarity) in similar_traces {
+                            let scaled = reward * similarity;
+                            bdh.reward_update(&trace_id, scaled, cfg.eta);
                         }
                     }
                 }
                 
-                // Cross-service learning through mesh cognition
+                // Cross-service learning through mesh cognition (reacquire lock)
                 if reward.abs() > 0.3 { // Only propagate significant experiences
-                    m.cross_service_learning(service_id, &qarr, avg_valence, reward);
+                    if let Ok(m) = mesh.try_lock() {
+                        m.cross_service_learning(service_id, &qarr, avg_valence, reward);
+                        m.consolidate_to_psi(service_id, cfg.promote_threshold);
+                        m.update_host_aggression(reward);
+                    }
                 }
-                
-                // Consolidate to PSI if needed
-                m.consolidate_to_psi(service_id, cfg.promote_threshold);
-                
-                // Update host-level aggression
-                m.update_host_aggression(reward);
-            }
         }
         
         sleep(Duration::from_secs(2)).await;
     }
+}
