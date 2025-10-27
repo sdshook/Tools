@@ -13,6 +13,8 @@ pub struct Config {
     pub beta: f32,
     pub gamma: f32,
     pub eps_explore: f32,
+    pub mesh_learning_rate: f32,
+    pub cross_service_threshold: f32,
 }
 
 impl Config {
@@ -28,6 +30,8 @@ impl Config {
             beta: 0.7,
             gamma: 0.3,
             eps_explore: 0.02,
+            mesh_learning_rate: 0.6,
+            cross_service_threshold: 0.3,
         }
     }
 }

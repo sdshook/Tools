@@ -14,7 +14,7 @@ pub struct MemoryTrace {
 }
 
 pub struct BdhMemory {
-    traces: Vec<MemoryTrace>,
+    pub traces: Vec<MemoryTrace>,
 }
 
 impl BdhMemory {
@@ -49,6 +49,31 @@ impl BdhMemory {
 
     pub fn max_similarity(&self, q: &[f32; EMBED_DIM]) -> f32 {
         self.traces.iter().map(|t| cosine_sim(&t.vec, q)).fold(0.0, |a,b| a.max(b))
+    }
+
+    pub fn add_mesh_trace(&mut self, vec: [f32; EMBED_DIM], valence: f32) -> String {
+        let id = format!("mesh_{}", Uuid::new_v4().to_string()[..8].to_string());
+        let trace = MemoryTrace { 
+            id: id.clone(), 
+            vec, 
+            valence, 
+            uses: 1, 
+            cum_reward: valence 
+        };
+        self.traces.push(trace);
+        id
+    }
+
+    pub fn get_trace_count(&self) -> usize {
+        self.traces.len()
+    }
+
+    pub fn get_average_valence(&self) -> f32 {
+        if self.traces.is_empty() {
+            0.0
+        } else {
+            self.traces.iter().map(|t| t.valence).sum::<f32>() / self.traces.len() as f32
+        }
     }
 }
 
