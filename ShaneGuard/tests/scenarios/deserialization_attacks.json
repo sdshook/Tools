@@ -1,0 +1,107 @@
+[
+  {
+    "name": "Java Deserialization RCE",
+    "description": "Malicious Java serialized object attempting remote code execution",
+    "telemetry": {
+      "pid": 1001,
+      "request_size": 8192,
+      "content_type": "application/x-java-serialized-object",
+      "payload_entropy": 7.8,
+      "suspicious_headers": 3,
+      "memory_allocation": 65536,
+      "execution_time": 2500,
+      "network_connections": 2,
+      "file_operations": 5,
+      "registry_access": 1,
+      "admin_api_flag": 1,
+      "write_remote": 1,
+      "endpoint_rarity": 0.95
+    },
+    "expected_threat_level": "high",
+    "attack_vector": "deserialization"
+  },
+  {
+    "name": ".NET BinaryFormatter Exploit",
+    "description": "Malicious .NET BinaryFormatter payload for privilege escalation",
+    "telemetry": {
+      "pid": 1002,
+      "request_size": 4096,
+      "content_type": "application/octet-stream",
+      "payload_entropy": 8.2,
+      "suspicious_headers": 2,
+      "memory_allocation": 32768,
+      "execution_time": 1800,
+      "network_connections": 1,
+      "file_operations": 8,
+      "registry_access": 3,
+      "admin_api_flag": 1,
+      "write_remote": 0,
+      "endpoint_rarity": 0.88
+    },
+    "expected_threat_level": "high",
+    "attack_vector": "deserialization"
+  },
+  {
+    "name": "Python Pickle Code Injection",
+    "description": "Malicious Python pickle object with embedded code execution",
+    "telemetry": {
+      "pid": 1003,
+      "request_size": 2048,
+      "content_type": "application/python-pickle",
+      "payload_entropy": 7.5,
+      "suspicious_headers": 1,
+      "memory_allocation": 16384,
+      "execution_time": 3200,
+      "network_connections": 3,
+      "file_operations": 12,
+      "registry_access": 0,
+      "admin_api_flag": 1,
+      "write_remote": 1,
+      "endpoint_rarity": 0.92
+    },
+    "expected_threat_level": "high",
+    "attack_vector": "deserialization"
+  },
+  {
+    "name": "PHP Unserialize Object Injection",
+    "description": "PHP object injection via unserialize() with magic methods",
+    "telemetry": {
+      "pid": 1004,
+      "request_size": 1024,
+      "content_type": "application/x-www-form-urlencoded",
+      "payload_entropy": 6.8,
+      "suspicious_headers": 4,
+      "memory_allocation": 8192,
+      "execution_time": 1200,
+      "network_connections": 1,
+      "file_operations": 6,
+      "registry_access": 0,
+      "admin_api_flag": 1,
+      "write_remote": 1,
+      "endpoint_rarity": 0.85
+    },
+    "expected_threat_level": "medium",
+    "attack_vector": "deserialization"
+  },
+  {
+    "name": "Node.js JSON Prototype Pollution",
+    "description": "JSON deserialization leading to prototype pollution attack",
+    "telemetry": {
+      "pid": 1005,
+      "request_size": 512,
+      "content_type": "application/json",
+      "payload_entropy": 5.9,
+      "suspicious_headers": 2,
+      "memory_allocation": 4096,
+      "execution_time": 800,
+      "network_connections": 0,
+      "file_operations": 3,
+      "registry_access": 0,
+      "admin_api_flag": 1,
+      "write_remote": 0,
+      "endpoint_rarity": 0.78
+    },
+    "expected_threat_level": "medium",
+    "attack_vector": "deserialization"
+  }
+]

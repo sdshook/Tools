@@ -40,6 +40,10 @@ chrono = { version = "0.4", features = ["serde"] }
 name = "shaneguard"
 path = "src/main.rs"
 
+[[bin]]
+name = "vulnerability_tests"
+path = "src/bin/vulnerability_tests.rs"
+
 [profile.release]
 opt-level = 3
 lto = true

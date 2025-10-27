@@ -1,0 +1,170 @@
+[
+  {
+    "name": "SQL Injection Union Attack",
+    "description": "SQL injection using UNION to extract sensitive data",
+    "telemetry": {
+      "pid": 1001,
+      "request_size": 512,
+      "content_type": "application/x-www-form-urlencoded",
+      "payload_entropy": 4.8,
+      "suspicious_headers": 2,
+      "memory_allocation": 4096,
+      "execution_time": 2800,
+      "network_connections": 1,
+      "file_operations": 0,
+      "registry_access": 0,
+      "admin_api_flag": 1,
+      "write_remote": 1,
+      "endpoint_rarity": 0.75
+    },
+    "expected_threat_level": "high",
+    "attack_vector": "sql_injection"
+  },
+  {
+    "name": "Cross-Site Scripting (XSS)",
+    "description": "Stored XSS payload attempting session hijacking",
+    "telemetry": {
+      "pid": 1002,
+      "request_size": 1024,
+      "content_type": "text/html",
+      "payload_entropy": 5.2,
+      "suspicious_headers": 4,
+      "memory_allocation": 2048,
+      "execution_time": 800,
+      "network_connections": 2,
+      "file_operations": 1,
+      "registry_access": 0,
+      "admin_api_flag": 0,
+      "write_remote": 1,
+      "endpoint_rarity": 0.65
+    },
+    "expected_threat_level": "medium",
+    "attack_vector": "xss"
+  },
+  {
+    "name": "Remote Code Execution via File Upload",
+    "description": "Malicious file upload bypassing extension filters",
+    "telemetry": {
+      "pid": 1003,
+      "request_size": 8192,
+      "content_type": "multipart/form-data",
+      "payload_entropy": 7.9,
+      "suspicious_headers": 1,
+      "memory_allocation": 16384,
+      "execution_time": 4200,
+      "network_connections": 3,
+      "file_operations": 15,
+      "registry_access": 2,
+      "admin_api_flag": 1,
+      "write_remote": 1,
+      "endpoint_rarity": 0.92
+    },
+    "expected_threat_level": "critical",
+    "attack_vector": "file_upload_rce"
+  },
+  {
+    "name": "XML External Entity (XXE) Attack",
+    "description": "XXE attack attempting to read local files",
+    "telemetry": {
+      "pid": 1004,
+      "request_size": 2048,
+      "content_type": "application/xml",
+      "payload_entropy": 6.1,
+      "suspicious_headers": 3,
+      "memory_allocation": 8192,
+      "execution_time": 1800,
+      "network_connections": 1,
+      "file_operations": 8,
+      "registry_access": 0,
+      "admin_api_flag": 1,
+      "write_remote": 0,
+      "endpoint_rarity": 0.83
+    },
+    "expected_threat_level": "high",
+    "attack_vector": "xxe"
+  },
+  {
+    "name": "Server-Side Request Forgery (SSRF)",
+    "description": "SSRF attack targeting internal services",
+    "telemetry": {
+      "pid": 1005,
+      "request_size": 256,
+      "content_type": "application/json",
+      "payload_entropy": 4.5,
+      "suspicious_headers": 2,
+      "memory_allocation": 1024,
+      "execution_time": 5000,
+      "network_connections": 5,
+      "file_operations": 2,
+      "registry_access": 0,
+      "admin_api_flag": 1,
+      "write_remote": 1,
+      "endpoint_rarity": 0.88
+    },
+    "expected_threat_level": "high",
+    "attack_vector": "ssrf"
+  },
+  {
+    "name": "Command Injection via Parameter",
+    "description": "OS command injection through vulnerable parameter",
+    "telemetry": {
+      "pid": 1006,
+      "request_size": 128,
+      "content_type": "text/plain",
+      "payload_entropy": 3.8,
+      "suspicious_headers": 1,
+      "memory_allocation": 512,
+      "execution_time": 6500,
+      "network_connections": 2,
+      "file_operations": 12,
+      "registry_access": 3,
+      "admin_api_flag": 1,
+      "write_remote": 1,
+      "endpoint_rarity": 0.94
+    },
+    "expected_threat_level": "critical",
+    "attack_vector": "command_injection"
+  },
+  {
+    "name": "Directory Traversal Attack",
+    "description": "Path traversal attempting to access sensitive files",
+    "telemetry": {
+      "pid": 1001,
+      "request_size": 64,
+      "content_type": "text/plain",
+      "payload_entropy": 2.9,
+      "suspicious_headers": 0,
+      "memory_allocation": 256,
+      "execution_time": 1200,
+      "network_connections": 0,
+      "file_operations": 5,
+      "registry_access": 0,
+      "admin_api_flag": 1,
+      "write_remote": 0,
+      "endpoint_rarity": 0.72
+    },
+    "expected_threat_level": "medium",
+    "attack_vector": "directory_traversal"
+  },
+  {
+    "name": "LDAP Injection Attack",
+    "description": "LDAP injection for authentication bypass",
+    "telemetry": {
+      "pid": 1002,
+      "request_size": 256,
+      "content_type": "application/x-www-form-urlencoded",
+      "payload_entropy": 4.1,
+      "suspicious_headers": 1,
+      "memory_allocation": 1024,
+      "execution_time": 2200,
+      "network_connections": 1,
+      "file_operations": 1,
+      "registry_access": 1,
+      "admin_api_flag": 1,
+      "write_remote": 0,
+      "endpoint_rarity": 0.86
+    },
+    "expected_threat_level": "high",
+    "attack_vector": "ldap_injection"
+  }
+]

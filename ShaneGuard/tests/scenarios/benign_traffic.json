@@ -1,0 +1,107 @@
+[
+  {
+    "name": "Normal User Login",
+    "description": "Legitimate user authentication request",
+    "telemetry": {
+      "pid": 1001,
+      "request_size": 256,
+      "content_type": "application/x-www-form-urlencoded",
+      "payload_entropy": 3.2,
+      "suspicious_headers": 0,
+      "memory_allocation": 1024,
+      "execution_time": 450,
+      "network_connections": 1,
+      "file_operations": 1,
+      "registry_access": 0,
+      "admin_api_flag": 0,
+      "write_remote": 0,
+      "endpoint_rarity": 0.05
+    },
+    "expected_threat_level": "none",
+    "attack_vector": "benign"
+  },
+  {
+    "name": "Static Resource Request",
+    "description": "Request for CSS/JS/image files",
+    "telemetry": {
+      "pid": 1002,
+      "request_size": 64,
+      "content_type": "text/css",
+      "payload_entropy": 1.8,
+      "suspicious_headers": 0,
+      "memory_allocation": 512,
+      "execution_time": 120,
+      "network_connections": 0,
+      "file_operations": 1,
+      "registry_access": 0,
+      "admin_api_flag": 0,
+      "write_remote": 0,
+      "endpoint_rarity": 0.01
+    },
+    "expected_threat_level": "none",
+    "attack_vector": "benign"
+  },
+  {
+    "name": "API Data Retrieval",
+    "description": "Legitimate API call for user data",
+    "telemetry": {
+      "pid": 1003,
+      "request_size": 128,
+      "content_type": "application/json",
+      "payload_entropy": 2.8,
+      "suspicious_headers": 1,
+      "memory_allocation": 2048,
+      "execution_time": 680,
+      "network_connections": 1,
+      "file_operations": 2,
+      "registry_access": 0,
+      "admin_api_flag": 0,
+      "write_remote": 0,
+      "endpoint_rarity": 0.15
+    },
+    "expected_threat_level": "none",
+    "attack_vector": "benign"
+  },
+  {
+    "name": "Form Submission",
+    "description": "Normal form data submission",
+    "telemetry": {
+      "pid": 1004,
+      "request_size": 512,
+      "content_type": "multipart/form-data",
+      "payload_entropy": 3.5,
+      "suspicious_headers": 0,
+      "memory_allocation": 4096,
+      "execution_time": 890,
+      "network_connections": 1,
+      "file_operations": 3,
+      "registry_access": 0,
+      "admin_api_flag": 0,
+      "write_remote": 0,
+      "endpoint_rarity": 0.25
+    },
+    "expected_threat_level": "none",
+    "attack_vector": "benign"
+  },
+  {
+    "name": "Search Query",
+    "description": "User performing search operation",
+    "telemetry": {
+      "pid": 1005,
+      "request_size": 192,
+      "content_type": "application/x-www-form-urlencoded",
+      "payload_entropy": 2.9,
+      "suspicious_headers": 0,
+      "memory_allocation": 1024,
+      "execution_time": 1200,
+      "network_connections": 1,
+      "file_operations": 2,
+      "registry_access": 0,
+      "admin_api_flag": 0,
+      "write_remote": 0,
+      "endpoint_rarity": 0.35
+    },
+    "expected_threat_level": "none",
+    "attack_vector": "benign"
+  }
+]
