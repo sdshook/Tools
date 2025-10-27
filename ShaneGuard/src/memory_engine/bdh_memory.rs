@@ -1,4 +1,9 @@
 
+/// BDH (Bidirectional Hebbian) Memory System
+/// Core component of RHLS (Reinforced Hebbian Learning System) that works with
+/// PSI (Persistent Semantic Index) to enable experiential learning.
+/// CMNN provides synaptic signal inputs with behavioral reward adjustments.
+
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 

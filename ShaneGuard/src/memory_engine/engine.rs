@@ -1,8 +1,18 @@
+/// RHLS (Reinforced Hebbian Learning System) Memory Engine
+/// 
+/// Integrates BDH (Bidirectional Hebbian) memory with PSI (Persistent Semantic Index)
+/// to enable experiential learning beyond context window constraints.
+/// 
+/// Components:
+/// - BDH: Core bidirectional Hebbian learning with synaptic plasticity
+/// - PSI: Persistent semantic index for long-term memory caching
+/// - CMNN: Provides synaptic signal inputs with behavioral reward adjustments
+
 use crate::memory_engine::{bdh_memory::*, psi_index::*};
 use crate::config::Config;
 use anyhow::Result;
 
-/// Enhanced Memory Engine that integrates BDH memory with PSI management
+/// RHLS Memory Engine - Integrates BDH memory with PSI management
 pub struct MemoryEngine {
     pub bdh_memory: BdhMemory,
     pub psi_index: PsiIndex,

@@ -1,4 +1,8 @@
 
+/// PSI (Persistent Semantic Index) - Memory cache for BDH that avoids context window constraints
+/// and enables experiential learning in RHLS (Reinforced Hebbian Learning System)
+/// where CMNN provides synaptic signal inputs with behavioral reward adjustments.
+
 use serde::{Serialize, Deserialize};
 
 pub const EMBED_DIM: usize = 32;
@@ -12,6 +16,9 @@ pub struct PsiEntry {
     pub tags: Vec<String>,
 }
 
+/// PSI (Persistent Semantic Index) - Core memory cache structure
+/// Provides persistent storage for BDH memory patterns to enable
+/// experiential learning beyond context window limitations
 pub struct PsiIndex {
     entries: Vec<PsiEntry>,
     max_entries: usize,

@@ -33,7 +33,7 @@ fn main() -> anyhow::Result<()> {
     println!("   • Initial Attack Ratio: {:.0}%", attack_ratio * 100.0);
     println!("   • Curriculum Phases: {}", curriculum_phases);
     println!("   • Enhanced Features: Temporal + Behavioral Analysis");
-    println!("   • Memory Management: PSI-guided with dynamic pruning");
+    println!("   • Memory Management: PSI (Persistent Semantic Index) guided with dynamic pruning");
     println!("");
     
     for iteration in 1..=total_iterations {
