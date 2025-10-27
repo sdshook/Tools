@@ -29,6 +29,15 @@ pub struct BdhMemory {
     pub hebbian_learning_rate: f32,
     pub decay_rate: f32,
     pub activation_threshold: f32,
+    // Enhanced learning parameters
+    pub max_memory_size: usize,
+    pub memory_pressure_threshold: f32,
+    pub learning_rate_decay: f32,
+    pub adaptive_threshold: f32,
+    pub connection_pruning_threshold: f32,
+    pub temporal_window: usize,
+    pub meta_learning_rate: f32,
+    pub performance_history: Vec<f32>,
 }
 
 impl BdhMemory {
@@ -39,10 +48,22 @@ impl BdhMemory {
             hebbian_learning_rate: 0.05,  // Increased from 0.01 for faster learning
             decay_rate: 0.002,            // Slightly increased decay to prevent saturation
             activation_threshold: 0.3,    // Lowered from 0.5 for more connections
+            // Enhanced learning parameters
+            max_memory_size: 1000,        // Dynamic memory limit
+            memory_pressure_threshold: 0.8, // Start pruning at 80% capacity
+            learning_rate_decay: 0.995,   // Gradual learning rate decay
+            adaptive_threshold: 0.3,      // Adaptive activation threshold
+            connection_pruning_threshold: 0.01, // Prune weak connections
+            temporal_window: 50,          // Window for temporal pattern analysis
+            meta_learning_rate: 0.001,    // Rate for meta-parameter adaptation
+            performance_history: Vec::new(),
         } 
     }
 
     pub fn add_trace(&mut self, vec: [f32; EMBED_DIM], valence: f32) -> String {
+        // Check memory pressure and perform PSI-guided pruning if needed
+        self.manage_memory_pressure();
+        
         let id = Uuid::new_v4().to_string();
         let trace = MemoryTrace { 
             id: id.clone(), 
@@ -58,6 +79,10 @@ impl BdhMemory {
         self.create_hebbian_connections(&id, &vec, valence);
         
         self.traces.push(trace);
+        
+        // Adaptive threshold adjustment based on memory growth
+        self.adapt_learning_parameters();
+        
         id
     }
 
@@ -193,7 +218,7 @@ impl BdhMemory {
         }
     }
     
-    fn create_hebbian_connections(&mut self, new_trace_id: &str, new_vec: &[f32; EMBED_DIM], _valence: f32) {
+    fn create_hebbian_connections_legacy(&mut self, new_trace_id: &str, new_vec: &[f32; EMBED_DIM], _valence: f32) {
         
         // Create connections with existing traces that are sufficiently similar
         for existing_trace in &self.traces {
@@ -285,6 +310,255 @@ impl BdhMemory {
         connections.sort_by(|a, b| b.weight.abs().partial_cmp(&a.weight.abs()).unwrap());
         connections.into_iter().take(limit).collect()
     }
+    
+    /// PSI-guided memory management to prevent exhaustion
+    fn manage_memory_pressure(&mut self) {
+        let memory_usage = self.traces.len() as f32 / self.max_memory_size as f32;
+        
+        if memory_usage > self.memory_pressure_threshold {
+            // Calculate memory pressure level
+            let pressure_level = (memory_usage - self.memory_pressure_threshold) / 
+                                (1.0 - self.memory_pressure_threshold);
+            
+            // Prune least useful traces based on multiple criteria
+            self.prune_memory_traces(pressure_level);
+            
+            // Prune weak Hebbian connections
+            self.prune_weak_connections();
+            
+            // Adjust learning parameters to be more selective
+            self.adaptive_threshold *= 1.0 + (pressure_level * 0.1);
+            self.hebbian_learning_rate *= 0.95; // Reduce learning rate under pressure
+        }
+    }
+    
+    /// Intelligent memory pruning using PSI principles
+    fn prune_memory_traces(&mut self, pressure_level: f32) {
+        let target_removal_count = ((self.traces.len() as f32) * pressure_level * 0.2) as usize;
+        
+        if target_removal_count == 0 {
+            return;
+        }
+        
+        // Score traces for removal (lower score = more likely to be removed)
+        let mut trace_scores: Vec<(usize, f32)> = self.traces.iter().enumerate()
+            .map(|(idx, trace)| {
+                let utility_score = self.calculate_trace_utility(trace);
+                (idx, utility_score)
+            })
+            .collect();
+        
+        // Sort by utility score (ascending - worst first)
+        trace_scores.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        
+        // Remove the least useful traces
+        let mut indices_to_remove: Vec<usize> = trace_scores.iter()
+            .take(target_removal_count)
+            .map(|(idx, _)| *idx)
+            .collect();
+        
+        // Sort indices in descending order to remove from back to front
+        indices_to_remove.sort_by(|a, b| b.cmp(a));
+        
+        for idx in indices_to_remove {
+            let removed_trace = self.traces.remove(idx);
+            // Also remove associated Hebbian connections
+            self.remove_connections_for_trace(&removed_trace.id);
+        }
+    }
+    
+    /// Calculate utility score for a memory trace (higher = more useful)
+    fn calculate_trace_utility(&self, trace: &MemoryTrace) -> f32 {
+        let recency_factor = 1.0; // Could be enhanced with timestamp
+        let usage_factor = (trace.uses as f32).ln_1p(); // Logarithmic usage scaling
+        let reward_factor = trace.cum_reward.abs();
+        let connection_factor = self.count_connections_for_trace(&trace.id) as f32;
+        let activation_factor = if trace.activation_history.is_empty() {
+            0.0
+        } else {
+            trace.activation_history.iter().sum::<f32>() / trace.activation_history.len() as f32
+        };
+        
+        // Weighted combination of factors
+        recency_factor * 0.2 + 
+        usage_factor * 0.3 + 
+        reward_factor * 0.2 + 
+        connection_factor * 0.2 + 
+        activation_factor * 0.1
+    }
+    
+    /// Count Hebbian connections for a specific trace
+    fn count_connections_for_trace(&self, trace_id: &str) -> usize {
+        self.hebbian_connections.iter()
+            .filter(|conn| conn.source_id == trace_id || conn.target_id == trace_id)
+            .count()
+    }
+    
+    /// Remove all Hebbian connections associated with a trace
+    fn remove_connections_for_trace(&mut self, trace_id: &str) {
+        self.hebbian_connections.retain(|conn| 
+            conn.source_id != trace_id && conn.target_id != trace_id
+        );
+    }
+    
+    /// Prune weak Hebbian connections
+    fn prune_weak_connections(&mut self) {
+        let initial_count = self.hebbian_connections.len();
+        
+        self.hebbian_connections.retain(|conn| 
+            conn.weight.abs() > self.connection_pruning_threshold
+        );
+        
+        let pruned_count = initial_count - self.hebbian_connections.len();
+        
+        // Adjust pruning threshold based on pruning effectiveness
+        if pruned_count == 0 {
+            self.connection_pruning_threshold *= 0.9; // Lower threshold if no pruning occurred
+        } else if pruned_count > initial_count / 4 {
+            self.connection_pruning_threshold *= 1.1; // Raise threshold if too much pruning
+        }
+    }
+    
+    /// Adaptive learning parameter adjustment
+    fn adapt_learning_parameters(&mut self) {
+        // Decay learning rate over time to stabilize learning
+        self.hebbian_learning_rate *= self.learning_rate_decay;
+        
+        // Adapt activation threshold based on connection density
+        let connection_density = self.hebbian_connections.len() as f32 / 
+                                (self.traces.len() as f32).max(1.0);
+        
+        if connection_density > 2.0 {
+            // Too many connections, raise threshold
+            self.adaptive_threshold *= 1.01;
+        } else if connection_density < 0.5 {
+            // Too few connections, lower threshold
+            self.adaptive_threshold *= 0.99;
+        }
+        
+        // Clamp threshold to reasonable bounds
+        self.adaptive_threshold = self.adaptive_threshold.max(0.1).min(0.8);
+        self.activation_threshold = self.adaptive_threshold;
+    }
+    
+    /// Meta-learning: adjust parameters based on performance feedback
+    pub fn meta_learning_update(&mut self, performance_score: f32) {
+        self.performance_history.push(performance_score);
+        
+        // Keep only recent performance history
+        if self.performance_history.len() > self.temporal_window {
+            self.performance_history.remove(0);
+        }
+        
+        if self.performance_history.len() >= 10 {
+            let recent_avg = self.performance_history.iter()
+                .rev().take(5).sum::<f32>() / 5.0;
+            let older_avg = self.performance_history.iter()
+                .rev().skip(5).take(5).sum::<f32>() / 5.0;
+            
+            let performance_trend = recent_avg - older_avg;
+            
+            // Adjust learning parameters based on performance trend
+            if performance_trend > 0.01 {
+                // Performance improving, maintain current settings
+                self.hebbian_learning_rate *= 1.001;
+            } else if performance_trend < -0.01 {
+                // Performance declining, adjust parameters
+                self.hebbian_learning_rate *= 0.999;
+                self.adaptive_threshold *= 0.99;
+            }
+            
+            // Clamp parameters to reasonable bounds
+            self.hebbian_learning_rate = self.hebbian_learning_rate.max(0.001).min(0.1);
+        }
+    }
+    
+    /// Enhanced connection creation with temporal awareness
+    fn create_hebbian_connections(&mut self, new_trace_id: &str, new_vec: &[f32; EMBED_DIM], valence: f32) {
+        let mut connections_created = 0;
+        let max_new_connections = 10; // Limit connections per new trace
+        
+        // Create connections with existing traces that are sufficiently similar
+        for existing_trace in &self.traces {
+            if connections_created >= max_new_connections {
+                break;
+            }
+            
+            let similarity = cosine_sim(&existing_trace.vec, new_vec);
+            
+            // Enhanced connection criteria
+            let valence_compatibility = if valence * existing_trace.valence > 0.0 {
+                1.0 // Same sign valences are more compatible
+            } else {
+                0.7 // Different sign valences are less compatible
+            };
+            
+            let connection_threshold = self.activation_threshold * valence_compatibility;
+            
+            if similarity > connection_threshold {
+                // Create bidirectional connections with adaptive weights
+                let base_weight = similarity * self.hebbian_learning_rate;
+                let valence_modulated_weight = base_weight * (1.0 + valence.abs() * 0.1);
+                
+                let forward_conn = HebbianConnection {
+                    source_id: existing_trace.id.clone(),
+                    target_id: new_trace_id.to_string(),
+                    weight: valence_modulated_weight,
+                    last_update: 0.0,
+                };
+                
+                let backward_conn = HebbianConnection {
+                    source_id: new_trace_id.to_string(),
+                    target_id: existing_trace.id.clone(),
+                    weight: valence_modulated_weight,
+                    last_update: 0.0,
+                };
+                
+                self.hebbian_connections.push(forward_conn);
+                self.hebbian_connections.push(backward_conn);
+                connections_created += 1;
+            }
+        }
+    }
+    
+    /// Get comprehensive memory statistics for monitoring
+    pub fn get_memory_stats(&self) -> MemoryStats {
+        let (connection_count, avg_weight, avg_self_weight) = self.get_hebbian_stats();
+        let memory_usage = self.traces.len() as f32 / self.max_memory_size as f32;
+        
+        MemoryStats {
+            trace_count: self.traces.len(),
+            connection_count,
+            memory_usage,
+            avg_connection_weight: avg_weight,
+            avg_self_weight,
+            learning_rate: self.hebbian_learning_rate,
+            activation_threshold: self.activation_threshold,
+            performance_trend: self.calculate_performance_trend(),
+        }
+    }
+    
+    fn calculate_performance_trend(&self) -> f32 {
+        if self.performance_history.len() < 6 {
+            return 0.0;
+        }
+        
+        let recent = self.performance_history.iter().rev().take(3).sum::<f32>() / 3.0;
+        let older = self.performance_history.iter().rev().skip(3).take(3).sum::<f32>() / 3.0;
+        recent - older
+    }
+}
+
+#[derive(Debug)]
+pub struct MemoryStats {
+    pub trace_count: usize,
+    pub connection_count: usize,
+    pub memory_usage: f32,
+    pub avg_connection_weight: f32,
+    pub avg_self_weight: f32,
+    pub learning_rate: f32,
+    pub activation_threshold: f32,
+    pub performance_trend: f32,
 }
 
 fn cosine_sim(a: &[f32; EMBED_DIM], b: &[f32; EMBED_DIM]) -> f32 {

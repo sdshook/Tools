@@ -1,0 +1,727 @@
+[
+  {
+    "attack_accuracy": 0.0,
+    "attack_count": 300,
+    "attack_detections": 0,
+    "attack_ratio": 0.30000001192092896,
+    "benign_accuracy": 0.4399999976158142,
+    "benign_count": 700,
+    "curriculum_phase": 1,
+    "difficulty_level": 0.30000001192092896,
+    "false_negatives": 300,
+    "false_positives": 392,
+    "iteration": 1,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.6326203346252441,
+      "connection_count": 2,
+      "learning_rate": 0.04984170198440552,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.0,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.30799999833106995,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.0,
+    "attack_count": 300,
+    "attack_detections": 0,
+    "attack_ratio": 0.30000001192092896,
+    "benign_accuracy": 0.427142858505249,
+    "benign_count": 700,
+    "curriculum_phase": 1,
+    "difficulty_level": 0.3375000059604645,
+    "false_negatives": 300,
+    "false_positives": 401,
+    "iteration": 2,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -1.244859218597412,
+      "connection_count": 2,
+      "learning_rate": 0.04978492856025696,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.0,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.29899999499320984,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.0,
+    "attack_count": 300,
+    "attack_detections": 0,
+    "attack_ratio": 0.30000001192092896,
+    "benign_accuracy": 0.42571428418159485,
+    "benign_count": 700,
+    "curriculum_phase": 1,
+    "difficulty_level": 0.375,
+    "false_negatives": 300,
+    "false_positives": 402,
+    "iteration": 3,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -1.1952834129333496,
+      "connection_count": 2,
+      "learning_rate": 0.04972853511571884,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.2980000078678131,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.996666669845581,
+    "attack_count": 300,
+    "attack_detections": 299,
+    "attack_ratio": 0.30000001192092896,
+    "benign_accuracy": 0.44857141375541687,
+    "benign_count": 700,
+    "curriculum_phase": 1,
+    "difficulty_level": 0.4125000238418579,
+    "false_negatives": 1,
+    "false_positives": 386,
+    "iteration": 4,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.07776514440774918,
+      "connection_count": 2,
+      "learning_rate": 0.05021871626377106,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.0,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.6129999756813049,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.0,
+    "attack_count": 300,
+    "attack_detections": 0,
+    "attack_ratio": 0.30000001192092896,
+    "benign_accuracy": 0.41999998688697815,
+    "benign_count": 700,
+    "curriculum_phase": 1,
+    "difficulty_level": 0.45000001788139343,
+    "false_negatives": 300,
+    "false_positives": 406,
+    "iteration": 5,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -1.243834376335144,
+      "connection_count": 2,
+      "learning_rate": 0.050061460584402084,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.2939999997615814,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.9866666793823242,
+    "attack_count": 300,
+    "attack_detections": 296,
+    "attack_ratio": 0.30000001192092896,
+    "benign_accuracy": 0.44999998807907104,
+    "benign_count": 700,
+    "curriculum_phase": 1,
+    "difficulty_level": 0.48750001192092896,
+    "false_negatives": 4,
+    "false_positives": 385,
+    "iteration": 6,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.031842123717069626,
+      "connection_count": 2,
+      "learning_rate": 0.05020170658826828,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.6110000014305115,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.9933333396911621,
+    "attack_count": 300,
+    "attack_detections": 298,
+    "attack_ratio": 0.30000001192092896,
+    "benign_accuracy": 0.44857141375541687,
+    "benign_count": 700,
+    "curriculum_phase": 1,
+    "difficulty_level": 0.5250000357627869,
+    "false_negatives": 2,
+    "false_positives": 386,
+    "iteration": 7,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.047204941511154175,
+      "connection_count": 2,
+      "learning_rate": 0.050595011562108994,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.6119999885559082,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.9800000190734863,
+    "attack_count": 300,
+    "attack_detections": 294,
+    "attack_ratio": 0.30000001192092896,
+    "benign_accuracy": 0.44857141375541687,
+    "benign_count": 700,
+    "curriculum_phase": 1,
+    "difficulty_level": 0.5625,
+    "false_negatives": 6,
+    "false_positives": 386,
+    "iteration": 8,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.08792723715305328,
+      "connection_count": 2,
+      "learning_rate": 0.050787199288606644,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": -0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.6079999804496765,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.0,
+    "attack_count": 300,
+    "attack_detections": 0,
+    "attack_ratio": 0.30000001192092896,
+    "benign_accuracy": 0.4214285612106323,
+    "benign_count": 700,
+    "curriculum_phase": 1,
+    "difficulty_level": 0.30000001192092896,
+    "false_negatives": 300,
+    "false_positives": 405,
+    "iteration": 9,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -1.2879966497421265,
+      "connection_count": 2,
+      "learning_rate": 0.05047646909952164,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": -0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.29499998688697815,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.0,
+    "attack_count": 200,
+    "attack_detections": 0,
+    "attack_ratio": 0.20000000298023224,
+    "benign_accuracy": 0.42750000953674316,
+    "benign_count": 800,
+    "curriculum_phase": 2,
+    "difficulty_level": 0.6375000476837158,
+    "false_negatives": 200,
+    "false_positives": 458,
+    "iteration": 10,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -1.1005975008010864,
+      "connection_count": 2,
+      "learning_rate": 0.05051897093653679,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.34200000762939453,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.9900000095367432,
+    "attack_count": 200,
+    "attack_detections": 198,
+    "attack_ratio": 0.20000000298023224,
+    "benign_accuracy": 0.44999998807907104,
+    "benign_count": 800,
+    "curriculum_phase": 2,
+    "difficulty_level": 0.675000011920929,
+    "false_negatives": 2,
+    "false_positives": 440,
+    "iteration": 11,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.1397119164466858,
+      "connection_count": 2,
+      "learning_rate": 0.050862569361925125,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.5580000281333923,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.9900000095367432,
+    "attack_count": 200,
+    "attack_detections": 198,
+    "attack_ratio": 0.20000000298023224,
+    "benign_accuracy": 0.44999998807907104,
+    "benign_count": 800,
+    "curriculum_phase": 2,
+    "difficulty_level": 0.7125000357627869,
+    "false_negatives": 2,
+    "false_positives": 440,
+    "iteration": 12,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.15246997773647308,
+      "connection_count": 2,
+      "learning_rate": 0.051157452166080475,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.5580000281333923,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.9850000143051147,
+    "attack_count": 200,
+    "attack_detections": 197,
+    "attack_ratio": 0.20000000298023224,
+    "benign_accuracy": 0.44999998807907104,
+    "benign_count": 800,
+    "curriculum_phase": 2,
+    "difficulty_level": 0.75,
+    "false_negatives": 3,
+    "false_positives": 440,
+    "iteration": 13,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.13796912133693695,
+      "connection_count": 2,
+      "learning_rate": 0.05145365744829178,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": -0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.5569999814033508,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.9950000047683716,
+    "attack_count": 200,
+    "attack_detections": 199,
+    "attack_ratio": 0.20000000298023224,
+    "benign_accuracy": 0.44874998927116394,
+    "benign_count": 800,
+    "curriculum_phase": 2,
+    "difficulty_level": 0.7875000238418579,
+    "false_negatives": 1,
+    "false_positives": 441,
+    "iteration": 14,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.21608756482601166,
+      "connection_count": 2,
+      "learning_rate": 0.051700472831726074,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.0,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.5580000281333923,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.0,
+    "attack_count": 200,
+    "attack_detections": 0,
+    "attack_ratio": 0.20000000298023224,
+    "benign_accuracy": 0.42124998569488525,
+    "benign_count": 800,
+    "curriculum_phase": 2,
+    "difficulty_level": 0.8250000476837158,
+    "false_negatives": 200,
+    "false_positives": 463,
+    "iteration": 15,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -1.1730140447616577,
+      "connection_count": 2,
+      "learning_rate": 0.05148531496524811,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": -0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.3370000123977661,
+    "psi_stats": {
+      "avg_valence": 0.0,
+      "entry_count": 2,
+      "memory_usage": 0.004000000189989805,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.0,
+    "attack_count": 200,
+    "attack_detections": 0,
+    "attack_ratio": 0.20000000298023224,
+    "benign_accuracy": 0.42375001311302185,
+    "benign_count": 800,
+    "curriculum_phase": 2,
+    "difficulty_level": 0.8625000715255737,
+    "false_negatives": 200,
+    "false_positives": 461,
+    "iteration": 16,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -1.2607885599136353,
+      "connection_count": 2,
+      "learning_rate": 0.05137346312403679,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.33899998664855957,
+    "psi_stats": {
+      "avg_valence": -0.39717116951942444,
+      "entry_count": 8,
+      "memory_usage": 0.01600000075995922,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.9900000095367432,
+    "attack_count": 200,
+    "attack_detections": 198,
+    "attack_ratio": 0.20000000298023224,
+    "benign_accuracy": 0.44874998927116394,
+    "benign_count": 800,
+    "curriculum_phase": 2,
+    "difficulty_level": 0.6000000238418579,
+    "false_negatives": 2,
+    "false_positives": 441,
+    "iteration": 17,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.3386111259460449,
+      "connection_count": 2,
+      "learning_rate": 0.05182645097374916,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.0,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.5569999814033508,
+    "psi_stats": {
+      "avg_valence": -0.39717116951942444,
+      "entry_count": 8,
+      "memory_usage": 0.01600000075995922,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.0,
+    "attack_count": 100,
+    "attack_detections": 0,
+    "attack_ratio": 0.10000000149011612,
+    "benign_accuracy": 0.4277777671813965,
+    "benign_count": 900,
+    "curriculum_phase": 3,
+    "difficulty_level": 0.9124999642372131,
+    "false_negatives": 100,
+    "false_positives": 515,
+    "iteration": 18,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -1.262171745300293,
+      "connection_count": 2,
+      "learning_rate": 0.051506929099559784,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": -0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.38499999046325684,
+    "psi_stats": {
+      "avg_valence": -0.39717116951942444,
+      "entry_count": 8,
+      "memory_usage": 0.01600000075995922,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.0,
+    "attack_count": 100,
+    "attack_detections": 0,
+    "attack_ratio": 0.10000000149011612,
+    "benign_accuracy": 0.4377777874469757,
+    "benign_count": 900,
+    "curriculum_phase": 3,
+    "difficulty_level": 0.9249999523162842,
+    "false_negatives": 100,
+    "false_positives": 506,
+    "iteration": 19,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.9888830780982971,
+      "connection_count": 2,
+      "learning_rate": 0.0512399785220623,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": -0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.39399999380111694,
+    "psi_stats": {
+      "avg_valence": -0.408593088388443,
+      "entry_count": 9,
+      "memory_usage": 0.017999999225139618,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.9800000190734863,
+    "attack_count": 100,
+    "attack_detections": 98,
+    "attack_ratio": 0.10000000149011612,
+    "benign_accuracy": 0.4511111080646515,
+    "benign_count": 900,
+    "curriculum_phase": 3,
+    "difficulty_level": 0.9375,
+    "false_negatives": 2,
+    "false_positives": 494,
+    "iteration": 20,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.2202150821685791,
+      "connection_count": 2,
+      "learning_rate": 0.051484256982803345,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.5040000081062317,
+    "psi_stats": {
+      "avg_valence": -0.408593088388443,
+      "entry_count": 9,
+      "memory_usage": 0.017999999225139618,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 1.0,
+    "attack_count": 100,
+    "attack_detections": 100,
+    "attack_ratio": 0.10000000149011612,
+    "benign_accuracy": 0.448888897895813,
+    "benign_count": 900,
+    "curriculum_phase": 3,
+    "difficulty_level": 0.949999988079071,
+    "false_negatives": 0,
+    "false_positives": 496,
+    "iteration": 21,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.2815380096435547,
+      "connection_count": 2,
+      "learning_rate": 0.05198931321501732,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": -0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.5040000081062317,
+    "psi_stats": {
+      "avg_valence": -0.408593088388443,
+      "entry_count": 9,
+      "memory_usage": 0.017999999225139618,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 1.0,
+    "attack_count": 100,
+    "attack_detections": 100,
+    "attack_ratio": 0.10000000149011612,
+    "benign_accuracy": 0.44999998807907104,
+    "benign_count": 900,
+    "curriculum_phase": 3,
+    "difficulty_level": 0.9624999761581421,
+    "false_negatives": 0,
+    "false_positives": 495,
+    "iteration": 22,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.292736679315567,
+      "connection_count": 2,
+      "learning_rate": 0.0522376149892807,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.0,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.5049999952316284,
+    "psi_stats": {
+      "avg_valence": -0.408593088388443,
+      "entry_count": 9,
+      "memory_usage": 0.017999999225139618,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.0,
+    "attack_count": 100,
+    "attack_detections": 0,
+    "attack_ratio": 0.10000000149011612,
+    "benign_accuracy": 0.4333333373069763,
+    "benign_count": 900,
+    "curriculum_phase": 3,
+    "difficulty_level": 0.9749999642372131,
+    "false_negatives": 100,
+    "false_positives": 510,
+    "iteration": 23,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -1.049676537513733,
+      "connection_count": 2,
+      "learning_rate": 0.052123039960861206,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": -0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.38999998569488525,
+    "psi_stats": {
+      "avg_valence": -0.408593088388443,
+      "entry_count": 9,
+      "memory_usage": 0.017999999225139618,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 0.0,
+    "attack_count": 100,
+    "attack_detections": 0,
+    "attack_ratio": 0.10000000149011612,
+    "benign_accuracy": 0.4300000071525574,
+    "benign_count": 900,
+    "curriculum_phase": 3,
+    "difficulty_level": 0.9874999523162842,
+    "false_negatives": 100,
+    "false_positives": 513,
+    "iteration": 24,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -1.1179193258285522,
+      "connection_count": 2,
+      "learning_rate": 0.05200919881463051,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": 0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.3869999945163727,
+    "psi_stats": {
+      "avg_valence": -0.420685350894928,
+      "entry_count": 10,
+      "memory_usage": 0.019999999552965164,
+      "quality_threshold": 0.10000000149011612
+    }
+  },
+  {
+    "attack_accuracy": 1.0,
+    "attack_count": 100,
+    "attack_detections": 100,
+    "attack_ratio": 0.10000000149011612,
+    "benign_accuracy": 0.44999998807907104,
+    "benign_count": 900,
+    "curriculum_phase": 3,
+    "difficulty_level": 0.8999999761581421,
+    "false_negatives": 0,
+    "false_positives": 495,
+    "iteration": 25,
+    "memory_stats": {
+      "activation_threshold": 0.2970000207424164,
+      "avg_connection_weight": -0.32049375772476196,
+      "connection_count": 2,
+      "learning_rate": 0.05241439864039421,
+      "memory_usage": 0.0020000000949949026,
+      "performance_trend": -0.3333333432674408,
+      "trace_count": 2
+    },
+    "overall_accuracy": 0.5049999952316284,
+    "psi_stats": {
+      "avg_valence": -0.420685350894928,
+      "entry_count": 10,
+      "memory_usage": 0.019999999552965164,
+      "quality_threshold": 0.10000000149011612
+    }
+  }
+]
