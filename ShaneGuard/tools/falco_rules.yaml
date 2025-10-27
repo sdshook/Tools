@@ -1,0 +1,15 @@
+
+# Falco rules: detect large POST writes to webserver worker processes and suspicious exec
+- rule: Large HTTP POST to admin endpoint
+  desc: Detect large POST writes to webserver worker which may carry serialized payloads
+  condition: evt.type = sendto and fd.num = 80 and evt.arg.size > 16384
+  output: "Large POST (>16KB) to admin endpoint (user=%user.name pid=%proc.pid cmdline=%proc.cmdline)"
+  priority: WARNING
+  tags: [network, wsus]
+
+- rule: Webserver worker exec suspicious child
+  desc: Detect when a webserver worker spawns a child process outside normal list
+  condition: spawned_process and proc.name in ("w3wp.exe", "nginx") and not proc.cmdline in ("/usr/sbin/nginx: worker process", "C:\\Windows\\System32\\inetsrv\\w3wp.exe")
+  output: "Suspicious child spawned by webserver worker (parent=%proc.name child=%proc.args)"
+  priority: CRITICAL
+  tags: [process, wsus]
