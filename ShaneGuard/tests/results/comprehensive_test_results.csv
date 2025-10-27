@@ -1,0 +1,361 @@
+suite,scenario,attack_vector,expected_threat,detected_action,similarity,valence,aggression,response_time_ms,iteration,hebbian_connections,avg_weight,memory_traces
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,0.000,0.000,0.200,0,1,0,0.0000,0
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,0.000,0.000,0.200,0,1,0,0.0000,0
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,0.000,0.000,0.200,0,1,0,0.0000,0
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,2,0,0.0000,1
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.000,0.100,0.200,0,2,0,0.0000,1
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,2,0,0.0000,1
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,3,2,0.0500,2
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.000,0.100,0.200,0,3,2,0.0500,2
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,3,2,0.0500,2
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.000,0.100,0.200,0,4,6,0.0500,3
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,4,6,0.0500,3
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,4,6,0.0500,3
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,5,12,0.0500,4
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.001,0.100,0.200,0,5,12,0.0500,4
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,5,12,0.0500,4
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,6,20,0.0500,5
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,6,20,0.0500,5
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.001,0.100,0.200,0,6,20,0.0500,5
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,7,30,0.0500,6
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.001,0.100,0.200,0,7,30,0.0500,6
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,7,30,0.0500,6
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,8,42,0.0500,7
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.002,0.100,0.200,0,8,42,0.0500,7
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,8,42,0.0500,7
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.002,0.100,0.200,0,9,56,0.0500,8
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,9,56,0.0500,8
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,9,56,0.0500,8
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,10,72,0.0500,9
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.002,0.100,0.200,0,10,72,0.0500,9
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,10,72,0.0500,9
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,11,90,0.0500,10
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,11,90,0.0500,10
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.002,0.100,0.200,0,11,90,0.0500,10
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,12,110,0.0500,11
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.003,0.100,0.200,0,12,110,0.0500,11
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,12,110,0.0500,11
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.003,0.100,0.200,0,13,132,0.0500,12
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,13,132,0.0500,12
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,13,132,0.0500,12
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,14,156,0.0500,13
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.003,0.100,0.200,0,14,156,0.0500,13
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,14,156,0.0500,13
+Deserialization Attacks,PHP Unserialize Object Injection,deserialization,medium,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Deserialization Attacks,.NET BinaryFormatter Attack,deserialization,medium,notify,1.003,0.100,0.200,0,15,182,0.0500,14
+Deserialization Attacks,Java Deserialization Attack,deserialization,high,notify,1.000,0.000,0.200,0,15,182,0.0500,14
+Deserialization Attacks,Node.js JSON Prototype Pollution,deserialization,medium,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Deserialization Attacks,Python Pickle Code Injection,deserialization,high,notify,1.000,0.000,0.200,0,15,182,0.0500,14
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,notify,0.000,0.000,0.200,0,1,0,0.0000,0
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,notify,0.000,0.000,0.200,0,1,0,0.0000,0
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,0.000,0.000,0.200,0,1,0,0.0000,0
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,throttle,1.000,-0.300,0.200,0,2,0,0.0000,1
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,throttle,1.000,-0.300,0.200,0,2,0,0.0000,1
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,2,0,0.0000,1
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,3,2,0.0500,2
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,notify,1.001,-0.100,0.200,0,3,2,0.0500,2
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,notify,1.001,-0.100,0.200,0,3,2,0.0500,2
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,throttle,1.002,-0.167,0.200,0,4,6,0.0500,3
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,throttle,1.002,-0.167,0.200,0,4,6,0.0500,3
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,4,6,0.0500,3
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,5,12,0.0500,4
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,notify,1.002,-0.100,0.200,0,5,12,0.0500,4
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,notify,1.002,-0.100,0.200,0,5,12,0.0500,4
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,throttle,1.003,-0.140,0.200,0,6,20,0.0500,5
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,throttle,1.003,-0.140,0.200,0,6,20,0.0500,5
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,6,20,0.0500,5
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,7,30,0.0500,6
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,notify,1.003,-0.060,0.200,0,7,30,0.0500,6
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,notify,1.003,-0.060,0.200,0,7,30,0.0500,6
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,8,42,0.0500,7
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,notify,1.004,-0.060,0.200,0,8,42,0.0500,7
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,notify,1.003,-0.060,0.200,0,8,42,0.0500,7
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,notify,1.004,-0.060,0.200,0,9,56,0.0500,8
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,notify,1.004,-0.060,0.200,0,9,56,0.0500,8
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,9,56,0.0500,8
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,10,72,0.0500,9
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,notify,1.005,-0.060,0.200,0,10,72,0.0500,9
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,notify,1.005,-0.060,0.200,0,10,72,0.0500,9
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,11,90,0.0500,10
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,notify,1.006,-0.060,0.200,0,11,90,0.0500,10
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,notify,1.006,-0.060,0.200,0,11,90,0.0500,10
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,12,110,0.0500,11
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,notify,1.007,-0.060,0.200,0,12,110,0.0500,11
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,notify,1.007,-0.060,0.200,0,12,110,0.0500,11
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,13,132,0.0500,12
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,notify,1.007,-0.060,0.200,0,13,132,0.0500,12
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,notify,1.007,-0.060,0.200,0,13,132,0.0500,12
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,notify,1.008,-0.060,0.200,0,14,156,0.0500,13
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,14,156,0.0500,13
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,notify,1.008,-0.060,0.200,0,14,156,0.0500,13
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Memory Corruption Attacks,Use-After-Free Exploitation,memory_corruption,high,notify,1.000,0.000,0.200,0,15,182,0.0500,14
+Memory Corruption Attacks,Heap Spray Attack,memory_corruption,critical,notify,1.009,-0.060,0.200,0,15,182,0.0500,14
+Memory Corruption Attacks,Format String Vulnerability,memory_corruption,high,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Memory Corruption Attacks,Buffer Overflow Stack Smashing,memory_corruption,critical,notify,1.009,-0.060,0.200,0,15,182,0.0500,14
+Memory Corruption Attacks,Double-Free Memory Corruption,memory_corruption,high,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Memory Corruption Attacks,Integer Overflow Attack,memory_corruption,medium,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,notify,0.000,0.000,0.200,0,1,0,0.0000,0
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,0.000,0.000,0.200,0,1,0,0.0000,0
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,0.000,0.000,0.200,0,1,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,throttle,1.000,-0.300,0.200,0,2,0,0.0000,1
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,2,0,0.0000,1
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.000,0.100,0.200,0,2,0,0.0000,1
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,notify,1.001,-0.100,0.200,0,3,2,0.0500,2
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,3,2,0.0500,2
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.000,0.100,0.200,0,3,2,0.0500,2
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,4,6,0.0500,3
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.001,0.100,0.200,0,4,6,0.0500,3
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,throttle,1.002,-0.167,0.200,0,4,6,0.0500,3
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.001,0.100,0.200,0,5,12,0.0500,4
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,5,12,0.0500,4
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,notify,1.002,-0.100,0.200,0,5,12,0.0500,4
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,throttle,1.003,-0.140,0.200,0,6,20,0.0500,5
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.001,0.100,0.200,0,6,20,0.0500,5
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,6,20,0.0500,5
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.001,0.100,0.200,0,7,30,0.0500,6
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,notify,1.003,-0.060,0.200,0,7,30,0.0500,6
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,7,30,0.0500,6
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,notify,1.003,-0.060,0.200,0,8,42,0.0500,7
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,8,42,0.0500,7
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.002,0.100,0.200,0,8,42,0.0500,7
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.002,0.100,0.200,0,9,56,0.0500,8
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,notify,1.004,-0.060,0.200,0,9,56,0.0500,8
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,9,56,0.0500,8
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.002,0.100,0.200,0,10,72,0.0500,9
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,10,72,0.0500,9
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,notify,1.005,-0.060,0.200,0,10,72,0.0500,9
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,11,90,0.0500,10
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,notify,1.006,-0.060,0.200,0,11,90,0.0500,10
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.002,0.100,0.200,0,11,90,0.0500,10
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,12,110,0.0500,11
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.003,0.100,0.200,0,12,110,0.0500,11
+Web Application Attacks,Command Injection via Parameter,webapp,critical,notify,1.007,-0.060,0.200,0,12,110,0.0500,11
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,13,132,0.0500,12
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.003,0.100,0.200,0,13,132,0.0500,12
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,notify,1.007,-0.060,0.200,0,13,132,0.0500,12
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.003,0.100,0.200,0,14,156,0.0500,13
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,notify,1.008,-0.060,0.200,0,14,156,0.0500,13
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,14,156,0.0500,13
+Web Application Attacks,Server-Side Request Forgery (SSRF),webapp,high,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Web Application Attacks,Directory Traversal Attack,webapp,medium,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Web Application Attacks,XML External Entity (XXE) Attack,webapp,high,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Web Application Attacks,Remote Code Execution via File Upload,webapp,critical,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Web Application Attacks,Command Injection via Parameter,webapp,critical,notify,1.009,-0.060,0.200,0,15,182,0.0500,14
+Web Application Attacks,LDAP Injection Attack,webapp,high,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Web Application Attacks,Cross-Site Scripting (XSS),webapp,medium,notify,1.003,0.100,0.200,0,15,182,0.0500,14
+Web Application Attacks,SQL Injection Union Attack,webapp,high,notify,1.000,0.000,0.200,0,15,182,0.0500,14
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,1,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,2,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,3,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,4,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,5,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,6,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,7,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,8,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,9,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,10,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,11,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,12,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,13,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,14,0,0.0000,0
+Benign Traffic,Normal User Login,none,none,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Benign Traffic,Form Submission,none,none,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Benign Traffic,Search Query,none,none,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Benign Traffic,Static Resource Request,none,none,log,0.000,0.000,0.000,0,15,0,0.0000,0
+Benign Traffic,API Data Retrieval,none,none,log,0.000,0.000,0.000,0,15,0,0.0000,0

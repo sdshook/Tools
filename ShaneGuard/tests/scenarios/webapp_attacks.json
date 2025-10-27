@@ -1,170 +1,138 @@
 [
   {
     "name": "SQL Injection Union Attack",
-    "description": "SQL injection using UNION to extract sensitive data",
-    "telemetry": {
-      "pid": 1001,
-      "request_size": 512,
-      "content_type": "application/x-www-form-urlencoded",
-      "payload_entropy": 4.8,
-      "suspicious_headers": 2,
-      "memory_allocation": 4096,
-      "execution_time": 2800,
-      "network_connections": 1,
-      "file_operations": 0,
-      "registry_access": 0,
-      "admin_api_flag": 1,
-      "write_remote": 1,
-      "endpoint_rarity": 0.75
-    },
+    "attack_vector": "webapp",
     "expected_threat_level": "high",
-    "attack_vector": "sql_injection"
+    "telemetry": {
+      "pid": 3001,
+      "process_name": "apache",
+      "network_connections": 12,
+      "file_operations": 8,
+      "memory_usage": 45.3,
+      "cpu_usage": 28.7,
+      "suspicious_patterns": ["UNION SELECT", "OR 1=1", "--"],
+      "payload_size": 256,
+      "entropy": 5.8,
+      "database_queries": 15
+    }
   },
   {
     "name": "Cross-Site Scripting (XSS)",
-    "description": "Stored XSS payload attempting session hijacking",
-    "telemetry": {
-      "pid": 1002,
-      "request_size": 1024,
-      "content_type": "text/html",
-      "payload_entropy": 5.2,
-      "suspicious_headers": 4,
-      "memory_allocation": 2048,
-      "execution_time": 800,
-      "network_connections": 2,
-      "file_operations": 1,
-      "registry_access": 0,
-      "admin_api_flag": 0,
-      "write_remote": 1,
-      "endpoint_rarity": 0.65
-    },
+    "attack_vector": "webapp",
     "expected_threat_level": "medium",
-    "attack_vector": "xss"
-  },
-  {
-    "name": "Remote Code Execution via File Upload",
-    "description": "Malicious file upload bypassing extension filters",
     "telemetry": {
-      "pid": 1003,
-      "request_size": 8192,
-      "content_type": "multipart/form-data",
-      "payload_entropy": 7.9,
-      "suspicious_headers": 1,
-      "memory_allocation": 16384,
-      "execution_time": 4200,
-      "network_connections": 3,
-      "file_operations": 15,
-      "registry_access": 2,
-      "admin_api_flag": 1,
-      "write_remote": 1,
-      "endpoint_rarity": 0.92
-    },
-    "expected_threat_level": "critical",
-    "attack_vector": "file_upload_rce"
-  },
-  {
-    "name": "XML External Entity (XXE) Attack",
-    "description": "XXE attack attempting to read local files",
-    "telemetry": {
-      "pid": 1004,
-      "request_size": 2048,
-      "content_type": "application/xml",
-      "payload_entropy": 6.1,
-      "suspicious_headers": 3,
-      "memory_allocation": 8192,
-      "execution_time": 1800,
-      "network_connections": 1,
-      "file_operations": 8,
-      "registry_access": 0,
-      "admin_api_flag": 1,
-      "write_remote": 0,
-      "endpoint_rarity": 0.83
-    },
-    "expected_threat_level": "high",
-    "attack_vector": "xxe"
-  },
-  {
-    "name": "Server-Side Request Forgery (SSRF)",
-    "description": "SSRF attack targeting internal services",
-    "telemetry": {
-      "pid": 1005,
-      "request_size": 256,
-      "content_type": "application/json",
-      "payload_entropy": 4.5,
-      "suspicious_headers": 2,
-      "memory_allocation": 1024,
-      "execution_time": 5000,
-      "network_connections": 5,
-      "file_operations": 2,
-      "registry_access": 0,
-      "admin_api_flag": 1,
-      "write_remote": 1,
-      "endpoint_rarity": 0.88
-    },
-    "expected_threat_level": "high",
-    "attack_vector": "ssrf"
+      "pid": 3002,
+      "process_name": "nginx",
+      "network_connections": 8,
+      "file_operations": 4,
+      "memory_usage": 32.1,
+      "cpu_usage": 18.9,
+      "suspicious_patterns": ["<script>", "javascript:", "onerror="],
+      "payload_size": 128,
+      "entropy": 4.2,
+      "http_requests": 25
+    }
   },
   {
     "name": "Command Injection via Parameter",
-    "description": "OS command injection through vulnerable parameter",
-    "telemetry": {
-      "pid": 1006,
-      "request_size": 128,
-      "content_type": "text/plain",
-      "payload_entropy": 3.8,
-      "suspicious_headers": 1,
-      "memory_allocation": 512,
-      "execution_time": 6500,
-      "network_connections": 2,
-      "file_operations": 12,
-      "registry_access": 3,
-      "admin_api_flag": 1,
-      "write_remote": 1,
-      "endpoint_rarity": 0.94
-    },
+    "attack_vector": "webapp",
     "expected_threat_level": "critical",
-    "attack_vector": "command_injection"
+    "telemetry": {
+      "pid": 3003,
+      "process_name": "php-fpm",
+      "network_connections": 5,
+      "file_operations": 18,
+      "memory_usage": 52.8,
+      "cpu_usage": 41.2,
+      "suspicious_patterns": ["; cat /etc/passwd", "| nc", "&& whoami"],
+      "payload_size": 512,
+      "entropy": 6.4,
+      "system_calls": 8
+    }
   },
   {
     "name": "Directory Traversal Attack",
-    "description": "Path traversal attempting to access sensitive files",
-    "telemetry": {
-      "pid": 1001,
-      "request_size": 64,
-      "content_type": "text/plain",
-      "payload_entropy": 2.9,
-      "suspicious_headers": 0,
-      "memory_allocation": 256,
-      "execution_time": 1200,
-      "network_connections": 0,
-      "file_operations": 5,
-      "registry_access": 0,
-      "admin_api_flag": 1,
-      "write_remote": 0,
-      "endpoint_rarity": 0.72
-    },
+    "attack_vector": "webapp",
     "expected_threat_level": "medium",
-    "attack_vector": "directory_traversal"
+    "telemetry": {
+      "pid": 3004,
+      "process_name": "tomcat",
+      "network_connections": 3,
+      "file_operations": 22,
+      "memory_usage": 38.7,
+      "cpu_usage": 24.1,
+      "suspicious_patterns": ["../../../", "..\\..\\", "%2e%2e%2f"],
+      "payload_size": 64,
+      "entropy": 3.8,
+      "file_access_attempts": 12
+    }
+  },
+  {
+    "name": "Remote Code Execution via File Upload",
+    "attack_vector": "webapp",
+    "expected_threat_level": "critical",
+    "telemetry": {
+      "pid": 3005,
+      "process_name": "iis",
+      "network_connections": 4,
+      "file_operations": 28,
+      "memory_usage": 61.4,
+      "cpu_usage": 48.3,
+      "suspicious_patterns": ["<?php system", "eval($_POST", "shell_exec"],
+      "payload_size": 1024,
+      "entropy": 7.1,
+      "file_uploads": 3
+    }
+  },
+  {
+    "name": "Server-Side Request Forgery (SSRF)",
+    "attack_vector": "webapp",
+    "expected_threat_level": "high",
+    "telemetry": {
+      "pid": 3006,
+      "process_name": "node",
+      "network_connections": 15,
+      "file_operations": 6,
+      "memory_usage": 42.9,
+      "cpu_usage": 31.5,
+      "suspicious_patterns": ["http://localhost", "file://", "gopher://"],
+      "payload_size": 256,
+      "entropy": 5.2,
+      "outbound_requests": 8
+    }
+  },
+  {
+    "name": "XML External Entity (XXE) Attack",
+    "attack_vector": "webapp",
+    "expected_threat_level": "high",
+    "telemetry": {
+      "pid": 3007,
+      "process_name": "java",
+      "network_connections": 6,
+      "file_operations": 14,
+      "memory_usage": 49.2,
+      "cpu_usage": 35.8,
+      "suspicious_patterns": ["<!ENTITY", "SYSTEM", "file:///etc/passwd"],
+      "payload_size": 512,
+      "entropy": 6.0,
+      "xml_parsing_errors": 2
+    }
   },
   {
     "name": "LDAP Injection Attack",
-    "description": "LDAP injection for authentication bypass",
-    "telemetry": {
-      "pid": 1002,
-      "request_size": 256,
-      "content_type": "application/x-www-form-urlencoded",
-      "payload_entropy": 4.1,
-      "suspicious_headers": 1,
-      "memory_allocation": 1024,
-      "execution_time": 2200,
-      "network_connections": 1,
-      "file_operations": 1,
-      "registry_access": 1,
-      "admin_api_flag": 1,
-      "write_remote": 0,
-      "endpoint_rarity": 0.86
-    },
+    "attack_vector": "webapp",
     "expected_threat_level": "high",
-    "attack_vector": "ldap_injection"
+    "telemetry": {
+      "pid": 3008,
+      "process_name": "apache",
+      "network_connections": 7,
+      "file_operations": 5,
+      "memory_usage": 36.8,
+      "cpu_usage": 22.4,
+      "suspicious_patterns": ["*)(uid=*", ")(cn=*", "|(objectClass=*"],
+      "payload_size": 128,
+      "entropy": 4.8,
+      "ldap_queries": 6
+    }
   }
 ]
