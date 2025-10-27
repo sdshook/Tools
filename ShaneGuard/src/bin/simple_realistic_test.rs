@@ -58,15 +58,36 @@ impl SimpleRealisticTest {
                 "scenario_type": "benign",
                 "expected": "none",
                 "pid": 1000 + (i % 100),
-                "process_name": "apache",
+                "process_name": match i % 4 {
+                    0 => "apache",
+                    1 => "nginx", 
+                    2 => "java",
+                    _ => "python"
+                },
                 "network_connections": 1 + (i % 3),
                 "file_operations": 2 + (i % 5),
-                "memory_usage": 20.0 + (i as f64 % 30.0),
-                "cpu_usage": 5.0 + (i as f64 % 15.0),
+                "memory_usage": 0.05 + (i as f64 % 0.25),  // Normalized 0-1
+                "cpu_usage": 0.01 + (i as f64 % 0.14),     // Normalized 0-1
                 "payload_size": 100 + (i % 500),
-                "entropy": 2.0 + (i as f64 % 1.5),
+                "entropy": 0.2 + (i as f64 % 0.3),         // Normalized 0-1
                 "suspicious_patterns": [],
-                "system_calls": 5 + (i % 10)
+                "system_calls": 5 + (i % 10),
+                // Add missing telemetry fields for proper feature extraction
+                "write_remote": 0,
+                "mprotect_rwx": 0,
+                "new_threads_unexpected": 0,
+                "addr_entropy": 0.1 + (i as f64 % 0.3),
+                "unique_endpoints": 1 + (i % 4),
+                "module_loads_unusual": 0,
+                "open_proc_vmwrite": 0,
+                "ptrace_attempts": 0,
+                "process_vm_writev": 0,
+                "admin_api_flag": 0,
+                "endpoint_rarity": i as f64 % 0.3,
+                "stack_canary_violations": 0,
+                "heap_allocations": 10 + (i % 90),
+                "memory_violations": 0,
+                "request_body": format!("GET /api/data?id={}", i)
             }));
         }
         
@@ -89,15 +110,36 @@ impl SimpleRealisticTest {
                 "scenario_type": "attack",
                 "expected": attack_type.1,
                 "pid": 2000 + i,
-                "process_name": "apache",
-                "network_connections": 1 + (i % 2),
-                "file_operations": 5 + (i % 10),
-                "memory_usage": 50.0 + (i as f64 % 40.0),
-                "cpu_usage": 30.0 + (i as f64 % 50.0),
+                "process_name": match i % 4 {
+                    0 => "vulnerable_app",
+                    1 => "browser",
+                    2 => "media_player", 
+                    _ => "java"
+                },
+                "network_connections": 5 + (i % 10),  // More connections for attacks
+                "file_operations": 15 + (i % 20),     // More file ops for attacks
+                "memory_usage": 0.4 + (i as f64 % 0.5),  // Higher memory usage
+                "cpu_usage": 0.3 + (i as f64 % 0.6),     // Higher CPU usage
                 "payload_size": 1000 + (i % 2000),
-                "entropy": 6.0 + (i as f64 % 3.0),
+                "entropy": 0.7 + (i as f64 % 0.25),      // Higher entropy for attacks
                 "suspicious_patterns": ["UNION", "SELECT", "script", "eval"],
-                "system_calls": 20 + (i % 30)
+                "system_calls": 50 + (i % 100),          // More system calls
+                // Add attack-specific telemetry indicators
+                "write_remote": 1 + (i % 3),             // Remote writes
+                "mprotect_rwx": 1 + (i % 2),             // Memory protection changes
+                "new_threads_unexpected": 1 + (i % 3),   // Unexpected threads
+                "addr_entropy": 0.6 + (i as f64 % 0.3),  // Higher address entropy
+                "unique_endpoints": 10 + (i % 15),       // More endpoints
+                "module_loads_unusual": 1 + (i % 3),     // Unusual module loads
+                "open_proc_vmwrite": 1 + (i % 2),        // Process memory writes
+                "ptrace_attempts": 1 + (i % 2),          // Debugging attempts
+                "process_vm_writev": 1 + (i % 2),        // Process memory writes
+                "admin_api_flag": 1,                     // Admin API access
+                "endpoint_rarity": 0.8 + (i as f64 % 0.2), // Rare endpoints
+                "stack_canary_violations": 1 + (i % 2),  // Stack violations
+                "heap_allocations": 200 + (i % 300),     // Many heap allocations
+                "memory_violations": 1 + (i % 3),        // Memory violations
+                "request_body": format!("POST /admin/exec?cmd=rm -rf / && echo {}", i)
             }));
         }
         
@@ -113,6 +155,33 @@ impl SimpleRealisticTest {
         info!("Registered {} services", self.services.len());
         Ok(())
     }
+    
+    async fn initialize_baseline_patterns(&self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Initializing baseline benign patterns to avoid cold start problem");
+        
+        let service_id = &self.services[0];
+        let mut mesh = self.mesh.lock().unwrap();
+        
+        if let Some(service_memory) = mesh.get_service_memory(service_id) {
+            let mut bdh = service_memory.lock().unwrap();
+            
+            // Add several baseline benign patterns with positive valence
+            let baseline_patterns = vec![
+                ([0.1, 0.2, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 0.8), // Normal web traffic
+                ([0.0, 0.1, 0.3, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 0.7), // API requests
+                ([0.0, 0.0, 0.1, 0.2, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 0.6), // Database queries
+                ([0.0, 0.0, 0.0, 0.1, 0.2, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 0.5), // File operations
+            ];
+            
+            for (pattern, valence) in baseline_patterns {
+                bdh.add_trace(pattern, valence);
+            }
+            
+            info!("Added {} baseline benign patterns", 4);
+        }
+        
+        Ok(())
+    }
 
     async fn run_test(&mut self, iterations: usize) -> Result<(), Box<dyn std::error::Error>> {
         info!("Starting Simple Realistic Learning Test (95% Benign / 5% Malicious)");
@@ -120,6 +189,9 @@ impl SimpleRealisticTest {
         info!("Iterations: {}", iterations);
 
         self.register_services().await?;
+        
+        // Initialize with baseline benign patterns to avoid cold start problem
+        self.initialize_baseline_patterns().await?;
 
         for iteration in 1..=iterations {
             info!("=== Learning Iteration {} ===", iteration);
@@ -132,10 +204,9 @@ impl SimpleRealisticTest {
                 let result = self.process_scenario(scenario, iteration, idx).await?;
                 self.results.push(result);
                 
-                // Reward feedback for benign traffic
-                if self.results.last().unwrap().detected_action == "log" {
-                    self.add_reward_feedback(&self.results.last().unwrap().scenario_name, 1.0).await;
-                }
+                // Reward feedback for benign traffic - correct classification gets positive reward
+                let reward = if self.results.last().unwrap().detected_action == "log" { 1.0 } else { -0.8 };
+                self.add_reward_feedback(&self.results.last().unwrap().scenario_name, reward).await;
             }
 
             // Process attack scenarios
@@ -429,7 +500,7 @@ resulting in improved learning performance. ShaneGuard demonstrates:
             (final_stats.0 - initial_stats.0) * 100.0,
             initial_stats.2,
             final_stats.2,
-            final_stats.2 - initial_stats.2,
+            final_stats.2.saturating_sub(initial_stats.2),
             final_stats.2,
             (final_stats.0 - initial_stats.0) * 100.0,
             final_stats.2,
