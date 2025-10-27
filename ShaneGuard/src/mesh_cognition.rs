@@ -10,22 +10,21 @@ use crate::memory_engine::valence::ValenceController;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WebServiceType {
-    // Web applications/services running under a web server
-    WebApp(String),      // e.g., "ecommerce-api", "user-portal", "admin-dashboard"
-    ApiService(String),  // e.g., "payment-api", "auth-service", "notification-service"
-    StaticSite(String),  // e.g., "marketing-site", "documentation", "landing-page"
-    Microservice(String), // e.g., "inventory-service", "order-service", "user-service"
-    Generic(String),     // Generic web service process
+    Apache,
+    Nginx,
+    IIS,
+    NodeJS,
+    Generic,
 }
 
 impl WebServiceType {
     pub fn as_str(&self) -> &str {
         match self {
-            WebServiceType::WebApp(name) => name,
-            WebServiceType::ApiService(name) => name,
-            WebServiceType::StaticSite(name) => name,
-            WebServiceType::Microservice(name) => name,
-            WebServiceType::Generic(name) => name,
+            WebServiceType::Apache => "apache",
+            WebServiceType::Nginx => "nginx",
+            WebServiceType::IIS => "iis",
+            WebServiceType::NodeJS => "nodejs",
+            WebServiceType::Generic => "generic",
         }
     }
 }
@@ -230,54 +229,32 @@ impl HostMeshCognition {
     }
 }
 
-// Helper function to detect web service type from process information
+// Helper function to detect web server type from process information
 pub fn detect_service_type(process_name: &str, command_line: &str) -> WebServiceType {
+    let process_lower = process_name.to_lowercase();
     let cmd_lower = command_line.to_lowercase();
     
-    // Detect API services
-    if cmd_lower.contains("api") || cmd_lower.contains("rest") || cmd_lower.contains("graphql") {
-        if cmd_lower.contains("auth") {
-            WebServiceType::ApiService("auth-service".to_string())
-        } else if cmd_lower.contains("payment") {
-            WebServiceType::ApiService("payment-api".to_string())
-        } else if cmd_lower.contains("user") {
-            WebServiceType::ApiService("user-api".to_string())
-        } else if cmd_lower.contains("order") {
-            WebServiceType::Microservice("order-service".to_string())
-        } else if cmd_lower.contains("inventory") {
-            WebServiceType::Microservice("inventory-service".to_string())
-        } else {
-            WebServiceType::ApiService(format!("{}-api", process_name))
-        }
+    // Detect Apache processes
+    if process_lower.contains("httpd") || process_lower.contains("apache") || 
+       cmd_lower.contains("httpd") || cmd_lower.contains("apache") {
+        WebServiceType::Apache
     }
-    // Detect web applications
-    else if cmd_lower.contains("app") || cmd_lower.contains("portal") || cmd_lower.contains("dashboard") {
-        if cmd_lower.contains("admin") {
-            WebServiceType::WebApp("admin-dashboard".to_string())
-        } else if cmd_lower.contains("user") {
-            WebServiceType::WebApp("user-portal".to_string())
-        } else if cmd_lower.contains("ecommerce") || cmd_lower.contains("shop") {
-            WebServiceType::WebApp("ecommerce-app".to_string())
-        } else {
-            WebServiceType::WebApp(format!("{}-app", process_name))
-        }
+    // Detect NGINX processes
+    else if process_lower.contains("nginx") || cmd_lower.contains("nginx") {
+        WebServiceType::Nginx
     }
-    // Detect static sites
-    else if cmd_lower.contains("static") || cmd_lower.contains("docs") || cmd_lower.contains("marketing") {
-        if cmd_lower.contains("docs") {
-            WebServiceType::StaticSite("documentation".to_string())
-        } else if cmd_lower.contains("marketing") {
-            WebServiceType::StaticSite("marketing-site".to_string())
-        } else {
-            WebServiceType::StaticSite(format!("{}-site", process_name))
-        }
+    // Detect IIS processes (w3wp.exe, iisexpress.exe, etc.)
+    else if process_lower.contains("w3wp") || process_lower.contains("iis") ||
+            cmd_lower.contains("w3wp") || cmd_lower.contains("iis") {
+        WebServiceType::IIS
     }
-    // Detect microservices
-    else if cmd_lower.contains("service") || cmd_lower.contains("micro") {
-        WebServiceType::Microservice(format!("{}-service", process_name))
+    // Detect Node.js processes
+    else if process_lower.contains("node") || cmd_lower.contains("node") ||
+            process_lower.contains("nodejs") || cmd_lower.contains("nodejs") {
+        WebServiceType::NodeJS
     }
-    // Default to generic web service
+    // Default to generic
     else {
-        WebServiceType::Generic(process_name.to_string())
+        WebServiceType::Generic
     }
 }

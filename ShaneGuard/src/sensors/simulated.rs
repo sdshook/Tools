@@ -168,13 +168,14 @@ pub async fn start_multi_service_simulator(mesh: Arc<Mutex<HostMeshCognition>>) 
     info!("Starting multi-service mesh cognition simulator...");
     
     let mut counter: u64 = 0;
+    // Simulate multiple IIS w3wp.exe processes serving different applications
     let services = vec![
-        ("ecommerce-api", WebServiceType::ApiService("ecommerce-api".to_string())),
-        ("user-portal", WebServiceType::WebApp("user-portal".to_string())), 
-        ("admin-dashboard", WebServiceType::WebApp("admin-dashboard".to_string())),
-        ("auth-service", WebServiceType::ApiService("auth-service".to_string())),
-        ("payment-api", WebServiceType::ApiService("payment-api".to_string())),
-        ("inventory-service", WebServiceType::Microservice("inventory-service".to_string())),
+        ("w3wp.exe", WebServiceType::IIS), // Process ID 1001 - ECommerce App
+        ("w3wp.exe", WebServiceType::IIS), // Process ID 1002 - User Portal  
+        ("w3wp.exe", WebServiceType::IIS), // Process ID 1003 - Admin Dashboard
+        ("w3wp.exe", WebServiceType::IIS), // Process ID 1004 - API Gateway
+        ("w3wp.exe", WebServiceType::IIS), // Process ID 1005 - Auth Service
+        ("w3wp.exe", WebServiceType::IIS), // Process ID 1006 - Payment Service
     ];
     
     loop {
@@ -183,15 +184,10 @@ pub async fn start_multi_service_simulator(mesh: Arc<Mutex<HostMeshCognition>>) 
         
         // Generate telemetry - make every 10th event suspicious
         let is_suspicious = counter % 10 == 0;
+        let process_pid = 1001 + (counter as usize % services.len()) as i64;
         let telemetry = if is_suspicious {
             json!({
-                "pid": match service_type {
-                    WebServiceType::ApiService(_) => 1001,
-                    WebServiceType::WebApp(_) => 1002,
-                    WebServiceType::Microservice(_) => 1003,
-                    WebServiceType::StaticSite(_) => 1004,
-                    _ => 1000,
-                },
+                "pid": process_pid,
                 "service_type": service_type.as_str(),
                 "write_remote": if counter % 20 == 0 { 2 } else { 0 },
                 "mprotect_rwx": if counter % 15 == 0 { 1 } else { 0 },
@@ -208,13 +204,7 @@ pub async fn start_multi_service_simulator(mesh: Arc<Mutex<HostMeshCognition>>) 
             })
         } else {
             json!({
-                "pid": match service_type {
-                    WebServiceType::ApiService(_) => 1001,
-                    WebServiceType::WebApp(_) => 1002,
-                    WebServiceType::Microservice(_) => 1003,
-                    WebServiceType::StaticSite(_) => 1004,
-                    _ => 1000,
-                },
+                "pid": process_pid,
                 "service_type": service_type.as_str(),
                 "write_remote": 0,
                 "mprotect_rwx": 0,

@@ -29,14 +29,18 @@ async fn main() -> Result<()> {
         cfg.aggression_init,
     )));
 
-    // Register simulated web service processes for demonstration
+    // Register multiple IIS w3wp.exe processes for demonstration
     {
         let mut m = mesh.lock().unwrap();
-        let ecommerce_id = m.register_service(WebServiceType::ApiService("ecommerce-api".to_string()), 1001);
-        let portal_id = m.register_service(WebServiceType::WebApp("user-portal".to_string()), 1002);
-        let auth_id = m.register_service(WebServiceType::ApiService("auth-service".to_string()), 1003);
+        let w3wp1_id = m.register_service(WebServiceType::IIS, 1001); // ECommerce App
+        let w3wp2_id = m.register_service(WebServiceType::IIS, 1002); // User Portal
+        let w3wp3_id = m.register_service(WebServiceType::IIS, 1003); // Admin Dashboard
+        let w3wp4_id = m.register_service(WebServiceType::IIS, 1004); // API Gateway
+        let w3wp5_id = m.register_service(WebServiceType::IIS, 1005); // Auth Service
+        let w3wp6_id = m.register_service(WebServiceType::IIS, 1006); // Payment Service
         
-        info!("Registered service processes: {}, {}, {}", ecommerce_id, portal_id, auth_id);
+        info!("Registered IIS w3wp processes: {}, {}, {}, {}, {}, {}", 
+              w3wp1_id, w3wp2_id, w3wp3_id, w3wp4_id, w3wp5_id, w3wp6_id);
     }
 
     // Start multi-service simulator
