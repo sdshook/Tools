@@ -36,9 +36,9 @@ impl BdhMemory {
         Self { 
             traces: Vec::new(),
             hebbian_connections: Vec::new(),
-            hebbian_learning_rate: 0.01,
-            decay_rate: 0.001,
-            activation_threshold: 0.5,
+            hebbian_learning_rate: 0.05,  // Increased from 0.01 for faster learning
+            decay_rate: 0.002,            // Slightly increased decay to prevent saturation
+            activation_threshold: 0.3,    // Lowered from 0.5 for more connections
         } 
     }
 

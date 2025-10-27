@@ -24,12 +24,12 @@ impl Config {
             window_seconds: 30,
             db_path: "./data/shaneguard.db".into(),
             aggression_init: 0.2,
-            eta: 0.12,
-            tau_novel: 0.28,
+            eta: 0.3,             // Increased learning rate for faster adaptation
+            tau_novel: 0.6,       // Lowered novelty threshold for better detection
             promote_threshold: 3.0,
-            beta: 0.7,
-            gamma: 0.3,
-            eps_explore: 0.02,
+            beta: 0.8,            // Increased valence weight for threat emphasis
+            gamma: 0.6,           // Increased similarity weight for pattern recognition
+            eps_explore: 0.05,    // Reduced exploration for more decisive actions
             mesh_learning_rate: 0.6,
             cross_service_threshold: 0.3,
         }

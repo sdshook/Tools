@@ -28,6 +28,10 @@ impl PsiIndex {
         out.sort_by(|a,b| b.1.partial_cmp(&a.1).unwrap());
         out.into_iter().take(top_k).collect()
     }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
 }
 
 fn cosine_sim(a: &[f32; EMBED_DIM], b: &[f32; EMBED_DIM]) -> f32 {

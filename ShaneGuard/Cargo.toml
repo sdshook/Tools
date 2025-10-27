@@ -44,6 +44,14 @@ path = "src/main.rs"
 name = "vulnerability_tests"
 path = "src/bin/vulnerability_tests.rs"
 
+[[bin]]
+name = "debug_components"
+path = "src/bin/debug_components.rs"
+
+[[bin]]
+name = "integration_tests"
+path = "src/bin/integration_tests.rs"
+
 [profile.release]
 opt-level = 3
 lto = true

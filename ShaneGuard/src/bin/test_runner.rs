@@ -180,7 +180,7 @@ impl VulnerabilityTestRunner {
         // Get the service memory for this PID
         let (similarity_score, valence, action, host_aggression) = {
             let mesh = self.mesh.lock().unwrap();
-            let service_id = format!("service_{}", pid);
+            let service_id = format!("apache_{}", pid); // Use the actual service type
             
             if let Some(service_memory) = mesh.get_service_memory(&service_id) {
                 let (top_sim, avg_valence) = {
@@ -373,4 +373,59 @@ impl VulnerabilityTestRunner {
         fs::write(filename, csv_content)?;
         Ok(())
     }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
+    
+    let args: Vec<String> = std::env::args().collect();
+    let mut iterations = 100;
+    let mut scenarios = 20;
+    
+    // Parse command line arguments
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--iterations" => {
+                if i + 1 < args.len() {
+                    iterations = args[i + 1].parse().unwrap_or(100);
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            },
+            "--scenarios" => {
+                if i + 1 < args.len() {
+                    scenarios = args[i + 1].parse().unwrap_or(20);
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            },
+            _ => i += 1,
+        }
+    }
+    
+    println!("ShaneGuard Test Runner");
+    println!("Iterations: {}, Scenarios: {}", iterations, scenarios);
+    
+    let config = Config::load_default();
+    let mesh = Arc::new(Mutex::new(HostMeshCognition::new(0.1, 0.3, 0.2)));
+    let mut test_runner = VulnerabilityTestRunner::new(mesh, config);
+    
+    // Load test scenarios
+    test_runner.load_test_scenarios()?;
+    
+    // Run learning simulation
+    test_runner.run_learning_simulation(WebServiceType::Apache, iterations).await?;
+    
+    // Generate reports
+    let summary = test_runner.generate_results_summary();
+    println!("{}", summary);
+    test_runner.export_results_csv("test_results.csv")?;
+    
+    println!("Test results exported to test_results.csv");
+    
+    Ok(())
 }
