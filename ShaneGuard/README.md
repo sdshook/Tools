@@ -125,25 +125,34 @@ The combination requires:
 ShaneGuard implements a novel **host-based mesh cognition** system adapted from the BHSM Cognitive Mesh Neural Network (CMNN). Unlike network-based mesh systems, this architecture focuses on **collaborative learning between multiple processes of the same web server type within a single host**. For example, multiple IIS w3wp.exe processes serving different applications share collective intelligence:
 
 ```
-┌─────────────────── Web Server Host ───────────────────┐
-│                                                        │
-│  ┌─Apache─┐    ┌─NGINX─┐    ┌─IIS─┐    ┌─Node.js─┐   │
-│  │ BDH-A  │◄──►│ BDH-N │◄──►│BDH-I│◄──►│ BDH-JS │   │
-│  │Memory  │    │Memory │    │Mem. │    │ Memory │   │
-│  └────────┘    └───────┘    └─────┘    └────────┘   │
-│       │            │           │            │        │
-│       └────────────┼───────────┼────────────┘        │
-│                    │           │                     │
-│              ┌─────▼───────────▼─────┐               │
-│              │   Shared PSI Index    │               │
-│              │  (Long-term Memory)   │               │
-│              └───────────────────────┘               │
-│                                                       │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │      Host Valence Controller                   │ │
-│  │   (Collective Aggression Management)           │ │
-│  └─────────────────────────────────────────────────┘ │
-└───────────────────────────────────────────────────────┘
+┌─────────────────── IIS Web Server Host ───────────────────┐
+│                                                            │
+│  ┌─w3wp.exe─┐  ┌─w3wp.exe─┐  ┌─w3wp.exe─┐  ┌─w3wp.exe─┐  │
+│  │PID: 1001 │  │PID: 1002 │  │PID: 1003 │  │PID: 1004 │  │
+│  │ECommerce │  │User      │  │Admin     │  │API       │  │
+│  │BDH Memory│◄─┤Portal    │◄─┤Dashboard │◄─┤Gateway   │  │
+│  └──────────┘  │BDH Memory│  │BDH Memory│  │BDH Memory│  │
+│       │        └──────────┘  └──────────┘  └──────────┘  │
+│       │             │             │             │        │
+│  ┌─w3wp.exe─┐  ┌─w3wp.exe─┐       │             │        │
+│  │PID: 1005 │  │PID: 1006 │       │             │        │
+│  │Auth      │  │Payment   │       │             │        │
+│  │Service   │◄─┤Service   │◄──────┼─────────────┘        │
+│  │BDH Memory│  │BDH Memory│       │                      │
+│  └──────────┘  └──────────┘       │                      │
+│       │             │             │                      │
+│       └─────────────┼─────────────┘                      │
+│                     │                                    │
+│              ┌──────▼──────────────┐                     │
+│              │   Shared PSI Index  │                     │
+│              │  (Long-term Memory) │                     │
+│              └─────────────────────┘                     │
+│                                                          │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │      Host Valence Controller                     │  │
+│  │   (Collective Aggression Management)             │  │
+│  └───────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ### **Key Benefits:**
