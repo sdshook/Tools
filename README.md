@@ -21,7 +21,7 @@ Advanced forensic code similarity analysis for IP theft detection:
   - Parallel processing for large repositories
 
 ### ShaneGuard - Adaptive Cybersecurity Web Service Protection Agent
-Revolutionary neuromorphic cybersecurity system combining Hebbian learning with reinforcement learning:
+Neuromorphic cybersecurity system combining Hebbian learning with reinforcement learning:
 
 * **[ShaneGuard/](ShaneGuard/)** - Adaptive Cybersecurity Web Service Protection Agent
   - **Neuromorphic Defense** with Reinforced Hebbian Learning architecture
