@@ -169,9 +169,12 @@ pub async fn start_multi_service_simulator(mesh: Arc<Mutex<HostMeshCognition>>) 
     
     let mut counter: u64 = 0;
     let services = vec![
-        ("apache_1001", WebServiceType::Apache),
-        ("nginx_1002", WebServiceType::Nginx), 
-        ("iis_1003", WebServiceType::IIS),
+        ("ecommerce-api", WebServiceType::ApiService("ecommerce-api".to_string())),
+        ("user-portal", WebServiceType::WebApp("user-portal".to_string())), 
+        ("admin-dashboard", WebServiceType::WebApp("admin-dashboard".to_string())),
+        ("auth-service", WebServiceType::ApiService("auth-service".to_string())),
+        ("payment-api", WebServiceType::ApiService("payment-api".to_string())),
+        ("inventory-service", WebServiceType::Microservice("inventory-service".to_string())),
     ];
     
     loop {
@@ -183,9 +186,10 @@ pub async fn start_multi_service_simulator(mesh: Arc<Mutex<HostMeshCognition>>) 
         let telemetry = if is_suspicious {
             json!({
                 "pid": match service_type {
-                    WebServiceType::Apache => 1001,
-                    WebServiceType::Nginx => 1002,
-                    WebServiceType::IIS => 1003,
+                    WebServiceType::ApiService(_) => 1001,
+                    WebServiceType::WebApp(_) => 1002,
+                    WebServiceType::Microservice(_) => 1003,
+                    WebServiceType::StaticSite(_) => 1004,
                     _ => 1000,
                 },
                 "service_type": service_type.as_str(),
@@ -205,9 +209,10 @@ pub async fn start_multi_service_simulator(mesh: Arc<Mutex<HostMeshCognition>>) 
         } else {
             json!({
                 "pid": match service_type {
-                    WebServiceType::Apache => 1001,
-                    WebServiceType::Nginx => 1002,
-                    WebServiceType::IIS => 1003,
+                    WebServiceType::ApiService(_) => 1001,
+                    WebServiceType::WebApp(_) => 1002,
+                    WebServiceType::Microservice(_) => 1003,
+                    WebServiceType::StaticSite(_) => 1004,
                     _ => 1000,
                 },
                 "service_type": service_type.as_str(),

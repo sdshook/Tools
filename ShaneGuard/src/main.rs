@@ -29,14 +29,14 @@ async fn main() -> Result<()> {
         cfg.aggression_init,
     )));
 
-    // Register simulated web services for demonstration
+    // Register simulated web service processes for demonstration
     {
         let mut m = mesh.lock().unwrap();
-        let apache_id = m.register_service(WebServiceType::Apache, 1001);
-        let nginx_id = m.register_service(WebServiceType::Nginx, 1002);
-        let iis_id = m.register_service(WebServiceType::IIS, 1003);
+        let ecommerce_id = m.register_service(WebServiceType::ApiService("ecommerce-api".to_string()), 1001);
+        let portal_id = m.register_service(WebServiceType::WebApp("user-portal".to_string()), 1002);
+        let auth_id = m.register_service(WebServiceType::ApiService("auth-service".to_string()), 1003);
         
-        info!("Registered services: {}, {}, {}", apache_id, nginx_id, iis_id);
+        info!("Registered service processes: {}, {}, {}", ecommerce_id, portal_id, auth_id);
     }
 
     // Start multi-service simulator
