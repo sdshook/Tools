@@ -177,6 +177,81 @@ ShaneGuard implements a novel **host-based mesh cognition** system adapted from 
 - **Reinforcement Scaling**: Reward magnitude directly modulates learning rate and connection strength
 - **Bidirectional Propagation**: Weight updates flow both forward and backward between connected traces
 
+## What Happens When An Intrusion or Exploitation Happens?
+
+When ShaneGuard's Reinforced Hebbian Learning (RHL) system detects an anomaly, it triggers a sophisticated multi-stage response process:
+
+### 1. **Anomaly Detection Process**
+- The system continuously monitors telemetry from web server processes (e.g., IIS w3wp.exe processes)
+- Each telemetry event is **featurized** into a 32-dimensional vector
+- The BDH (Behavioral Decision Hierarchy) memory retrieves **similar past experiences** and computes:
+  - `top_sim`: Similarity score to most similar past event
+  - `avg_valence`: Average emotional valence (positive/negative) of similar experiences
+
+### 2. **Policy Decision Engine**
+The system uses a **reinforcement learning policy** that considers:
+- **Similarity score**: How similar this event is to known patterns
+- **Valence**: Emotional context (threat level) from past experiences  
+- **Host aggression**: Current defensive posture of the system
+- **Configuration parameters**: β (valence weight), γ (score weight), ε (exploration rate)
+
+### 3. **Response Actions Available**
+Based on the policy decision, the system can take these actions:
+
+```rust
+pub enum Action {
+    Log,              // Record event only
+    Notify,           // Alert administrators  
+    Throttle,         // Rate limit connections
+    Isolate,          // Block/quarantine process
+    Restart,          // Restart the process
+    SnapshotAndKill,  // Capture evidence then terminate
+}
+```
+
+### 4. **Logging and Evidence Collection**
+
+**Yes, anomalies are logged with datetime and details:**
+
+- **Standard logging**: Every detection event is logged with:
+  ```
+  "Telemetry pid={} sim_score={} avg_valence={:?} action={:?}"
+  ```
+
+- **Evidence snapshots**: For severe threats (`SnapshotAndKill` action), the system:
+  - Calls `evidence::snapshot_evidence(pid, "policy_snapshot")`
+  - Creates timestamped JSON entries in `evidence.log`:
+    ```json
+    {"pid":1001,"reason":"policy_snapshot","time":1698765432}
+    ```
+
+### 5. **MTD-Style Defensive Actions**
+
+**Yes, the system can interfere with process connections when configured:**
+
+- **Throttle**: Rate limits incoming connections to the affected process
+- **Isolate**: Blocks network access or quarantines the process  
+- **SnapshotAndKill**: Terminates the compromised process after evidence collection
+- **Restart**: Restarts the process to clear any compromise
+
+The actual implementation is in `actuators::apply_nginx_mitigation()` (designed for real defensive actions).
+
+### 6. **Cross-Process Learning**
+When one IIS w3wp.exe process detects an anomaly:
+- The learning is **immediately shared** with other w3wp.exe processes on the same host
+- This creates **collective immunity** - if one process learns about a threat, all processes become resistant
+- The shared PSI Index stores long-term memory accessible to all processes
+
+### 7. **Adaptive Aggression**
+The system maintains a **host-level aggression score** that:
+- Increases when threats are detected
+- Makes the system more sensitive to future anomalies
+- Influences the severity of defensive responses
+
+This creates a **living defense system** that learns from attacks and becomes more protective over time, with immediate cross-process threat sharing and configurable MTD-style responses.
+
+---
+
 ## Impact
 
 This represents a new class of cognitive, self-adaptive cybersecurity system—emergent, biologically inspired, and locally learning. Rather than reinventing existing tools, this project creates an adaptive "suspension system" that enables the cybersecurity infrastructure to learn and adapt to new terrain autonomously.
