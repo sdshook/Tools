@@ -4694,7 +4694,7 @@ class ForensicWorkflowManager:
         self.logger.info(f"Created custom FAS5 SQLite output module for database: {database_path}")
         return module
 
-    def parse_artifacts_plaso(self, plaso_path: Path) -> bool:
+    def parse_artifacts_plaso(self, plaso_path: Path, fast_mode: bool = False, date_from: str = None, date_to: str = None) -> bool:
         """Parse collected artifacts using proper Plaso two-step workflow: log2timeline -> psort -> SQLite"""
         try:
             self.log_custody_event("PARSING_START", "Starting Plaso two-step processing: log2timeline -> psort -> SQLite")
@@ -4769,16 +4769,92 @@ class ForensicWorkflowManager:
             
             self.logger.info(f"Step 1: Creating timeline from artifacts (Size: {artifacts_size:.1f}MB): {self.artifacts_path} -> {plaso_storage_path}")
             
-            # Step 1: Create timeline from collected artifacts
-            log2timeline_cmd = [
-                log2timeline_cmd_path,  # Use the detected command path
-                "--storage-file", str(plaso_storage_path),
-                "--parsers", "mft,prefetch,winreg,lnk,winjob,winevtx,usnjrnl,filestat,sqlite/chrome_27_history,sqlite/chrome_66_cookies,sqlite/chrome_autofill,sqlite/firefox_history,sqlite/firefox_downloads,sqlite/safari_historydb,sqlite/edge_load_statistics,msiecf,binary_cookies,chrome_cache,firefox_cache,recycle_bin,custom_destinations,olecf/olecf_automatic_destinations",
-                "--hashers", "md5,sha256",
-                "--workers", "6",  # Increased workers for better performance
-                "--worker_memory_limit", "4096",  # 4GB memory limit
-                str(self.artifacts_path)
+            # Step 1: Create timeline from collected artifacts with performance optimizations
+            
+            # Determine optimal worker count based on system resources
+            cpu_count = psutil.cpu_count(logical=False) or 4  # Physical cores
+            optimal_workers = min(max(cpu_count - 1, 2), 12)  # Leave 1 core free, max 12 workers
+            
+            # Determine optimal memory limit based on available RAM
+            available_memory = psutil.virtual_memory().available // (1024 * 1024)  # MB
+            worker_memory_limit = min(max(available_memory // optimal_workers // 2, 1024), 8192)  # 1-8GB per worker
+            
+            # Selective parser configuration for faster processing
+            # Focus on parsers most relevant to the 12 standard forensic questions
+            essential_parsers = [
+                "mft",           # File system activity
+                "prefetch",      # Program execution
+                "winreg",        # Registry (USB, software, user accounts)
+                "lnk",           # Recent file access
+                "winevtx",       # Windows event logs
+                "usnjrnl",       # File system journal
+                "filestat",      # File metadata
+                "recycle_bin",   # Deleted files
+                # Browser artifacts (selective)
+                "sqlite/chrome_27_history",
+                "sqlite/firefox_history",
+                "msiecf",        # Internet Explorer
+                # USB and device artifacts
+                "custom_destinations",  # Jump lists
+                "olecf/olecf_automatic_destinations"
             ]
+            
+            # Optional parsers for comprehensive analysis (can be disabled for speed)
+            optional_parsers = [
+                "sqlite/chrome_66_cookies",
+                "sqlite/chrome_autofill", 
+                "sqlite/firefox_downloads",
+                "sqlite/safari_historydb",
+                "sqlite/edge_load_statistics",
+                "binary_cookies",
+                "chrome_cache",
+                "firefox_cache",
+                "winjob"  # Scheduled tasks
+            ]
+            
+            # Use essential parsers by default, add optional if processing time allows
+            parsers_list = essential_parsers
+            if not fast_mode and artifacts_size < 5000:  # Less than 5GB - include optional parsers
+                parsers_list.extend(optional_parsers)
+            elif fast_mode:
+                # In fast mode, use only the most critical parsers for the 12 questions
+                parsers_list = [
+                    "mft",           # File system activity
+                    "prefetch",      # Program execution  
+                    "winreg",        # Registry (USB, software)
+                    "winevtx",       # Windows event logs
+                    "usnjrnl",       # File system journal
+                    "recycle_bin"    # Deleted files
+                ]
+            
+            log2timeline_cmd = [
+                log2timeline_cmd_path,
+                "--storage-file", str(plaso_storage_path),
+                "--parsers", ",".join(parsers_list),
+                "--hashers", "md5",  # Only MD5 for speed (SHA256 can be added later if needed)
+                "--workers", str(optimal_workers),
+                "--worker_memory_limit", str(worker_memory_limit),
+                "--buffer_size", "196608",  # 192KB buffer for better I/O performance
+                "--temporary_directory", str(self.parsed_dir / "temp"),  # Use SSD temp space
+            ]
+            
+            # Add date filtering if specified (major performance boost for targeted analysis)
+            if date_from or date_to:
+                if date_from:
+                    log2timeline_cmd.extend(["--date_filter", f"start:{date_from}"])
+                if date_to:
+                    log2timeline_cmd.extend(["--date_filter", f"end:{date_to}"])
+                self.logger.info(f"Date filtering enabled: {date_from} to {date_to}")
+            
+            # Add the artifacts path as the final argument
+            log2timeline_cmd.append(str(self.artifacts_path))
+            
+            # Create temp directory for better performance
+            temp_dir = self.parsed_dir / "temp"
+            temp_dir.mkdir(exist_ok=True)
+            
+            self.logger.info(f"Performance optimizations: {optimal_workers} workers, {worker_memory_limit}MB per worker")
+            self.logger.info(f"Parser selection: {'Essential + Optional' if len(parsers_list) > len(essential_parsers) else 'Essential only'} ({len(parsers_list)} parsers)")
             
             self.logger.info(f"Executing log2timeline: {' '.join(log2timeline_cmd)}")
             
@@ -4828,10 +4904,14 @@ class ForensicWorkflowManager:
             
             # Use standard JSON output and process with our custom module
             json_output_path = self.parsed_dir / f"{self.case_id}_timeline.json"
+            
+            # Optimize psort for faster processing
             psort_cmd = [
                 psort_cmd_path,
                 "-o", "json",
                 "-w", str(json_output_path),
+                "--buffer_size", "196608",  # 192KB buffer for better I/O
+                "--temporary_directory", str(temp_dir),  # Use same temp directory
                 str(plaso_storage_path)
             ]
             
@@ -4890,10 +4970,14 @@ class ForensicWorkflowManager:
             # Clean up temporary files
             try:
                 json_output_path.unlink()
+                # Clean up temp directory
+                import shutil
+                if temp_dir.exists():
+                    shutil.rmtree(temp_dir, ignore_errors=True)
                 # Optionally clean up intermediate .plaso file to save space
                 # plaso_storage_path.unlink()  # Uncomment if storage space is critical
-            except:
-                pass
+            except Exception as e:
+                self.logger.debug(f"Cleanup warning: {e}")
                 
             # Log performance metrics
             db_size = database_path.stat().st_size / 1024 / 1024  # MB
@@ -4952,7 +5036,7 @@ class ForensicWorkflowManager:
             self.logger.warning(f"Database post-optimization failed: {e}")
             
     def run_full_analysis(self, target: str, kape_path: Path, plaso_path: Path, 
-                         questions: List[str] = None, date_from: str = None, date_to: str = None, days_back: int = None, keywords: List[str] = None, existing_artifacts_dir: Path = None) -> bool:
+                         questions: List[str] = None, date_from: str = None, date_to: str = None, days_back: int = None, keywords: List[str] = None, existing_artifacts_dir: Path = None, fast_mode: bool = False) -> bool:
         """Execute complete end-to-end forensic analysis with performance monitoring"""
         start_time = time.time()
         try:
@@ -4975,7 +5059,7 @@ class ForensicWorkflowManager:
                     return False
                 
             # Step 2: Parse artifacts with Plaso
-            if not self.parse_artifacts_plaso(plaso_path):
+            if not self.parse_artifacts_plaso(plaso_path, fast_mode, date_from, date_to):
                 return False
                 
             # Step 3: Validate and use database created by direct SQLite processing
@@ -5181,6 +5265,7 @@ def main():
     parser.add_argument('--artifacts-dir', type=Path, help='Use existing artifacts directory (skips KAPE collection)')
     parser.add_argument('--kape-path', type=Path, default=Path('D:/FORAI/tools/kape/kape.exe'), help='Path to KAPE executable')
     parser.add_argument('--plaso-path', type=Path, default=Path('D:/FORAI/tools/plaso'), help='Path to Plaso tools directory')
+    parser.add_argument('--fast-mode', action='store_true', help='Enable fast processing mode (reduced parsers, optimized for 12 standard questions)')
     
     # EXISTING OPTIONS
     # CSV arguments removed - using direct artifact → SQLite workflow only
@@ -5288,7 +5373,7 @@ def main():
             
             # Run complete analysis with time filtering
             success = workflow.run_full_analysis(target, args.kape_path, args.plaso_path, questions, 
-                                                args.date_from, args.date_to, args.days_back, keywords, args.artifacts_dir)
+                                                args.date_from, args.date_to, args.days_back, keywords, args.artifacts_dir, args.fast_mode)
             
             if success:
                 print(f"\n🎉 FULL FORENSIC ANALYSIS COMPLETED SUCCESSFULLY!")
@@ -5390,7 +5475,7 @@ def main():
                                          f"Loading {len(keywords)} custom keywords for case-insensitive flagging")
                 inject_keywords(args.case_id, keywords)
             
-            success = workflow.parse_artifacts_plaso(args.plaso_path)
+            success = workflow.parse_artifacts_plaso(args.plaso_path, args.fast_mode, args.date_from, args.date_to)
             print(f"Artifact parsing {'completed' if success else 'failed'}")
             return
         
