@@ -1,4 +1,5 @@
 # FORAI - Forensic AI Analysis Tool
+# (c) 2025, All Rights Reserved - Shane D. Shook, PhD
 
 **FORAI** (Forensic AI) is a streamlined, high-performance digital forensics analysis tool that combines deterministic evidence extraction with AI-powered semantic analysis for rapid forensic triage and investigation.
 
@@ -6,7 +7,6 @@
 
 FORAI revolutionizes digital forensic analysis by integrating:
 - **Deterministic fact extraction** for 100% accurate forensic data
-- **BHSM semantic memory** for intelligent evidence correlation  
 - **AI-powered narrative generation** for comprehensive reporting
 - **Performance-optimized architecture** for real-time analysis
 
@@ -15,7 +15,7 @@ FORAI revolutionizes digital forensic analysis by integrating:
 Unlike traditional forensic tools that rely purely on keyword searches or AI tools that hallucinate facts, FORAI uses a **hybrid approach**:
 
 1. **Deterministic extractors** provide ground-truth facts (USB devices, file hashes, timestamps)
-2. **PSI semantic search** finds relevant evidence patterns quickly
+2. **Semantic search** finds relevant evidence patterns quickly
 3. **AI summarization** creates human-readable narratives from verified facts
 4. **Validation layer** ensures AI claims match deterministic evidence
 
@@ -31,13 +31,13 @@ Digital Evidence → KAPE Collection → Plaso Timeline → FORAI Analysis → F
          │                       │
          ▼                       ▼ (if no deterministic answer)
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│ PSI Semantic    │───▶│ Exact SQL        │───▶│ AI Narrative    │
+│    Semantic    │───▶│ Exact SQL        │───▶│ AI Narrative    │
 │ Search (fast)   │    │ Retrieval        │    │ + Validation    │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│ BDH Learning    │    │ Evidence Facts   │    │ Validated       │
+│      RHL        │    │ Evidence Facts   │    │ Validated       │
 │ (reward good    │    │ (ground truth)   │    │ Final Answer    │
 │ patterns)       │    │                  │    │                 │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
@@ -57,7 +57,7 @@ Digital Evidence → KAPE Collection → Plaso Timeline → FORAI Analysis → F
 
 ### 3. **Intelligent Triage**
 - **Semantic evidence correlation** finds related artifacts automatically
-- **Learning system** improves relevance over time
+- **Reinforced Hebbian Learning system** improves relevance over time
 - **Prioritized results** based on forensic significance
 
 ### 4. **Comprehensive Coverage**
@@ -104,7 +104,7 @@ pip install llama-cpp-python plaso tqdm fpdf2 sqlite3
 
 ### BHSM Integration
 
-FORAI requires the BHSM (Biological Hebbian Semantic Memory) module for optimal performance:
+FORAI requires the BHSM module for optimal performance:
 
 ```bash
 # Ensure BHSM.py is in the same directory or Python path
@@ -273,7 +273,7 @@ backdoor
 - **Memory-efficient storage** for large datasets
 - **Incremental updates** for ongoing investigations
 
-### BDHMemory (Biological Dual-Hemisphere Memory)
+### BDHMemory (BiDirectional Reinforced Hebbian Memory)
 - **Learning system** that improves over time
 - **Reward-based updates** for successful evidence patterns
 - **Automatic consolidation** of important evidence to PSI
@@ -382,7 +382,7 @@ Copyright (c) 2025 Shane D. Shook. All Rights Reserved.
 
 ## 🎉 Conclusion
 
-FORAI represents a paradigm shift in digital forensics, combining the speed and accuracy of deterministic analysis with the intelligence of AI-powered semantic search. By eliminating traditional bottlenecks and reducing AI hallucination, FORAI enables forensic professionals to conduct rapid, accurate triage analysis at scale.
+FORAI combines the speed and accuracy of deterministic analysis with the intelligence of AI-powered semantic search. By eliminating traditional bottlenecks and reducing AI hallucination, FORAI enables forensic professionals to conduct rapid, accurate triage analysis at scale.
 
 **Key Benefits:**
 - ⚡ **10-50x faster** than traditional tools
@@ -391,4 +391,4 @@ FORAI represents a paradigm shift in digital forensics, combining the speed and 
 - 📊 **Comprehensive** reporting and documentation
 - 🔄 **Learning system** that improves over time
 
-Transform your forensic workflow with FORAI - where deterministic precision meets AI intelligence.
+Transform your forensic workflow with FORAI - where deterministic precision meets autonomous intelligence.
