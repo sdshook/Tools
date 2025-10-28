@@ -43,6 +43,26 @@ Digital Evidence → KAPE Collection → Plaso Timeline → FORAI Analysis → F
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
+## ✨ New Features (v3.0)
+
+### 🤖 **Autonomous Analysis Mode**
+- **Automatically answers all 12 standard forensic questions**
+- **Comprehensive confidence scoring** for each answer
+- **Structured reporting** with supporting evidence
+- **Intelligent recommendations** for follow-up actions
+
+### 🔧 **Flexible LLM Configuration**
+- **Local LLM support**: Use models from local folder (e.g., `D:\FORAI\LLM`)
+- **API provider support**: OpenAI, Anthropic, and other cloud providers
+- **Token-based authentication** for secure API access
+- **Automatic fallback** to deterministic methods when LLM unavailable
+
+### 📊 **Enhanced Reporting**
+- **Confidence analysis** with high/medium/low categorization
+- **Evidence validation** ensuring AI claims match forensic facts
+- **Processing metrics** including timing and accuracy statistics
+- **Actionable recommendations** based on analysis results
+
 ## 🎯 Benefits for AI-Supported Forensic Triage
 
 ### 1. **Speed & Efficiency**
@@ -155,6 +175,22 @@ python FORAI.py --case-id CASE001 --question "What network activity occurred?" -
 ```
 
 ## 📊 CLI Usage Examples
+
+### 🤖 Autonomous Analysis (NEW!)
+
+```bash
+# Autonomous analysis with local LLM
+python FORAI.py --case-id CASE001 --autonomous-analysis --llm-folder "D:\FORAI\LLM" --report pdf --verbose
+
+# Autonomous analysis with OpenAI API
+python FORAI.py --case-id CASE001 --autonomous-analysis --llm-api-provider openai --llm-api-token "sk-..." --llm-model "gpt-4" --report json
+
+# Autonomous analysis with Anthropic API
+python FORAI.py --case-id CASE001 --autonomous-analysis --llm-api-provider anthropic --llm-api-token "sk-ant-..." --llm-model "claude-3-sonnet-20240229"
+
+# Deterministic analysis only (no LLM required)
+python FORAI.py --case-id CASE001 --autonomous-analysis --report json
+```
 
 ### Basic Analysis
 

@@ -25,6 +25,19 @@ CLI USAGE EXAMPLES:
     # Use YOUR 12 standard forensic questions (no --question flag)
     python FORAI.py --case-id CASE001 --full-analysis --target-drive C: --chain-of-custody --verbose
     
+🤖 AUTONOMOUS ANALYSIS (ANSWER ALL 12 QUESTIONS AUTOMATICALLY):
+    # Local LLM model from folder
+    python FORAI.py --case-id CASE001 --autonomous-analysis --llm-folder "D:\\FORAI\\LLM" --report pdf --verbose
+    
+    # OpenAI API with token
+    python FORAI.py --case-id CASE001 --autonomous-analysis --llm-api-provider openai --llm-api-token "sk-..." --llm-model "gpt-4" --report json
+    
+    # Anthropic API with token
+    python FORAI.py --case-id CASE001 --autonomous-analysis --llm-api-provider anthropic --llm-api-token "sk-ant-..." --llm-model "claude-3-sonnet-20240229"
+    
+    # Deterministic analysis only (no LLM)
+    python FORAI.py --case-id CASE001 --autonomous-analysis --report json
+    
     # Use custom question (with --question flag)
     python FORAI.py --case-id CASE001 --full-analysis --target-drive C: --question "Your specific custom question here" --chain-of-custody --verbose
     
@@ -117,8 +130,15 @@ from functools import lru_cache, wraps
 
 from tqdm import tqdm
 from fpdf import FPDF
-from llama_cpp import Llama
 import psutil
+
+# Optional imports for LLM functionality
+try:
+    from llama_cpp import Llama
+    LLAMA_CPP_AVAILABLE = True
+except ImportError:
+    LLAMA_CPP_AVAILABLE = False
+    print("Warning: llama-cpp-python not available. Local LLM functionality will be disabled.")
 
 # Import BHSM components for efficient semantic indexing and learning
 try:
@@ -131,11 +151,264 @@ except ImportError as e:
     BHSM_AVAILABLE = False
 
 # ============================================================================
+# STANDARD FORENSIC QUESTIONS
+# ============================================================================
+
+STANDARD_FORENSIC_QUESTIONS = [
+    {
+        "id": "Q1",
+        "question": "What is the computer name?",
+        "description": "Identify the system hostname/computer name",
+        "extractor": "extract_computer_identity",
+        "keywords": ["computername", "computer name", "hostname", "system name"]
+    },
+    {
+        "id": "Q2", 
+        "question": "What is the computer make, model, and serial number?",
+        "description": "Hardware identification details",
+        "extractor": "extract_computer_identity",
+        "keywords": ["make", "model", "serial", "manufacturer", "hardware"]
+    },
+    {
+        "id": "Q3",
+        "question": "What internal hard drives are present?",
+        "description": "Internal storage devices and specifications",
+        "extractor": "extract_hard_drives", 
+        "keywords": ["internal", "hard drive", "storage", "disk", "drive"]
+    },
+    {
+        "id": "Q4",
+        "question": "What user accounts exist and their activity levels?",
+        "description": "User accounts, SIDs, and usage patterns",
+        "extractor": "extract_user_accounts",
+        "keywords": ["user", "account", "sid", "username", "profile"]
+    },
+    {
+        "id": "Q5",
+        "question": "Who is the primary user of this system?",
+        "description": "Most active user based on logon frequency and file activity",
+        "extractor": "extract_user_accounts",
+        "keywords": ["primary user", "main user", "most active", "owner"]
+    },
+    {
+        "id": "Q6",
+        "question": "Is there evidence of anti-forensic activity?",
+        "description": "Data destruction, tampering, or evidence elimination attempts",
+        "extractor": "extract_anti_forensic_activity",
+        "keywords": ["anti-forensic", "data destruction", "tampering", "deletion", "wiping"]
+    },
+    {
+        "id": "Q7",
+        "question": "What USB or removable storage devices were connected?",
+        "description": "External storage devices and connection history",
+        "extractor": "extract_usb_devices",
+        "keywords": ["usb", "removable", "external", "storage", "device"]
+    },
+    {
+        "id": "Q8",
+        "question": "What files were transferred to/from removable storage?",
+        "description": "File transfer activity involving external devices",
+        "extractor": "extract_file_transfers",
+        "keywords": ["file transfer", "copy", "move", "removable", "external"]
+    },
+    {
+        "id": "Q9",
+        "question": "Is there evidence of cloud storage usage?",
+        "description": "Cloud storage applications and sync activity",
+        "extractor": "extract_file_transfers",
+        "keywords": ["cloud", "dropbox", "onedrive", "google drive", "sync"]
+    },
+    {
+        "id": "Q10",
+        "question": "Are there any screenshot artifacts?",
+        "description": "Screenshot files and screen capture activity",
+        "extractor": "extract_screenshots",
+        "keywords": ["screenshot", "screen capture", "snipping", "print screen"]
+    },
+    {
+        "id": "Q11",
+        "question": "What documents were printed?",
+        "description": "Print job history and document printing activity",
+        "extractor": "extract_print_jobs",
+        "keywords": ["print", "printer", "document", "job", "spool"]
+    },
+    {
+        "id": "Q12",
+        "question": "What software was installed or modified?",
+        "description": "Software installation, updates, and modification history",
+        "extractor": "extract_software_changes",
+        "keywords": ["software", "install", "program", "application", "modify"]
+    }
+]
+
+# ============================================================================
 # PERFORMANCE OPTIMIZATION: LLM SINGLETON
 # ============================================================================
 # Global LLM instance to avoid repeated model loads (major performance boost)
 _GLOBAL_LLM = None
 _LLM_LOCK = threading.Lock()
+
+# ============================================================================
+# LLM PROVIDER ABSTRACTION
+# ============================================================================
+
+class LLMProvider:
+    """Abstract base class for LLM providers (local vs API)"""
+    
+    def __init__(self, config: dict):
+        self.config = config
+        self.provider_type = config.get('provider', 'local')
+        
+    def generate_response(self, prompt: str, max_tokens: int = 500, temperature: float = 0.1) -> str:
+        """Generate response from LLM"""
+        raise NotImplementedError("Subclasses must implement generate_response")
+    
+    def is_available(self) -> bool:
+        """Check if LLM provider is available"""
+        raise NotImplementedError("Subclasses must implement is_available")
+
+class LocalLLMProvider(LLMProvider):
+    """Local LLM provider using llama-cpp-python"""
+    
+    def __init__(self, config: dict):
+        super().__init__(config)
+        self.model_path = config.get('model_path')
+        self.llm = None
+        self._initialize()
+    
+    def _initialize(self):
+        """Initialize local LLM model"""
+        try:
+            if not LLAMA_CPP_AVAILABLE:
+                LOGGER.warning("llama-cpp-python not available, local LLM disabled")
+                self.llm = None
+                return
+                
+            if self.model_path and Path(self.model_path).exists():
+                self.llm = Llama(
+                    model_path=str(self.model_path),
+                    n_ctx=2048,
+                    n_threads=4,
+                    verbose=False
+                )
+                LOGGER.info(f"Local LLM initialized: {self.model_path}")
+            else:
+                LOGGER.warning(f"Local LLM model not found: {self.model_path}")
+        except Exception as e:
+            LOGGER.error(f"Failed to initialize local LLM: {e}")
+            self.llm = None
+    
+    def generate_response(self, prompt: str, max_tokens: int = 500, temperature: float = 0.1) -> str:
+        """Generate response using local LLM"""
+        if not self.llm:
+            return "Local LLM not available"
+        
+        try:
+            response = self.llm(
+                prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=0.9,
+                stop=["Question:", "Evidence:", "\n\n"],
+                echo=False
+            )
+            return response['choices'][0]['text'].strip()
+        except Exception as e:
+            LOGGER.error(f"Local LLM generation error: {e}")
+            return "Error generating response"
+    
+    def is_available(self) -> bool:
+        return self.llm is not None
+
+class APILLMProvider(LLMProvider):
+    """API-based LLM provider (OpenAI, Anthropic, etc.)"""
+    
+    def __init__(self, config: dict):
+        super().__init__(config)
+        self.api_token = config.get('api_token')
+        self.model = config.get('model', 'gpt-3.5-turbo')
+        self.provider_name = config.get('provider', 'openai')
+        self.client = None
+        self._initialize()
+    
+    def _initialize(self):
+        """Initialize API client"""
+        try:
+            if self.provider_name == 'openai':
+                import openai
+                self.client = openai.OpenAI(api_key=self.api_token)
+                LOGGER.info(f"OpenAI API client initialized with model: {self.model}")
+            elif self.provider_name == 'anthropic':
+                import anthropic
+                self.client = anthropic.Anthropic(api_key=self.api_token)
+                LOGGER.info(f"Anthropic API client initialized with model: {self.model}")
+            else:
+                LOGGER.error(f"Unsupported API provider: {self.provider_name}")
+        except ImportError as e:
+            LOGGER.error(f"Missing API client library: {e}")
+            self.client = None
+        except Exception as e:
+            LOGGER.error(f"Failed to initialize API client: {e}")
+            self.client = None
+    
+    def generate_response(self, prompt: str, max_tokens: int = 500, temperature: float = 0.1) -> str:
+        """Generate response using API"""
+        if not self.client:
+            return "API client not available"
+        
+        try:
+            if self.provider_name == 'openai':
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "You are a forensic analysis expert. Provide accurate, concise answers based on the evidence provided."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=temperature
+                )
+                return response.choices[0].message.content.strip()
+            
+            elif self.provider_name == 'anthropic':
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                return response.content[0].text.strip()
+            
+        except Exception as e:
+            LOGGER.error(f"API generation error: {e}")
+            return "Error generating API response"
+    
+    def is_available(self) -> bool:
+        return self.client is not None
+
+def create_llm_provider(args) -> LLMProvider:
+    """Factory function to create appropriate LLM provider"""
+    if args.llm_api_token and args.llm_api_provider != 'local':
+        # API-based provider
+        config = {
+            'provider': args.llm_api_provider,
+            'api_token': args.llm_api_token,
+            'model': args.llm_model
+        }
+        return APILLMProvider(config)
+    else:
+        # Local provider
+        if args.llm_folder:
+            model_path = args.llm_folder / args.llm_model
+        else:
+            model_path = CONFIG.base_dir / "LLM" / args.llm_model
+        
+        config = {
+            'provider': 'local',
+            'model_path': str(model_path)
+        }
+        return LocalLLMProvider(config)
 
 def get_global_llm(model_path: str = None, force_reload: bool = False):
     """Get or create global LLM instance (singleton pattern)"""
@@ -502,7 +775,7 @@ class RemovedEnhancedForensicSearch:
         
         return "\n".join(context_parts)
 
-enhanced_search = EnhancedForensicSearch()
+enhanced_search = RemovedEnhancedForensicSearch()
 
 class AdvancedTinyLlamaEnhancer:
     """Advanced enhancement system to boost LLM accuracy for forensic analysis"""
@@ -3400,6 +3673,240 @@ Answer:"""
         
         # Generic fallback
         return "Unable to answer this question with available evidence. Consider running with LLM model for enhanced analysis."
+    
+    def autonomous_analysis(self, case_id: str, llm_provider: LLMProvider = None) -> Dict[str, Any]:
+        """Autonomously answer all 12 standard forensic questions and generate comprehensive report"""
+        LOGGER.info(f"Starting autonomous analysis for case {case_id}")
+        start_time = time.perf_counter()
+        
+        results = {
+            'case_id': case_id,
+            'analysis_timestamp': datetime.now().isoformat(),
+            'questions_answered': 0,
+            'total_questions': len(STANDARD_FORENSIC_QUESTIONS),
+            'answers': {},
+            'evidence_summary': {},
+            'confidence_scores': {},
+            'processing_time': 0,
+            'llm_provider': llm_provider.provider_type if llm_provider else 'none'
+        }
+        
+        with get_database_connection() as conn:
+            # First, gather overall evidence statistics
+            cursor = conn.execute("""
+                SELECT 
+                    COUNT(*) as total_evidence,
+                    COUNT(DISTINCT artifact_type) as artifact_types,
+                    MIN(timestamp) as earliest_event,
+                    MAX(timestamp) as latest_event
+                FROM evidence 
+                WHERE case_id = ?
+            """, (case_id,))
+            
+            stats = cursor.fetchone()
+            if stats:
+                results['evidence_summary'] = {
+                    'total_evidence_items': stats[0],
+                    'artifact_types_found': stats[1],
+                    'timeline_start': stats[2],
+                    'timeline_end': stats[3]
+                }
+            
+            # Process each standard question
+            for question_data in STANDARD_FORENSIC_QUESTIONS:
+                question_id = question_data['id']
+                question = question_data['question']
+                extractor_name = question_data['extractor']
+                
+                LOGGER.info(f"Processing {question_id}: {question}")
+                
+                try:
+                    # Step 1: Try deterministic extraction first
+                    deterministic_answer = try_deterministic_answer(conn, question, case_id)
+                    
+                    if deterministic_answer:
+                        # Deterministic answer found - high confidence
+                        results['answers'][question_id] = {
+                            'question': question,
+                            'answer': deterministic_answer,
+                            'method': 'deterministic',
+                            'confidence': 0.95,
+                            'supporting_evidence': self._get_supporting_evidence(conn, question_data, case_id)
+                        }
+                        results['confidence_scores'][question_id] = 0.95
+                        
+                    else:
+                        # Step 2: Use LLM with semantic search if available
+                        if llm_provider and llm_provider.is_available():
+                            llm_answer = self._llm_assisted_answer(conn, question_data, case_id, llm_provider)
+                            results['answers'][question_id] = llm_answer
+                            results['confidence_scores'][question_id] = llm_answer.get('confidence', 0.5)
+                        else:
+                            # No LLM available - provide evidence summary
+                            evidence_summary = self._get_evidence_summary(conn, question_data, case_id)
+                            results['answers'][question_id] = {
+                                'question': question,
+                                'answer': f"Evidence found but requires LLM analysis: {evidence_summary}",
+                                'method': 'evidence_summary',
+                                'confidence': 0.3,
+                                'supporting_evidence': self._get_supporting_evidence(conn, question_data, case_id)
+                            }
+                            results['confidence_scores'][question_id] = 0.3
+                    
+                    results['questions_answered'] += 1
+                    
+                except Exception as e:
+                    LOGGER.error(f"Error processing {question_id}: {e}")
+                    results['answers'][question_id] = {
+                        'question': question,
+                        'answer': f"Error processing question: {str(e)}",
+                        'method': 'error',
+                        'confidence': 0.0,
+                        'supporting_evidence': []
+                    }
+                    results['confidence_scores'][question_id] = 0.0
+        
+        results['processing_time'] = time.perf_counter() - start_time
+        results['average_confidence'] = sum(results['confidence_scores'].values()) / len(results['confidence_scores']) if results['confidence_scores'] else 0.0
+        
+        LOGGER.info(f"Autonomous analysis completed in {results['processing_time']:.2f}s")
+        LOGGER.info(f"Questions answered: {results['questions_answered']}/{results['total_questions']}")
+        LOGGER.info(f"Average confidence: {results['average_confidence']:.2f}")
+        
+        return results
+    
+    def _get_supporting_evidence(self, conn: sqlite3.Connection, question_data: Dict, case_id: str, limit: int = 5) -> List[Dict]:
+        """Get supporting evidence for a question"""
+        keywords = question_data.get('keywords', [])
+        evidence = []
+        
+        if keywords:
+            # Build search query for relevant evidence
+            keyword_conditions = " OR ".join([f"LOWER(summary) LIKE LOWER('%{kw}%') OR LOWER(data_json) LIKE LOWER('%{kw}%')" for kw in keywords])
+            
+            cursor = conn.execute(f"""
+                SELECT timestamp, artifact_type, summary, data_json
+                FROM evidence 
+                WHERE case_id = ? AND ({keyword_conditions})
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """, (case_id, limit))
+            
+            for row in cursor.fetchall():
+                evidence.append({
+                    'timestamp': row[0],
+                    'artifact_type': row[1],
+                    'summary': row[2][:200] if row[2] else '',  # Truncate for readability
+                    'relevance': 'keyword_match'
+                })
+        
+        return evidence
+    
+    def _get_evidence_summary(self, conn: sqlite3.Connection, question_data: Dict, case_id: str) -> str:
+        """Get a brief evidence summary for a question"""
+        keywords = question_data.get('keywords', [])
+        
+        if keywords:
+            keyword_conditions = " OR ".join([f"LOWER(summary) LIKE LOWER('%{kw}%')" for kw in keywords])
+            
+            cursor = conn.execute(f"""
+                SELECT COUNT(*) as count, artifact_type
+                FROM evidence 
+                WHERE case_id = ? AND ({keyword_conditions})
+                GROUP BY artifact_type
+                ORDER BY count DESC
+                LIMIT 3
+            """, (case_id,))
+            
+            results = cursor.fetchall()
+            if results:
+                summary_parts = []
+                for count, artifact_type in results:
+                    summary_parts.append(f"{count} {artifact_type} artifacts")
+                return f"Found {', '.join(summary_parts)}"
+        
+        return "Limited evidence available"
+    
+    def _llm_assisted_answer(self, conn: sqlite3.Connection, question_data: Dict, case_id: str, llm_provider: LLMProvider) -> Dict:
+        """Use LLM to answer question with semantic search"""
+        question = question_data['question']
+        
+        # Get relevant evidence using PSI if available
+        embedder, psi, bdh = get_bhsm_components()
+        evidence_text = ""
+        
+        if embedder and psi:
+            # Use semantic search
+            qvec = embedder.embed(question)
+            hits = psi.search(qvec, top_k=5)
+            
+            if hits:
+                # Get original evidence
+                evidence_ids = [h[1].replace("evidence_", "") for h in hits if h[1].startswith("evidence_")]
+                if evidence_ids:
+                    placeholders = ','.join(['?'] * len(evidence_ids))
+                    cursor = conn.execute(f"""
+                        SELECT timestamp, artifact_type, summary, data_json
+                        FROM evidence 
+                        WHERE case_id = ? AND id IN ({placeholders})
+                        ORDER BY timestamp DESC
+                    """, [case_id] + evidence_ids)
+                    
+                    evidence_rows = cursor.fetchall()
+                    evidence_parts = []
+                    for row in evidence_rows:
+                        evidence_parts.append(f"[{row[1]}] {row[2][:150]}")
+                    evidence_text = "\n".join(evidence_parts[:5])
+        
+        # Fallback to keyword search if no PSI
+        if not evidence_text:
+            keywords = question_data.get('keywords', [])
+            if keywords:
+                keyword_conditions = " OR ".join([f"LOWER(summary) LIKE LOWER('%{kw}%')" for kw in keywords])
+                cursor = conn.execute(f"""
+                    SELECT timestamp, artifact_type, summary
+                    FROM evidence 
+                    WHERE case_id = ? AND ({keyword_conditions})
+                    ORDER BY timestamp DESC
+                    LIMIT 5
+                """, (case_id,))
+                
+                evidence_rows = cursor.fetchall()
+                evidence_parts = []
+                for row in evidence_rows:
+                    evidence_parts.append(f"[{row[1]}] {row[2][:150]}")
+                evidence_text = "\n".join(evidence_parts)
+        
+        # Generate LLM response
+        if evidence_text:
+            prompt = f"""Question: {question}
+
+Evidence:
+{evidence_text}
+
+Based on the forensic evidence above, provide a concise, factual answer to the question. Focus on specific details found in the evidence. If the evidence is insufficient, state what was found and what additional evidence would be needed."""
+            
+            llm_response = llm_provider.generate_response(prompt, max_tokens=300, temperature=0.1)
+            
+            # Validate response
+            validation_result = ForensicValidator.validate_llm_response(llm_response, [], question)
+            
+            return {
+                'question': question,
+                'answer': llm_response,
+                'method': 'llm_semantic',
+                'confidence': validation_result.get('confidence', 0.6),
+                'supporting_evidence': self._get_supporting_evidence(conn, question_data, case_id),
+                'validation': validation_result
+            }
+        else:
+            return {
+                'question': question,
+                'answer': "No relevant evidence found for this question.",
+                'method': 'no_evidence',
+                'confidence': 0.1,
+                'supporting_evidence': []
+            }
 
 class ForensicProcessor:
     """Modern forensic data processor for Plaso timeline integration"""
@@ -3448,6 +3955,96 @@ class ModernReportGenerator:
         for question in FORENSIC_QUESTIONS:
             answer = self.analyzer.answer_forensic_question(question, self.case_id)
             report['forensic_answers'][question] = answer
+        
+        return report
+    
+    def generate_autonomous_report(self, autonomous_results: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate comprehensive report from autonomous analysis results"""
+        report = {
+            'case_id': self.case_id,
+            'report_type': 'autonomous_forensic_analysis',
+            'generated': datetime.now(timezone.utc).isoformat(),
+            'analysis_summary': {
+                'total_questions': autonomous_results.get('total_questions', 0),
+                'questions_answered': autonomous_results.get('questions_answered', 0),
+                'average_confidence': autonomous_results.get('average_confidence', 0.0),
+                'processing_time': autonomous_results.get('processing_time', 0.0),
+                'llm_provider': autonomous_results.get('llm_provider', 'none')
+            },
+            'evidence_overview': autonomous_results.get('evidence_summary', {}),
+            'forensic_questions_and_answers': [],
+            'confidence_analysis': {},
+            'recommendations': []
+        }
+        
+        # Process each question and answer
+        answers = autonomous_results.get('answers', {})
+        confidence_scores = autonomous_results.get('confidence_scores', {})
+        
+        high_confidence_count = 0
+        medium_confidence_count = 0
+        low_confidence_count = 0
+        
+        for question_id in sorted(answers.keys()):
+            answer_data = answers[question_id]
+            confidence = confidence_scores.get(question_id, 0.0)
+            
+            # Categorize confidence
+            if confidence >= 0.8:
+                confidence_category = "High"
+                high_confidence_count += 1
+            elif confidence >= 0.5:
+                confidence_category = "Medium"
+                medium_confidence_count += 1
+            else:
+                confidence_category = "Low"
+                low_confidence_count += 1
+            
+            question_report = {
+                'question_id': question_id,
+                'question': answer_data.get('question', ''),
+                'answer': answer_data.get('answer', ''),
+                'method': answer_data.get('method', ''),
+                'confidence_score': confidence,
+                'confidence_category': confidence_category,
+                'supporting_evidence_count': len(answer_data.get('supporting_evidence', [])),
+                'supporting_evidence': answer_data.get('supporting_evidence', [])
+            }
+            
+            # Add validation details if available
+            if 'validation' in answer_data:
+                question_report['validation'] = answer_data['validation']
+            
+            report['forensic_questions_and_answers'].append(question_report)
+        
+        # Confidence analysis
+        report['confidence_analysis'] = {
+            'high_confidence_answers': high_confidence_count,
+            'medium_confidence_answers': medium_confidence_count,
+            'low_confidence_answers': low_confidence_count,
+            'confidence_distribution': {
+                'high': f"{(high_confidence_count / len(answers) * 100):.1f}%" if answers else "0%",
+                'medium': f"{(medium_confidence_count / len(answers) * 100):.1f}%" if answers else "0%",
+                'low': f"{(low_confidence_count / len(answers) * 100):.1f}%" if answers else "0%"
+            }
+        }
+        
+        # Generate recommendations
+        recommendations = []
+        
+        if low_confidence_count > 0:
+            recommendations.append(f"Consider manual review of {low_confidence_count} low-confidence answers")
+        
+        if autonomous_results.get('llm_provider') == 'none':
+            recommendations.append("Consider using LLM provider for enhanced analysis of complex questions")
+        
+        if report['evidence_overview'].get('total_evidence_items', 0) < 100:
+            recommendations.append("Limited evidence available - consider additional artifact collection")
+        
+        if high_confidence_count == len(answers):
+            recommendations.append("All questions answered with high confidence - analysis appears complete")
+        
+        report['recommendations'] = recommendations
         
         return report
     
@@ -4597,6 +5194,18 @@ def main():
     # CUSTOM INTELLIGENCE & CONTEXT
     parser.add_argument('--keywords-file', type=Path, help='File containing keywords to flag (one per line, case-insensitive)')
     
+    # LLM CONFIGURATION OPTIONS
+    parser.add_argument('--llm-folder', type=Path, help='Path to local LLM model folder (e.g., D:\\FORAI\\LLM)')
+    parser.add_argument('--llm-api-token', help='API token for cloud LLM services (OpenAI, Anthropic, etc.)')
+    parser.add_argument('--llm-api-provider', choices=['openai', 'anthropic', 'local'], default='local', 
+                       help='LLM provider type (default: local)')
+    parser.add_argument('--llm-model', default='tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf', 
+                       help='Model name/path for local models or model ID for API providers')
+    
+    # AUTONOMOUS ANALYSIS
+    parser.add_argument('--autonomous-analysis', action='store_true', 
+                       help='Automatically answer all 12 standard forensic questions and generate summary report')
+    
     # CHAIN OF CUSTODY & OUTPUT
     parser.add_argument('--chain-of-custody', action='store_true', help='Generate chain of custody documentation')
     parser.add_argument('--output-dir', type=Path, default=Path('D:/FORAI'), help='Output directory for all results')
@@ -4697,6 +5306,58 @@ def main():
             else:
                 print("❌ Full forensic analysis failed. Check logs for details.")
                 sys.exit(1)
+            return
+        
+        # AUTONOMOUS ANALYSIS MODE
+        elif args.autonomous_analysis:
+            LOGGER.info(f"Starting autonomous analysis for case {args.case_id}")
+            
+            # Create LLM provider
+            llm_provider = create_llm_provider(args)
+            
+            if not llm_provider.is_available():
+                LOGGER.warning("LLM provider not available - analysis will use deterministic methods only")
+            
+            # Initialize analyzer
+            analyzer = ForensicAnalyzer()
+            
+            # Run autonomous analysis
+            results = analyzer.autonomous_analysis(args.case_id, llm_provider)
+            
+            # Generate comprehensive report
+            report_generator = ModernReportGenerator(args.case_id)
+            report = report_generator.generate_autonomous_report(results)
+            
+            # Save report in requested format(s)
+            output_dir = args.output_dir / "reports"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Always save JSON report
+            json_report_path = report_generator.save_report(report, 'json')
+            print(f"\n🎉 AUTONOMOUS FORENSIC ANALYSIS COMPLETED!")
+            print(f"📊 Questions Answered: {results['questions_answered']}/{results['total_questions']}")
+            print(f"🎯 Average Confidence: {results['average_confidence']:.2f}")
+            print(f"⏱️  Processing Time: {results['processing_time']:.2f}s")
+            print(f"🤖 LLM Provider: {results['llm_provider']}")
+            print(f"📄 JSON Report: {json_report_path}")
+            
+            # Also save PDF if requested
+            if args.report == 'pdf':
+                pdf_report_path = report_generator.save_report(report, 'pdf')
+                print(f"📄 PDF Report: {pdf_report_path}")
+            
+            # Print summary of results
+            print(f"\n📋 ANALYSIS SUMMARY:")
+            confidence_analysis = report['confidence_analysis']
+            print(f"   High Confidence: {confidence_analysis['high_confidence_answers']} answers ({confidence_analysis['confidence_distribution']['high']})")
+            print(f"   Medium Confidence: {confidence_analysis['medium_confidence_answers']} answers ({confidence_analysis['confidence_distribution']['medium']})")
+            print(f"   Low Confidence: {confidence_analysis['low_confidence_answers']} answers ({confidence_analysis['confidence_distribution']['low']})")
+            
+            if report['recommendations']:
+                print(f"\n💡 RECOMMENDATIONS:")
+                for i, rec in enumerate(report['recommendations'], 1):
+                    print(f"   {i}. {rec}")
+            
             return
         
         # INDIVIDUAL WORKFLOW COMPONENTS
