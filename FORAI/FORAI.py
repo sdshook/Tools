@@ -146,13 +146,26 @@ except ImportError:
 
 # Import BHSM components for efficient semantic indexing and learning
 try:
-    import sys
-    sys.path.append(str(Path(__file__).parent.parent / "BHSM"))
-    from BHSM import SimEmbedder, PSIIndex, BDHMemory
+    # Try lightweight BHSM first (no heavy dependencies)
+    from BHSM_lite import SimEmbedder, PSIIndex, BDHMemory, get_global_components, init_global_psi
     BHSM_AVAILABLE = True
-except ImportError as e:
-    print(f"Warning: BHSM not available: {e}")
-    BHSM_AVAILABLE = False
+    print("BHSM Lite components loaded successfully")
+except ImportError:
+    try:
+        # Fallback to full BHSM if available
+        import sys
+        sys.path.append(str(Path(__file__).parent.parent / "BHSM"))
+        from BHSM import SimEmbedder, PSIIndex, BDHMemory
+        BHSM_AVAILABLE = True
+        print("Full BHSM components loaded successfully")
+        # Define compatibility functions for lite version
+        def get_global_components():
+            return None, None, None
+        def init_global_psi():
+            return None
+    except ImportError as e:
+        print(f"Warning: BHSM not available: {e}")
+        BHSM_AVAILABLE = False
 
 # ============================================================================
 # STANDARD FORENSIC QUESTIONS
@@ -1706,6 +1719,10 @@ def sanitize_query_string(query: str) -> str:
     return sanitized[:500]
 
 @performance_monitor
+def database_exists(case_id: str) -> bool:
+    """Check if the database exists for the given case ID"""
+    return CONFIG.db_path.exists()
+
 def initialize_database() -> None:
     """Initialize database with optimized schema"""
     with get_database_connection() as conn:
