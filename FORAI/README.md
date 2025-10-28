@@ -107,6 +107,43 @@ FORAI provides instant, deterministic answers to these critical forensic questio
 11. **Document Printing**: What documents were printed?
 12. **Software Changes**: What software was installed or modified?
 
+## 📊 Data Processing Pipeline
+
+FORAI processes forensic data through a three-stage pipeline:
+
+### Stage 1: Artifact Collection (KAPE)
+```
+Raw System → KAPE → Raw Artifacts Directory
+                    ├── Registry/
+                    ├── EventLogs/
+                    ├── FileSystem/
+                    └── Browser/
+```
+
+### Stage 2: Timeline Generation (Plaso)
+```
+Raw Artifacts → Plaso → Timeline Database (SQLite)
+Directory       ├── log2timeline (parsing)
+                └── psort (filtering)
+```
+
+### Stage 3: Forensic Analysis (FORAI)
+```
+Timeline Database → FORAI → Forensic Answers + Reports
+                    ├── Deterministic extraction
+                    ├── Semantic search
+                    └── AI-assisted analysis
+```
+
+### CLI Data Type Expectations
+
+| CLI Option | Input Data Type | Description |
+|------------|----------------|-------------|
+| `--target-drive C:` | Live system | Direct collection from running system |
+| `--artifacts-dir "path"` | KAPE output folder | Raw artifacts (registry, logs, files) |
+| `--parse-artifacts` | KAPE output folder | Processes raw artifacts → timeline DB |
+| `--question "..."` | Existing timeline DB | Queries processed timeline database |
+
 ## 🛠️ Installation & Dependencies
 
 ### Core Dependencies
@@ -140,25 +177,37 @@ pip install pandas numpy matplotlib seaborn
 
 ## 🚀 Quick Start Guide
 
-### 1. Initialize Database
+### Option A: Live System Analysis (Full Pipeline)
 
 ```bash
-# Create case database
+# 1. Initialize database
 python FORAI.py --case-id CASE001 --init-db
-```
 
-### 2. Collect Artifacts (Full Workflow)
-
-```bash
-# Complete end-to-end analysis
+# 2. Complete end-to-end analysis (KAPE → Plaso → Analysis)
 python FORAI.py --case-id CASE001 --full-analysis --target-drive C: --chain-of-custody --verbose
+
+# 3. Build semantic index for fast searches
+python FORAI.py --case-id CASE001 --build-psi
 ```
 
-### 3. Build Semantic Index
+### Option B: Existing KAPE Artifacts
 
 ```bash
-# Build PSI index for fast semantic search (one-time per case)
+# 1. Initialize database
+python FORAI.py --case-id CASE001 --init-db
+
+# 2. Process existing KAPE output (Raw artifacts → Timeline DB)
+python FORAI.py --case-id CASE001 --parse-artifacts --artifacts-dir "C:\\Path\\To\\KAPE\\Output"
+
+# 3. Build semantic index
 python FORAI.py --case-id CASE001 --build-psi
+```
+
+### Option C: Existing Timeline Database
+
+```bash
+# If you already have a FORAI timeline database, skip directly to analysis
+python FORAI.py --case-id CASE001 --question "What USB devices were connected?"
 ```
 
 ### 4. Ask Forensic Questions
@@ -238,12 +287,23 @@ python FORAI.py --case-id CASE001 --chain-of-custody
 ### Working with Existing Data
 
 ```bash
-# Use existing KAPE output
+# Use existing KAPE output (raw artifacts directory)
+# --artifacts-dir expects the KAPE output folder containing raw artifacts (registry hives, logs, etc.)
 python FORAI.py --case-id CASE001 --full-analysis --artifacts-dir "C:\\YourExistingKapeOutput" --question "What USB devices were connected?" --verbose
 
-# Parse existing artifacts
-python FORAI.py --case-id CASE001 --parse-artifacts --keywords-file suspicious_terms.txt
+# Parse existing raw artifacts (KAPE output) into timeline database
+# This processes raw artifacts through Plaso to create the timeline database
+python FORAI.py --case-id CASE001 --parse-artifacts --artifacts-dir "C:\\YourExistingKapeOutput" --keywords-file suspicious_terms.txt
+
+# Work with existing timeline database (skip collection and parsing)
+# If you already have a FORAI database from previous runs
+python FORAI.py --case-id CASE001 --question "What USB devices were connected?" --verbose
 ```
+
+**Data Flow Clarification:**
+1. **Raw Artifacts** (KAPE output) → `--artifacts-dir` → Raw forensic files (registry, logs, etc.)
+2. **Timeline Database** (Plaso output) → FORAI SQLite database → Ready for analysis
+3. **Analysis** → Questions and searches against the timeline database
 
 ## 🔧 Configuration Options
 
@@ -255,7 +315,9 @@ python FORAI.py --case-id CASE001 --parse-artifacts --keywords-file suspicious_t
 | `--init-db` | Initialize case database | |
 | `--build-psi` | Build PSI semantic index | |
 | `--full-analysis` | Complete end-to-end analysis | |
-| `--target-drive` | Drive to analyze | `C:` |
+| `--target-drive` | Drive to analyze (live system) | `C:` |
+| `--artifacts-dir` | Path to KAPE output folder (raw artifacts) | `"C:\\KAPE\\Output"` |
+| `--parse-artifacts` | Process raw artifacts into timeline DB | |
 | `--question` | Specific forensic question | `"What USB devices were connected?"` |
 | `--search` | Search evidence database | `"malware"` |
 | `--keywords-file` | File containing search keywords | `indicators.txt` |
