@@ -4889,10 +4889,15 @@ class ForensicWorkflowManager:
         self.logger.info(f"Created custom FAS5 SQLite output module for database: {database_path}")
         return module
 
-    def parse_artifacts_plaso(self, plaso_path: Path, fast_mode: bool = False, date_from: str = None, date_to: str = None) -> bool:
+    def parse_artifacts_plaso(self, plaso_path: Path, fast_mode: bool = False, date_from: str = None, date_to: str = None, artifacts_dir: Path = None) -> bool:
         """Parse collected artifacts using proper Plaso two-step workflow: log2timeline -> psort -> SQLite"""
         try:
             self.log_custody_event("PARSING_START", "Starting Plaso two-step processing: log2timeline -> psort -> SQLite")
+            
+            # Set artifacts path if provided directly (for --parse-artifacts with --artifacts-dir)
+            if artifacts_dir and artifacts_dir.exists():
+                self.artifacts_path = artifacts_dir
+                self.logger.info(f"Using provided artifacts directory: {artifacts_dir}")
             
             # Check if log2timeline is available in PATH or at specified location
             log2timeline_cmd_path = None
@@ -5677,7 +5682,7 @@ def main():
                                          f"Loading {len(keywords)} custom keywords for case-insensitive flagging")
                 inject_keywords(args.case_id, keywords)
             
-            success = workflow.parse_artifacts_plaso(args.plaso_path, args.fast_mode, args.date_from, args.date_to)
+            success = workflow.parse_artifacts_plaso(args.plaso_path, args.fast_mode, args.date_from, args.date_to, args.artifacts_dir)
             print(f"Artifact parsing {'completed' if success else 'failed'}")
             return
         
