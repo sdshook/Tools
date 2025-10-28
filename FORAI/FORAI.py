@@ -119,6 +119,10 @@ import subprocess
 import shutil
 import logging
 import threading
+try:
+    import psutil
+except ImportError:
+    psutil = None
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -130,7 +134,7 @@ from functools import lru_cache, wraps
 
 from tqdm import tqdm
 from fpdf import FPDF
-import psutil
+# psutil imported above with try/except
 
 # Optional imports for LLM functionality
 try:
@@ -421,7 +425,7 @@ def get_global_llm(model_path: str = None, force_reload: bool = False):
                     _GLOBAL_LLM = Llama(
                         model_path=str(model_path),
                         n_ctx=2048,  # Reduced context for faster inference
-                        n_threads=min(4, psutil.cpu_count()),
+                        n_threads=min(4, psutil.cpu_count() if psutil else 4),
                         verbose=False
                     )
                     LOGGER.info(f"Global LLM initialized: {model_path}")
@@ -1574,14 +1578,14 @@ def performance_monitor(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         start_time = time.time()
-        start_memory = psutil.Process().memory_info().rss / 1024 / 1024
+        start_memory = psutil.Process().memory_info().rss / 1024 / 1024 if psutil else 0
         
         try:
             result = func(*args, **kwargs)
             return result
         finally:
             end_time = time.time()
-            end_memory = psutil.Process().memory_info().rss / 1024 / 1024
+            end_memory = psutil.Process().memory_info().rss / 1024 / 1024 if psutil else 0
             
             LOGGER.debug(f"{func.__name__}: {end_time - start_time:.2f}s, "
                         f"Memory: {end_memory - start_memory:+.1f}MB")
@@ -4764,7 +4768,7 @@ class ForensicWorkflowManager:
             
             # Track processing metrics
             start_time = time.time()
-            start_memory = psutil.Process().memory_info().rss / 1024 / 1024
+            start_memory = psutil.Process().memory_info().rss / 1024 / 1024 if psutil else 0
             artifacts_size = sum(f.stat().st_size for f in self.artifacts_path.rglob("*") if f.is_file()) / 1024 / 1024  # MB
             
             self.logger.info(f"Step 1: Creating timeline from artifacts (Size: {artifacts_size:.1f}MB): {self.artifacts_path} -> {plaso_storage_path}")
@@ -4772,11 +4776,14 @@ class ForensicWorkflowManager:
             # Step 1: Create timeline from collected artifacts with performance optimizations
             
             # Determine optimal worker count based on system resources
-            cpu_count = psutil.cpu_count(logical=False) or 4  # Physical cores
-            optimal_workers = min(max(cpu_count - 1, 2), 12)  # Leave 1 core free, max 12 workers
+            if psutil:
+                cpu_count = psutil.cpu_count(logical=False) or 4  # Physical cores
+                available_memory = psutil.virtual_memory().available // (1024 * 1024)  # MB
+            else:
+                cpu_count = os.cpu_count() or 4
+                available_memory = 8192  # 8GB fallback
             
-            # Determine optimal memory limit based on available RAM
-            available_memory = psutil.virtual_memory().available // (1024 * 1024)  # MB
+            optimal_workers = min(max(cpu_count - 1, 2), 12)  # Leave 1 core free, max 12 workers
             worker_memory_limit = min(max(available_memory // optimal_workers // 2, 1024), 8192)  # 1-8GB per worker
             
             # Selective parser configuration for faster processing
@@ -4953,7 +4960,7 @@ class ForensicWorkflowManager:
                 
             # Calculate performance metrics
             end_time = time.time()
-            end_memory = psutil.Process().memory_info().rss / 1024 / 1024
+            end_memory = psutil.Process().memory_info().rss / 1024 / 1024 if psutil else 0
             processing_time = end_time - start_time
             memory_delta = end_memory - start_memory
             throughput = artifacts_size / processing_time if processing_time > 0 else 0
@@ -4971,7 +4978,6 @@ class ForensicWorkflowManager:
             try:
                 json_output_path.unlink()
                 # Clean up temp directory
-                import shutil
                 if temp_dir.exists():
                     shutil.rmtree(temp_dir, ignore_errors=True)
                 # Optionally clean up intermediate .plaso file to save space
@@ -5466,6 +5472,11 @@ def main():
             return
             
         if args.parse_artifacts:
+            # Initialize database if it doesn't exist
+            if not database_exists(args.case_id):
+                LOGGER.info("Database doesn't exist, initializing...")
+                initialize_database()
+            
             workflow = ForensicWorkflowManager(args.case_id, args.output_dir, args.verbose)
             
             # Load and inject custom keywords
