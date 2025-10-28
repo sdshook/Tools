@@ -134,6 +134,7 @@ from functools import lru_cache, wraps
 
 from tqdm import tqdm
 from fpdf import FPDF
+import numpy as np
 # psutil imported above with try/except
 
 # Optional imports for LLM functionality
@@ -144,28 +145,225 @@ except ImportError:
     LLAMA_CPP_AVAILABLE = False
     print("Warning: llama-cpp-python not available. Local LLM functionality will be disabled.")
 
-# Import BHSM components for efficient semantic indexing and learning
-try:
-    # Try lightweight BHSM first (no heavy dependencies)
-    from BHSM_lite import SimEmbedder, PSIIndex, BDHMemory, get_global_components, init_global_psi
-    BHSM_AVAILABLE = True
-    print("BHSM Lite components loaded successfully")
-except ImportError:
-    try:
-        # Fallback to full BHSM if available
-        import sys
-        sys.path.append(str(Path(__file__).parent.parent / "BHSM"))
-        from BHSM import SimEmbedder, PSIIndex, BDHMemory
-        BHSM_AVAILABLE = True
-        print("Full BHSM components loaded successfully")
-        # Define compatibility functions for lite version
-        def get_global_components():
-            return None, None, None
-        def init_global_psi():
-            return None
-    except ImportError as e:
-        print(f"Warning: BHSM not available: {e}")
-        BHSM_AVAILABLE = False
+# ============================================================================
+# INTEGRATED SEMANTIC INDEXING COMPONENTS (BHSM Lite)
+# ============================================================================
+# Lightweight semantic indexing without external dependencies
+
+def l2_norm(x: np.ndarray) -> np.ndarray:
+    """L2 normalization with numerical stability."""
+    norm = np.linalg.norm(x)
+    return x / (norm + 1e-12)
+
+@dataclass
+class PSIDocument:
+    """Document stored in PSI index"""
+    doc_id: str
+    text: str
+    vector: np.ndarray
+    tags: List[str]
+    valence: float
+    protected: bool
+    timestamp: float
+
+class SimEmbedder:
+    """Fast deterministic semantic embedder using hash-based features."""
+    
+    def __init__(self, dim: int = 32):
+        self.dim = dim
+        self._cache = {}
+        
+    def embed(self, text: str) -> np.ndarray:
+        """Generate deterministic embedding for text"""
+        if text in self._cache:
+            return self._cache[text]
+            
+        # Normalize text
+        text = text.lower().strip()
+        if not text:
+            return np.zeros(self.dim)
+            
+        # Generate multiple hash-based features
+        features = np.zeros(self.dim)
+        
+        # Word-level features
+        words = text.split()
+        for i, word in enumerate(words[:self.dim//4]):
+            hash_val = int(hashlib.md5(word.encode()).hexdigest()[:8], 16)
+            features[i % self.dim] += (hash_val % 1000) / 1000.0
+            
+        # Character n-gram features
+        for n in [2, 3, 4]:
+            for i in range(len(text) - n + 1):
+                ngram = text[i:i+n]
+                hash_val = int(hashlib.md5(ngram.encode()).hexdigest()[:8], 16)
+                features[(hash_val % (self.dim//4)) + (n-2)*(self.dim//4)] += 1.0
+                
+        # Length and structure features
+        features[-4] = len(words) / 100.0  # Word count
+        features[-3] = len(text) / 1000.0  # Character count
+        features[-2] = text.count('.') / 10.0  # Sentence markers
+        features[-1] = sum(1 for c in text if c.isupper()) / len(text) if text else 0  # Uppercase ratio
+        
+        # Normalize
+        embedding = l2_norm(features)
+        self._cache[text] = embedding
+        return embedding
+        
+    def similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
+        """Compute cosine similarity between vectors"""
+        return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2) + 1e-12)
+
+class PSIIndex:
+    """Persistent Semantic Index for fast document retrieval."""
+    
+    def __init__(self, db_path: Optional[Path] = None):
+        self.db_path = db_path or Path("forai_psi.db")
+        self.embedder = SimEmbedder()
+        self._init_database()
+        
+    def _init_database(self):
+        """Initialize SQLite database for PSI storage"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS psi_documents (
+                    doc_id TEXT PRIMARY KEY,
+                    text TEXT NOT NULL,
+                    vector BLOB NOT NULL,
+                    tags TEXT NOT NULL,
+                    valence REAL NOT NULL,
+                    protected INTEGER NOT NULL,
+                    timestamp REAL NOT NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON psi_documents(timestamp)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_valence ON psi_documents(valence)")
+            
+    def add_doc(self, doc_id: str, text: str, vector: Optional[np.ndarray] = None, 
+                tags: Optional[List[str]] = None, valence: float = 0.0, protected: bool = False):
+        """Add document to PSI index"""
+        if vector is None:
+            vector = self.embedder.embed(text)
+            
+        tags = tags or []
+        timestamp = time.time()
+        
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO psi_documents 
+                (doc_id, text, vector, tags, valence, protected, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                doc_id, text, vector.tobytes(), 
+                json.dumps(tags), valence, int(protected), timestamp
+            ))
+            
+    def search(self, query_vector: np.ndarray, top_k: int = 5, 
+               min_similarity: float = 0.1) -> List[Tuple[float, str, np.ndarray]]:
+        """Search for similar documents"""
+        results = []
+        
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT doc_id, text, vector, valence FROM psi_documents")
+            
+            for row in cursor:
+                doc_id, text, vector_bytes, valence = row
+                doc_vector = np.frombuffer(vector_bytes, dtype=np.float64)
+                
+                similarity = self.embedder.similarity(query_vector, doc_vector)
+                if similarity >= min_similarity:
+                    results.append((similarity, doc_id, doc_vector))
+                    
+        # Sort by similarity and return top_k
+        results.sort(key=lambda x: x[0], reverse=True)
+        return results[:top_k]
+        
+    def count(self) -> int:
+        """Get total number of documents"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM psi_documents")
+            return cursor.fetchone()[0]
+
+class BDHMemory:
+    """Bidirectional Hebbian Memory with reward gating."""
+    
+    def __init__(self, store_type: str = "forai", db_path: Optional[Path] = None):
+        self.store_type = store_type
+        self.db_path = db_path or Path(f"forai_bdh.db")
+        self.embedder = SimEmbedder()
+        self._init_database()
+        
+    def _init_database(self):
+        """Initialize BDH memory database"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS bdh_traces (
+                    trace_id TEXT PRIMARY KEY,
+                    vector BLOB NOT NULL,
+                    valence REAL NOT NULL,
+                    reward_count INTEGER DEFAULT 0,
+                    last_reward REAL DEFAULT 0,
+                    consolidation_score REAL DEFAULT 0,
+                    timestamp REAL NOT NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_consolidation ON bdh_traces(consolidation_score)")
+            
+    def add_or_update(self, trace_id: str, vector: np.ndarray, valence: float = 0.0):
+        """Add or update memory trace"""
+        timestamp = time.time()
+        
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO bdh_traces 
+                (trace_id, vector, valence, timestamp)
+                VALUES (?, ?, ?, ?)
+            """, (trace_id, vector.tobytes(), valence, timestamp))
+                
+    def reward_gated_update(self, trace_id: str, state_vec: np.ndarray, reward: float):
+        """Apply reward-gated learning to strengthen useful patterns"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                SELECT vector, valence, reward_count, consolidation_score 
+                FROM bdh_traces WHERE trace_id = ?
+            """, (trace_id,))
+            
+            row = cursor.fetchone()
+            if row:
+                vector_bytes, valence, reward_count, consolidation_score = row
+                
+                # Update consolidation score based on reward
+                new_reward_count = reward_count + 1
+                new_consolidation_score = consolidation_score + reward * 0.1
+                new_valence = valence + reward * 0.05
+                
+                conn.execute("""
+                    UPDATE bdh_traces 
+                    SET reward_count = ?, consolidation_score = ?, valence = ?, last_reward = ?
+                    WHERE trace_id = ?
+                """, (new_reward_count, new_consolidation_score, new_valence, reward, trace_id))
+
+# Global BHSM components
+_GLOBAL_EMBEDDER = None
+_GLOBAL_PSI = None
+_GLOBAL_BDH = None
+
+def get_global_components() -> Tuple[SimEmbedder, PSIIndex, BDHMemory]:
+    """Get or create global BHSM components for FORAI"""
+    global _GLOBAL_EMBEDDER, _GLOBAL_PSI, _GLOBAL_BDH
+    
+    if _GLOBAL_EMBEDDER is None:
+        _GLOBAL_EMBEDDER = SimEmbedder()
+        
+    if _GLOBAL_PSI is None:
+        _GLOBAL_PSI = PSIIndex(Path("forai_psi.db"))
+        
+    if _GLOBAL_BDH is None:
+        _GLOBAL_BDH = BDHMemory("forai", Path("forai_bdh.db"))
+        
+    return _GLOBAL_EMBEDDER, _GLOBAL_PSI, _GLOBAL_BDH
+
+BHSM_AVAILABLE = True  # Always available since integrated
 
 # ============================================================================
 # STANDARD FORENSIC QUESTIONS
@@ -1428,34 +1626,10 @@ def setup_logging() -> logging.Logger:
 
 LOGGER = setup_logging()
 
-# ============================================================================
-# BHSM GLOBAL INSTANCES FOR SEMANTIC INDEXING AND LEARNING
-# ============================================================================
-# Global BHSM components for efficient semantic search and learning
-_GLOBAL_EMBEDDER = None
-_GLOBAL_PSI = None
-_GLOBAL_BDH = None
-
+# Use the integrated get_global_components function
 def get_bhsm_components():
-    """Get or create global BHSM components"""
-    global _GLOBAL_EMBEDDER, _GLOBAL_PSI, _GLOBAL_BDH
-    
-    if not BHSM_AVAILABLE:
-        return None, None, None
-    
-    if _GLOBAL_EMBEDDER is None:
-        _GLOBAL_EMBEDDER = SimEmbedder(dim=32)  # Fast deterministic embeddings
-        LOGGER.info("Global SimEmbedder initialized")
-    
-    if _GLOBAL_PSI is None:
-        _GLOBAL_PSI = PSIIndex()  # Long-term semantic memory
-        LOGGER.info("Global PSIIndex initialized")
-    
-    if _GLOBAL_BDH is None:
-        _GLOBAL_BDH = BDHMemory(store_type="forai")  # Reward-gated learning
-        LOGGER.info("Global BDHMemory initialized")
-    
-    return _GLOBAL_EMBEDDER, _GLOBAL_PSI, _GLOBAL_BDH
+    """Get or create global BHSM components (compatibility wrapper)"""
+    return get_global_components()
 
 SYSTEM_PROMPT = """You are an expert digital forensics analyst. Follow these rules for maximum accuracy:
 
