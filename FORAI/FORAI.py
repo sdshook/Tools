@@ -1663,7 +1663,7 @@ CREATE TABLE IF NOT EXISTS evidence (
     case_id     TEXT NOT NULL,
     host        TEXT,
     user        TEXT,
-    timestamp   INTEGER NOT NULL,  -- Required for timeline analysis
+    timestamp   REAL NOT NULL,  -- REAL for Windows Event Log microsecond precision
     artifact    TEXT NOT NULL,
     source_file TEXT NOT NULL,
     summary     TEXT,
@@ -1832,24 +1832,58 @@ TIMESTAMP_PATTERNS = [
     (re.compile(r'^\d{1,2}/\d{1,2}/\d{4} \d{2}:\d{2}:\d{2}$'), "%d/%m/%Y %H:%M:%S"),
 ]
 
+# Windows Event Log specific patterns
+WINEVT_TIMESTAMP_PATTERNS = [
+    # Windows SystemTime format: "SystemTime: 2024-01-15T10:30:45.123456700Z"
+    re.compile(r'SystemTime:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)'),
+    # Windows Event Log XML timestamp
+    re.compile(r'TimeCreated\s+SystemTime=["\'](\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)["\']'),
+]
+
 @lru_cache(maxsize=2000)
-def parse_timestamp(timestamp_str: str) -> Optional[int]:
-    """Optimized timestamp parsing with pre-compiled regex patterns"""
+def parse_timestamp(timestamp_str: str) -> Optional[float]:
+    """Enhanced timestamp parsing with Windows Event Log and FILETIME support"""
     if not timestamp_str or timestamp_str.lower() in ('null', 'none', ''):
         return None
     
     clean_str = timestamp_str.strip()
     
-    # Fast pattern matching before expensive strptime calls
+    # Handle Windows FILETIME (100-nanosecond intervals since 1601-01-01)
+    if clean_str.isdigit() and len(clean_str) >= 17:
+        try:
+            filetime = int(clean_str)
+            # Convert FILETIME to Unix timestamp with microsecond precision
+            unix_timestamp = (filetime / 10000000.0) - 11644473600
+            if 0 < unix_timestamp < 2147483647:  # Reasonable timestamp range
+                return unix_timestamp
+        except (ValueError, OverflowError):
+            pass
+    
+    # Handle Windows Event Log specific formats
+    for pattern in WINEVT_TIMESTAMP_PATTERNS:
+        match = pattern.search(clean_str)
+        if match:
+            clean_str = match.group(1)
+            break
+    
+    # Handle standard timestamp formats with microsecond precision
     for pattern, fmt in TIMESTAMP_PATTERNS:
         if pattern.match(clean_str):
             try:
                 dt = datetime.strptime(clean_str, fmt)
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=timezone.utc)
-                return int(dt.timestamp())
+                return dt.timestamp()  # Returns float with microsecond precision
             except ValueError:
                 continue
+    
+    # Handle Unix timestamps (both integer and float)
+    try:
+        timestamp_float = float(clean_str)
+        if 0 < timestamp_float < 2147483647:  # Reasonable range
+            return timestamp_float
+    except ValueError:
+        pass
     
     return None
 
@@ -4414,7 +4448,7 @@ class FAS5SQLiteOutputModule:
             case_id     TEXT NOT NULL,
             host        TEXT,
             user        TEXT,
-            timestamp   INTEGER,
+            timestamp   REAL,  -- REAL for Windows Event Log microsecond precision
             artifact    TEXT NOT NULL,
             source_file TEXT NOT NULL,
             summary     TEXT,
@@ -4898,6 +4932,9 @@ class ForensicWorkflowManager:
             if artifacts_dir and artifacts_dir.exists():
                 self.artifacts_path = artifacts_dir
                 self.logger.info(f"Using provided artifacts directory: {artifacts_dir}")
+                
+                # Check for large Windows Event Log files that need special handling
+                has_large_event_logs = self._check_large_event_logs(artifacts_dir)
             
             # Check if log2timeline is available in PATH or at specified location
             log2timeline_cmd_path = None
@@ -5436,21 +5473,55 @@ class ForensicWorkflowManager:
             self.logger.warning(f"Windows Event Log recovery error: {e}")
             return False
     
+    def _check_large_event_logs(self, artifacts_dir: Path) -> bool:
+        """Check for large Windows Event Log files that need special handling"""
+        try:
+            evt_files = list(artifacts_dir.glob("**/*.evtx")) + list(artifacts_dir.glob("**/*.evt"))
+            large_files = []
+            
+            for evt_file in evt_files:
+                try:
+                    file_size_mb = evt_file.stat().st_size / (1024 * 1024)
+                    if file_size_mb > 100:  # Over 100MB
+                        large_files.append((evt_file, file_size_mb))
+                        self.logger.warning(f"Large Windows Event Log detected: {evt_file.name} ({file_size_mb:.1f}MB)")
+                except Exception as e:
+                    self.logger.debug(f"Error checking {evt_file}: {e}")
+                    continue
+            
+            if large_files:
+                self.logger.info(f"Found {len(large_files)} large Windows Event Log files")
+                self.logger.info("Enabling enhanced processing settings for large winevt data")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.debug(f"Error checking for large event logs: {e}")
+            return False
+    
     def _pre_optimize_database(self, db_path: Path) -> None:
-        """Pre-optimize database for bulk operations"""
+        """Pre-optimize database for bulk operations with Windows Event Log support"""
         try:
             with sqlite3.connect(str(db_path)) as conn:
-                # Settings for bulk inserts
+                # Settings for bulk inserts and large Windows Event Log processing
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.execute("PRAGMA synchronous=OFF")  # Speed during processing
-                conn.execute("PRAGMA cache_size=100000")  # Cache for bulk operations
+                conn.execute("PRAGMA cache_size=200000")  # Larger cache for winevt data
                 conn.execute("PRAGMA temp_store=MEMORY")
-                conn.execute("PRAGMA page_size=65536")  # Pages for bulk data
+                conn.execute("PRAGMA page_size=65536")  # Large pages for bulk data
                 conn.execute("PRAGMA wal_autocheckpoint=0")  # Disable auto-checkpoint during processing
-                conn.execute("PRAGMA busy_timeout=300000")  # 5 minute timeout
+                conn.execute("PRAGMA busy_timeout=600000")  # 10 minute timeout for large files
+                
+                # Additional settings for very large Windows Event Log files
+                conn.execute("PRAGMA max_page_count=4294967292")  # Allow DB to grow very large
+                conn.execute("PRAGMA cache_spill=100000")  # Spill cache to disk when needed
+                conn.execute("PRAGMA mmap_size=268435456")  # 256MB memory mapping
+                conn.execute("PRAGMA threads=4")  # Multi-threaded operations
+                
                 conn.commit()
                 
-            self.logger.debug("Database pre-optimized for maximum performance")
+            self.logger.debug("Database pre-optimized for maximum performance with Windows Event Log support")
         except Exception as e:
             self.logger.warning(f"Database pre-optimization failed: {e}")
     
