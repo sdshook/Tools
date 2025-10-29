@@ -4889,7 +4889,7 @@ class ForensicWorkflowManager:
         self.logger.info(f"Created custom FAS5 SQLite output module for database: {database_path}")
         return module
 
-    def parse_artifacts_plaso(self, plaso_path: Path, fast_mode: bool = False, date_from: str = None, date_to: str = None, artifacts_dir: Path = None) -> bool:
+    def parse_artifacts_plaso(self, plaso_path: Path, fast_mode: bool = False, date_from: str = None, date_to: str = None, artifacts_dir: Path = None, enable_winevtx: bool = False) -> bool:
         """Parse collected artifacts using proper Plaso two-step workflow: log2timeline -> psort -> SQLite"""
         try:
             self.log_custody_event("PARSING_START", "Starting Plaso two-step processing: log2timeline -> psort -> SQLite")
@@ -5021,11 +5021,11 @@ class ForensicWorkflowManager:
                 parsers_list.extend(optional_parsers)
             elif fast_mode:
                 # In fast mode, use only the most critical parsers for the 12 questions
-                # Note: winevtx excluded due to Plaso compatibility issues with some versions
                 parsers_list = [
                     "mft",           # File system activity
                     "prefetch",      # Program execution  
                     "winreg",        # Registry (USB, software)
+                    "winevtx",       # Windows event logs
                     "usnjrnl",       # File system journal
                     "recycle_bin"    # Deleted files
                 ]
@@ -5124,25 +5124,64 @@ class ForensicWorkflowManager:
                 
                 # Check if this is the winevtx AttributeError issue
                 if "AttributeError: 'NoneType' object has no attribute 'GetAttributeContainers'" in result.stderr:
-                    self.logger.warning("Detected Plaso winevtx compatibility issue. Trying alternative approach...")
+                    self.logger.warning("Detected Plaso winevtx compatibility issue. Trying multiple fallback approaches...")
                     
-                    # Try with CSV output instead of JSON as a fallback
-                    csv_output_path = self.parsed_dir / f"{self.case_id}_timeline.csv"
-                    fallback_cmd = [
+                    # Try approach 1: Use dynamic output format (avoids JSON formatting issues)
+                    self.logger.info("Fallback 1: Trying dynamic output format...")
+                    dynamic_output_path = self.parsed_dir / f"{self.case_id}_timeline_dynamic.txt"
+                    dynamic_cmd = [
                         psort_cmd_path,
                         "-o", "dynamic",
+                        "-w", str(dynamic_output_path),
+                        "--temporary_directory", str(temp_dir),
+                        str(plaso_storage_path)
+                    ]
+                    
+                    dynamic_result = subprocess.run(dynamic_cmd, capture_output=True, text=True, timeout=3600)
+                    
+                    if dynamic_result.returncode == 0 and dynamic_output_path.exists():
+                        self.logger.info("Dynamic format export successful. Converting to database format...")
+                        return self._process_dynamic_timeline(dynamic_output_path, custom_module)
+                    
+                    # Try approach 2: Use L2T CSV format
+                    self.logger.info("Fallback 2: Trying L2T CSV format...")
+                    csv_output_path = self.parsed_dir / f"{self.case_id}_timeline.csv"
+                    csv_cmd = [
+                        psort_cmd_path,
+                        "-o", "l2tcsv",
                         "-w", str(csv_output_path),
                         "--temporary_directory", str(temp_dir),
                         str(plaso_storage_path)
                     ]
                     
-                    self.logger.info(f"Trying fallback with CSV output: {' '.join(fallback_cmd)}")
-                    fallback_result = subprocess.run(fallback_cmd, capture_output=True, text=True, timeout=3600)
+                    csv_result = subprocess.run(csv_cmd, capture_output=True, text=True, timeout=3600)
                     
-                    if fallback_result.returncode == 0 and csv_output_path.exists():
-                        self.logger.info("Fallback CSV export successful. Converting to database format...")
-                        # Process CSV instead of JSON
+                    if csv_result.returncode == 0 and csv_output_path.exists():
+                        self.logger.info("L2T CSV export successful. Converting to database format...")
                         return self._process_csv_timeline(csv_output_path, custom_module)
+                    
+                    # Try approach 3: Use JSON with filtered parsers (exclude problematic ones temporarily)
+                    self.logger.info("Fallback 3: Trying JSON with parser filtering...")
+                    filtered_json_path = self.parsed_dir / f"{self.case_id}_timeline_filtered.json"
+                    filtered_cmd = [
+                        psort_cmd_path,
+                        "-o", "json",
+                        "-w", str(filtered_json_path),
+                        "--temporary_directory", str(temp_dir),
+                        str(plaso_storage_path),
+                        "parser != 'winevtx'"  # Filter to exclude problematic events
+                    ]
+                    
+                    filtered_result = subprocess.run(filtered_cmd, capture_output=True, text=True, timeout=3600)
+                    
+                    if filtered_result.returncode == 0 and filtered_json_path.exists():
+                        self.logger.warning("Filtered JSON export successful, but Windows Event Logs excluded!")
+                        # Process filtered JSON and then try to get winevtx separately
+                        success = self._process_json_timeline(filtered_json_path, custom_module)
+                        if success:
+                            # Try to get winevtx events separately with dynamic format
+                            self._attempt_winevtx_recovery(psort_cmd_path, plaso_storage_path, temp_dir, custom_module)
+                        return success
                 
                 self.log_custody_event("PARSING_ERROR", f"psort processing failed: {result.stderr}")
                 return False
@@ -5153,22 +5192,7 @@ class ForensicWorkflowManager:
                 self.log_custody_event("PARSING_ERROR", "JSON timeline was not created")
                 return False
                 
-            # Initialize custom module and process JSON data
-            custom_module.open_connection()
-            try:
-                with open(json_output_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        if line.strip():
-                            try:
-                                event_data = json.loads(line)
-                                custom_module.process_event(event_data)
-                            except json.JSONDecodeError:
-                                continue
-                            except Exception as e:
-                                self.logger.warning(f"Error processing event: {e}")
-                                continue
-            finally:
-                custom_module.close_connection()
+            return self._process_json_timeline(json_output_path, custom_module)
                 
             if not database_path.exists():
                 self.logger.error("FAS5 SQLite database was not created")
@@ -5279,6 +5303,139 @@ class ForensicWorkflowManager:
             self.logger.error(f"CSV processing error: {e}")
             return False
     
+    def _process_json_timeline(self, json_path, custom_module):
+        """Process JSON timeline output"""
+        try:
+            self.logger.info(f"Processing JSON timeline: {json_path}")
+            
+            # Initialize custom module and process JSON data
+            custom_module.open_connection()
+            try:
+                processed_count = 0
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip():
+                            try:
+                                event_data = json.loads(line)
+                                custom_module.process_event(event_data)
+                                processed_count += 1
+                                
+                                if processed_count % 10000 == 0:
+                                    self.logger.info(f"Processed {processed_count} JSON events...")
+                                    
+                            except json.JSONDecodeError:
+                                continue
+                            except Exception as e:
+                                self.logger.debug(f"Error processing JSON event: {e}")
+                                continue
+            finally:
+                custom_module.close_connection()
+            
+            self.logger.info(f"JSON processing completed: {processed_count} events processed")
+            
+            # Clean up JSON file
+            try:
+                json_path.unlink()
+            except Exception as e:
+                self.logger.debug(f"JSON cleanup warning: {e}")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"JSON processing error: {e}")
+            return False
+    
+    def _process_dynamic_timeline(self, dynamic_path, custom_module):
+        """Process dynamic format timeline output"""
+        try:
+            import re
+            
+            self.logger.info(f"Processing dynamic timeline: {dynamic_path}")
+            
+            # Initialize custom module
+            custom_module.open_connection()
+            
+            processed_count = 0
+            with open(dynamic_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    
+                    try:
+                        # Parse dynamic format line (simplified parsing)
+                        # Dynamic format: datetime,timestamp_desc,source,source_long,message,parser,display_name,tag
+                        parts = line.split(',', 7)  # Split into max 8 parts
+                        if len(parts) >= 5:
+                            event_data = {
+                                'timestamp': parts[0] if len(parts) > 0 else '',
+                                'timestamp_desc': parts[1] if len(parts) > 1 else '',
+                                'source': parts[2] if len(parts) > 2 else '',
+                                'source_long': parts[3] if len(parts) > 3 else '',
+                                'message': parts[4] if len(parts) > 4 else '',
+                                'parser': parts[5] if len(parts) > 5 else '',
+                                'display_name': parts[6] if len(parts) > 6 else '',
+                                'tag': parts[7] if len(parts) > 7 else '',
+                            }
+                            
+                            custom_module.process_event(event_data)
+                            processed_count += 1
+                            
+                            if processed_count % 10000 == 0:
+                                self.logger.info(f"Processed {processed_count} dynamic events...")
+                                
+                    except Exception as e:
+                        self.logger.debug(f"Error processing dynamic line: {e}")
+                        continue
+            
+            custom_module.close_connection()
+            self.logger.info(f"Dynamic processing completed: {processed_count} events processed")
+            
+            # Clean up dynamic file
+            try:
+                dynamic_path.unlink()
+            except Exception as e:
+                self.logger.debug(f"Dynamic cleanup warning: {e}")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Dynamic processing error: {e}")
+            return False
+    
+    def _attempt_winevtx_recovery(self, psort_cmd_path, plaso_storage_path, temp_dir, custom_module):
+        """Attempt to recover Windows Event Log data using alternative methods"""
+        try:
+            self.logger.info("Attempting to recover Windows Event Log data...")
+            
+            # Try to extract just winevtx events with dynamic format
+            winevtx_output_path = self.parsed_dir / f"{self.case_id}_winevtx_recovery.txt"
+            winevtx_cmd = [
+                psort_cmd_path,
+                "-o", "dynamic",
+                "-w", str(winevtx_output_path),
+                "--temporary_directory", str(temp_dir),
+                str(plaso_storage_path),
+                "parser == 'winevtx'"  # Only winevtx events
+            ]
+            
+            winevtx_result = subprocess.run(winevtx_cmd, capture_output=True, text=True, timeout=1800)
+            
+            if winevtx_result.returncode == 0 and winevtx_output_path.exists():
+                self.logger.info("Windows Event Log recovery successful!")
+                # Process the recovered events
+                success = self._process_dynamic_timeline(winevtx_output_path, custom_module)
+                if success:
+                    self.logger.info("Windows Event Log data successfully integrated")
+                return success
+            else:
+                self.logger.warning("Windows Event Log recovery failed")
+                return False
+                
+        except Exception as e:
+            self.logger.warning(f"Windows Event Log recovery error: {e}")
+            return False
+    
     def _pre_optimize_database(self, db_path: Path) -> None:
         """Pre-optimize database for bulk operations"""
         try:
@@ -5342,7 +5499,7 @@ class ForensicWorkflowManager:
                     return False
                 
             # Step 2: Parse artifacts with Plaso
-            if not self.parse_artifacts_plaso(plaso_path, fast_mode, date_from, date_to):
+            if not self.parse_artifacts_plaso(plaso_path, fast_mode, date_from, date_to, existing_artifacts_dir, False):
                 return False
                 
             # Step 3: Validate and use database created by direct SQLite processing
@@ -5549,6 +5706,7 @@ def main():
     parser.add_argument('--kape-path', type=Path, default=Path('D:/FORAI/tools/kape/kape.exe'), help='Path to KAPE executable')
     parser.add_argument('--plaso-path', type=Path, default=Path('D:/FORAI/tools/plaso'), help='Path to Plaso tools directory')
     parser.add_argument('--fast-mode', action='store_true', help='Enable fast processing mode (reduced parsers, optimized for 12 standard questions)')
+    parser.add_argument('--enable-winevtx', action='store_true', help='Enable Windows Event Log parsing (may cause crashes with some Plaso versions)')
     
     # EXISTING OPTIONS
     # CSV arguments removed - using direct artifact → SQLite workflow only
@@ -5763,7 +5921,7 @@ def main():
                                          f"Loading {len(keywords)} custom keywords for case-insensitive flagging")
                 inject_keywords(args.case_id, keywords)
             
-            success = workflow.parse_artifacts_plaso(args.plaso_path, args.fast_mode, args.date_from, args.date_to, args.artifacts_dir)
+            success = workflow.parse_artifacts_plaso(args.plaso_path, args.fast_mode, args.date_from, args.date_to, args.artifacts_dir, args.enable_winevtx)
             print(f"Artifact parsing {'completed' if success else 'failed'}")
             return
         
