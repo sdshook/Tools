@@ -5021,11 +5021,11 @@ class ForensicWorkflowManager:
                 parsers_list.extend(optional_parsers)
             elif fast_mode:
                 # In fast mode, use only the most critical parsers for the 12 questions
+                # Note: winevtx excluded due to Plaso compatibility issues with some versions
                 parsers_list = [
                     "mft",           # File system activity
                     "prefetch",      # Program execution  
                     "winreg",        # Registry (USB, software)
-                    "winevtx",       # Windows event logs
                     "usnjrnl",       # File system journal
                     "recycle_bin"    # Deleted files
                 ]
@@ -5121,6 +5121,29 @@ class ForensicWorkflowManager:
             
             if result.returncode != 0:
                 self.logger.error(f"psort processing failed: {result.stderr}")
+                
+                # Check if this is the winevtx AttributeError issue
+                if "AttributeError: 'NoneType' object has no attribute 'GetAttributeContainers'" in result.stderr:
+                    self.logger.warning("Detected Plaso winevtx compatibility issue. Trying alternative approach...")
+                    
+                    # Try with CSV output instead of JSON as a fallback
+                    csv_output_path = self.parsed_dir / f"{self.case_id}_timeline.csv"
+                    fallback_cmd = [
+                        psort_cmd_path,
+                        "-o", "dynamic",
+                        "-w", str(csv_output_path),
+                        "--temporary_directory", str(temp_dir),
+                        str(plaso_storage_path)
+                    ]
+                    
+                    self.logger.info(f"Trying fallback with CSV output: {' '.join(fallback_cmd)}")
+                    fallback_result = subprocess.run(fallback_cmd, capture_output=True, text=True, timeout=3600)
+                    
+                    if fallback_result.returncode == 0 and csv_output_path.exists():
+                        self.logger.info("Fallback CSV export successful. Converting to database format...")
+                        # Process CSV instead of JSON
+                        return self._process_csv_timeline(csv_output_path, custom_module)
+                
                 self.log_custody_event("PARSING_ERROR", f"psort processing failed: {result.stderr}")
                 return False
                 
@@ -5194,6 +5217,66 @@ class ForensicWorkflowManager:
         except Exception as e:
             self.logger.error(f"Plaso two-step processing error: {e}")
             self.log_custody_event("PARSING_ERROR", f"Plaso two-step processing error: {str(e)}")
+            return False
+    
+    def _process_csv_timeline(self, csv_path, custom_module):
+        """Process CSV timeline output as fallback when JSON fails"""
+        try:
+            import csv
+            
+            self.logger.info(f"Processing CSV timeline: {csv_path}")
+            
+            # Initialize custom module
+            custom_module.open_connection()
+            
+            processed_count = 0
+            with open(csv_path, 'r', encoding='utf-8', newline='') as csvfile:
+                # Try to detect the CSV format
+                sample = csvfile.read(1024)
+                csvfile.seek(0)
+                sniffer = csv.Sniffer()
+                delimiter = sniffer.sniff(sample).delimiter
+                
+                reader = csv.DictReader(csvfile, delimiter=delimiter)
+                
+                for row in reader:
+                    try:
+                        # Convert CSV row to event format similar to JSON
+                        event_data = {
+                            'timestamp': row.get('datetime', ''),
+                            'timestamp_desc': row.get('timestamp_desc', ''),
+                            'source': row.get('source', ''),
+                            'source_long': row.get('source_long', ''),
+                            'message': row.get('message', ''),
+                            'parser': row.get('parser', ''),
+                            'display_name': row.get('display_name', ''),
+                            'tag': row.get('tag', ''),
+                        }
+                        
+                        # Process the event through custom module
+                        custom_module.process_event(event_data)
+                        processed_count += 1
+                        
+                        if processed_count % 10000 == 0:
+                            self.logger.info(f"Processed {processed_count} CSV events...")
+                            
+                    except Exception as e:
+                        self.logger.debug(f"Error processing CSV row: {e}")
+                        continue
+            
+            custom_module.close_connection()
+            self.logger.info(f"CSV processing completed: {processed_count} events processed")
+            
+            # Clean up CSV file
+            try:
+                csv_path.unlink()
+            except Exception as e:
+                self.logger.debug(f"CSV cleanup warning: {e}")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"CSV processing error: {e}")
             return False
     
     def _pre_optimize_database(self, db_path: Path) -> None:
