@@ -5037,7 +5037,6 @@ class ForensicWorkflowManager:
                 "--hashers", "md5",  # Only MD5 for speed (SHA256 can be added later if needed)
                 "--workers", str(optimal_workers),
                 "--worker_memory_limit", str(worker_memory_limit),
-                "--buffer_size", "196608",  # 192KB buffer for better I/O performance
                 "--temporary_directory", str(self.parsed_dir / "temp"),  # Use SSD temp space
             ]
             
@@ -5113,7 +5112,6 @@ class ForensicWorkflowManager:
                 psort_cmd_path,
                 "-o", "json",
                 "-w", str(json_output_path),
-                "--buffer_size", "196608",  # 192KB buffer for better I/O
                 "--temporary_directory", str(temp_dir),  # Use same temp directory
                 str(plaso_storage_path)
             ]
