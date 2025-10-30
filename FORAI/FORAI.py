@@ -6064,6 +6064,25 @@ def main():
         
         # Generate report
         if args.report:
+            # Check if database has data first
+            db_path = CONFIG.base_dir / "extracts" / f"{args.case_id}_fas5.db"
+            if not db_path.exists():
+                print(f"\n❌ Database not found: {db_path}")
+                print("Run with --parse-artifacts first to create the database.")
+                sys.exit(1)
+            
+            # Check if database has evidence data
+            conn = sqlite3.connect(db_path)
+            cursor = conn.execute("SELECT COUNT(*) FROM evidence")
+            evidence_count = cursor.fetchone()[0]
+            conn.close()
+            
+            if evidence_count == 0:
+                print(f"\n❌ Database is empty (no evidence records found)")
+                print("Run with --parse-artifacts first to populate the database.")
+                sys.exit(1)
+            
+            print(f"\n📊 Found {evidence_count} evidence records in database")
             generator = ModernReportGenerator(args.case_id, args.llm_folder)
             report = generator.generate_comprehensive_report()
             report_path = generator.save_report(report, args.report)
