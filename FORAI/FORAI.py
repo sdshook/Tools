@@ -6064,38 +6064,76 @@ def main():
         
         # Generate report
         if args.report:
-            # Only validate database if parsing wasn't just run
-            if not args.parse_artifacts:
-                # Check if database has data first
-                db_path = CONFIG.base_dir / "extracts" / f"{args.case_id}_fas5.db"
-                if not db_path.exists():
-                    print(f"\n❌ Database not found: {db_path}")
-                    print("Run with --parse-artifacts first to create the database.")
-                    sys.exit(1)
-                
-                # Check if database has evidence data
+            # FORENSIC DATABASE VALIDATION (always required for chain of custody)
+            print(f"\n🔍 Performing forensic database validation...")
+            db_path = CONFIG.base_dir / "extracts" / f"{args.case_id}_fas5.db"
+            
+            # Initialize workflow for chain of custody logging
+            if not 'workflow' in locals():
+                workflow = ForensicWorkflowManager(args.case_id, args.output_dir, args.verbose)
+            
+            # Validate database exists
+            if not db_path.exists():
+                error_msg = f"Database not found: {db_path}"
+                workflow.log_custody_event("DATABASE_VALIDATION_FAILED", error_msg)
+                print(f"\n❌ {error_msg}")
+                print("Run with --parse-artifacts first to create the database.")
+                sys.exit(1)
+            
+            # Validate database integrity and content
+            try:
                 conn = sqlite3.connect(db_path)
+                
+                # Check evidence table exists and has data
                 cursor = conn.execute("SELECT COUNT(*) FROM evidence")
                 evidence_count = cursor.fetchone()[0]
+                
+                # Get database file size for validation
+                db_size_mb = db_path.stat().st_size / (1024 * 1024)
+                
+                # Check for basic table structure
+                cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = [row[0] for row in cursor.fetchall()]
+                
                 conn.close()
                 
+                # Validate minimum forensic requirements
                 if evidence_count == 0:
-                    print(f"\n❌ Database is empty (no evidence records found)")
+                    error_msg = f"Database validation failed: No evidence records found (database size: {db_size_mb:.1f}MB)"
+                    workflow.log_custody_event("DATABASE_VALIDATION_FAILED", error_msg)
+                    print(f"\n❌ {error_msg}")
                     print("Run with --parse-artifacts first to populate the database.")
                     sys.exit(1)
                 
-                print(f"\n📊 Found {evidence_count} evidence records in database")
+                # Log successful validation to chain of custody
+                validation_msg = f"Database validation successful: {evidence_count} evidence records, {db_size_mb:.1f}MB, tables: {', '.join(tables)}"
+                workflow.log_custody_event("DATABASE_VALIDATION_SUCCESS", validation_msg)
+                print(f"✅ Database validated: {evidence_count} evidence records ({db_size_mb:.1f}MB)")
+                
+            except Exception as e:
+                error_msg = f"Database validation error: {str(e)}"
+                workflow.log_custody_event("DATABASE_VALIDATION_ERROR", error_msg)
+                print(f"\n❌ {error_msg}")
+                sys.exit(1)
+            
+            # Proceed with report generation using validated database
+            print(f"\n📊 Generating forensic report from validated database...")
+            workflow.log_custody_event("REPORT_GENERATION_START", f"Starting {args.report.upper()} report generation with {evidence_count} evidence records")
             
             generator = ModernReportGenerator(args.case_id, args.llm_folder)
             report = generator.generate_comprehensive_report()
             report_path = generator.save_report(report, args.report)
-            print(f"\nReport generated: {report_path}")
+            
+            workflow.log_custody_event("REPORT_GENERATION_COMPLETE", f"Report generated: {report_path}")
+            print(f"✅ Report generated: {report_path}")
         
         # Generate chain of custody documentation
         if args.chain_of_custody:
-            workflow = ForensicWorkflowManager(args.case_id, args.output_dir, args.verbose)
+            # Use existing workflow if available, otherwise create new one
+            if not 'workflow' in locals():
+                workflow = ForensicWorkflowManager(args.case_id, args.output_dir, args.verbose)
             custody_file = workflow.generate_chain_of_custody_report()
-            print(f"\nChain of custody generated: {custody_file}")
+            print(f"\n📜 Chain of custody generated: {custody_file}")
     
     except Exception as e:
         LOGGER.error(f"Error in main workflow: {e}")
