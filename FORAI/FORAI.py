@@ -776,10 +776,10 @@ class RemovedEnhancedForensicSearch:
             weighted_results = []
             for row in results:
                 result_dict = dict(row)
-                artifact_type = result_dict.get('artifact_type', '').lower()
+                artifact = result_dict.get('artifact', '').lower()
                 
                 # Apply artifact-specific weighting
-                artifact_weight = self.artifact_weights.get(artifact_type, 1.0)
+                artifact_weight = self.artifact_weights.get(artifact, 1.0)
                 result_dict['weighted_score'] = result_dict['base_score'] * artifact_weight * weight
                 
                 weighted_results.append(result_dict)
@@ -916,10 +916,10 @@ class RemovedEnhancedForensicSearch:
         
         # Sort results by score and prioritize important artifact types
         def sort_key(result):
-            artifact_type = result.get('artifact_type', '').lower()
+            artifact = result.get('artifact', '').lower()
             base_score = result.get('final_ranking_score', 0)
-            priority_boost = 0.2 if artifact_type in priority_types else 0
-            diversity_penalty = 0.1 if artifact_type in seen_types else 0
+            priority_boost = 0.2 if artifact in priority_types else 0
+            diversity_penalty = 0.1 if artifact in seen_types else 0
             return base_score + priority_boost - diversity_penalty
         
         # Process results in streaming fashion to avoid loading all into memory
@@ -929,7 +929,7 @@ class RemovedEnhancedForensicSearch:
             if current_tokens >= max_tokens:
                 break
                 
-            artifact_type = result.get('artifact_type', '').lower()
+            artifact = result.get('artifact', '').lower()
             adjusted_score = sort_key(result)
             
             if adjusted_score > 0.15:  # Lower threshold for better coverage
@@ -955,7 +955,7 @@ class RemovedEnhancedForensicSearch:
                 if not summary.strip():
                     summary = str(result.get('data_json', ''))[:90]
                 
-                evidence_text = f"{timestamp_str}{artifact_type.upper()}: {summary}"
+                evidence_text = f"{timestamp_str}{artifact.upper()}: {summary}"
                 
                 # Add correlation info if significant
                 correlation_count = result.get('correlation_count', 1)
@@ -968,17 +968,17 @@ class RemovedEnhancedForensicSearch:
                 if current_tokens + estimated_tokens <= max_tokens:
                     context_parts.append(evidence_text)
                     current_tokens += estimated_tokens
-                    seen_types.add(artifact_type)
+                    seen_types.add(artifact)
                 else:
                     # Try to fit a shorter version
                     short_summary = summary[:50]
-                    short_text = f"{timestamp_str}{artifact_type.upper()}: {short_summary}..."
+                    short_text = f"{timestamp_str}{artifact.upper()}: {short_summary}..."
                     short_tokens = len(short_text) // 3.5
                     
                     if current_tokens + short_tokens <= max_tokens:
                         context_parts.append(short_text)
                         current_tokens += short_tokens
-                        seen_types.add(artifact_type)
+                        seen_types.add(artifact)
                     else:
                         break
         
@@ -1508,7 +1508,7 @@ WINDOW ANALYSIS:"""
         
         for idx, evidence in enumerate(evidence_window, 1):
             timestamp = evidence.get('timestamp', 'Unknown time')
-            artifact = evidence.get('artifact_type', 'Unknown artifact')
+            artifact = evidence.get('artifact', 'Unknown artifact')
             summary = evidence.get('summary', 'No summary')[:100]  # Truncate for window analysis
             
             context_parts.append(f"{idx}. [{timestamp}] {artifact}: {summary}")
@@ -1952,7 +1952,7 @@ def build_psi_from_db(case_id: str = None) -> bool:
     try:
         with get_database_connection() as conn:
             # Build query with optional case filtering
-            query = "SELECT id, summary, data_json, artifact_type, timestamp FROM evidence"
+            query = "SELECT id, summary, data_json, artifact, timestamp FROM evidence"
             params = []
             
             if case_id:
@@ -1980,7 +1980,7 @@ def build_psi_from_db(case_id: str = None) -> bool:
                     doc_id=doc_id,
                     text=text_content,
                     vec=vec,
-                    tags=[row[3] or "unknown"],  # artifact_type as tag
+                    tags=[row[3] or "unknown"],  # artifact as tag
                     valence=0.0,  # Neutral valence initially
                     protected=False
                 )
@@ -2011,7 +2011,7 @@ class ForensicExtractors:
         query = """
             SELECT id, data_json, timestamp, summary
             FROM evidence 
-            WHERE (artifact_type LIKE '%usb%' OR artifact_type LIKE '%storage%'
+            WHERE (artifact LIKE '%usb%' OR artifact LIKE '%storage%'
                    OR summary LIKE '%USB%' OR data_json LIKE '%USB%'
                    OR data_json LIKE '%DeviceInstanceId%' OR data_json LIKE '%SerialNumber%')
         """
@@ -2059,9 +2059,9 @@ class ForensicExtractors:
     def extract_file_executions(conn: sqlite3.Connection, case_id: str = None) -> List[Dict[str, Any]]:
         """Extract file execution evidence using deterministic patterns"""
         query = """
-            SELECT id, data_json, timestamp, summary, artifact_type
+            SELECT id, data_json, timestamp, summary, artifact
             FROM evidence 
-            WHERE (artifact_type LIKE '%prefetch%' OR artifact_type LIKE '%execution%'
+            WHERE (artifact LIKE '%prefetch%' OR artifact LIKE '%execution%'
                    OR summary LIKE '%.exe%' OR data_json LIKE '%.exe%'
                    OR data_json LIKE '%ProcessName%' OR data_json LIKE '%CommandLine%')
         """
@@ -2074,7 +2074,7 @@ class ForensicExtractors:
         cursor = conn.execute(query, params)
         
         for row in cursor:
-            exec_info = {"evidence_id": row[0], "timestamp": row[2], "artifact_type": row[4]}
+            exec_info = {"evidence_id": row[0], "timestamp": row[2], "artifact": row[4]}
             data_json = row[1] or ""
             summary = row[3] or ""
             
@@ -2109,7 +2109,7 @@ class ForensicExtractors:
         query = """
             SELECT id, data_json, timestamp, summary
             FROM evidence 
-            WHERE (artifact_type LIKE '%network%' OR artifact_type LIKE '%connection%'
+            WHERE (artifact LIKE '%network%' OR artifact LIKE '%connection%'
                    OR data_json LIKE '%IP%' OR data_json LIKE '%Port%'
                    OR data_json LIKE '%RemoteAddress%' OR summary LIKE '%connection%')
         """
@@ -2157,7 +2157,7 @@ class ForensicExtractors:
         query = """
             SELECT id, data_json, timestamp, summary
             FROM evidence 
-            WHERE (artifact_type LIKE '%registry%' 
+            WHERE (artifact LIKE '%registry%' 
                    OR data_json LIKE '%HKEY%' OR summary LIKE '%registry%')
         """
         params = []
@@ -2199,7 +2199,7 @@ class ForensicExtractors:
         query = """
             SELECT id, data_json, timestamp, summary
             FROM evidence 
-            WHERE (artifact_type LIKE '%system%' OR artifact_type LIKE '%computer%'
+            WHERE (artifact LIKE '%system%' OR artifact LIKE '%computer%'
                    OR data_json LIKE '%ComputerName%' OR data_json LIKE '%SystemManufacturer%'
                    OR data_json LIKE '%SystemProductName%' OR data_json LIKE '%SerialNumber%'
                    OR summary LIKE '%computer%' OR summary LIKE '%system%')
@@ -2248,7 +2248,7 @@ class ForensicExtractors:
         query = """
             SELECT id, data_json, timestamp, summary
             FROM evidence 
-            WHERE (artifact_type LIKE '%user%' OR artifact_type LIKE '%account%'
+            WHERE (artifact LIKE '%user%' OR artifact LIKE '%account%'
                    OR data_json LIKE '%SID%' OR data_json LIKE '%Username%'
                    OR data_json LIKE '%ProfilePath%' OR summary LIKE '%user%')
         """
@@ -2293,7 +2293,7 @@ class ForensicExtractors:
             FROM evidence 
             WHERE (data_json LIKE '%copy%' OR data_json LIKE '%move%'
                    OR data_json LIKE '%transfer%' OR summary LIKE '%copy%'
-                   OR summary LIKE '%transfer%' OR artifact_type LIKE '%file%')
+                   OR summary LIKE '%transfer%' OR artifact LIKE '%file%')
         """
         params = []
         if case_id:
@@ -2329,7 +2329,7 @@ class ForensicExtractors:
         query = """
             SELECT id, data_json, timestamp, summary
             FROM evidence 
-            WHERE (artifact_type LIKE '%install%' OR artifact_type LIKE '%uninstall%'
+            WHERE (artifact LIKE '%install%' OR artifact LIKE '%uninstall%'
                    OR data_json LIKE '%install%' OR data_json LIKE '%uninstall%'
                    OR data_json LIKE '%DisplayName%' OR data_json LIKE '%Publisher%'
                    OR summary LIKE '%install%' OR summary LIKE '%software%')
@@ -2382,7 +2382,7 @@ class ForensicExtractors:
             WHERE (data_json LIKE '%clear%' OR data_json LIKE '%delete%'
                    OR data_json LIKE '%wipe%' OR data_json LIKE '%timestamp%'
                    OR summary LIKE '%clear%' OR summary LIKE '%delete%'
-                   OR summary LIKE '%log%' OR artifact_type LIKE '%log%')
+                   OR summary LIKE '%log%' OR artifact LIKE '%log%')
         """
         params = []
         if case_id:
@@ -2460,7 +2460,7 @@ class ForensicExtractors:
             SELECT id, data_json, summary, timestamp
             FROM evidence 
             WHERE (data_json LIKE '%print%' OR data_json LIKE '%spool%'
-                   OR summary LIKE '%print%' OR artifact_type LIKE '%print%')
+                   OR summary LIKE '%print%' OR artifact LIKE '%print%')
         """
         params = []
         if case_id:
@@ -3230,7 +3230,7 @@ class ForensicAnalyzer:
                     MIN(timestamp) as first_activity,
                     MAX(timestamp) as last_activity,
                     COUNT(*) as activity_count,
-                    COUNT(DISTINCT artifact) as artifact_types
+                    COUNT(DISTINCT artifact) as artifacts
                 FROM evidence 
                 WHERE case_id = ? 
                   AND user IS NOT NULL 
@@ -3249,7 +3249,7 @@ class ForensicAnalyzer:
                     'first_activity': row[2],
                     'last_activity': row[3],
                     'activity_count': row[4],
-                    'artifact_types': row[5]
+                    'artifacts': row[5]
                 })
             
             return results
@@ -3366,18 +3366,18 @@ class ForensicAnalyzer:
             row_dict = dict(row)
             
             # Extract structured facts based on artifact type
-            artifact_type = row_dict.get('artifact_type', '').lower()
+            artifact = row_dict.get('artifact', '').lower()
             data_json = row_dict.get('data_json', '') or ''
             summary = row_dict.get('summary', '') or ''
             
             fact = {
-                'type': artifact_type,
+                'type': artifact,
                 'timestamp': row_dict.get('timestamp'),
                 'summary': summary[:100]  # Truncate for conciseness
             }
             
             # Extract specific facts based on type
-            if 'usb' in artifact_type or 'USB' in data_json:
+            if 'usb' in artifact or 'USB' in data_json:
                 serial_match = re.search(r'SerialNumber["\s]*[:=]["\s]*([A-Za-z0-9]+)', data_json)
                 if serial_match:
                     fact['usb_serial'] = serial_match.group(1)
@@ -3385,12 +3385,12 @@ class ForensicAnalyzer:
                 if name_match:
                     fact['device_name'] = name_match.group(1)
             
-            elif 'network' in artifact_type or 'IP' in data_json:
+            elif 'network' in artifact or 'IP' in data_json:
                 ip_matches = re.findall(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b', data_json)
                 if ip_matches:
                     fact['ip_addresses'] = ip_matches[:3]  # Limit to first 3
             
-            elif 'registry' in artifact_type or 'HKEY' in data_json:
+            elif 'registry' in artifact or 'HKEY' in data_json:
                 key_match = re.search(r'(HKEY_[A-Z_]+\\[^"]+)', data_json)
                 if key_match:
                     fact['registry_key'] = key_match.group(1)[:100]
@@ -3611,13 +3611,13 @@ Answer:"""
         # Group additional evidence by type
         evidence_by_type = defaultdict(list)
         for evidence in additional_evidence:
-            artifact_type = evidence.get('artifact_type', 'unknown')
-            evidence_by_type[artifact_type].append(evidence)
+            artifact = evidence.get('artifact', 'unknown')
+            evidence_by_type[artifact].append(evidence)
         
         # Analyze each evidence type
-        for artifact_type, evidence_list in evidence_by_type.items():
+        for artifact, evidence_list in evidence_by_type.items():
             if len(evidence_list) >= 2:  # Only analyze types with multiple items
-                findings.append(f"• {artifact_type.upper()}: {len(evidence_list)} additional items found")
+                findings.append(f"• {artifact.upper()}: {len(evidence_list)} additional items found")
                 
                 # Look for patterns in this evidence type
                 timestamps = [e.get('timestamp') for e in evidence_list if e.get('timestamp')]
@@ -3657,8 +3657,8 @@ Answer:"""
         
         for result in evidence_results:
             # Count artifact types
-            artifact_type = result.get('artifact_type', 'unknown')
-            artifact_counts[artifact_type] += 1
+            artifact = result.get('artifact', 'unknown')
+            artifact_counts[artifact] += 1
             
             # Track time range
             if result.get('timestamp'):
@@ -3707,7 +3707,7 @@ Answer:"""
                 dt = datetime.fromtimestamp(result['timestamp'])
                 timestamp_str = f"[{dt.strftime('%m/%d %H:%M')}] "
             
-            analysis += f"{i}. {timestamp_str}{result.get('artifact_type', 'UNKNOWN').upper()}: "
+            analysis += f"{i}. {timestamp_str}{result.get('artifact', 'UNKNOWN').upper()}: "
             analysis += f"{result.get('summary', 'No summary available')[:100]}"
             analysis += f"{cluster_info}{correlation_info} (score: {score:.2f})\n"
         
@@ -3936,7 +3936,7 @@ Answer:"""
             cursor = conn.execute("""
                 SELECT 
                     COUNT(*) as total_evidence,
-                    COUNT(DISTINCT artifact_type) as artifact_types,
+                    COUNT(DISTINCT artifact) as artifacts,
                     MIN(timestamp) as earliest_event,
                     MAX(timestamp) as latest_event
                 FROM evidence 
@@ -3947,7 +3947,7 @@ Answer:"""
             if stats:
                 results['evidence_summary'] = {
                     'total_evidence_items': stats[0],
-                    'artifact_types_found': stats[1],
+                    'artifacts_found': stats[1],
                     'timeline_start': stats[2],
                     'timeline_end': stats[3]
                 }
@@ -4025,7 +4025,7 @@ Answer:"""
             keyword_conditions = " OR ".join([f"LOWER(summary) LIKE LOWER('%{kw}%') OR LOWER(data_json) LIKE LOWER('%{kw}%')" for kw in keywords])
             
             cursor = conn.execute(f"""
-                SELECT timestamp, artifact_type, summary, data_json
+                SELECT timestamp, artifact, summary, data_json
                 FROM evidence 
                 WHERE case_id = ? AND ({keyword_conditions})
                 ORDER BY timestamp DESC
@@ -4035,7 +4035,7 @@ Answer:"""
             for row in cursor.fetchall():
                 evidence.append({
                     'timestamp': row[0],
-                    'artifact_type': row[1],
+                    'artifact': row[1],
                     'summary': row[2][:200] if row[2] else '',  # Truncate for readability
                     'relevance': 'keyword_match'
                 })
@@ -4050,10 +4050,10 @@ Answer:"""
             keyword_conditions = " OR ".join([f"LOWER(summary) LIKE LOWER('%{kw}%')" for kw in keywords])
             
             cursor = conn.execute(f"""
-                SELECT COUNT(*) as count, artifact_type
+                SELECT COUNT(*) as count, artifact
                 FROM evidence 
                 WHERE case_id = ? AND ({keyword_conditions})
-                GROUP BY artifact_type
+                GROUP BY artifact
                 ORDER BY count DESC
                 LIMIT 3
             """, (case_id,))
@@ -4061,8 +4061,8 @@ Answer:"""
             results = cursor.fetchall()
             if results:
                 summary_parts = []
-                for count, artifact_type in results:
-                    summary_parts.append(f"{count} {artifact_type} artifacts")
+                for count, artifact in results:
+                    summary_parts.append(f"{count} {artifact} artifacts")
                 return f"Found {', '.join(summary_parts)}"
         
         return "Limited evidence available"
@@ -4086,7 +4086,7 @@ Answer:"""
                 if evidence_ids:
                     placeholders = ','.join(['?'] * len(evidence_ids))
                     cursor = conn.execute(f"""
-                        SELECT timestamp, artifact_type, summary, data_json
+                        SELECT timestamp, artifact, summary, data_json
                         FROM evidence 
                         WHERE case_id = ? AND id IN ({placeholders})
                         ORDER BY timestamp DESC
@@ -4104,7 +4104,7 @@ Answer:"""
             if keywords:
                 keyword_conditions = " OR ".join([f"LOWER(summary) LIKE LOWER('%{kw}%')" for kw in keywords])
                 cursor = conn.execute(f"""
-                    SELECT timestamp, artifact_type, summary
+                    SELECT timestamp, artifact, summary
                     FROM evidence 
                     WHERE case_id = ? AND ({keyword_conditions})
                     ORDER BY timestamp DESC
