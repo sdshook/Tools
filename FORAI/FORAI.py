@@ -5994,7 +5994,11 @@ def main():
             
             success = workflow.parse_artifacts_plaso(args.plaso_path, args.fast_mode, args.date_from, args.date_to, args.artifacts_dir, args.enable_winevtx)
             print(f"Artifact parsing {'completed' if success else 'failed'}")
-            return
+            
+            # Continue to analytics and reporting phases after parsing
+            if not success:
+                LOGGER.error("Parsing failed, cannot proceed to analytics and reporting")
+                return
         
         # Initialize database if requested
         if args.init_db:
