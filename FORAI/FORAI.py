@@ -3086,8 +3086,19 @@ def search_evidence(query: str, limit: int = 100, date_from: str = None, date_to
 class ModernLLM:
     """Modern LLM integration with advanced guardrails - now using global singleton"""
     
-    def __init__(self, model_path: Optional[Path] = None):
-        self.model_path = model_path or CONFIG.base_dir / "LLM" / "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+    def __init__(self, llm_folder: Optional[Path] = None):
+        if llm_folder:
+            # Use provided LLM folder and find the model file
+            llm_path = Path(llm_folder)
+            model_files = list(llm_path.glob("*.gguf"))
+            if model_files:
+                self.model_path = model_files[0]  # Use first .gguf file found
+            else:
+                # Fallback to default if no .gguf files found
+                self.model_path = CONFIG.base_dir / "LLM" / "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+        else:
+            self.model_path = CONFIG.base_dir / "LLM" / "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+        
         # Use global singleton instead of creating new instance
         self.llm = get_global_llm(str(self.model_path))
     
@@ -3173,8 +3184,8 @@ class ModernLLM:
 class ForensicAnalyzer:
     """Modern forensic analysis engine"""
     
-    def __init__(self):
-        self.llm = ModernLLM()
+    def __init__(self, llm_folder: Optional[Path] = None):
+        self.llm = ModernLLM(llm_folder)
     
     @performance_monitor
     def analyze_computer_identity(self, case_id: str) -> Dict[str, Any]:
@@ -4164,9 +4175,9 @@ class ForensicProcessor:
 class ModernReportGenerator:
     """Modern report generation with multiple formats"""
     
-    def __init__(self, case_id: str):
+    def __init__(self, case_id: str, llm_folder: Optional[Path] = None):
         self.case_id = case_id
-        self.analyzer = ForensicAnalyzer()
+        self.analyzer = ForensicAnalyzer(llm_folder)
     
     @performance_monitor
     def generate_comprehensive_report(self) -> Dict[str, Any]:
@@ -6041,7 +6052,7 @@ def main():
         
         # Answer forensic question
         if args.question:
-            analyzer = ForensicAnalyzer()
+            analyzer = ForensicAnalyzer(args.llm_folder)
             answer = analyzer.answer_forensic_question(args.question, args.case_id, args.date_from, args.date_to, args.days_back)
             time_filter_msg = ""
             if args.days_back:
@@ -6053,7 +6064,7 @@ def main():
         
         # Generate report
         if args.report:
-            generator = ModernReportGenerator(args.case_id)
+            generator = ModernReportGenerator(args.case_id, args.llm_folder)
             report = generator.generate_comprehensive_report()
             report_path = generator.save_report(report, args.report)
             print(f"\nReport generated: {report_path}")
