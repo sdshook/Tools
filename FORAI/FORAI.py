@@ -6076,8 +6076,9 @@ def main():
             if not db_path.exists():
                 error_msg = f"Database not found: {db_path}"
                 workflow.log_custody_event("DATABASE_VALIDATION_FAILED", error_msg)
-                print(f"\n❌ {error_msg}")
-                print("Run with --parse-artifacts first to create the database.")
+                print(f"\n❌ FORENSIC VALIDATION FAILED: {error_msg}")
+                print("🛑 WORKFLOW TERMINATED: Cannot generate forensic reports without valid database")
+                print("📋 REQUIRED ACTION: Run with --parse-artifacts first to create the database.")
                 sys.exit(1)
             
             # Validate database integrity and content
@@ -6101,19 +6102,23 @@ def main():
                 if evidence_count == 0:
                     error_msg = f"Database validation failed: No evidence records found (database size: {db_size_mb:.1f}MB)"
                     workflow.log_custody_event("DATABASE_VALIDATION_FAILED", error_msg)
-                    print(f"\n❌ {error_msg}")
-                    print("Run with --parse-artifacts first to populate the database.")
+                    print(f"\n❌ FORENSIC VALIDATION FAILED: {error_msg}")
+                    print("🛑 WORKFLOW TERMINATED: Cannot generate forensic reports from empty database")
+                    print("📋 REQUIRED ACTION: Run with --parse-artifacts first to populate the database.")
                     sys.exit(1)
                 
                 # Log successful validation to chain of custody
                 validation_msg = f"Database validation successful: {evidence_count} evidence records, {db_size_mb:.1f}MB, tables: {', '.join(tables)}"
                 workflow.log_custody_event("DATABASE_VALIDATION_SUCCESS", validation_msg)
-                print(f"✅ Database validated: {evidence_count} evidence records ({db_size_mb:.1f}MB)")
+                print(f"✅ FORENSIC VALIDATION PASSED: {evidence_count} evidence records ({db_size_mb:.1f}MB)")
+                print(f"🔒 Database integrity verified - proceeding with report generation")
                 
             except Exception as e:
                 error_msg = f"Database validation error: {str(e)}"
                 workflow.log_custody_event("DATABASE_VALIDATION_ERROR", error_msg)
-                print(f"\n❌ {error_msg}")
+                print(f"\n❌ FORENSIC VALIDATION ERROR: {error_msg}")
+                print("🛑 WORKFLOW TERMINATED: Database integrity cannot be verified")
+                print("📋 REQUIRED ACTION: Check database file and re-run parsing if necessary")
                 sys.exit(1)
             
             # Proceed with report generation using validated database
