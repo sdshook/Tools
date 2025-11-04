@@ -475,65 +475,7 @@ WebGuard/
 │   ├── featurizer.rs              # Feature extraction and vectorization
 │   ├── policy.rs                  # Decision policy engine
 │   └── main.rs                    # Main application entry point
-├── tests/
-│   ├── test_eq_iq_integration.rs  # EQ/IQ system integration tests
-│   └── test_retrospective_learning.rs # Retrospective learning tests
-├── src/bin/
-│   ├── adaptive_learning_test.rs  # Multi-pass adaptive learning test
-│   └── experiential_learning_test.rs # Isolation Forest experiential learning test
+
 └── tools/                         # Development and testing tools
 ```
 
-## Testing the Isolation Forest Integration
-
-The Isolation Forest experiential learning integration can be tested using the dedicated test binary:
-
-```bash
-# Run the comprehensive experiential learning test
-cargo run --bin experiential_learning_test
-
-# Build and run with optimizations for performance testing
-cargo build --release
-./target/release/experiential_learning_test
-```
-
-### Test Results Interpretation
-
-The experiential learning test validates several key aspects:
-
-1. **Cognitive Learning Validation**: Measures improvement in threat detection across multiple learning passes
-2. **EQ/IQ Regulation Testing**: Validates emotional-analytical balance maintenance
-3. **Fear Mitigation Effectiveness**: Ensures negative experiences don't cause decision paralysis
-4. **Memory Utilization**: Tracks efficient use of BDH memory and PSI integration
-5. **Security-First Validation**: Confirms preference for false positives over false negatives
-
-### Expected Test Output
-
-```
-🧠 WebGuard Experiential Learning Test with Isolation Forest Integration
-🎯 Testing cognitive learning improvements with EQ/IQ regulation
-🛡️  Security-first approach: Preferring false positives over false negatives
-⚖️  Fear mitigation: Preventing decision paralysis from negative experiences
-
-🔄 Learning Pass 1/5
-   📈 Threat Detection Rate: 94.7%
-   🚨 False Positive Rate: 8.0%
-   ⚠️  False Negative Rate: 0.0%
-   🎯 Confidence Score: 0.450
-   🧠 Memory Utilization: 15.0%
-   ⚖️  EQ/IQ Balance: 0.500
-   🛡️  Fear Mitigation Applied: 786 times
-   💭 Experiential Context Used: 150 times
-
-✅ SYSTEM VALIDATION: Isolation Forest experiential learning operational
-✅ EQ/IQ REGULATION: Emotional-analytical balance maintained
-✅ FEAR MITIGATION: Decision paralysis prevention active
-✅ SECURITY-FIRST: Low false negative rate achieved
-```
-
-The test demonstrates successful integration of:
-- Isolation Forest anomaly detection as experiential contributor
-- PSI semantic encoding for anomaly patterns
-- BDH memory enhancement with experiential context
-- EQ/IQ regulation preventing fear-based decision paralysis
-- Fear mitigation system maintaining learning while preventing paralysis

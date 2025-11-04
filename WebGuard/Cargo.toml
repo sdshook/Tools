@@ -46,6 +46,8 @@ plotters = "0.3"
 csv = "1.3"
 chrono = "0.4"
 
+# Additional dependencies for comprehensive testing
+
 [[bin]]
 name = "webguard"
 path = "src/main.rs"
@@ -67,12 +69,10 @@ name = "debug_feature_extraction"
 path = "src/bin/debug_feature_extraction.rs"
 
 [[bin]]
-name = "adaptive_learning_test"
-path = "src/bin/adaptive_learning_test.rs"
+name = "comprehensive_multipass_test"
+path = "src/bin/comprehensive_multipass_test.rs"
 
-[[bin]]
-name = "experiential_learning_test"
-path = "src/bin/experiential_learning_test.rs"
+
 
 [profile.release]
 opt-level = 3
