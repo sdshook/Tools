@@ -1,5 +1,8 @@
 pub mod config;
 pub mod featurizer;
+pub mod advanced_feature_extractor;
+pub mod adaptive_threshold;
+pub mod enhanced_pattern_recognition;
 pub mod memory_engine;
 pub mod mesh_cognition;
 pub mod policy;

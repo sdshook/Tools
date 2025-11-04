@@ -36,6 +36,10 @@ chrono = { version = "0.4", features = ["serde"] }
 # Base64 encoding
 base64 = "0.21"
 
+# Advanced feature extraction
+regex = "1.10"
+urlencoding = "2.1"
+
 [dev-dependencies]
 # Testing and development dependencies
 plotters = "0.3"
@@ -53,6 +57,14 @@ path = "src/bin/webguard_performance_suite.rs"
 [[bin]]
 name = "webguard_diagnostic"
 path = "src/bin/webguard_diagnostic.rs"
+
+[[bin]]
+name = "webguard_enhanced_diagnostic"
+path = "src/bin/webguard_enhanced_diagnostic.rs"
+
+[[bin]]
+name = "debug_feature_extraction"
+path = "src/bin/debug_feature_extraction.rs"
 
 [profile.release]
 opt-level = 3
