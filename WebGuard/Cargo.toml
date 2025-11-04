@@ -66,6 +66,10 @@ path = "src/bin/webguard_enhanced_diagnostic.rs"
 name = "debug_feature_extraction"
 path = "src/bin/debug_feature_extraction.rs"
 
+[[bin]]
+name = "adaptive_learning_test"
+path = "src/bin/adaptive_learning_test.rs"
+
 [profile.release]
 opt-level = 3
 lto = true
