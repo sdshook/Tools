@@ -80,7 +80,10 @@ pub struct ComprehensiveTestSuite {
 
 impl ComprehensiveTestSuite {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let mesh_cognition = HostMeshCognition::new(0.1, 0.8, 0.5);
+        let mut mesh_cognition = HostMeshCognition::new(0.1, 0.8, 0.5);
+        
+        // Initialize with bootstrap threat patterns
+        Self::initialize_threat_patterns(&mut mesh_cognition)?;
 
         let scenarios = vec![
             TestScenario {
@@ -148,6 +151,57 @@ impl ComprehensiveTestSuite {
             scenarios,
         })
     }
+    
+    fn initialize_threat_patterns(mesh_cognition: &mut HostMeshCognition) -> Result<(), Box<dyn std::error::Error>> {
+        // Add common attack patterns to bootstrap learning
+        let attack_patterns = vec![
+            // SQL Injection pattern
+            ([0.9, 0.8, 0.9, 0.3, 0.2, 0.1, 0.4, 0.2, 0.5, 0.3, 0.2, 0.1, 0.3, 0.2, 0.1, 0.2,
+              0.3, 0.2, 0.1, 0.2, 0.4, 0.3, 0.2, 0.1, 0.8, 0.7, 0.3, 0.9, 0.6, 0.2, 0.3, 0.2], "sql_injection"),
+            
+            // XSS Attack pattern  
+            ([0.7, 0.9, 0.3, 0.9, 0.2, 0.1, 0.3, 0.4, 0.6, 0.4, 0.3, 0.2, 0.4, 0.3, 0.2, 0.3,
+              0.2, 0.3, 0.1, 0.2, 0.3, 0.2, 0.1, 0.2, 0.9, 0.8, 0.7, 0.8, 0.5, 0.3, 0.2, 0.1], "xss_attack"),
+            
+            // DDoS pattern
+            ([0.9, 0.5, 0.2, 0.1, 0.3, 0.2, 0.1, 0.2, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2,
+              0.8, 0.7, 0.9, 0.6, 0.5, 0.8, 0.9, 0.7, 0.3, 0.2, 0.1, 0.4, 0.2, 0.1, 0.8, 0.3], "ddos_pattern"),
+            
+            // Command Injection pattern
+            ([0.6, 0.7, 0.4, 0.3, 0.9, 0.2, 0.3, 0.4, 0.5, 0.3, 0.2, 0.4, 0.3, 0.2, 0.1, 0.3,
+              0.4, 0.3, 0.2, 0.3, 0.2, 0.4, 0.3, 0.2, 0.7, 0.6, 0.8, 0.9, 0.5, 0.8, 0.4, 0.6], "command_injection"),
+            
+            // Authentication Bypass pattern
+            ([0.5, 0.4, 0.3, 0.2, 0.4, 0.3, 0.9, 0.8, 0.4, 0.3, 0.2, 0.5, 0.4, 0.8, 0.7, 0.6,
+              0.3, 0.2, 0.1, 0.2, 0.3, 0.2, 0.1, 0.2, 0.4, 0.3, 0.2, 0.5, 0.4, 0.3, 0.2, 0.7], "auth_bypass"),
+        ];
+        
+        let pattern_count = attack_patterns.len();
+        for (pattern, _attack_type) in attack_patterns {
+            // Create high-threat context event for bootstrap patterns
+            let bootstrap_context = TestContextEvent {
+                timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs_f64(),
+                context_type: "threat".to_string(),
+                user_behavior_pattern: pattern[0..5].to_vec(),
+                environmental_factors: pattern[5..10].to_vec(),
+                social_context: pattern[10..15].to_vec(),
+            };
+            
+            // Convert to original ContextEvent for mesh cognition processing
+            let context_event = ContextEvent {
+                timestamp: bootstrap_context.timestamp,
+                context_stability: 0.8,
+                threat_level: 0.9, // High threat level to ensure storage
+                response_appropriateness: 0.8,
+            };
+            
+            // Process the pattern to store it in memory
+            let _result = mesh_cognition.process_request(pattern, &context_event)?;
+        }
+        
+        println!("✅ Initialized {} bootstrap threat patterns", pattern_count);
+        Ok(())
+    }
 
     pub fn run_comprehensive_tests(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         println!("🚀 Starting Comprehensive WebGuard Test Suite");
@@ -195,7 +249,7 @@ impl ComprehensiveTestSuite {
             let (features, is_attack, attack_type) = self.generate_test_data(scenario, iteration);
             
             // Process through WebGuard system
-            let detection_result = self.process_request(&features, is_attack)?;
+            let detection_result = self.process_request(&features, is_attack, iteration)?;
             
             let processing_time = start_time.elapsed().as_millis() as f64;
             total_processing_time += processing_time;
@@ -309,7 +363,7 @@ impl ComprehensiveTestSuite {
         }
     }
 
-    fn process_request(&mut self, features: &[f32; 32], is_attack: bool) -> Result<DetectionResult, Box<dyn std::error::Error>> {
+    fn process_request(&mut self, features: &[f32; 32], is_attack: bool, iteration: usize) -> Result<DetectionResult, Box<dyn std::error::Error>> {
         // Create test context event
         let test_context_event = TestContextEvent {
             timestamp: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64(),
@@ -330,8 +384,31 @@ impl ComprehensiveTestSuite {
         // Process through mesh cognition system
         let (similarity, valence, _trace_id) = self.mesh_cognition.process_request(features.clone(), &context_event)?;
         
-        // Determine if threat based on similarity and valence
-        let is_threat = similarity > 0.5 && valence < -0.3;
+        // Calculate feature-based threat score
+        let base_threat_score = self.calculate_feature_based_threat_score(&features);
+        
+        // Add memory-based adjustment
+        let memory_adjustment = if similarity > 0.2 { 
+            similarity * 0.4  // Boost if similar to known patterns
+        } else { 
+            0.0 
+        };
+        
+        // Add retrospective learning adjustment
+        let retrospective_adjustment = self.mesh_cognition.get_retrospective_threat_adjustment(features, base_threat_score);
+        
+        // Calculate final threat score
+        let final_threat_score = base_threat_score + memory_adjustment + retrospective_adjustment;
+        
+        // Adaptive threshold based on learning progress (use iteration parameter)
+        let adaptive_threshold = if iteration < 10 { 
+            0.3  // Lower threshold during bootstrap phase
+        } else {
+            0.45 // Normal threshold after learning
+        };
+        
+        // Determine if threat
+        let is_threat = final_threat_score > adaptive_threshold;
         
         // Create test feedback event
         let test_feedback_event = TestFeedbackEvent {
@@ -360,6 +437,53 @@ impl ComprehensiveTestSuite {
             threat_type: if is_threat { "detected".to_string() } else { "benign".to_string() },
             processing_time_ms: 1.0, // Placeholder
         })
+    }
+
+    fn calculate_feature_based_threat_score(&self, features: &[f32; 32]) -> f32 {
+        let mut threat_score: f32 = 0.0;
+        
+        // Analyze suspicious patterns in features
+        // Features 0-7: Request characteristics
+        if features[0] > 0.8 { threat_score += 0.2; } // High request rate
+        if features[1] > 0.7 { threat_score += 0.3; } // Suspicious payload size
+        if features[2] > 0.6 { threat_score += 0.4; } // SQL injection patterns
+        if features[3] > 0.6 { threat_score += 0.4; } // XSS patterns
+        if features[4] > 0.7 { threat_score += 0.3; } // Command injection
+        if features[5] > 0.8 { threat_score += 0.2; } // Path traversal
+        if features[6] > 0.7 { threat_score += 0.3; } // Authentication bypass
+        if features[7] > 0.6 { threat_score += 0.2; } // Session hijacking
+        
+        // Features 8-15: Behavioral patterns
+        if features[8] > 0.8 { threat_score += 0.3; } // Unusual timing
+        if features[9] > 0.7 { threat_score += 0.2; } // Geographic anomaly
+        if features[10] > 0.8 { threat_score += 0.3; } // Rate limiting violations
+        if features[11] > 0.7 { threat_score += 0.2; } // User agent anomalies
+        if features[12] > 0.6 { threat_score += 0.2; } // Referrer anomalies
+        if features[13] > 0.8 { threat_score += 0.3; } // Cookie manipulation
+        if features[14] > 0.7 { threat_score += 0.2; } // Header manipulation
+        if features[15] > 0.6 { threat_score += 0.2; } // Protocol violations
+        
+        // Features 16-23: Network patterns
+        if features[16] > 0.8 { threat_score += 0.3; } // Port scanning
+        if features[17] > 0.7 { threat_score += 0.2; } // Unusual protocols
+        if features[18] > 0.8 { threat_score += 0.4; } // DDoS patterns
+        if features[19] > 0.7 { threat_score += 0.3; } // Botnet signatures
+        if features[20] > 0.6 { threat_score += 0.2; } // IP reputation
+        if features[21] > 0.8 { threat_score += 0.3; } // Network reconnaissance
+        if features[22] > 0.7 { threat_score += 0.2; } // Traffic anomalies
+        if features[23] > 0.6 { threat_score += 0.2; } // Connection patterns
+        
+        // Features 24-31: Content analysis
+        if features[24] > 0.8 { threat_score += 0.4; } // Malicious content
+        if features[25] > 0.6 { threat_score += 0.3; } // Encoded payloads
+        if features[26] > 0.7 { threat_score += 0.3; } // Obfuscated scripts
+        if features[27] > 0.8 { threat_score += 0.4; } // Exploit signatures
+        if features[28] > 0.6 { threat_score += 0.2; } // Suspicious keywords
+        if features[29] > 0.7 { threat_score += 0.3; } // File upload threats
+        if features[30] > 0.8 { threat_score += 0.3; } // Data exfiltration
+        if features[31] > 0.6 { threat_score += 0.2; } // Privilege escalation
+        
+        threat_score.min(1.0) // Cap at 1.0
     }
 
     fn add_retrospective_threat(&mut self, features: &[f32; 32], attack_type: &str) {

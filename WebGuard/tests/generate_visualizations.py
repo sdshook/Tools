@@ -11,11 +11,11 @@ plt.style.use('seaborn-v0_8')
 sns.set_palette("husl")
 
 # Create output directory
-os.makedirs('images', exist_ok=True)
+os.makedirs('tests/images', exist_ok=True)
 
 # Load data
-results_df = pd.read_csv('results/comprehensive_test_results.csv')
-progress_df = pd.read_csv('results/adaptive_learning_progress.csv')
+results_df = pd.read_csv('tests/results/comprehensive_test_results.csv')
+progress_df = pd.read_csv('tests/results/adaptive_learning_progress.csv')
 
 # 1. Accuracy Over Time
 plt.figure(figsize=(12, 8))
@@ -60,7 +60,7 @@ plt.legend()
 plt.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('images/comprehensive_performance_overview.png', dpi=300, bbox_inches='tight')
+plt.savefig('tests/images/comprehensive_performance_overview.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 # 5. Adaptive Learning Detailed Analysis
@@ -110,7 +110,7 @@ axes[1, 2].set_ylabel('Processing Time (ms)')
 axes[1, 2].grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('images/adaptive_learning_analysis.png', dpi=300, bbox_inches='tight')
+plt.savefig('tests/images/adaptive_learning_analysis.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 # 6. False Positive/Negative Analysis
@@ -135,7 +135,7 @@ plt.ylabel('False Negative Rate (%)')
 plt.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('images/error_analysis.png', dpi=300, bbox_inches='tight')
+plt.savefig('tests/images/error_analysis.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 # 7. System State Heatmap
@@ -146,11 +146,11 @@ plt.title('System Performance Heatmap Over Time', fontsize=16, fontweight='bold'
 plt.xlabel('Test Iteration')
 plt.ylabel('Metrics')
 plt.tight_layout()
-plt.savefig('images/system_state_heatmap.png', dpi=300, bbox_inches='tight')
+plt.savefig('tests/images/system_state_heatmap.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 print("✅ All visualizations generated successfully!")
-print("📊 Saved to images/:")
+print("📊 Saved to tests/images/:")
 print("   - comprehensive_performance_overview.png")
 print("   - adaptive_learning_analysis.png") 
 print("   - error_analysis.png")

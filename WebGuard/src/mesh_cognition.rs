@@ -344,9 +344,19 @@ impl HostMeshCognition {
         // Generate trace ID
         let trace_id = format!("trace_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis());
         
-        // Store memory trace if significant
-        if adjusted_similarity > 0.3 || valence.abs() > 0.5 {
-            self.store_memory_trace(&embedding, adjusted_similarity, valence)?;
+        // Store memory trace with learning-friendly thresholds
+        let should_store = adjusted_similarity > 0.1 || 
+                          valence.abs() > 0.2 || 
+                          context_event.threat_level > 0.5; // Always store high threat events
+        
+        if should_store {
+            // Use threat level as learning signal for valence
+            let learning_valence = if context_event.threat_level > 0.5 { 
+                0.8  // Positive valence for threats (to remember them)
+            } else { 
+                -0.2 // Slight negative valence for normal traffic
+            };
+            self.store_memory_trace(&embedding, adjusted_similarity, learning_valence)?;
         }
 
         Ok((adjusted_similarity, valence, trace_id))
