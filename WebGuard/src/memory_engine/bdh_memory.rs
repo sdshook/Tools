@@ -8,6 +8,18 @@ use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 use crate::eq_iq_regulator::{ExperientialBehavioralRegulator, ContextEvent, FeedbackEvent};
 
+/// Experiential context from memory retrieval with EQ/IQ regulation
+#[derive(Debug, Clone)]
+pub struct ExperientialContext {
+    pub memory_id: String,
+    pub similarity: f32,
+    pub valence: f32,
+    pub experience_type: String,
+    pub relevance_score: f32,
+    pub eq_iq_regulated: bool,
+    pub fear_mitigation_applied: bool,
+}
+
 pub const EMBED_DIM: usize = 32;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -654,6 +666,161 @@ impl BdhMemory {
         self.manage_memory_pressure();
 
         Ok(())
+    }
+
+    /// Retrieve experiential context for anomaly analysis with EQ/IQ regulation
+    pub fn retrieve_experiential_context(
+        &self, 
+        anomaly_embedding: &[f32; EMBED_DIM], 
+        context_limit: usize,
+        eq_iq_balance: &crate::eq_iq_regulator::EQIQBalance
+    ) -> Vec<ExperientialContext> {
+        let mut contexts = Vec::new();
+        
+        // Get similar traces
+        let similar_traces = self.retrieve_similar(anomaly_embedding, context_limit * 2);
+        
+        for (trace, similarity) in similar_traces.iter().take(context_limit) {
+            // EQ/IQ regulated relevance calculation
+            let analytical_relevance = similarity * (1.0 + trace.cum_reward.abs() * 0.1);
+            let emotional_relevance = if trace.valence < 0.0 {
+                // Negative experiences need EQ regulation to prevent fear-based paralysis
+                trace.valence.abs() * eq_iq_balance.eq * 0.5  // Reduced impact of negative experiences
+            } else {
+                trace.valence * eq_iq_balance.eq
+            };
+            
+            // Balanced relevance score prevents experiential paralysis
+            let regulated_relevance = analytical_relevance * eq_iq_balance.iq + 
+                                    emotional_relevance * eq_iq_balance.eq;
+            
+            // Ensure negative experiences don't prevent necessary actions
+            let action_confidence = if trace.valence < 0.0 {
+                // For negative experiences, boost confidence if analytical assessment is strong
+                regulated_relevance * (1.0 + eq_iq_balance.iq * 0.3)
+            } else {
+                regulated_relevance
+            };
+            
+            contexts.push(ExperientialContext {
+                memory_id: trace.id.clone(),
+                similarity: *similarity,
+                valence: trace.valence,
+                experience_type: "BDH_Regulated".to_string(),
+                relevance_score: action_confidence,
+                eq_iq_regulated: true,
+                fear_mitigation_applied: trace.valence < 0.0,
+            });
+        }
+        
+        // Sort by regulated relevance to prioritize actionable experiences
+        contexts.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap());
+        contexts
+    }
+
+    /// Add experiential anomaly trace with EQ/IQ regulation
+    pub fn add_experiential_anomaly_trace(
+        &mut self, 
+        embedding: [f32; EMBED_DIM], 
+        anomaly_score: f32,
+        is_threat: bool,
+        context_stability: f32,
+        threat_level: f32
+    ) -> String {
+        // Create context event for EQ/IQ regulation
+        let context = crate::eq_iq_regulator::ContextEvent {
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs_f64(),
+            context_stability,
+            threat_level,
+            response_appropriateness: if is_threat { 0.8 } else { 0.6 },
+        };
+
+        // Create feedback event
+        let feedback = crate::eq_iq_regulator::FeedbackEvent {
+            timestamp: context.timestamp,
+            predicted_threat: anomaly_score,
+            actual_threat: if is_threat { 1.0 } else { 0.0 },
+            accuracy: 1.0 - (anomaly_score - if is_threat { 1.0 } else { 0.0 }).abs(),
+        };
+
+        // Calculate EQ/IQ balanced valence
+        let eq_iq_balance = self.eq_iq_regulator.calculate_eq_iq_balance(&context, &feedback);
+        
+        // Regulate valence to prevent fear-based paralysis
+        let base_valence = if is_threat { -anomaly_score } else { anomaly_score * 0.5 };
+        let regulated_valence = base_valence * eq_iq_balance.balance;
+        
+        // Ensure negative experiences don't prevent future threat detection
+        let final_valence = if regulated_valence < 0.0 {
+            // Apply fear mitigation - negative experiences shouldn't paralyze the system
+            regulated_valence * (0.7 + eq_iq_balance.iq * 0.3)  // IQ component reduces fear impact
+        } else {
+            regulated_valence
+        };
+
+        // Add the regulated trace
+        self.add_trace(embedding, final_valence)
+    }
+
+    /// Update experiential trace with outcome feedback and EQ/IQ regulation
+    pub fn update_experiential_outcome(
+        &mut self,
+        trace_id: &str,
+        actual_outcome: f32,
+        predicted_outcome: f32,
+        action_taken: bool,
+        was_correct: bool
+    ) {
+        if let Some(trace) = self.traces.iter_mut().find(|t| t.id == trace_id) {
+            // Calculate outcome-based reward
+            let accuracy_reward = 1.0 - (actual_outcome - predicted_outcome).abs();
+            let action_reward = if action_taken && was_correct { 0.5 } else if !action_taken && !was_correct { 0.3 } else { -0.2 };
+            
+            // EQ/IQ regulated reward prevents fear-based learning
+            let context = crate::eq_iq_regulator::ContextEvent {
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs_f64(),
+                context_stability: 0.7,
+                threat_level: actual_outcome,
+                response_appropriateness: if was_correct { 0.9 } else { 0.4 },
+            };
+
+            let feedback = crate::eq_iq_regulator::FeedbackEvent {
+                timestamp: context.timestamp,
+                predicted_threat: predicted_outcome,
+                actual_threat: actual_outcome,
+                accuracy: accuracy_reward,
+            };
+
+            let eq_iq_balance = self.eq_iq_regulator.calculate_eq_iq_balance(&context, &feedback);
+            
+            // Regulated reward update
+            let total_reward = (accuracy_reward + action_reward) * eq_iq_balance.balance;
+            
+            // Apply fear mitigation for negative outcomes
+            let final_reward = if total_reward < 0.0 && !action_taken {
+                // If we didn't act and it was wrong, don't create excessive fear
+                total_reward * (0.6 + eq_iq_balance.iq * 0.4)  // IQ reduces fear impact
+            } else {
+                total_reward
+            };
+            
+            // Update with EQ/IQ context
+            self.reward_update_with_context(
+                trace_id,
+                final_reward,
+                0.1,
+                context.context_stability,
+                context.threat_level,
+                predicted_outcome,
+                actual_outcome
+            );
+        }
     }
 }
 

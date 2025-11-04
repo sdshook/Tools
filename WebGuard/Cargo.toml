@@ -70,6 +70,10 @@ path = "src/bin/debug_feature_extraction.rs"
 name = "adaptive_learning_test"
 path = "src/bin/adaptive_learning_test.rs"
 
+[[bin]]
+name = "experiential_learning_test"
+path = "src/bin/experiential_learning_test.rs"
+
 [profile.release]
 opt-level = 3
 lto = true

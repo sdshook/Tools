@@ -12,3 +12,5 @@ pub mod evidence;
 pub mod persistence;
 pub mod eq_iq_regulator;
 pub mod retrospective_learning;
+pub mod experiential_anomaly;
+pub mod experiential_learning_test;
