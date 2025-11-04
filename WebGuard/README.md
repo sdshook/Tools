@@ -9,11 +9,13 @@ This project introduces a novel adaptive cybersecurity web service protection ag
 ## Core Innovation
 
 ### The Unique Combination
-The system fuses four key components that have rarely been integrated:
+The system fuses six key components that have rarely been integrated:
 - **True Bidirectional Hebbian Learning**: "Neurons that fire together, wire together" - explicit connection weights between memory traces that strengthen with co-activation and reward
 - **Reinforcement-Modulated Plasticity**: Reward/punishment signals directly modulate Hebbian learning rates and connection strengths in real-time
 - **Persistent Semantic Index (PSI)**: Long-term memory structure storing reinforced associations across unlimited time horizons
 - **Host-Based Mesh Cognition**: Cross-service learning between web processes on the same host, enabling collaborative defense
+- **EQ/IQ Behavioral Regulation**: Emotional intelligence (empathy, social awareness) balanced with analytical intelligence for context-aware decision making
+- **Retrospective Learning System**: Enhanced learning from false negatives (missed threats) discovered after initial analysis, mimicking natural learning from mistakes
 
 ## Technical Architecture
 
@@ -41,13 +43,29 @@ The system fuses four key components that have rarely been integrated:
    - **Collective Valence**: Host-level aggression control coordinating defensive posture across service processes
    - **Cosine Similarity Retrieval**: Efficient pattern matching within and across service process memories
 
-3. **Adaptive Defense**:
-   - ValenceController adjusts aggression based on reward history
+3. **EQ/IQ Behavioral Regulation System**:
+   - **Emotional Intelligence (EQ)**: Empathy modeling, social context awareness, and emotional state tracking
+   - **Analytical Intelligence (IQ)**: Pattern recognition, logical reasoning, and systematic analysis
+   - **Dynamic Balance**: Adaptive weighting between emotional and analytical responses based on context
+   - **Contextual Decision Making**: Considers both emotional and analytical factors for nuanced threat response
+   - **Empathic Accuracy**: Measures system's ability to understand and predict user/attacker behavior
+
+4. **Retrospective Learning System**:
+   - **False Negative Learning**: Enhanced learning from missed threats discovered after initial analysis
+   - **Threat Discovery Methods**: Supports learning from security audits, incident response, external detection, user reports, forensic analysis, and threat intelligence
+   - **Temporal Pattern Analysis**: Time-based decay and relevance weighting for discovered threats
+   - **Consequence Severity Tracking**: Adjusts learning intensity based on threat impact (1.0-3.0 scale)
+   - **Enhanced Learning Rate**: 2.0x multiplier for false negative corrections to accelerate adaptation
+   - **Feature Similarity Matching**: Identifies related threat patterns for comprehensive learning
+
+5. **Adaptive Defense**:
+   - ValenceController adjusts aggression based on reward history and EQ/IQ balance
    - Produces actuations that modify the runtime environment:
      - Process respawn/reseed
      - Seccomp/job object changes
      - Isolate/throttle/restart actions
    - Implements Moving Target Defense (MTD) strategies
+   - Integrates retrospective learning feedback for continuous improvement
 
 ## Distinctive Features
 
@@ -56,13 +74,16 @@ The system fuses four key components that have rarely been integrated:
 | Aspect | Traditional Systems | This Project |
 |--------|-------------------|--------------|
 | **Training** | Centralized, cloud-based | Local, autonomous learning |
-| **Learning Type** | Supervised/Statistical | Reinforcement + Hebbian |
+| **Learning Type** | Supervised/Statistical | Reinforcement + Hebbian + EQ/IQ |
 | **Context** | Limited telemetry | Deep process state embedding |
 | **Adaptation** | Requires retraining | Continuous, experiential |
 | **Defense** | Detect → Alert | Detect → Learn → Adapt |
 | **Memory** | Model drift prone | Persistent consolidation |
 | **Platform** | Vendor-specific | Cross-process (multiple processes of same web server type) |
 | **Feedback** | Often ignored | Integrated as reinforcement |
+| **False Negatives** | Manual analysis | Automated retrospective learning |
+| **Intelligence** | Single-mode analysis | Dual EQ/IQ balanced reasoning |
+| **Mistake Learning** | Limited/manual | Enhanced 2.0x learning rate |
 
 ## Key Innovations
 
@@ -77,15 +98,32 @@ The system fuses four key components that have rarely been integrated:
 - **Shared Intelligence**: Consolidated PSI memory accessible to all web server processes on the host
 - **Transfer Learning**: Cross-process knowledge sharing through mesh cognition, not retraining
 
-### 3. **Embodied Defense**
+### 3. **EQ/IQ Behavioral Regulation**
+- **Dual Intelligence System**: Balances emotional intelligence (empathy, social awareness) with analytical intelligence (pattern recognition, logic)
+- **Context-Aware Decision Making**: Adapts response style based on situational context and threat characteristics
+- **Empathic Accuracy**: Measures and improves system's ability to understand user and attacker behavior patterns
+- **Dynamic Balance**: Automatically adjusts EQ/IQ weighting based on feedback and performance metrics
+- **Behavioral Adaptation**: Learns optimal emotional vs. analytical response patterns for different threat types
+
+### 4. **Retrospective Learning from Mistakes**
+- **False Negative Enhancement**: Implements 2.0x enhanced learning rate when threats are discovered after initial miss
+- **Natural Learning Principle**: Mimics biological learning where mistakes provide stronger learning signals than successes
+- **Multi-Source Discovery**: Learns from threats discovered via security audits, incident response, external detection, user reports, forensic analysis, and threat intelligence
+- **Temporal Intelligence**: Applies time-based decay and relevance weighting to discovered threats
+- **Consequence-Weighted Learning**: Adjusts learning intensity based on actual threat impact and severity
+- **Pattern Generalization**: Uses feature similarity matching to apply lessons from missed threats to related patterns
+
+### 5. **Embodied Defense**
 - System doesn't just detect—it actively modifies its attack surface
 - Learning rewards survivability, not just accuracy
 - Defensive behaviors emerge through trial and reinforcement
+- Integrates EQ/IQ balance and retrospective learning into defense strategies
 
-### 4. **Operator Integration**
+### 6. **Operator Integration**
 - Real-time feedback loop with human operators
 - UI feedback ("good isolate," "false positive") becomes reinforcement signal
 - Model evolves decision boundaries based on operational outcomes
+- Retrospective learning system incorporates post-incident analysis and lessons learned
 
 ## Implementation Details
 
@@ -250,6 +288,72 @@ The system maintains a **host-level aggression score** that:
 
 This creates a **living defense system** that learns from attacks and becomes more protective over time, with immediate cross-process threat sharing and configurable MTD-style responses.
 
+## Advanced Learning Systems
+
+### EQ/IQ Behavioral Regulation System
+
+WebGuard implements a novel **dual-intelligence system** that balances emotional intelligence (EQ) with analytical intelligence (IQ) for context-aware cybersecurity decision making:
+
+#### **Emotional Intelligence (EQ) Components:**
+- **Empathy Modeling**: Tracks and predicts user behavior patterns to distinguish legitimate users from attackers
+- **Social Context Awareness**: Considers organizational context, user roles, and behavioral norms
+- **Emotional State Tracking**: Monitors system "mood" and stress levels based on recent threat activity
+- **Empathic Accuracy**: Measures system's ability to correctly interpret user intentions and predict behavior
+
+#### **Analytical Intelligence (IQ) Components:**
+- **Pattern Recognition**: Traditional ML-based threat detection and classification
+- **Logical Reasoning**: Rule-based analysis and systematic threat evaluation
+- **Statistical Analysis**: Quantitative risk assessment and probability calculations
+- **Systematic Processing**: Structured approach to threat analysis and response planning
+
+#### **Dynamic Balance Mechanism:**
+```rust
+pub struct EqIqBalance {
+    pub eq_weight: f32,     // Emotional intelligence weighting (0.0-1.0)
+    pub iq_weight: f32,     // Analytical intelligence weighting (0.0-1.0)
+    pub balance: f32,       // Overall balance factor for learning modulation
+}
+```
+
+The system automatically adjusts the EQ/IQ balance based on:
+- **Context Type**: High-stakes environments favor IQ, social environments favor EQ
+- **Threat Characteristics**: Known attack patterns favor IQ, novel behaviors favor EQ
+- **Performance Feedback**: System learns optimal balance through reinforcement
+- **Temporal Patterns**: Time-of-day and usage patterns influence balance
+
+### Retrospective Learning System
+
+WebGuard implements **enhanced learning from false negatives** - threats that were initially missed but discovered later through various means:
+
+#### **Threat Discovery Methods:**
+```rust
+pub enum ThreatDiscoveryMethod {
+    SecurityAudit,        // Discovered during security audit
+    IncidentResponse,     // Found during incident investigation
+    ExternalDetection,    // Detected by external security tools
+    UserReport,           // Reported by users or administrators
+    ForensicAnalysis,     // Uncovered during forensic investigation
+    ThreatIntelligence,   // Identified through threat intelligence feeds
+}
+```
+
+#### **Enhanced Learning Process:**
+1. **Missed Threat Reporting**: System accepts reports of previously missed threats with context
+2. **Temporal Analysis**: Calculates time decay and relevance weighting
+3. **Consequence Assessment**: Evaluates actual impact and severity (1.0-3.0 scale)
+4. **Feature Similarity**: Identifies related patterns in memory for comprehensive learning
+5. **Enhanced Learning Rate**: Applies 2.0x learning multiplier for false negative corrections
+6. **Pattern Generalization**: Updates related threat patterns based on similarity matching
+
+#### **Natural Learning Principle:**
+The system mimics biological learning where **mistakes provide stronger learning signals than successes**. This addresses the common cybersecurity challenge where systems learn well from detected threats but poorly from missed ones.
+
+#### **Integration with Memory Systems:**
+- **BDH Memory Updates**: Retrospective learning directly updates Hebbian connection weights
+- **PSI Index Enhancement**: Long-term memory incorporates lessons from missed threats
+- **Cross-Process Propagation**: Retrospective learning spreads across all host processes
+- **EQ/IQ Integration**: Missed threats inform optimal EQ/IQ balance for similar future scenarios
+
 ---
 
 ## Impact
@@ -267,11 +371,20 @@ The project has been set up with the following structure based on analysis of th
 
 ```
 WebGuard/
-├── Cargo.toml              # Rust project configuration
-├── README.md               # This file
+├── Cargo.toml                      # Rust project configuration
+├── README.md                       # This file
 ├── src/
-│   ├── actuators/          # Defense actuators module
-│   ├── memory_engine/      # Hebbian memory system
-│   └── sensors/            # Behavioral sensors module
-└── tools/                  # Development and testing tools
+│   ├── actuators/                  # Defense actuators module
+│   ├── memory_engine/              # Hebbian memory system
+│   ├── sensors/                    # Behavioral sensors module
+│   ├── eq_iq_regulator.rs         # EQ/IQ behavioral regulation system
+│   ├── retrospective_learning.rs  # False negative learning system
+│   ├── mesh_cognition.rs          # Host-based mesh cognition
+│   ├── featurizer.rs              # Feature extraction and vectorization
+│   ├── policy.rs                  # Decision policy engine
+│   └── main.rs                    # Main application entry point
+├── tests/
+│   ├── test_eq_iq_integration.rs  # EQ/IQ system integration tests
+│   └── test_retrospective_learning.rs # Retrospective learning tests
+└── tools/                         # Development and testing tools
 ```
