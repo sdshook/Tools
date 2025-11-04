@@ -136,6 +136,7 @@ from tqdm import tqdm
 from fpdf import FPDF
 import numpy as np
 # psutil imported above with try/except
+from eq_iq_regulator import ExperientialBehavioralRegulator, ContextEvent, FeedbackEvent
 
 # Optional imports for LLM functionality
 try:
@@ -291,6 +292,8 @@ class BDHMemory:
         self.store_type = store_type
         self.db_path = db_path or Path(f"forai_bdh.db")
         self.embedder = SimEmbedder()
+        # Initialize EQ/IQ regulator with balanced parameters (α=0.6, β=0.4)
+        self.eq_iq_regulator = ExperientialBehavioralRegulator(alpha=0.6, beta=0.4, learning_rate=0.01)
         self._init_database()
         
     def _init_database(self):
@@ -304,10 +307,16 @@ class BDHMemory:
                     reward_count INTEGER DEFAULT 0,
                     last_reward REAL DEFAULT 0,
                     consolidation_score REAL DEFAULT 0,
+                    eq_iq_history TEXT DEFAULT '[]',
                     timestamp REAL NOT NULL
                 )
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_consolidation ON bdh_traces(consolidation_score)")
+            # Add eq_iq_history column if it doesn't exist (for existing databases)
+            try:
+                conn.execute("ALTER TABLE bdh_traces ADD COLUMN eq_iq_history TEXT DEFAULT '[]'")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
             
     def add_or_update(self, trace_id: str, vector: np.ndarray, valence: float = 0.0):
         """Add or update memory trace"""
@@ -320,28 +329,119 @@ class BDHMemory:
                 VALUES (?, ?, ?, ?)
             """, (trace_id, vector.tobytes(), valence, timestamp))
                 
-    def reward_gated_update(self, trace_id: str, state_vec: np.ndarray, reward: float):
-        """Apply reward-gated learning to strengthen useful patterns"""
+    def reward_gated_update(self, trace_id: str, state_vec: np.ndarray, reward: float, 
+                           context_event: Optional[ContextEvent] = None, 
+                           feedback_event: Optional[FeedbackEvent] = None):
+        """Apply EQ/IQ balanced reward-gated learning to strengthen useful patterns"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
-                SELECT vector, valence, reward_count, consolidation_score 
+                SELECT vector, valence, reward_count, consolidation_score, eq_iq_history 
                 FROM bdh_traces WHERE trace_id = ?
             """, (trace_id,))
             
             row = cursor.fetchone()
             if row:
-                vector_bytes, valence, reward_count, consolidation_score = row
+                vector_bytes, valence, reward_count, consolidation_score, eq_iq_history_str = row
                 
-                # Update consolidation score based on reward
+                # Parse EQ/IQ history
+                try:
+                    eq_iq_history = json.loads(eq_iq_history_str) if eq_iq_history_str else []
+                except json.JSONDecodeError:
+                    eq_iq_history = []
+                
+                # Create context and feedback events if not provided
+                if context_event is None:
+                    context_event = ContextEvent(
+                        stability=min(1.0, consolidation_score / 10.0),  # Normalize consolidation score
+                        coherence=abs(valence),  # Use valence as coherence measure
+                        relevance=min(1.0, reward_count / 5.0)  # Normalize reward count
+                    )
+                
+                if feedback_event is None:
+                    feedback_event = FeedbackEvent(
+                        accuracy=max(0.0, min(1.0, reward)),  # Clamp reward to [0,1]
+                        precision=min(1.0, abs(reward) * 2.0),  # Scale reward for precision
+                        confidence=min(1.0, consolidation_score / 5.0)  # Use consolidation for confidence
+                    )
+                
+                # Get EQ/IQ balanced reward
+                eq_iq_reward = self.eq_iq_regulator.calculate_reward(context_event, feedback_event)
+                
+                # Apply bidirectional Hebbian update with EQ/IQ balance
+                # Δwij = η · (xi · yj) · (α · EQ + β · IQ)
+                learning_rate = 0.01
+                vector = np.frombuffer(vector_bytes, dtype=np.float32)
+                
+                # Simulate bidirectional update (xi * yj approximated by vector norm and state norm)
+                hebbian_term = np.linalg.norm(vector) * np.linalg.norm(state_vec) / (len(vector) * len(state_vec))
+                eq_iq_modulated_update = learning_rate * hebbian_term * eq_iq_reward
+                
+                # Update consolidation score and valence with EQ/IQ modulation
                 new_reward_count = reward_count + 1
-                new_consolidation_score = consolidation_score + reward * 0.1
-                new_valence = valence + reward * 0.05
+                new_consolidation_score = consolidation_score + eq_iq_modulated_update
+                new_valence = valence + reward * 0.05 * eq_iq_reward  # Modulate valence update
+                
+                # Store EQ/IQ metrics in history
+                eq_iq_metrics = {
+                    "timestamp": time.time(),
+                    "eq": context_event.stability * context_event.coherence * context_event.relevance,
+                    "iq": feedback_event.accuracy * feedback_event.precision * feedback_event.confidence,
+                    "balance": eq_iq_reward,
+                    "reward": reward,
+                    "modulated_reward": eq_iq_modulated_update
+                }
+                eq_iq_history.append(eq_iq_metrics)
+                
+                # Keep only last 50 entries to prevent unbounded growth
+                if len(eq_iq_history) > 50:
+                    eq_iq_history = eq_iq_history[-50:]
                 
                 conn.execute("""
                     UPDATE bdh_traces 
-                    SET reward_count = ?, consolidation_score = ?, valence = ?, last_reward = ?
+                    SET reward_count = ?, consolidation_score = ?, valence = ?, last_reward = ?, eq_iq_history = ?
                     WHERE trace_id = ?
-                """, (new_reward_count, new_consolidation_score, new_valence, reward, trace_id))
+                """, (new_reward_count, new_consolidation_score, new_valence, reward, 
+                      json.dumps(eq_iq_history), trace_id))
+    
+    def get_eq_iq_stats(self) -> Dict[str, float]:
+        """Get EQ/IQ regulator statistics"""
+        return self.eq_iq_regulator.get_stats()
+    
+    def adapt_eq_iq_parameters(self, performance_feedback: float):
+        """Adapt EQ/IQ parameters based on system performance"""
+        self.eq_iq_regulator.adapt_parameters(performance_feedback)
+    
+    def get_memory_eq_iq_summary(self) -> Dict[str, float]:
+        """Get summary of EQ/IQ metrics across all memory traces"""
+        all_eq = []
+        all_iq = []
+        all_balance = []
+        
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT eq_iq_history FROM bdh_traces WHERE eq_iq_history != '[]'")
+            
+            for (eq_iq_history_str,) in cursor.fetchall():
+                try:
+                    eq_iq_history = json.loads(eq_iq_history_str) if eq_iq_history_str else []
+                    if eq_iq_history:
+                        recent_metrics = eq_iq_history[-1]  # Most recent
+                        all_eq.append(recent_metrics["eq"])
+                        all_iq.append(recent_metrics["iq"])
+                        all_balance.append(recent_metrics["balance"])
+                except (json.JSONDecodeError, KeyError):
+                    continue
+        
+        if not all_eq:
+            return {"avg_eq": 0.5, "avg_iq": 0.5, "avg_balance": 0.5, "trace_count": 0}
+        
+        return {
+            "avg_eq": np.mean(all_eq),
+            "avg_iq": np.mean(all_iq),
+            "avg_balance": np.mean(all_balance),
+            "trace_count": len(all_eq),
+            "eq_std": np.std(all_eq),
+            "iq_std": np.std(all_iq)
+        }
 
 # Global BHSM components
 _GLOBAL_EMBEDDER = None

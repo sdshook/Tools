@@ -29,6 +29,7 @@ import argparse
 import random
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
+from eq_iq_regulator import ExperientialBehavioralRegulator, ContextEvent, FeedbackEvent
 
 # Configuration
 SEED = 42
@@ -131,6 +132,8 @@ class BDHMemory:
         self.storage = {}
         self.store_type = store_type
         self.consolidation_threshold = TAU_CONSOLIDATION
+        # Initialize EQ/IQ regulator with balanced parameters (α=0.6, β=0.4)
+        self.eq_iq_regulator = ExperientialBehavioralRegulator(alpha=0.6, beta=0.4, learning_rate=0.01)
         
     def add_trace(self, trace_id: str, vec: np.ndarray, 
                   valence: float = 0.0, protected: bool = False):
@@ -165,21 +168,43 @@ class BDHMemory:
         return sorted(items, key=lambda x: x[0], reverse=True)[:top_k]
     
     def reward_gated_update(self, trace_id: str, state_vec: np.ndarray, 
-                           reward: float):
+                           reward: float, context_stability: float = 0.5, 
+                           threat_level: float = 0.0, response_appropriateness: float = 0.5,
+                           predicted_threat: float = 0.0, actual_threat: float = 0.0):
         """
-        Update weights based on reward signal.
+        EQ/IQ Balanced Reward-Gated Update with Bidirectional Hebbian Learning
         
-        CONCEPTUAL ADVANCE: Implements bidirectional eligibility traces with protected
-        memory mechanism, extending basic Hebbian learning with safety constraints.
+        CONCEPTUAL ADVANCE: Implements EQ/IQ balanced bidirectional eligibility traces 
+        with protected memory mechanism, extending basic Hebbian learning with 
+        empathy-accuracy balance and safety constraints.
         
         Mathematical Implementation:
-        - Potentiation: W += η_pot * r * (x⊗y + E_pos⊗E_pos) for positive rewards
-        - Depression: W -= η_dep * |r| * (x⊗y + E_neg⊗E_neg) for negative rewards
+        - EQ/IQ Balance: Δwij = η · (xi · yj) · (α · EQ + β · IQ)
+        - Potentiation: W += η_pot * r * balance * (x⊗y + E_pos⊗E_pos) for positive rewards
+        - Depression: W -= η_dep * |r| * balance * (x⊗y + E_neg⊗E_neg) for negative rewards
         - Protection: Ethical memories resist depression even under negative rewards
         """
         entry = self.storage.get(trace_id)
         if entry is None:
             return
+        
+        # Create context and feedback events for EQ/IQ measurement
+        context_event = ContextEvent(
+            timestamp=time.time(),
+            context_stability=context_stability,
+            threat_level=threat_level,
+            response_appropriateness=response_appropriateness
+        )
+        
+        feedback_event = FeedbackEvent(
+            timestamp=time.time(),
+            predicted_threat=predicted_threat,
+            actual_threat=actual_threat,
+            accuracy=1.0 - abs(predicted_threat - actual_threat)
+        )
+        
+        # Calculate EQ/IQ balanced reward
+        eq_iq_balance = self.eq_iq_regulator.calculate_eq_iq_balance(context_event, feedback_event)
         
         x = entry["vec"]
         y = state_vec
@@ -189,20 +214,32 @@ class BDHMemory:
         entry["elig_pos"] = GAMMA_E * entry["elig_pos"] + np.maximum(0.0, outer).mean(axis=1)
         entry["elig_neg"] = GAMMA_E * entry["elig_neg"] + np.maximum(0.0, -outer).mean(axis=1)
         
-        # INNOVATION: Reward-gated synaptic plasticity with protection mechanism
+        # INNOVATION: EQ/IQ balanced reward-gated synaptic plasticity with protection mechanism
         if reward > 0:
-            # Long-term potentiation with eligibility trace enhancement
-            entry["W"] += BDH_ETA_POT * reward * (outer + np.outer(entry["elig_pos"], entry["elig_pos"]))
+            # Long-term potentiation with EQ/IQ balance and eligibility trace enhancement
+            delta_w = BDH_ETA_POT * reward * eq_iq_balance.balance * (outer + np.outer(entry["elig_pos"], entry["elig_pos"]))
+            entry["W"] += delta_w
         else:
             # SAFETY INNOVATION: Protected memories resist negative updates
             if not entry["protected"]:
-                # Long-term depression with eligibility trace modulation
-                entry["W"] -= BDH_ETA_DEP * abs(reward) * (outer + np.outer(entry["elig_neg"], entry["elig_neg"]))
+                # Long-term depression with EQ/IQ balance and eligibility trace modulation
+                delta_w = BDH_ETA_DEP * abs(reward) * eq_iq_balance.balance * (outer + np.outer(entry["elig_neg"], entry["elig_neg"]))
+                entry["W"] -= delta_w
         
         # Update valence and usage statistics
         entry["valence"] = 0.9 * entry["valence"] + 0.1 * reward
         entry["uses"] += 1
         entry["cumulative_reward"] += reward
+        
+        # Store EQ/IQ metrics
+        if "eq_iq_history" not in entry:
+            entry["eq_iq_history"] = []
+        entry["eq_iq_history"].append({
+            "timestamp": time.time(),
+            "eq": eq_iq_balance.eq,
+            "iq": eq_iq_balance.iq,
+            "balance": eq_iq_balance.balance
+        })
         
         # INNOVATION: Automatic memory consolidation based on significance
         if abs(entry["cumulative_reward"]) > self.consolidation_threshold:
@@ -220,6 +257,39 @@ class BDHMemory:
                        f"Failed pattern from {trace_id}",
                        entry["vec"], tags=["learned", "negative"],
                        valence=entry["valence"], protected=False)
+    
+    def get_eq_iq_stats(self) -> Dict[str, float]:
+        """Get EQ/IQ regulator statistics"""
+        return self.eq_iq_regulator.get_stats()
+    
+    def adapt_eq_iq_parameters(self, performance_feedback: float):
+        """Adapt EQ/IQ parameters based on system performance"""
+        self.eq_iq_regulator.adapt_parameters(performance_feedback)
+    
+    def get_memory_eq_iq_summary(self) -> Dict[str, float]:
+        """Get summary of EQ/IQ metrics across all memory traces"""
+        all_eq = []
+        all_iq = []
+        all_balance = []
+        
+        for trace_id, entry in self.storage.items():
+            if "eq_iq_history" in entry and entry["eq_iq_history"]:
+                recent_metrics = entry["eq_iq_history"][-1]  # Most recent
+                all_eq.append(recent_metrics["eq"])
+                all_iq.append(recent_metrics["iq"])
+                all_balance.append(recent_metrics["balance"])
+        
+        if not all_eq:
+            return {"avg_eq": 0.5, "avg_iq": 0.5, "avg_balance": 0.5, "trace_count": 0}
+        
+        return {
+            "avg_eq": np.mean(all_eq),
+            "avg_iq": np.mean(all_iq),
+            "avg_balance": np.mean(all_balance),
+            "trace_count": len(all_eq),
+            "eq_std": np.std(all_eq),
+            "iq_std": np.std(all_iq)
+        }
 
 class MeshNode(nn.Module):
     """Individual reasoning node in the CMNN."""

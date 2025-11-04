@@ -6,6 +6,7 @@
 
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
+use crate::eq_iq_regulator::{ExperientialBehavioralRegulator, ContextEvent, FeedbackEvent};
 
 pub const EMBED_DIM: usize = 32;
 
@@ -43,6 +44,8 @@ pub struct BdhMemory {
     pub temporal_window: usize,
     pub meta_learning_rate: f32,
     pub performance_history: Vec<f32>,
+    // EQ/IQ Balanced Reward System
+    pub eq_iq_regulator: ExperientialBehavioralRegulator,
 }
 
 impl BdhMemory {
@@ -62,6 +65,8 @@ impl BdhMemory {
             temporal_window: 50,          // Window for temporal pattern analysis
             meta_learning_rate: 0.001,    // Rate for meta-parameter adaptation
             performance_history: Vec::new(),
+            // Initialize EQ/IQ regulator with balanced parameters (α=0.6, β=0.4)
+            eq_iq_regulator: ExperientialBehavioralRegulator::new(0.6, 0.4, 0.01),
         } 
     }
 
@@ -128,17 +133,53 @@ impl BdhMemory {
         boost.max(-0.3).min(0.3) // Clamp boost to prevent overwhelming base similarity
     }
 
-    /// Reinforced Hebbian Learning: Updates both valence and Hebbian weights based on reward
+    /// EQ/IQ Balanced Reinforced Hebbian Learning: Updates both valence and Hebbian weights based on balanced reward
     pub fn reward_update(&mut self, id: &str, reward: f32, eta: f32) {
+        self.reward_update_with_context(id, reward, eta, 0.5, 0.2, 0.8, 0.9);
+    }
+
+    /// Enhanced reward update with EQ/IQ context
+    pub fn reward_update_with_context(
+        &mut self, 
+        id: &str, 
+        reward: f32, 
+        eta: f32,
+        context_stability: f32,
+        threat_level: f32,
+        predicted_threat: f32,
+        actual_threat: f32,
+    ) {
         if let Some(trace_idx) = self.traces.iter().position(|x| x.id == id) {
             let activation = reward.abs();
             let trace_id = self.traces[trace_idx].id.clone();
             
-            // Traditional reward update
+            // Create context and feedback events for EQ/IQ calculation
+            let context = ContextEvent {
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs_f64(),
+                context_stability,
+                threat_level,
+                response_appropriateness: if reward > 0.0 { 0.8 } else { 0.3 },
+            };
+
+            let feedback = FeedbackEvent {
+                timestamp: context.timestamp,
+                predicted_threat,
+                actual_threat,
+                accuracy: 1.0 - (predicted_threat - actual_threat).abs(),
+            };
+
+            // Calculate EQ/IQ balanced reward
+            let eq_iq_balance = self.eq_iq_regulator.calculate_eq_iq_balance(&context, &feedback);
+            let balanced_reward = reward * eq_iq_balance.balance;
+            
+            // Traditional reward update with EQ/IQ balance
             {
                 let trace = &mut self.traces[trace_idx];
-                trace.cum_reward += reward;
-                trace.valence = trace.valence + eta * (reward - trace.valence);
+                trace.cum_reward += balanced_reward;
+                trace.valence = trace.valence + eta * (balanced_reward - trace.valence);
                 trace.uses += 1;
                 
                 // Update activation history for temporal Hebbian learning
@@ -148,14 +189,15 @@ impl BdhMemory {
                 }
             }
             
-            // Reinforced Hebbian Learning: Modulate Hebbian weight updates by reward
-            self.hebbian_update_with_reinforcement(&trace_id, reward, activation);
+            // EQ/IQ Balanced Hebbian Learning: Modulate Hebbian weight updates by balanced reward
+            self.hebbian_update_with_eq_iq_reinforcement(&trace_id, balanced_reward, activation, &eq_iq_balance);
         }
     }
     
-    /// Core Bidirectional Hebbian Learning: "Neurons that fire together, wire together"
-    fn hebbian_update_with_reinforcement(&mut self, trace_id: &str, reward: f32, activation: f32) {
-        let learning_rate = self.hebbian_learning_rate * (1.0 + reward.abs()); // Reward modulates learning rate
+    /// EQ/IQ Balanced Bidirectional Hebbian Learning: "Neurons that fire together, wire together" with emotional and intellectual balance
+    fn hebbian_update_with_eq_iq_reinforcement(&mut self, trace_id: &str, reward: f32, activation: f32, eq_iq_balance: &crate::eq_iq_regulator::EQIQBalance) {
+        // Use EQ/IQ balance to modulate learning rate
+        let learning_rate = self.hebbian_learning_rate * (1.0 + reward.abs()) * eq_iq_balance.balance;
         
         // Find all connections involving this trace
         let mut connections_to_update = Vec::new();
@@ -180,8 +222,13 @@ impl BdhMemory {
             // Now update the connection
             let conn = &mut self.hebbian_connections[conn_idx];
             
-            // Hebbian rule: Δw = η * activation_pre * activation_post * reward_modulation
-            let hebbian_delta = learning_rate * source_activation * target_activation * reward.signum();
+            // EQ/IQ Balanced Hebbian rule: Δw = η * (xi * yj) * (α * EQ + β * IQ)
+            let hebbian_delta = self.eq_iq_regulator.bidirectional_hebbian_update(
+                source_activation, 
+                target_activation, 
+                eq_iq_balance.eq, 
+                eq_iq_balance.iq
+            );
             
             // Bidirectional update: strengthen connection if both are active and reward is positive
             conn.weight += hebbian_delta;
@@ -198,9 +245,14 @@ impl BdhMemory {
         // Update the trace's own Hebbian weights based on its vector and reward
         if let Some(trace) = self.traces.iter_mut().find(|t| t.id == trace_id) {
             for i in 0..EMBED_DIM {
-                // Self-reinforcement: strengthen weights for active dimensions
+                // EQ/IQ Balanced Self-reinforcement: strengthen weights for active dimensions
                 let dimension_activity = trace.vec[i].abs();
-                let hebbian_delta = learning_rate * dimension_activity * activation * reward.signum();
+                let hebbian_delta = self.eq_iq_regulator.bidirectional_hebbian_update(
+                    dimension_activity, 
+                    activation, 
+                    eq_iq_balance.eq, 
+                    eq_iq_balance.iq
+                );
                 trace.hebbian_weights[i] += hebbian_delta;
                 
                 // Apply decay
@@ -551,6 +603,16 @@ impl BdhMemory {
         let recent = self.performance_history.iter().rev().take(3).sum::<f32>() / 3.0;
         let older = self.performance_history.iter().rev().skip(3).take(3).sum::<f32>() / 3.0;
         recent - older
+    }
+
+    /// Get EQ/IQ regulator statistics
+    pub fn get_eq_iq_stats(&self) -> std::collections::HashMap<String, f32> {
+        self.eq_iq_regulator.get_stats()
+    }
+
+    /// Adapt EQ/IQ parameters based on system performance
+    pub fn adapt_eq_iq_parameters(&mut self, performance_feedback: f32) {
+        self.eq_iq_regulator.adapt_parameters(performance_feedback);
     }
 }
 

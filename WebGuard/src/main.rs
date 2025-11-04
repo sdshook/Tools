@@ -8,6 +8,7 @@ mod sensors;
 mod actuators;
 mod evidence;
 mod persistence;
+mod eq_iq_regulator;
 
 use anyhow::Result;
 use tracing::info;
