@@ -275,12 +275,14 @@ impl AdaptiveThreshold {
         
         let adjustment = match (assessment.threat_detected, actual_threat) {
             (true, false) => {
-                // False positive - increase threshold
-                learning_rate * 0.1
+                // False positive - increase threshold moderately (security-first: prefer false positives)
+                learning_rate * 0.3
             },
             (false, true) => {
-                // False negative - decrease threshold
-                -learning_rate * 0.1
+                // False negative - CRITICAL: decrease threshold aggressively (security-first priority)
+                let confidence_gap = current_threshold - assessment.base_similarity;
+                let aggressive_adjustment = -learning_rate * (1.0 + confidence_gap * 2.0);
+                aggressive_adjustment.max(-0.15) // Cap at 15% reduction per false negative
             },
             _ => {
                 // Correct prediction - small adjustment toward optimal
@@ -289,7 +291,7 @@ impl AdaptiveThreshold {
                 } else {
                     assessment.base_similarity * 1.1 // Slightly above similarity for non-threats
                 };
-                (optimal_threshold - current_threshold) * learning_rate * 0.05
+                (optimal_threshold - current_threshold) * learning_rate * 0.1
             }
         };
         
@@ -373,10 +375,10 @@ impl PerformanceHistory {
 impl AdjustmentParameters {
     pub fn new() -> Self {
         Self {
-            learning_rate: 0.01,        // Conservative learning rate
+            learning_rate: 0.15,        // Aggressive learning rate for security-first approach
             min_threshold: 0.05,        // Minimum threshold to prevent over-sensitivity
             max_threshold: 0.85,        // Maximum threshold to ensure detection capability
-            adjustment_sensitivity: 0.1, // How sensitive to performance changes
+            adjustment_sensitivity: 0.3, // High sensitivity to performance changes
             performance_window: 100,     // Number of samples to consider for adjustments
         }
     }
