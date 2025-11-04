@@ -50,6 +50,10 @@ path = "src/main.rs"
 name = "webguard_performance_suite"
 path = "src/bin/webguard_performance_suite.rs"
 
+[[bin]]
+name = "webguard_diagnostic"
+path = "src/bin/webguard_diagnostic.rs"
+
 [profile.release]
 opt-level = 3
 lto = true
