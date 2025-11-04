@@ -38,30 +38,17 @@ base64 = "0.21"
 
 [dev-dependencies]
 # Testing and development dependencies
+plotters = "0.3"
+csv = "1.3"
+chrono = "0.4"
 
 [[bin]]
 name = "webguard"
 path = "src/main.rs"
 
 [[bin]]
-name = "vulnerability_tests"
-path = "src/bin/vulnerability_tests.rs"
-
-[[bin]]
-name = "debug_components"
-path = "src/bin/debug_components.rs"
-
-[[bin]]
-name = "integration_tests"
-path = "src/bin/integration_tests.rs"
-
-[[bin]]
-name = "enhanced_adaptive_learning_test"
-path = "src/bin/enhanced_adaptive_learning_test.rs"
-
-[[bin]]
-name = "quick_memory_test"
-path = "src/bin/quick_memory_test.rs"
+name = "webguard_performance_suite"
+path = "src/bin/webguard_performance_suite.rs"
 
 [profile.release]
 opt-level = 3
