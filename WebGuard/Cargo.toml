@@ -70,7 +70,7 @@ path = "src/bin/debug_feature_extraction.rs"
 
 [[bin]]
 name = "comprehensive_multipass_test"
-path = "src/bin/comprehensive_multipass_test.rs"
+path = "tests/scripts/comprehensive_multipass_test.rs"
 
 
 
