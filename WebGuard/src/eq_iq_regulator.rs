@@ -29,7 +29,7 @@ pub struct ExperientialBehavioralRegulator {
     pub eq_iq_correlation_history: Vec<f32>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ContextEvent {
     pub timestamp: f64,
     pub context_stability: f32,

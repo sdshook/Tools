@@ -7,6 +7,8 @@ use tracing::{info, debug};
 use crate::memory_engine::bdh_memory::{BdhMemory, EMBED_DIM};
 use crate::memory_engine::psi_index::{PsiIndex, PsiEntry};
 use crate::memory_engine::valence::ValenceController;
+use crate::retrospective_learning::{RetrospectiveLearningSystem, ThreatDiscoveryMethod, MissedThreatEvent, RetrospectiveLearningStats};
+use crate::eq_iq_regulator::ExperientialBehavioralRegulator;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WebServiceType {
@@ -43,6 +45,8 @@ pub struct HostMeshCognition {
     host_valence: Arc<Mutex<ValenceController>>,
     mesh_learning_rate: f32,
     cross_service_threshold: f32,
+    retrospective_learning: Arc<Mutex<RetrospectiveLearningSystem>>,
+    eq_iq_regulator: Arc<Mutex<ExperientialBehavioralRegulator>>,
 }
 
 impl HostMeshCognition {
@@ -53,6 +57,8 @@ impl HostMeshCognition {
             host_valence: Arc::new(Mutex::new(ValenceController::new(aggression_init))),
             mesh_learning_rate,
             cross_service_threshold,
+            retrospective_learning: Arc::new(Mutex::new(RetrospectiveLearningSystem::new())),
+            eq_iq_regulator: Arc::new(Mutex::new(ExperientialBehavioralRegulator::new(0.5, 0.5, 0.1))),
         }
     }
 
@@ -226,6 +232,91 @@ impl HostMeshCognition {
         }
         
         stats
+    }
+
+    /// Report a missed threat for retrospective learning
+    pub fn report_missed_threat(&self, 
+                                original_timestamp: f64,
+                                discovery_timestamp: f64,
+                                original_threat_score: f32,
+                                actual_threat_level: f32,
+                                feature_vector: Vec<f32>,
+                                discovery_method: ThreatDiscoveryMethod,
+                                consequence_severity: f32) {
+        
+        let missed_threat = MissedThreatEvent {
+            original_timestamp,
+            discovery_timestamp,
+            original_threat_score,
+            actual_threat_level,
+            feature_vector,
+            original_context: crate::eq_iq_regulator::ContextEvent {
+                timestamp: original_timestamp,
+                context_stability: 0.5, // Moderate stability assumption
+                threat_level: original_threat_score,
+                response_appropriateness: 0.2, // Low appropriateness for missing threat
+            },
+            discovery_method,
+            consequence_severity,
+        };
+
+        if let Ok(mut retro_learning) = self.retrospective_learning.try_lock() {
+            retro_learning.add_missed_threat(missed_threat);
+            info!("Added missed threat to retrospective learning system: original_score={:.3}, actual_level={:.3}, severity={:.3}",
+                  original_threat_score, actual_threat_level, consequence_severity);
+        }
+    }
+
+    /// Apply retrospective learning to improve future threat detection
+    pub fn apply_retrospective_learning(&self, current_timestamp: f64) {
+        // Apply retrospective learning to EQ/IQ regulator
+        if let (Ok(mut retro_learning), Ok(mut eq_iq_regulator)) = 
+            (self.retrospective_learning.try_lock(), self.eq_iq_regulator.try_lock()) {
+            retro_learning.apply_retrospective_eq_iq_learning(&mut eq_iq_regulator, current_timestamp);
+        }
+
+        // Apply retrospective learning to all service memories
+        for (service_id, service_memory) in &self.services {
+            if let (Ok(mut retro_learning), Ok(mut bdh_memory)) = 
+                (self.retrospective_learning.try_lock(), service_memory.bdh_memory.try_lock()) {
+                retro_learning.apply_retrospective_memory_learning(&mut bdh_memory, current_timestamp);
+                debug!("Applied retrospective learning to service: {}", service_id);
+            }
+        }
+    }
+
+    /// Get threat score adjustment based on retrospective learning
+    pub fn get_retrospective_threat_adjustment(&self, feature_vector: &[f32], base_score: f32) -> f32 {
+        if let Ok(retro_learning) = self.retrospective_learning.try_lock() {
+            retro_learning.calculate_threat_score_adjustment(feature_vector, base_score)
+        } else {
+            base_score
+        }
+    }
+
+    /// Get retrospective learning statistics
+    pub fn get_retrospective_learning_stats(&self) -> Option<RetrospectiveLearningStats> {
+        if let Ok(retro_learning) = self.retrospective_learning.try_lock() {
+            Some(retro_learning.get_learning_stats().clone())
+        } else {
+            None
+        }
+    }
+
+    /// Clean up old retrospective learning data
+    pub fn cleanup_retrospective_learning(&self, current_timestamp: f64, retention_days: f64) {
+        if let Ok(mut retro_learning) = self.retrospective_learning.try_lock() {
+            retro_learning.cleanup_old_threats(current_timestamp, retention_days);
+        }
+    }
+
+    /// Export missed threat patterns for analysis
+    pub fn export_missed_threat_patterns(&self) -> Vec<std::collections::HashMap<String, serde_json::Value>> {
+        if let Ok(retro_learning) = self.retrospective_learning.try_lock() {
+            retro_learning.export_missed_threat_patterns()
+        } else {
+            Vec::new()
+        }
     }
 }
 
