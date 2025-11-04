@@ -611,6 +611,134 @@ impl ExperientialBehavioralRegulator {
 
         stats
     }
+
+    /// Process a context event for EQ/IQ regulation
+    pub fn process_context_event(&mut self, context_event: ContextEvent) -> Result<(), Box<dyn std::error::Error>> {
+        // Add to context history
+        self.context_history.push(context_event.clone());
+        
+        // Maintain history size
+        if self.context_history.len() > self.max_history {
+            self.context_history.remove(0);
+        }
+
+        // Adapt EQ/IQ balance based on context
+        let threat_level = context_event.threat_level;
+        
+        // Adjust alpha (EQ) and beta (IQ) based on context
+        if threat_level > 0.5 {
+            // High threat - increase IQ weight for accuracy
+            self.base_beta = (self.base_beta * 1.1).min(1.0);
+            self.base_alpha = (self.base_alpha * 0.9).max(0.1);
+        } else {
+            // Low threat - increase EQ weight for empathy
+            self.base_alpha = (self.base_alpha * 1.05).min(1.0);
+            self.base_beta = (self.base_beta * 0.95).max(0.1);
+        }
+
+        // Normalize
+        let total = self.base_alpha + self.base_beta;
+        self.base_alpha /= total;
+        self.base_beta /= total;
+
+        Ok(())
+    }
+
+    /// Apply feedback for learning
+    pub fn apply_feedback(&mut self, feedback_event: FeedbackEvent) -> Result<(), Box<dyn std::error::Error>> {
+        // Add to feedback history
+        self.feedback_history.push(feedback_event.clone());
+        
+        // Maintain history size
+        if self.feedback_history.len() > self.max_history {
+            self.feedback_history.remove(0);
+        }
+
+        // Adapt learning rate based on feedback
+        if feedback_event.accuracy > 0.8 {
+            self.learning_rate = (self.learning_rate * 0.95).max(0.001);
+        } else {
+            self.learning_rate = (self.learning_rate * 1.05).min(0.1);
+        }
+
+        // Adjust EQ/IQ balance based on prediction error
+        let prediction_error = (feedback_event.predicted_threat - feedback_event.actual_threat).abs();
+        
+        if prediction_error > 0.3 {
+            // High error - adjust balance
+            if feedback_event.predicted_threat > feedback_event.actual_threat {
+                // False positive - increase EQ for empathy
+                self.base_alpha = (self.base_alpha * 1.1).min(1.0);
+                self.base_beta = (self.base_beta * 0.9).max(0.1);
+            } else {
+                // False negative - increase IQ for accuracy
+                self.base_beta = (self.base_beta * 1.1).min(1.0);
+                self.base_alpha = (self.base_alpha * 0.9).max(0.1);
+            }
+        }
+
+        // Normalize
+        let total = self.base_alpha + self.base_beta;
+        self.base_alpha /= total;
+        self.base_beta /= total;
+
+        Ok(())
+    }
+
+    /// Get current EQ/IQ balance information
+    pub fn get_balance_info(&self) -> crate::mesh_cognition::EqIqBalance {
+        crate::mesh_cognition::EqIqBalance {
+            eq_weight: self.base_alpha,
+            iq_weight: self.base_beta,
+        }
+    }
+
+    /// Get empathic accuracy score
+    pub fn get_empathic_accuracy(&self) -> f32 {
+        if self.feedback_history.is_empty() {
+            return 0.5;
+        }
+
+        // Calculate empathic accuracy based on accuracy and false positive rate
+        let avg_accuracy: f32 = self.feedback_history.iter()
+            .map(|f| f.accuracy)
+            .sum::<f32>() / self.feedback_history.len() as f32;
+
+        let false_positive_rate = self.feedback_history.iter()
+            .filter(|f| f.predicted_threat > f.actual_threat + 0.2)
+            .count() as f32 / self.feedback_history.len() as f32;
+
+        // Empathic accuracy is high accuracy with low false positives
+        (avg_accuracy * (1.0 - false_positive_rate)).min(1.0).max(0.0)
+    }
+
+    /// Calculate context stability from context event
+    fn calculate_context_stability(&self, context_event: &ContextEvent) -> f32 {
+        if self.context_history.len() < 2 {
+            return 0.5;
+        }
+
+        // Calculate stability based on similarity to recent contexts
+        let recent_contexts = &self.context_history[self.context_history.len().saturating_sub(5)..];
+        let mut similarity_sum = 0.0;
+        let mut count = 0;
+
+        for prev_context in recent_contexts {
+            // Calculate similarity based on threat level and response appropriateness
+            let threat_similarity = 1.0 - (prev_context.threat_level - context_event.threat_level).abs();
+            let response_similarity = 1.0 - (prev_context.response_appropriateness - context_event.response_appropriateness).abs();
+            let overall_similarity = (threat_similarity + response_similarity) / 2.0;
+            
+            similarity_sum += overall_similarity;
+            count += 1;
+        }
+
+        if count > 0 {
+            similarity_sum / count as f32
+        } else {
+            0.5
+        }
+    }
 }
 
 

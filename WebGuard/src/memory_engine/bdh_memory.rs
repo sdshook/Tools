@@ -614,6 +614,47 @@ impl BdhMemory {
     pub fn adapt_eq_iq_parameters(&mut self, performance_feedback: f32) {
         self.eq_iq_regulator.adapt_parameters(performance_feedback);
     }
+
+    /// Get connection count for statistics
+    pub fn get_connection_count(&self) -> usize {
+        self.hebbian_connections.len()
+    }
+
+    /// Calculate similarity to existing traces
+    pub fn calculate_similarity(&self, embedding: &[f32; EMBED_DIM]) -> Result<f32, Box<dyn std::error::Error>> {
+        if self.traces.is_empty() {
+            return Ok(0.0);
+        }
+
+        let mut max_similarity: f32 = 0.0;
+        for trace in &self.traces {
+            let similarity = cosine_sim(embedding, &trace.vec);
+            max_similarity = max_similarity.max(similarity);
+        }
+
+        Ok(max_similarity)
+    }
+
+    /// Store a new memory trace
+    pub fn store_trace(&mut self, embedding: [f32; EMBED_DIM], similarity: f32, valence: f32) -> Result<(), Box<dyn std::error::Error>> {
+        // Create new trace
+        let trace = MemoryTrace {
+            id: format!("trace_{}", self.traces.len()),
+            vec: embedding,
+            valence,
+            uses: 1,
+            cum_reward: similarity,
+            hebbian_weights: [0.0; EMBED_DIM],
+            activation_history: vec![similarity],
+        };
+
+        self.traces.push(trace);
+
+        // Manage memory pressure if needed
+        self.manage_memory_pressure();
+
+        Ok(())
+    }
 }
 
 #[derive(Debug)]

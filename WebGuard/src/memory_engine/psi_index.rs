@@ -189,6 +189,11 @@ impl PsiIndex {
             .cloned()
             .collect()
     }
+
+    /// Get the number of entries in the PSI index
+    pub fn get_entry_count(&self) -> usize {
+        self.entries.len()
+    }
 }
 
 #[derive(Debug)]

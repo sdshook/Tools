@@ -318,6 +318,165 @@ impl HostMeshCognition {
             Vec::new()
         }
     }
+
+    /// Process a request through the mesh cognition system
+    pub fn process_request(&mut self, features: [f32; 32], context_event: &crate::eq_iq_regulator::ContextEvent) -> Result<(f32, f32, String), Box<dyn std::error::Error>> {
+        // Process through EQ/IQ regulator first
+        if let Ok(mut eq_iq) = self.eq_iq_regulator.try_lock() {
+            eq_iq.process_context_event(context_event.clone())?;
+        }
+
+        // Convert features to embedding dimension
+        let mut embedding = [0.0; EMBED_DIM];
+        for (i, &feature) in features.iter().enumerate() {
+            if i < EMBED_DIM {
+                embedding[i] = feature;
+            }
+        }
+
+        // Process through memory system
+        let similarity = self.calculate_similarity(&embedding)?;
+        let valence = self.calculate_valence(&embedding)?;
+        
+        // Apply retrospective learning adjustment
+        let adjusted_similarity = similarity; // Simplified for now
+        
+        // Generate trace ID
+        let trace_id = format!("trace_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis());
+        
+        // Store memory trace if significant
+        if adjusted_similarity > 0.3 || valence.abs() > 0.5 {
+            self.store_memory_trace(&embedding, adjusted_similarity, valence)?;
+        }
+
+        Ok((adjusted_similarity, valence, trace_id))
+    }
+
+    /// Apply feedback for learning
+    pub fn apply_feedback(&mut self, feedback_event: &crate::eq_iq_regulator::FeedbackEvent) -> Result<(), Box<dyn std::error::Error>> {
+        // Apply feedback to EQ/IQ regulator
+        if let Ok(mut eq_iq) = self.eq_iq_regulator.try_lock() {
+            eq_iq.apply_feedback(feedback_event.clone())?;
+        }
+
+        // Update learning rate based on feedback
+        if feedback_event.accuracy > 0.8 {
+            self.mesh_learning_rate = (self.mesh_learning_rate * 0.95).max(0.001);
+        } else {
+            self.mesh_learning_rate = (self.mesh_learning_rate * 1.05).min(0.1);
+        }
+
+        Ok(())
+    }
+
+    /// Get memory system statistics
+    pub fn get_memory_stats(&self) -> MemoryStats {
+        let mut total_traces = 0;
+        let mut total_connections = 0;
+        let mut psi_entries = 0;
+
+        // Count traces and connections from all services
+        for service in self.services.values() {
+            if let Ok(bdh) = service.bdh_memory.try_lock() {
+                total_traces += bdh.get_trace_count();
+                total_connections += bdh.get_connection_count();
+            }
+        }
+
+        // Count PSI entries
+        if let Ok(psi) = self.shared_psi.try_lock() {
+            psi_entries = psi.get_entry_count();
+        }
+
+        MemoryStats {
+            total_traces,
+            total_connections,
+            psi_entries,
+            current_learning_rate: self.mesh_learning_rate,
+        }
+    }
+
+    /// Get EQ/IQ balance information
+    pub fn get_eq_iq_balance(&self) -> EqIqBalance {
+        if let Ok(eq_iq) = self.eq_iq_regulator.try_lock() {
+            eq_iq.get_balance_info()
+        } else {
+            EqIqBalance {
+                eq_weight: 0.5,
+                iq_weight: 0.5,
+            }
+        }
+    }
+
+    /// Get empathic accuracy score
+    pub fn get_empathic_accuracy(&self) -> f32 {
+        if let Ok(eq_iq) = self.eq_iq_regulator.try_lock() {
+            eq_iq.get_empathic_accuracy()
+        } else {
+            0.5
+        }
+    }
+
+    /// Helper method to calculate similarity
+    fn calculate_similarity(&self, embedding: &[f32; EMBED_DIM]) -> Result<f32, Box<dyn std::error::Error>> {
+        let mut max_similarity: f32 = 0.0;
+        
+        for service in self.services.values() {
+            if let Ok(bdh) = service.bdh_memory.try_lock() {
+                let similarity = bdh.calculate_similarity(embedding)?;
+                max_similarity = max_similarity.max(similarity);
+            }
+        }
+        
+        Ok(max_similarity)
+    }
+
+    /// Helper method to calculate valence
+    fn calculate_valence(&self, _embedding: &[f32; EMBED_DIM]) -> Result<f32, Box<dyn std::error::Error>> {
+        if let Ok(valence_controller) = self.host_valence.try_lock() {
+            // Use aggression as a proxy for valence (negative aggression = negative valence)
+            Ok(-valence_controller.aggression)
+        } else {
+            Ok(0.0)
+        }
+    }
+
+    /// Helper method to store memory trace
+    fn store_memory_trace(&mut self, embedding: &[f32; EMBED_DIM], similarity: f32, valence: f32) -> Result<(), Box<dyn std::error::Error>> {
+        // Store in the first available service (or create a generic one)
+        if self.services.is_empty() {
+            // Create a generic service if none exists
+            let generic_service = ServiceMemory {
+                service_type: WebServiceType::Generic,
+                pid: 0,
+                bdh_memory: Arc::new(Mutex::new(BdhMemory::new())),
+                active: true,
+            };
+            self.services.insert("generic".to_string(), generic_service);
+        }
+
+        if let Some(service) = self.services.values().next() {
+            if let Ok(mut bdh) = service.bdh_memory.try_lock() {
+                bdh.store_trace(embedding.clone(), similarity, valence)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MemoryStats {
+    pub total_traces: usize,
+    pub total_connections: usize,
+    pub psi_entries: usize,
+    pub current_learning_rate: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct EqIqBalance {
+    pub eq_weight: f32,
+    pub iq_weight: f32,
 }
 
 // Helper function to detect web server type from process information
