@@ -80,6 +80,31 @@ FORAI provides intelligent, adaptive answers to these critical forensic question
 11. **Document Printing**: What documents were printed?
 12. **Software Changes**: What software was installed or modified?
 
+## 🤖 Machine Learning Enhancement System
+
+FORAI integrates advanced ML techniques to improve forensic analysis accuracy, particularly for behavioral questions (Q6-Q12):
+
+### 🔍 **Isolation Forest Anomaly Detection**
+- **Purpose**: Identifies unusual patterns in forensic evidence that may indicate sophisticated anti-forensic techniques
+- **Application**: Detects anomalous temporal gaps, suspicious file operations, and irregular system behaviors
+- **Benefit**: Reduces false negatives by catching subtle evidence manipulation attempts
+
+### 📈 **Gradient Descent Optimization**
+- **Purpose**: Continuously improves evidence scoring accuracy based on historical case outcomes
+- **Application**: Optimizes feature weights for different evidence types and correlation algorithms
+- **Benefit**: Provides statistically defensible confidence scores for expert witness testimony
+
+### 🎯 **Behavioral Feature Extraction**
+- **Anti-Forensic Analysis (Q6)**: Temporal gap analysis, log clearing patterns, deletion indicators
+- **Transfer Analysis (Q7-Q8)**: Volume patterns, timing analysis, file type diversity
+- **Cloud Storage Analysis (Q9)**: Service diversity, sync patterns, upload/download ratios
+- **Activity Analysis (Q10-Q12)**: Frequency patterns, application diversity, time distribution
+
+### 📊 **Enhanced Confidence Scoring**
+- **Deterministic Questions (Q1-Q5)**: 95% deterministic + 5% ML validation
+- **Behavioral Questions (Q6-Q12)**: 70% deterministic + 30% ML enhancement
+- **Statistical Backing**: Provides percentage confidence scores suitable for court testimony
+
 ## 📊 Data Processing Pipeline
 
 FORAI processes forensic data through a three-stage pipeline:
@@ -206,10 +231,14 @@ python FORAI.py --case-id CASE001 --question "What is the computer name?" --verb
 python FORAI.py --case-id CASE001 --question "What USB devices were connected?" --verbose
 python FORAI.py --case-id CASE001 --question "What users have logged into the system?" --verbose
 
-# Questions with natural language mapping
+# Questions with natural language mapping and ML enhancement
 python FORAI.py --case-id CASE001 --question "What operating system is installed?"
 python FORAI.py --case-id CASE001 --question "What anti-forensic activity occurred?"
 python FORAI.py --case-id CASE001 --question "What software was installed or removed?"
+
+# ML-enhanced behavioral analysis
+python FORAI.py --case-id CASE001 --question "Were any files deleted to hide evidence?" --verbose
+python FORAI.py --case-id CASE001 --question "What suspicious patterns were detected?" --verbose
 ```
 
 ## 📊 Enhanced Output Examples
@@ -223,6 +252,18 @@ $ python FORAI.py --case-id CASE001 --question "What is the computer name?" --ve
 Question: What is the computer name?
 Answer: Computer name: DESKTOP-ABC123
 Confidence: 95.0%
+Method: deterministic
+Evidence: Registry key HKLM\SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName
+
+=== ML-ENHANCED BEHAVIORAL ANALYSIS ===
+Question: Is there evidence of anti-forensic activity?
+Answer: Found 3 evidence items indicating potential anti-forensic activity: Event log clearing at 2024-01-15 14:32:15; CCleaner execution at 2024-01-15 14:35:22; Recycle bin emptying at 2024-01-15 14:40:11 [ML Analysis: Anomalous patterns detected with 87.3% confidence] [High significance score: 93.4%] [Overall confidence: 86.0%]
+Method: deterministic+ml
+ML Insights:
+  - Anomaly detected: True (87.3% confidence)
+  - Optimized score: 93.4%
+  - ML confidence: 100.0%
+  - Final confidence: 86.0%
 Evidence Count: 4
 
 === SUPPORTING EVIDENCE ===

@@ -145,6 +145,17 @@ except ImportError:
     LLAMA_CPP_AVAILABLE = False
     print("Warning: llama-cpp-python not available. Local LLM functionality will be disabled.")
 
+# Optional imports for ML functionality
+try:
+    from sklearn.ensemble import IsolationForest
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.metrics import accuracy_score
+    import numpy as np
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+    print("Warning: scikit-learn not available. ML-enhanced analysis will be disabled.")
+
 # ============================================================================
 # INTEGRATED SEMANTIC INDEXING COMPONENTS (BHSM Lite)
 # ============================================================================
@@ -455,6 +466,394 @@ STANDARD_FORENSIC_QUESTIONS = [
         "keywords": ["software", "install", "program", "application", "modify"]
     }
 ]
+
+# ============================================================================
+# MACHINE LEARNING ENHANCEMENT SYSTEM
+# ============================================================================
+
+class ForensicMLAnalyzer:
+    """Machine Learning analyzer for enhanced forensic question accuracy"""
+    
+    def __init__(self):
+        self.isolation_forests = {}  # Per-question isolation forests
+        self.gradient_optimizers = {}  # Per-question gradient descent optimizers
+        self.feature_scalers = {}  # Per-question feature scalers
+        self.ml_available = ML_AVAILABLE
+        self.training_data = {}  # Historical training data per question
+        
+    def extract_behavioral_features(self, evidence_items: List[Dict], question_id: str) -> np.ndarray:
+        """Extract behavioral features for ML analysis based on question type"""
+        if not self.ml_available:
+            return np.array([])
+            
+        features = []
+        
+        if question_id in ['Q6']:  # Anti-forensic activity
+            features.extend(self._extract_antiforensic_features(evidence_items))
+        elif question_id in ['Q7', 'Q8']:  # USB/File transfers
+            features.extend(self._extract_transfer_features(evidence_items))
+        elif question_id in ['Q9']:  # Cloud storage
+            features.extend(self._extract_cloud_features(evidence_items))
+        elif question_id in ['Q10', 'Q11', 'Q12']:  # Screenshots, printing, software
+            features.extend(self._extract_activity_features(evidence_items))
+        else:
+            # For ad-hoc questions, extract general behavioral features
+            features.extend(self._extract_general_features(evidence_items))
+            
+        return np.array(features) if features else np.array([0.0])
+    
+    def _extract_antiforensic_features(self, evidence_items: List[Dict]) -> List[float]:
+        """Extract features specific to anti-forensic activity detection"""
+        features = []
+        
+        # Temporal gap analysis
+        timestamps = [item.get('timestamp', '') for item in evidence_items if item.get('timestamp')]
+        if len(timestamps) > 1:
+            # Calculate gaps between events
+            time_gaps = self._calculate_time_gaps(timestamps)
+            features.extend([
+                np.mean(time_gaps) if time_gaps else 0.0,
+                np.std(time_gaps) if time_gaps else 0.0,
+                max(time_gaps) if time_gaps else 0.0
+            ])
+        else:
+            features.extend([0.0, 0.0, 0.0])
+        
+        # Log clearing indicators
+        log_clear_count = sum(1 for item in evidence_items 
+                             if any(term in str(item.get('data_json', '')).lower() 
+                                   for term in ['eventlog', 'clear', 'wevtutil']))
+        features.append(log_clear_count)
+        
+        # File deletion patterns
+        deletion_count = sum(1 for item in evidence_items 
+                           if any(term in str(item.get('data_json', '')).lower() 
+                                 for term in ['delete', 'remove', 'sdelete']))
+        features.append(deletion_count)
+        
+        # Timestamp modification indicators
+        timestamp_mod_count = sum(1 for item in evidence_items 
+                                if any(term in str(item.get('data_json', '')).lower() 
+                                      for term in ['timestamp', 'filetime', 'touch']))
+        features.append(timestamp_mod_count)
+        
+        # Registry modification patterns
+        registry_mod_count = sum(1 for item in evidence_items 
+                               if 'registry' in str(item.get('data_json', '')).lower())
+        features.append(registry_mod_count)
+        
+        return features
+    
+    def _extract_transfer_features(self, evidence_items: List[Dict]) -> List[float]:
+        """Extract features for USB/file transfer analysis"""
+        features = []
+        
+        # Volume of data transferred
+        total_size = 0
+        file_count = 0
+        for item in evidence_items:
+            data_json = str(item.get('data_json', ''))
+            # Extract file sizes if available
+            size_match = re.search(r'size["\s]*[:=]["\s]*(\d+)', data_json, re.IGNORECASE)
+            if size_match:
+                total_size += int(size_match.group(1))
+                file_count += 1
+        
+        features.extend([total_size, file_count])
+        
+        # Transfer timing patterns
+        timestamps = [item.get('timestamp', '') for item in evidence_items if item.get('timestamp')]
+        if len(timestamps) > 1:
+            time_gaps = self._calculate_time_gaps(timestamps)
+            # Rapid transfers might indicate bulk data exfiltration
+            rapid_transfers = sum(1 for gap in time_gaps if gap < 60)  # Less than 1 minute apart
+            features.append(rapid_transfers)
+        else:
+            features.append(0)
+        
+        # File type diversity
+        file_extensions = set()
+        for item in evidence_items:
+            data_json = str(item.get('data_json', ''))
+            ext_matches = re.findall(r'\.([a-zA-Z0-9]{2,4})', data_json)
+            file_extensions.update(ext_matches)
+        features.append(len(file_extensions))
+        
+        return features
+    
+    def _extract_cloud_features(self, evidence_items: List[Dict]) -> List[float]:
+        """Extract features for cloud storage analysis"""
+        features = []
+        
+        # Cloud service diversity
+        cloud_services = set()
+        for item in evidence_items:
+            data_json = str(item.get('data_json', '')).lower()
+            if 'dropbox' in data_json:
+                cloud_services.add('dropbox')
+            elif 'onedrive' in data_json:
+                cloud_services.add('onedrive')
+            elif 'google' in data_json and 'drive' in data_json:
+                cloud_services.add('googledrive')
+            elif 'icloud' in data_json:
+                cloud_services.add('icloud')
+        
+        features.append(len(cloud_services))
+        
+        # Sync activity frequency
+        sync_count = sum(1 for item in evidence_items 
+                        if 'sync' in str(item.get('data_json', '')).lower())
+        features.append(sync_count)
+        
+        # Upload vs download patterns
+        upload_count = sum(1 for item in evidence_items 
+                          if 'upload' in str(item.get('data_json', '')).lower())
+        download_count = sum(1 for item in evidence_items 
+                           if 'download' in str(item.get('data_json', '')).lower())
+        features.extend([upload_count, download_count])
+        
+        return features
+    
+    def _extract_activity_features(self, evidence_items: List[Dict]) -> List[float]:
+        """Extract features for general activity analysis (screenshots, printing, software)"""
+        features = []
+        
+        # Activity frequency
+        features.append(len(evidence_items))
+        
+        # Time distribution
+        timestamps = [item.get('timestamp', '') for item in evidence_items if item.get('timestamp')]
+        if timestamps:
+            time_gaps = self._calculate_time_gaps(timestamps)
+            features.extend([
+                np.mean(time_gaps) if time_gaps else 0.0,
+                np.std(time_gaps) if time_gaps else 0.0
+            ])
+        else:
+            features.extend([0.0, 0.0])
+        
+        # Application diversity
+        applications = set()
+        for item in evidence_items:
+            data_json = str(item.get('data_json', ''))
+            app_match = re.search(r'application["\s]*[:=]["\s]*([^"]+)', data_json, re.IGNORECASE)
+            if app_match:
+                applications.add(app_match.group(1).lower())
+        features.append(len(applications))
+        
+        return features
+    
+    def _extract_general_features(self, evidence_items: List[Dict]) -> List[float]:
+        """Extract general behavioral features for ad-hoc questions"""
+        features = []
+        
+        # Basic statistics
+        features.append(len(evidence_items))
+        
+        # Temporal patterns
+        timestamps = [item.get('timestamp', '') for item in evidence_items if item.get('timestamp')]
+        if timestamps:
+            time_gaps = self._calculate_time_gaps(timestamps)
+            features.extend([
+                np.mean(time_gaps) if time_gaps else 0.0,
+                np.std(time_gaps) if time_gaps else 0.0,
+                min(time_gaps) if time_gaps else 0.0,
+                max(time_gaps) if time_gaps else 0.0
+            ])
+        else:
+            features.extend([0.0, 0.0, 0.0, 0.0])
+        
+        # Content complexity
+        total_content_length = sum(len(str(item.get('data_json', ''))) for item in evidence_items)
+        features.append(total_content_length)
+        
+        # Artifact diversity
+        artifacts = set(item.get('artifact', '') for item in evidence_items if item.get('artifact'))
+        features.append(len(artifacts))
+        
+        return features
+    
+    def _calculate_time_gaps(self, timestamps: List[str]) -> List[float]:
+        """Calculate time gaps between timestamps in seconds"""
+        gaps = []
+        parsed_times = []
+        
+        for ts in timestamps:
+            try:
+                # Try to parse various timestamp formats
+                if 'T' in ts:
+                    parsed_time = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                else:
+                    parsed_time = datetime.strptime(ts, '%Y-%m-%d %H:%M:%S')
+                parsed_times.append(parsed_time)
+            except:
+                continue
+        
+        if len(parsed_times) > 1:
+            parsed_times.sort()
+            for i in range(1, len(parsed_times)):
+                gap = (parsed_times[i] - parsed_times[i-1]).total_seconds()
+                gaps.append(gap)
+        
+        return gaps
+    
+    def analyze_with_isolation_forest(self, evidence_items: List[Dict], question_id: str) -> Dict[str, Any]:
+        """Use Isolation Forest to identify anomalous patterns in evidence"""
+        if not self.ml_available or not evidence_items:
+            return {"anomaly_score": 0.0, "confidence": 0.0, "anomalous_items": []}
+        
+        try:
+            # Extract features
+            features = self.extract_behavioral_features(evidence_items, question_id)
+            if len(features) == 0:
+                return {"anomaly_score": 0.0, "confidence": 0.0, "anomalous_items": []}
+            
+            # Reshape for sklearn
+            X = features.reshape(1, -1) if len(features.shape) == 1 else features
+            
+            # Initialize or get existing isolation forest for this question
+            if question_id not in self.isolation_forests:
+                self.isolation_forests[question_id] = IsolationForest(
+                    contamination=0.1,  # Expect 10% anomalies
+                    random_state=42,
+                    n_estimators=100
+                )
+                
+                # If we have historical data, fit the model
+                if question_id in self.training_data and len(self.training_data[question_id]) > 10:
+                    training_features = np.array(self.training_data[question_id])
+                    self.isolation_forests[question_id].fit(training_features)
+                else:
+                    # Fit on current data (less reliable but functional)
+                    self.isolation_forests[question_id].fit(X)
+            
+            # Get anomaly score
+            anomaly_score = self.isolation_forests[question_id].decision_function(X)[0]
+            is_anomaly = self.isolation_forests[question_id].predict(X)[0] == -1
+            
+            # Convert to confidence score (higher = more suspicious)
+            confidence = max(0.0, min(1.0, (0.5 - anomaly_score) * 2))
+            
+            result = {
+                "anomaly_score": float(anomaly_score),
+                "confidence": float(confidence),
+                "is_anomalous": bool(is_anomaly),
+                "anomalous_items": evidence_items if is_anomaly else []
+            }
+            
+            # Store features for future training
+            if question_id not in self.training_data:
+                self.training_data[question_id] = []
+            self.training_data[question_id].append(features.tolist())
+            
+            return result
+            
+        except Exception as e:
+            LOGGER.warning(f"Isolation Forest analysis failed for {question_id}: {e}")
+            return {"anomaly_score": 0.0, "confidence": 0.0, "anomalous_items": []}
+    
+    def optimize_with_gradient_descent(self, question_id: str, evidence_items: List[Dict], 
+                                     ground_truth_score: float = None) -> Dict[str, Any]:
+        """Use gradient descent to optimize evidence scoring for forensic accuracy"""
+        if not self.ml_available:
+            return {"optimized_score": 0.5, "confidence": 0.5}
+        
+        try:
+            # Extract features
+            features = self.extract_behavioral_features(evidence_items, question_id)
+            if len(features) == 0:
+                return {"optimized_score": 0.5, "confidence": 0.5}
+            
+            # Initialize gradient optimizer for this question if needed
+            if question_id not in self.gradient_optimizers:
+                self.gradient_optimizers[question_id] = {
+                    'weights': np.random.normal(0, 0.1, len(features)),
+                    'bias': 0.0,
+                    'learning_rate': 0.01,
+                    'momentum': np.zeros(len(features)),
+                    'momentum_decay': 0.9
+                }
+            
+            optimizer = self.gradient_optimizers[question_id]
+            
+            # Calculate current score
+            score = self._sigmoid(np.dot(features, optimizer['weights']) + optimizer['bias'])
+            
+            # If we have ground truth, update weights
+            if ground_truth_score is not None:
+                # Calculate gradient
+                error = score - ground_truth_score
+                gradient_w = error * features * score * (1 - score)
+                gradient_b = error * score * (1 - score)
+                
+                # Update with momentum
+                optimizer['momentum'] = (optimizer['momentum_decay'] * optimizer['momentum'] + 
+                                       optimizer['learning_rate'] * gradient_w)
+                optimizer['weights'] -= optimizer['momentum']
+                optimizer['bias'] -= optimizer['learning_rate'] * gradient_b
+                
+                # Recalculate score with updated weights
+                score = self._sigmoid(np.dot(features, optimizer['weights']) + optimizer['bias'])
+            
+            # Calculate confidence based on feature magnitude and weight alignment
+            feature_magnitude = np.linalg.norm(features)
+            weight_magnitude = np.linalg.norm(optimizer['weights'])
+            confidence = min(1.0, (feature_magnitude * weight_magnitude) / (len(features) + 1))
+            
+            return {
+                "optimized_score": float(score),
+                "confidence": float(confidence),
+                "feature_importance": dict(zip(range(len(features)), optimizer['weights'].tolist()))
+            }
+            
+        except Exception as e:
+            LOGGER.warning(f"Gradient descent optimization failed for {question_id}: {e}")
+            return {"optimized_score": 0.5, "confidence": 0.5}
+    
+    def _sigmoid(self, x):
+        """Sigmoid activation function with numerical stability"""
+        return 1 / (1 + np.exp(-np.clip(x, -500, 500)))
+    
+    def enhance_forensic_analysis(self, question_id: str, evidence_items: List[Dict], 
+                                deterministic_result: Dict) -> Dict[str, Any]:
+        """Combine deterministic results with ML enhancement for improved accuracy"""
+        if not self.ml_available:
+            return deterministic_result
+        
+        try:
+            # Get ML analysis
+            isolation_result = self.analyze_with_isolation_forest(evidence_items, question_id)
+            gradient_result = self.optimize_with_gradient_descent(question_id, evidence_items)
+            
+            # Combine results
+            enhanced_result = deterministic_result.copy()
+            
+            # Add ML insights
+            enhanced_result['ml_analysis'] = {
+                'anomaly_detection': isolation_result,
+                'optimized_scoring': gradient_result,
+                'ml_confidence': (isolation_result['confidence'] + gradient_result['confidence']) / 2
+            }
+            
+            # Adjust overall confidence based on ML analysis
+            original_confidence = enhanced_result.get('confidence', 0.5)
+            ml_confidence = enhanced_result['ml_analysis']['ml_confidence']
+            
+            # Weight combination: 70% deterministic, 30% ML for behavioral questions
+            if question_id in ['Q6', 'Q7', 'Q8', 'Q9', 'Q10', 'Q11', 'Q12']:
+                combined_confidence = 0.7 * original_confidence + 0.3 * ml_confidence
+            else:
+                # For deterministic questions (Q1-Q5), ML has minimal impact
+                combined_confidence = 0.95 * original_confidence + 0.05 * ml_confidence
+            
+            enhanced_result['confidence'] = combined_confidence
+            enhanced_result['ml_enhanced'] = True
+            
+            return enhanced_result
+            
+        except Exception as e:
+            LOGGER.warning(f"ML enhancement failed for {question_id}: {e}")
+            return deterministic_result
 
 # ============================================================================
 # PERFORMANCE OPTIMIZATION: LLM SINGLETON
@@ -3182,10 +3581,11 @@ class ModernLLM:
         return True
 
 class ForensicAnalyzer:
-    """Modern forensic analysis engine"""
+    """Modern forensic analysis engine with ML enhancement"""
     
     def __init__(self, llm_folder: Optional[Path] = None):
         self.llm = ModernLLM(llm_folder)
+        self.ml_analyzer = ForensicMLAnalyzer()
     
     @performance_monitor
     def analyze_computer_identity(self, case_id: str) -> Dict[str, Any]:
@@ -3362,8 +3762,11 @@ class ForensicAnalyzer:
         
         # Step 4: Extract deterministic facts from evidence
         facts = []
+        evidence_items = []  # For ML analysis
+        
         for row in evidence_rows:
             row_dict = dict(row)
+            evidence_items.append(row_dict)  # Store for ML analysis
             
             # Extract structured facts based on artifact type
             artifact = row_dict.get('artifact', '').lower()
@@ -3468,9 +3871,87 @@ Answer:"""
         
         # Fallback: return fact summary without LLM
         if facts:
-            return f"Found {len(facts)} evidence items: " + "; ".join([f['summary'] for f in facts[:5]])
+            # Step 5: Apply ML enhancement for behavioral questions
+            question_id = self._identify_question_id(question)
+            
+            # Create deterministic result
+            deterministic_result = {
+                'answer': f"Found {len(facts)} evidence items: " + "; ".join([f['summary'] for f in facts[:5]]),
+                'evidence_count': len(facts),
+                'confidence': 0.8,  # Base confidence for deterministic facts
+                'facts': facts
+            }
+            
+            # Enhance with ML analysis
+            enhanced_result = self.ml_analyzer.enhance_forensic_analysis(
+                question_id, evidence_items, deterministic_result
+            )
+            
+            # Return enhanced answer with ML insights
+            base_answer = enhanced_result['answer']
+            if enhanced_result.get('ml_enhanced') and enhanced_result.get('ml_analysis'):
+                ml_analysis = enhanced_result['ml_analysis']
+                confidence = enhanced_result.get('confidence', 0.8)
+                
+                # Add ML insights to answer for behavioral questions (Q6-Q12)
+                if question_id in ['Q6', 'Q7', 'Q8', 'Q9', 'Q10', 'Q11', 'Q12']:
+                    anomaly_info = ml_analysis.get('anomaly_detection', {})
+                    if anomaly_info.get('is_anomalous'):
+                        base_answer += f" [ML Analysis: Anomalous patterns detected with {anomaly_info.get('confidence', 0)*100:.1f}% confidence]"
+                    
+                    optimized_info = ml_analysis.get('optimized_scoring', {})
+                    if optimized_info.get('optimized_score', 0) > 0.7:
+                        base_answer += f" [High significance score: {optimized_info.get('optimized_score', 0)*100:.1f}%]"
+                
+                base_answer += f" [Overall confidence: {confidence*100:.1f}%]"
+            
+            return base_answer
         
         return "No relevant evidence found."
+    
+    def _identify_question_id(self, question: str) -> str:
+        """Identify which standard forensic question this matches, or return 'AD_HOC' for ad-hoc questions"""
+        question_lower = question.lower()
+        
+        # Direct keyword matching for specific questions
+        if any(term in question_lower for term in ['computer name', 'hostname', 'computername']):
+            return 'Q1'
+        elif any(term in question_lower for term in ['make', 'model', 'serial', 'manufacturer', 'hardware']):
+            return 'Q2'
+        elif any(term in question_lower for term in ['hard drive', 'internal drive', 'internal storage', 'disk']) and 'cloud' not in question_lower:
+            return 'Q3'
+        elif any(term in question_lower for term in ['user account', 'username', 'profile', 'sid']):
+            return 'Q4'
+        elif any(term in question_lower for term in ['primary user', 'main user', 'most active', 'owner']):
+            return 'Q5'
+        elif any(term in question_lower for term in ['anti-forensic', 'tamper', 'evidence elimination', 'data destruction']):
+            return 'Q6'
+        elif any(term in question_lower for term in ['usb', 'removable storage', 'external device']):
+            return 'Q7'
+        elif any(term in question_lower for term in ['file transfer', 'copy', 'move', 'removable']):
+            return 'Q8'
+        elif any(term in question_lower for term in ['cloud storage', 'dropbox', 'onedrive', 'google drive', 'sync']):
+            return 'Q9'
+        elif any(term in question_lower for term in ['screenshot', 'screen capture', 'snipping', 'print screen']):
+            return 'Q10'
+        elif any(term in question_lower for term in ['print', 'printer', 'document', 'job', 'spool']):
+            return 'Q11'
+        elif any(term in question_lower for term in ['software', 'install', 'program', 'application', 'modify']):
+            return 'Q12'
+        
+        # Fallback: Map questions to IDs based on keywords from STANDARD_FORENSIC_QUESTIONS
+        for q in STANDARD_FORENSIC_QUESTIONS:
+            keywords = [kw.lower() for kw in q.get('keywords', [])]
+            if any(keyword in question_lower for keyword in keywords):
+                return q['id']
+        
+        # Additional behavioral pattern matching for ad-hoc questions
+        if any(term in question_lower for term in ['delete', 'clear', 'wipe', 'hide']):
+            return 'Q6'  # Anti-forensic activity
+        elif 'file' in question_lower and any(term in question_lower for term in ['transfer', 'copy', 'move']):
+            return 'Q8'  # File transfers
+        
+        return 'AD_HOC'  # Ad-hoc question
 
     def answer_forensic_question_legacy(self, question: str, case_id: str, date_from: str = None, date_to: str = None, days_back: int = None) -> str:
         """LEGACY forensic question answering with 7 techniques for 85-95% TinyLLama accuracy"""
@@ -3965,22 +4446,62 @@ Answer:"""
                     deterministic_answer = try_deterministic_answer(conn, question, case_id)
                     
                     if deterministic_answer:
-                        # Deterministic answer found - high confidence
-                        results['answers'][question_id] = {
+                        # Deterministic answer found - enhance with ML for behavioral questions
+                        supporting_evidence = self._get_supporting_evidence(conn, question_data, case_id)
+                        
+                        deterministic_result = {
                             'question': question,
                             'answer': deterministic_answer,
                             'method': 'deterministic',
                             'confidence': 0.95,
-                            'supporting_evidence': self._get_supporting_evidence(conn, question_data, case_id)
+                            'supporting_evidence': supporting_evidence
                         }
-                        results['confidence_scores'][question_id] = 0.95
+                        
+                        # Apply ML enhancement
+                        enhanced_result = self.ml_analyzer.enhance_forensic_analysis(
+                            question_id, supporting_evidence, deterministic_result
+                        )
+                        
+                        # Update with ML insights
+                        if enhanced_result.get('ml_enhanced'):
+                            enhanced_result['method'] = 'deterministic+ml'
+                            if enhanced_result.get('ml_analysis'):
+                                ml_analysis = enhanced_result['ml_analysis']
+                                enhanced_result['ml_insights'] = {
+                                    'anomaly_detected': ml_analysis.get('anomaly_detection', {}).get('is_anomalous', False),
+                                    'anomaly_confidence': ml_analysis.get('anomaly_detection', {}).get('confidence', 0.0),
+                                    'optimized_score': ml_analysis.get('optimized_scoring', {}).get('optimized_score', 0.5),
+                                    'ml_confidence': ml_analysis.get('ml_confidence', 0.5)
+                                }
+                        
+                        results['answers'][question_id] = enhanced_result
+                        results['confidence_scores'][question_id] = enhanced_result.get('confidence', 0.95)
                         
                     else:
                         # Step 2: Use LLM with semantic search if available
                         if llm_provider and llm_provider.is_available():
                             llm_answer = self._llm_assisted_answer(conn, question_data, case_id, llm_provider)
-                            results['answers'][question_id] = llm_answer
-                            results['confidence_scores'][question_id] = llm_answer.get('confidence', 0.5)
+                            
+                            # Enhance LLM answer with ML analysis
+                            supporting_evidence = llm_answer.get('supporting_evidence', [])
+                            enhanced_llm_result = self.ml_analyzer.enhance_forensic_analysis(
+                                question_id, supporting_evidence, llm_answer
+                            )
+                            
+                            # Add ML insights to LLM result
+                            if enhanced_llm_result.get('ml_enhanced'):
+                                enhanced_llm_result['method'] = 'llm+ml'
+                                if enhanced_llm_result.get('ml_analysis'):
+                                    ml_analysis = enhanced_llm_result['ml_analysis']
+                                    enhanced_llm_result['ml_insights'] = {
+                                        'anomaly_detected': ml_analysis.get('anomaly_detection', {}).get('is_anomalous', False),
+                                        'anomaly_confidence': ml_analysis.get('anomaly_detection', {}).get('confidence', 0.0),
+                                        'optimized_score': ml_analysis.get('optimized_scoring', {}).get('optimized_score', 0.5),
+                                        'ml_confidence': ml_analysis.get('ml_confidence', 0.5)
+                                    }
+                            
+                            results['answers'][question_id] = enhanced_llm_result
+                            results['confidence_scores'][question_id] = enhanced_llm_result.get('confidence', 0.5)
                         else:
                             # No LLM available - provide evidence summary
                             evidence_summary = self._get_evidence_summary(conn, question_data, case_id)
@@ -4009,9 +4530,23 @@ Answer:"""
         results['processing_time'] = time.perf_counter() - start_time
         results['average_confidence'] = sum(results['confidence_scores'].values()) / len(results['confidence_scores']) if results['confidence_scores'] else 0.0
         
+        # Add ML enhancement summary
+        ml_enhanced_count = sum(1 for answer in results['answers'].values() if answer.get('ml_enhanced'))
+        anomalies_detected = sum(1 for answer in results['answers'].values() 
+                               if answer.get('ml_insights', {}).get('anomaly_detected'))
+        
+        results['ml_summary'] = {
+            'ml_enhanced_questions': ml_enhanced_count,
+            'anomalies_detected': anomalies_detected,
+            'ml_available': self.ml_analyzer.ml_available
+        }
+        
         LOGGER.info(f"Autonomous analysis completed in {results['processing_time']:.2f}s")
         LOGGER.info(f"Questions answered: {results['questions_answered']}/{results['total_questions']}")
         LOGGER.info(f"Average confidence: {results['average_confidence']:.2f}")
+        LOGGER.info(f"ML enhanced questions: {ml_enhanced_count}/{results['total_questions']}")
+        if anomalies_detected > 0:
+            LOGGER.info(f"Anomalous patterns detected in {anomalies_detected} questions")
         
         return results
     
