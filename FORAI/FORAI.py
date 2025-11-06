@@ -63,6 +63,16 @@ CLI USAGE EXAMPLES:
     
     # Analysis with custom question using existing collection
     python FORAI.py --case-id CASE001 --full-analysis --artifacts-dir "C:\\YourExistingKapeOutput" --question "What USB devices were connected?" --verbose
+
+📄 IMPORT EXISTING PLASO FILE (SKIP KAPE + LOG2TIMELINE):
+    # Import existing .plaso file and create FAS5 database
+    python FORAI.py --case-id CASE001 --plaso-file "C:\\Evidence\\timeline.plaso" --verbose
+    
+    # Import plaso file with custom keywords and generate report
+    python FORAI.py --case-id CASE001 --plaso-file "D:\\Cases\\CASE001.plaso" --keywords-file malware_iocs.txt --autonomous-analysis --report pdf
+    
+    # Import plaso file and answer specific question
+    python FORAI.py --case-id CASE001 --plaso-file "timeline.plaso" --question "What anti-forensic activity occurred?" --verbose
     
     # Initialize database for a new case
     python FORAI.py --case-id CASE001 --init-db
@@ -6091,6 +6101,158 @@ class ForensicWorkflowManager:
             self.logger.debug("Database post-optimized")
         except Exception as e:
             self.logger.warning(f"Database post-optimization failed: {e}")
+
+    def import_plaso_file(self, plaso_file_path: Path, plaso_path: Path) -> bool:
+        """Import existing .plaso file and create FAS5 database (skips log2timeline step)"""
+        try:
+            self.log_custody_event("PLASO_IMPORT_START", f"Starting import of existing plaso file: {plaso_file_path}")
+            
+            # Validate plaso file exists
+            if not plaso_file_path.exists():
+                raise FileNotFoundError(f"Plaso file not found: {plaso_file_path}")
+            
+            # Check file size and log
+            plaso_size = plaso_file_path.stat().st_size / 1024 / 1024  # MB
+            self.logger.info(f"Importing plaso file (Size: {plaso_size:.1f}MB): {plaso_file_path}")
+            
+            # Find psort command
+            psort_cmd_path = None
+            if shutil.which("psort"):
+                psort_cmd_path = "psort"
+                self.logger.info("Found psort in system PATH")
+            elif plaso_path.exists():
+                potential_path = plaso_path / "psort.exe"
+                if potential_path.exists():
+                    psort_cmd_path = str(potential_path)
+                    self.logger.info(f"Found psort at: {potential_path}")
+                else:
+                    potential_path = plaso_path / "psort"
+                    if potential_path.exists():
+                        psort_cmd_path = str(potential_path)
+                        self.logger.info(f"Found psort at: {potential_path}")
+            
+            if not psort_cmd_path:
+                raise FileNotFoundError(f"psort not found in PATH or at {plaso_path}")
+            
+            # Create custom FAS5 SQLite output module
+            custom_module = self.create_custom_plaso_output_module()
+            database_path = self.parsed_dir / f"{self.case_id}_fas5.db"
+            
+            # Pre-optimize database for bulk operations
+            self._pre_optimize_database(database_path)
+            
+            # Create temp directory
+            temp_dir = self.parsed_dir / "temp"
+            temp_dir.mkdir(exist_ok=True)
+            
+            # Track processing metrics
+            start_time = time.time()
+            start_memory = psutil.Process().memory_info().rss / 1024 / 1024 if psutil else 0
+            
+            self.logger.info(f"Processing plaso file to SQLite: {plaso_file_path} -> {database_path}")
+            
+            # Use standard JSON output and process with our custom module
+            json_output_path = self.parsed_dir / f"{self.case_id}_timeline.json"
+            
+            # Process plaso file to JSON
+            psort_cmd = [
+                psort_cmd_path,
+                "-o", "json",
+                "-w", str(json_output_path),
+                "--temporary_directory", str(temp_dir),
+                str(plaso_file_path)
+            ]
+            
+            self.logger.info(f"Executing psort: {' '.join(psort_cmd)}")
+            result = subprocess.run(psort_cmd, capture_output=True, text=True, timeout=3600)
+            
+            if result.returncode != 0:
+                # Try alternative formats if JSON fails
+                self.logger.warning(f"JSON export failed, trying alternative formats...")
+                
+                # Try dynamic format
+                dynamic_output_path = self.parsed_dir / f"{self.case_id}_timeline.txt"
+                dynamic_cmd = [
+                    psort_cmd_path,
+                    "-o", "dynamic",
+                    "-w", str(dynamic_output_path),
+                    "--temporary_directory", str(temp_dir),
+                    str(plaso_file_path)
+                ]
+                
+                dynamic_result = subprocess.run(dynamic_cmd, capture_output=True, text=True, timeout=3600)
+                
+                if dynamic_result.returncode == 0 and dynamic_output_path.exists():
+                    self.logger.info("Dynamic format export successful")
+                    success = self._process_dynamic_timeline(dynamic_output_path, custom_module)
+                    if success:
+                        self._post_optimize_database(database_path)
+                        return True
+                
+                # Try CSV format as last resort
+                csv_output_path = self.parsed_dir / f"{self.case_id}_timeline.csv"
+                csv_cmd = [
+                    psort_cmd_path,
+                    "-o", "l2tcsv",
+                    "-w", str(csv_output_path),
+                    "--temporary_directory", str(temp_dir),
+                    str(plaso_file_path)
+                ]
+                
+                csv_result = subprocess.run(csv_cmd, capture_output=True, text=True, timeout=3600)
+                
+                if csv_result.returncode == 0 and csv_output_path.exists():
+                    self.logger.warning("CSV export successful, but with limited data structure")
+                    # Note: CSV processing would need additional implementation
+                    # For now, we'll consider this a partial success
+                
+                self.log_custody_event("PLASO_IMPORT_ERROR", f"psort processing failed: {result.stderr}")
+                return False
+            
+            # Process JSON timeline
+            if json_output_path.exists():
+                success = self._process_json_timeline(json_output_path, custom_module)
+                
+                if success:
+                    # Post-optimize database
+                    self._post_optimize_database(database_path)
+                    
+                    # Calculate performance metrics
+                    end_time = time.time()
+                    processing_time = end_time - start_time
+                    end_memory = psutil.Process().memory_info().rss / 1024 / 1024 if psutil else 0
+                    memory_delta = end_memory - start_memory
+                    throughput = plaso_size / processing_time if processing_time > 0 else 0
+                    
+                    # Clean up temporary files
+                    try:
+                        json_output_path.unlink()
+                        if temp_dir.exists():
+                            shutil.rmtree(temp_dir, ignore_errors=True)
+                    except Exception as e:
+                        self.logger.debug(f"Cleanup warning: {e}")
+                    
+                    # Log performance metrics
+                    db_size = database_path.stat().st_size / 1024 / 1024  # MB
+                    self.log_custody_event("PLASO_IMPORT_SUCCESS",
+                                         f"Plaso file import completed. "
+                                         f"Time: {processing_time:.2f}s, Memory: {memory_delta:+.1f}MB, "
+                                         f"Throughput: {throughput:.1f}MB/s, Database: {db_size:.1f}MB")
+                    
+                    self.logger.info(f"✅ Plaso file import completed successfully")
+                    self.logger.info(f"📊 Performance: {processing_time:.2f}s, {throughput:.1f}MB/s, Database: {db_size:.1f}MB")
+                    return True
+                else:
+                    self.log_custody_event("PLASO_IMPORT_ERROR", "Failed to process JSON timeline")
+                    return False
+            else:
+                self.log_custody_event("PLASO_IMPORT_ERROR", "JSON output file was not created")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Plaso file import failed: {e}")
+            self.log_custody_event("PLASO_IMPORT_ERROR", f"Import failed: {str(e)}")
+            return False
             
     def run_full_analysis(self, target: str, kape_path: Path, plaso_path: Path, 
                          questions: List[str] = None, date_from: str = None, date_to: str = None, days_back: int = None, keywords: List[str] = None, existing_artifacts_dir: Path = None, fast_mode: bool = False) -> bool:
@@ -6320,6 +6482,7 @@ def main():
     parser.add_argument('--collect-artifacts', action='store_true', help='Collect artifacts using KAPE')
     parser.add_argument('--parse-artifacts', action='store_true', help='Parse artifacts using Plaso timeline analysis')
     parser.add_argument('--artifacts-dir', type=Path, help='Use existing artifacts directory (skips KAPE collection)')
+    parser.add_argument('--plaso-file', type=Path, help='Import existing .plaso file (skips log2timeline, goes directly to psort → FAS5 database)')
     parser.add_argument('--kape-path', type=Path, default=Path('D:/FORAI/tools/kape/kape.exe'), help='Path to KAPE executable')
     parser.add_argument('--plaso-path', type=Path, default=Path('D:/FORAI/tools/plaso'), help='Path to Plaso tools directory')
     parser.add_argument('--fast-mode', action='store_true', help='Enable fast processing mode (reduced parsers, optimized for 12 standard questions)')
@@ -6544,6 +6707,35 @@ def main():
             # Continue to analytics and reporting phases after parsing
             if not success:
                 LOGGER.error("Parsing failed, cannot proceed to analytics and reporting")
+                return
+
+        # Import existing plaso file if requested
+        if args.plaso_file:
+            # Validate plaso file exists
+            if not args.plaso_file.exists():
+                LOGGER.error(f"Plaso file not found: {args.plaso_file}")
+                return
+            
+            # Initialize database if it doesn't exist
+            if not database_exists(args.case_id):
+                LOGGER.info("Database doesn't exist, initializing...")
+                initialize_database()
+
+            workflow = ForensicWorkflowManager(args.case_id, args.output_dir, args.verbose)
+
+            # Load and inject custom keywords
+            keywords = load_keywords(args)
+            if keywords:
+                workflow.log_custody_event("KEYWORDS_LOADING",
+                                         f"Loading {len(keywords)} custom keywords for case-insensitive flagging")
+                inject_keywords(args.case_id, keywords)
+
+            success = workflow.import_plaso_file(args.plaso_file, args.plaso_path)
+            print(f"Plaso file import {'completed' if success else 'failed'}")
+            
+            # Continue to analytics and reporting phases after import
+            if not success:
+                LOGGER.error("Plaso file import failed, cannot proceed to analytics and reporting")
                 return
         
         # Initialize database if requested

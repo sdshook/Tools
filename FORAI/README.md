@@ -123,12 +123,18 @@ Raw System → KAPE → Raw Artifacts Directory
 Raw Artifacts → Plaso → Timeline Database (SQLite)
 Directory       ├── log2timeline (parsing)
                 └── psort (filtering)
+
+OR
+
+Existing .plaso → psort → Timeline Database (SQLite)
+File             (direct import)
 ```
 
 ### Stage 3: Forensic Analysis (FORAI)
 ```
 Timeline Database → FORAI → Forensic Answers + Reports
                     ├── Deterministic extraction
+                    ├── ML-enhanced behavioral analysis
                     ├── Semantic search
                     └── AI-assisted analysis
 ```
@@ -140,6 +146,7 @@ Timeline Database → FORAI → Forensic Answers + Reports
 | `--target-drive C:` | Live system | Direct collection from running system |
 | `--artifacts-dir "path"` | KAPE output folder | Raw artifacts (registry, logs, files) |
 | `--parse-artifacts` | KAPE output folder | Processes raw artifacts → timeline DB |
+| `--plaso-file "file.plaso"` | Existing .plaso file | Import pre-processed timeline (skips KAPE + log2timeline) |
 | `--question "..."` | Existing timeline DB | Queries processed timeline database |
 
 ## 🛠️ Installation & Dependencies
@@ -202,6 +209,25 @@ python FORAI.py --case-id CASE001 --artifacts-dir "C:\\KAPE_Output" --full-analy
 # 3. Analysis of all 12 standard forensic questions
 ```
 
+### Option C: Import Existing Plaso File (⚡ Skip KAPE + log2timeline)
+
+```bash
+# Import existing .plaso file and create FAS5 database
+python FORAI.py --case-id CASE001 --plaso-file "C:\\Evidence\\timeline.plaso" --verbose
+
+# Import plaso file with custom keywords and generate comprehensive report
+python FORAI.py --case-id CASE001 --plaso-file "D:\\Cases\\CASE001.plaso" --keywords-file malware_iocs.txt --autonomous-analysis --report pdf
+
+# Import plaso file and answer specific forensic question
+python FORAI.py --case-id CASE001 --plaso-file "timeline.plaso" --question "What anti-forensic activity occurred?" --verbose
+
+# This workflow:
+# 1. Skips KAPE collection (uses existing plaso file)
+# 2. Skips log2timeline processing (uses existing plaso file)
+# 3. Runs psort.py to convert plaso → SQLite database
+# 4. Performs ML-enhanced forensic analysis
+```
+
 ### Fast Processing Mode (⚡ Performance Optimized)
 
 ```bash
@@ -215,7 +241,7 @@ python FORAI.py --case-id CASE001 --parse-artifacts --artifacts-dir "C:\\KAPE\\O
 python FORAI.py --case-id CASE001 --autonomous-analysis --fast-mode --llm-folder "D:\\FORAI\\LLM" --report pdf
 ```
 
-### Option C: Question Answering from Existing Database
+### Option D: Question Answering from Existing Database
 
 ```bash
 # If you already have a FORAI SQLite database, answer specific questions
