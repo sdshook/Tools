@@ -76,19 +76,42 @@ Scripts to automate collection of security posture information for incident tria
 * **[CBA_Win.ps1](CRA/CBA_Win.ps1)** - Cyber Breach Assessment script for Windows systems
 * **[CBT.ps1](CRA/CBT.ps1)** - Cyber Breach Triage script to quickly collect active communicating processes for incident triage
 
-### Forensic Analysis Tools
-Advanced forensic analysis and AI-assisted investigation tools:
+### FORAI - Forensic AI Analysis Tool
+Comprehensive digital forensic analysis platform with multi-LLM AI integration:
 
-* **[FORAI.py](FORAI/FORAI.py)** - An AI project for Computer Forensics
-  - End-to-end Windows triage, analysis, and reporting pipeline
-  - Automated collection using KAPE and Eric Zimmerman's Tools
-  - Deterministic layer: CSV to SQLite with evidence indexing and FTS
-  - Generative AI layer: LLM executive summaries and Q&A grounded in evidence
-  - Answers 12 common DFIR questions via SQL views
-  - Chain-of-custody logging and daily archive packaging
-  - Supported by TinyLLaMA 1.1b for AI-assisted analysis
-* **[New_FORAI.py](FORAI/New_FORAI.py)** - Updated version of FORAI with enhanced capabilities
-* **[FORAI Workflow Documentation](FORAI/FORAI_Workflow.md)** - Detailed workflow and usage guide for FORAI.py
+* **[FORAI.py](FORAI/FORAI.py)** - Complete Forensic Analysis Platform (6,149 lines)
+  - **Complete Forensic Workflow**: Target Drive → KAPE → log2timeline → psort → SQLite → AI Analysis
+  - **Autonomous Analysis**: Automatically answers all 12 standard forensic questions
+  - **Multi-LLM Support**: TinyLLaMA (local), OpenAI GPT-4, Anthropic Claude
+  - **Advanced Evidence Processing**: SHA256 validation, chain of custody, timeline analysis
+  - **Threat Detection**: Custom keywords files for IOC flagging and threat hunting
+  - **Time Filtering**: Date range analysis and temporal correlation
+  - **Professional Reporting**: Court-ready JSON/PDF reports with executive summaries
+  - **Flexible Deployment**: Local LLM for air-gapped environments or cloud APIs
+
+#### Key FORAI Capabilities:
+- **🚀 End-to-End Analysis**: Single command complete forensic investigation
+- **🤖 Autonomous LLM Analysis**: AI-powered evidence interpretation and reporting
+- **🔍 Advanced Threat Hunting**: Custom keywords, IOCs, and temporal analysis
+- **📊 Flexible Evidence Search**: Natural language queries with time filtering
+- **📋 12 Standard Questions**: Computer ID, hardware, users, USB devices, network activity, anti-forensics, etc.
+- **🔒 Chain of Custody**: Legal admissibility with complete audit trails
+- **⚡ Multi-Provider LLM**: Local privacy or cloud AI with fallback support
+
+#### Usage Examples:
+```bash
+# Complete autonomous analysis with local LLM
+python FORAI.py --case-id CASE001 --autonomous-analysis --llm-folder "D:\FORAI\LLM" --report pdf
+
+# OpenAI GPT-4 powered investigation
+python FORAI.py --case-id CASE001 --autonomous-analysis --llm-api-provider openai --llm-model "gpt-4"
+
+# Threat hunting with custom IOCs
+python FORAI.py --case-id CASE001 --full-analysis --target-drive C: --keywords-file threat_indicators.txt
+
+# Time-filtered analysis
+python FORAI.py --case-id CASE001 --search "malware execution" --date-from 20241201 --date-to 20241215
+```
 
 ### Administrative Credentials & Risk Management
 Tools for managing administrative access and assessing security risks:
