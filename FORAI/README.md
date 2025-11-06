@@ -90,13 +90,13 @@ Digital Evidence → KAPE Collection → log2timeline → psort → FAS5 SQLite 
 - **Sub-second responses** for standard forensic questions with confidence scores
 - **Natural language answer generation** from verified timeline evidence
 - **Adaptive query optimization** learns from performance feedback
-- **Evidence-based confidence calculation** for forensic reliability
+- **Enhanced forensic-grade confidence calculation** (85-100% for reliable evidence sources)
 
 ### 4. **Machine Learning Integration**
 - **Anomaly detection** in timeline patterns for each forensic question
 - **Feature extraction** tailored to forensic artifact characteristics
 - **Performance learning** that adapts to case-specific patterns
-- **Confidence scoring** based on evidence quality and quantity
+- **Forensic-grade confidence scoring** (85-100%) based on source reliability and evidence quality
 
 ### 5. **Forensic Reliability**
 - **Chain of custody preservation** throughout the analysis process
@@ -284,7 +284,7 @@ $ python FORAI.py --case-id CASE001 --question "What is the computer name?" --en
 === FORENSIC QUESTION ANSWER ===
 Question: What is the computer name?
 Answer: Computer name: DESKTOP-ABC123
-Confidence: 45.0%
+Confidence: 95.0%
 Evidence Count: 4
 
 === SUPPORTING EVIDENCE ===
@@ -307,7 +307,7 @@ $ python FORAI.py --case-id CASE001 --question "What USB devices were connected?
 === FORENSIC QUESTION ANSWER ===
 Question: What USB devices were connected?
 Answer: Found evidence of 2 USB device activities.
-Confidence: 25.0%
+Confidence: 90.0%
 Evidence Count: 2
 
 === DISCOVERED PATTERNS ===
