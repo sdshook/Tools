@@ -227,8 +227,20 @@ class ForensicIsolationTree:
             return 0.0
         return 2.0 * (np.log(n - 1) + 0.5772156649) - (2.0 * (n - 1) / n)
 
-class ForensicAnomalyDetector:
-    """Isolation Forest for detecting anomalous forensic artifacts"""
+@dataclass
+class QuestionPattern:
+    """Represents a discovered pattern relevant to a specific forensic question"""
+    question_id: str
+    pattern_id: str
+    timeline_features: np.ndarray
+    relevance_score: float
+    artifact_types: List[str]
+    event_characteristics: Dict[str, Any]
+    success_rate: float = 0.0
+    case_examples: List[str] = field(default_factory=list)
+
+class FAS5TimelineAnalyzer:
+    """Enhanced Isolation Forest for FAS5 timeline pattern discovery and question answering"""
     
     def __init__(self, n_trees: int = 100, subsample_size: int = 256, anomaly_threshold: float = 0.6):
         self.n_trees = n_trees
@@ -238,30 +250,230 @@ class ForensicAnomalyDetector:
         self.feature_names: List[str] = []
         self.artifact_patterns: Dict[str, List[np.ndarray]] = {}
         
-    def extract_forensic_features(self, artifact_data: Dict[str, Any], artifact_type: str) -> np.ndarray:
-        """Extract numerical features from forensic artifacts"""
+        # Question-specific pattern storage for the 12 standard questions
+        self.question_patterns: Dict[str, List[QuestionPattern]] = {}
+        self.timeline_features_cache: Dict[str, np.ndarray] = {}
+        
+        # Initialize patterns for 12 standard questions
+        self._initialize_question_patterns()
+        
+    def _initialize_question_patterns(self):
+        """Initialize pattern storage for the 12 standard forensic questions"""
+        standard_questions = [
+            "Q1", "Q2", "Q3", "Q4", "Q5", "Q6", 
+            "Q7", "Q8", "Q9", "Q10", "Q11", "Q12"
+        ]
+        
+        for question_id in standard_questions:
+            self.question_patterns[question_id] = []
+        
+    def extract_timeline_features(self, timeline_event: Dict[str, Any], question_id: str) -> np.ndarray:
+        """Extract features from FAS5 timeline events specific to forensic questions"""
         features = []
         
-        if artifact_type == "registry":
-            features.extend(self._extract_registry_features(artifact_data))
-        elif artifact_type == "file_system":
-            features.extend(self._extract_filesystem_features(artifact_data))
-        elif artifact_type == "event_log":
-            features.extend(self._extract_eventlog_features(artifact_data))
-        elif artifact_type == "network":
-            features.extend(self._extract_network_features(artifact_data))
-        elif artifact_type == "process":
-            features.extend(self._extract_process_features(artifact_data))
+        # Base timeline features
+        timestamp = timeline_event.get('timestamp', 0)
+        features.append(timestamp % (24 * 3600))  # Time of day
+        features.append((timestamp % (7 * 24 * 3600)) / (24 * 3600))  # Day of week
+        
+        # Artifact type features
+        artifact_type = timeline_event.get('artifact_type', '').lower()
+        features.extend(self._extract_artifact_type_features(artifact_type))
+        
+        # Question-specific features
+        if question_id in ["Q1", "Q2"]:  # Computer identity
+            features.extend(self._extract_identity_features(timeline_event))
+        elif question_id == "Q3":  # Hard drives
+            features.extend(self._extract_storage_features(timeline_event))
+        elif question_id in ["Q4", "Q5"]:  # User accounts
+            features.extend(self._extract_user_features(timeline_event))
+        elif question_id == "Q6":  # Anti-forensic
+            features.extend(self._extract_antiforensic_features(timeline_event))
+        elif question_id in ["Q7", "Q8"]:  # USB devices and transfers
+            features.extend(self._extract_usb_features(timeline_event))
+        elif question_id == "Q9":  # Cloud storage
+            features.extend(self._extract_cloud_features(timeline_event))
+        elif question_id == "Q10":  # Screenshots
+            features.extend(self._extract_screenshot_features(timeline_event))
+        elif question_id == "Q11":  # Print jobs
+            features.extend(self._extract_print_features(timeline_event))
+        elif question_id == "Q12":  # Software changes
+            features.extend(self._extract_software_features(timeline_event))
         else:
-            features.extend(self._extract_generic_features(artifact_data))
-            
+            features.extend([0.0] * 10)  # Default padding
+        
+        # Ensure consistent feature vector size
         target_size = 32
         if len(features) < target_size:
             features.extend([0.0] * (target_size - len(features)))
         elif len(features) > target_size:
             features = features[:target_size]
-            
+        
         return np.array(features, dtype=np.float32)
+    
+    def extract_forensic_features(self, artifact_data: Dict[str, Any], artifact_type: str) -> np.ndarray:
+        """Legacy method - extract numerical features from forensic artifacts"""
+        # Convert to timeline event format and use default question
+        timeline_event = {
+            'timestamp': artifact_data.get('timestamp', 0),
+            'artifact_type': artifact_type,
+            'key_path': artifact_data.get('key_path', ''),
+            'file_path': artifact_data.get('file_path', ''),
+            'description': artifact_data.get('description', ''),
+            'event_id': artifact_data.get('event_id', 0),
+            'process_name': artifact_data.get('process_name', ''),
+            'user_name': artifact_data.get('user_name', '')
+        }
+        return self.extract_timeline_features(timeline_event, "Q1")  # Default to Q1
+    
+    def _extract_artifact_type_features(self, artifact_type: str) -> List[float]:
+        """Extract features based on artifact type"""
+        features = []
+        artifact_types = ['registry', 'file_system', 'event_log', 'network', 'process', 'browser']
+        
+        artifact_type_safe = (artifact_type or '').lower()
+        for atype in artifact_types:
+            features.append(1.0 if atype in artifact_type_safe else 0.0)
+        
+        return features
+    
+    def _extract_identity_features(self, event: Dict[str, Any]) -> List[float]:
+        """Extract features for computer identity questions (Q1, Q2)"""
+        features = []
+        
+        # Registry-based identity indicators
+        key_path = (event.get('key_path') or '').lower()
+        features.append(1.0 if 'computername' in key_path else 0.0)
+        features.append(1.0 if 'currentversion' in key_path else 0.0)
+        features.append(1.0 if 'hardware' in key_path else 0.0)
+        features.append(1.0 if 'system' in key_path else 0.0)
+        
+        # Value-based indicators
+        value_name = (event.get('value_name') or '').lower()
+        features.append(1.0 if 'computername' in value_name else 0.0)
+        features.append(1.0 if 'productname' in value_name else 0.0)
+        
+        return features
+    
+    def _extract_storage_features(self, event: Dict[str, Any]) -> List[float]:
+        """Extract features for hard drive questions (Q3)"""
+        features = []
+        
+        key_path = (event.get('key_path') or '').lower()
+        description = (event.get('description') or '').lower()
+        
+        features.append(1.0 if 'disk' in key_path or 'disk' in description else 0.0)
+        features.append(1.0 if 'storage' in key_path or 'storage' in description else 0.0)
+        features.append(1.0 if 'volume' in key_path or 'volume' in description else 0.0)
+        features.append(1.0 if 'partition' in key_path or 'partition' in description else 0.0)
+        
+        return features
+    
+    def _extract_user_features(self, event: Dict[str, Any]) -> List[float]:
+        """Extract features for user account questions (Q4, Q5)"""
+        features = []
+        
+        key_path = (event.get('key_path') or '').lower()
+        user_name = (event.get('user_name') or '').lower()
+        
+        features.append(1.0 if 'sam' in key_path else 0.0)
+        features.append(1.0 if 'users' in key_path else 0.0)
+        features.append(1.0 if 'profiles' in key_path else 0.0)
+        features.append(1.0 if user_name and user_name != 'system' else 0.0)
+        
+        # Event log indicators
+        event_id = event.get('event_id', 0)
+        features.append(1.0 if event_id in [4624, 4625, 4634] else 0.0)  # Logon events
+        
+        return features
+    
+    def _extract_antiforensic_features(self, event: Dict[str, Any]) -> List[float]:
+        """Extract features for anti-forensic activity (Q6)"""
+        features = []
+        
+        description = (event.get('description') or '').lower()
+        file_path = (event.get('file_path') or '').lower()
+        process_name = (event.get('process_name') or '').lower()
+        
+        # Deletion indicators
+        features.append(1.0 if 'delete' in description else 0.0)
+        features.append(1.0 if 'remove' in description else 0.0)
+        features.append(1.0 if 'wipe' in description else 0.0)
+        
+        # Suspicious tools
+        suspicious_tools = ['sdelete', 'cipher', 'bleachbit', 'ccleaner']
+        features.append(1.0 if any(tool in process_name for tool in suspicious_tools) else 0.0)
+        
+        return features
+    
+    def _extract_usb_features(self, event: Dict[str, Any]) -> List[float]:
+        """Extract features for USB device questions (Q7, Q8)"""
+        features = []
+        
+        key_path = (event.get('key_path') or '').lower()
+        description = (event.get('description') or '').lower()
+        
+        features.append(1.0 if 'usbstor' in key_path else 0.0)
+        features.append(1.0 if 'usb' in key_path or 'usb' in description else 0.0)
+        features.append(1.0 if 'removable' in description else 0.0)
+        
+        # Event log indicators
+        event_id = event.get('event_id', 0)
+        features.append(1.0 if event_id in [20001, 20003] else 0.0)  # USB events
+        
+        return features
+    
+    def _extract_cloud_features(self, event: Dict[str, Any]) -> List[float]:
+        """Extract features for cloud storage questions (Q9)"""
+        features = []
+        
+        file_path = (event.get('file_path') or '').lower()
+        process_name = (event.get('process_name') or '').lower()
+        
+        cloud_services = ['dropbox', 'onedrive', 'googledrive', 'icloud', 'box']
+        features.append(1.0 if any(service in file_path for service in cloud_services) else 0.0)
+        features.append(1.0 if any(service in process_name for service in cloud_services) else 0.0)
+        
+        return features
+    
+    def _extract_screenshot_features(self, event: Dict[str, Any]) -> List[float]:
+        """Extract features for screenshot questions (Q10)"""
+        features = []
+        
+        file_path = (event.get('file_path') or '').lower()
+        description = (event.get('description') or '').lower()
+        
+        features.append(1.0 if 'screenshot' in file_path or 'screenshot' in description else 0.0)
+        features.append(1.0 if file_path.endswith(('.png', '.jpg', '.bmp')) else 0.0)
+        features.append(1.0 if 'snip' in file_path else 0.0)
+        
+        return features
+    
+    def _extract_print_features(self, event: Dict[str, Any]) -> List[float]:
+        """Extract features for print job questions (Q11)"""
+        features = []
+        
+        key_path = (event.get('key_path') or '').lower()
+        description = (event.get('description') or '').lower()
+        
+        features.append(1.0 if 'print' in key_path or 'print' in description else 0.0)
+        features.append(1.0 if 'spool' in key_path or 'spool' in description else 0.0)
+        
+        return features
+    
+    def _extract_software_features(self, event: Dict[str, Any]) -> List[float]:
+        """Extract features for software change questions (Q12)"""
+        features = []
+        
+        key_path = (event.get('key_path') or '').lower()
+        description = (event.get('description') or '').lower()
+        
+        features.append(1.0 if 'uninstall' in key_path else 0.0)
+        features.append(1.0 if 'software' in key_path else 0.0)
+        features.append(1.0 if 'install' in description else 0.0)
+        features.append(1.0 if 'program' in key_path else 0.0)
+        
+        return features
     
     def _extract_registry_features(self, data: Dict[str, Any]) -> List[float]:
         """Extract features from registry artifacts"""
@@ -446,6 +658,74 @@ class ForensicAnomalyDetector:
         
         return anomaly_score
     
+    def discover_question_patterns(self, timeline_events: List[Dict[str, Any]], question_id: str) -> List[QuestionPattern]:
+        """Discover patterns in timeline events relevant to a specific question"""
+        if not timeline_events:
+            return []
+        
+        # Extract features for all timeline events
+        feature_vectors = []
+        for event in timeline_events:
+            features = self.extract_timeline_features(event, question_id)
+            feature_vectors.append(features)
+        
+        if len(feature_vectors) < 5:
+            return []
+        
+        feature_matrix = np.array(feature_vectors)
+        
+        # Fit isolation forest
+        self.fit(feature_matrix)
+        
+        # Find patterns (normal behavior clusters)
+        patterns = []
+        for i, event in enumerate(timeline_events):
+            features = feature_vectors[i]
+            anomaly_score = self.predict(features)
+            
+            # Low anomaly score = normal pattern relevant to question
+            if anomaly_score < 0.3:  # Normal patterns
+                relevance_score = 1.0 - anomaly_score
+                
+                pattern = QuestionPattern(
+                    question_id=question_id,
+                    pattern_id=f"{question_id}_pattern_{i}",
+                    timeline_features=features,
+                    relevance_score=relevance_score,
+                    artifact_types=[event.get('artifact_type', 'unknown')],
+                    event_characteristics={
+                        'timestamp': event.get('timestamp', 0),
+                        'source': event.get('source', ''),
+                        'description': event.get('description', '')[:100]  # Truncate
+                    }
+                )
+                patterns.append(pattern)
+        
+        # Store discovered patterns
+        if question_id not in self.question_patterns:
+            self.question_patterns[question_id] = []
+        
+        self.question_patterns[question_id].extend(patterns)
+        
+        return patterns
+    
+    def get_question_relevance_score(self, timeline_event: Dict[str, Any], question_id: str) -> float:
+        """Get relevance score for a timeline event to a specific question"""
+        if question_id not in self.question_patterns or not self.question_patterns[question_id]:
+            return 0.5  # Default relevance
+        
+        event_features = self.extract_timeline_features(timeline_event, question_id)
+        
+        # Compare with known patterns for this question
+        max_similarity = 0.0
+        for pattern in self.question_patterns[question_id]:
+            similarity = np.dot(event_features, pattern.timeline_features) / (
+                np.linalg.norm(event_features) * np.linalg.norm(pattern.timeline_features) + 1e-8
+            )
+            max_similarity = max(max_similarity, similarity)
+        
+        return max_similarity
+    
     def detect_anomalies_in_case(self, case_id: str, artifacts: List[Dict[str, Any]]) -> List[ForensicAnomaly]:
         """Detect anomalies in case artifacts"""
         anomalies = []
@@ -517,8 +797,11 @@ class ForensicAnomalyDetector:
         
         return similar_patterns[:5]
 
+# Legacy alias for compatibility
+ForensicAnomalyDetector = FAS5TimelineAnalyzer
+
 # ============================================================================
-# GRADIENT DESCENT QUERY OPTIMIZER
+# GRADIENT DESCENT QUERY OPTIMIZER FOR FAS5 QUESTION ANSWERING
 # ============================================================================
 
 @dataclass
@@ -533,7 +816,7 @@ class QueryPlan:
     result_count: Optional[int] = None
 
 class FAS5GradientOptimizer:
-    """Gradient descent optimizer for FAS5 forensic database queries"""
+    """Enhanced gradient descent optimizer for FAS5 forensic database queries with question-aware learning"""
     
     def __init__(self, db_path: Optional[Path] = None, learning_rate: float = 0.01):
         self.db_path = db_path
@@ -542,6 +825,11 @@ class FAS5GradientOptimizer:
         self.optimization_cache: Dict[str, str] = {}
         self.feature_weights = np.array([1.0, 1.0, 1.0, 1.0, 1.0])
         self.performance_history: List[float] = []
+        
+        # Question-aware optimization
+        self.question_query_patterns: Dict[str, List[str]] = {}
+        self.question_performance: Dict[str, List[float]] = {}
+        self._initialize_question_queries()
         
     def extract_query_features(self, query: str, parameters: Dict[str, Any] = None) -> np.ndarray:
         """Extract numerical features from SQL query for optimization"""
@@ -598,6 +886,124 @@ class FAS5GradientOptimizer:
             
         return features
     
+    def _initialize_question_queries(self):
+        """Initialize base query patterns for the 12 standard forensic questions"""
+        self.question_query_patterns = {
+            "Q1": [  # Computer name and identity
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%ComputerName%'",
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%CurrentVersion%'",
+                "SELECT * FROM timeline_events WHERE artifact_type = 'registry' AND key_path LIKE '%System%'"
+            ],
+            "Q2": [  # Operating system
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%ProductName%'",
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%CurrentVersion%'",
+                "SELECT * FROM timeline_events WHERE description LIKE '%Windows%'"
+            ],
+            "Q3": [  # Hard drives and storage
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%Disk%'",
+                "SELECT * FROM timeline_events WHERE description LIKE '%storage%'",
+                "SELECT * FROM timeline_events WHERE artifact_type = 'file_system'"
+            ],
+            "Q4": [  # User accounts
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%SAM%'",
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%Users%'",
+                "SELECT * FROM timeline_events WHERE event_id IN (4624, 4625, 4634)"
+            ],
+            "Q5": [  # User activity
+                "SELECT * FROM timeline_events WHERE user_name IS NOT NULL AND user_name != 'SYSTEM'",
+                "SELECT * FROM timeline_events WHERE event_id IN (4624, 4625, 4634)",
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%Profiles%'"
+            ],
+            "Q6": [  # Anti-forensic activity
+                "SELECT * FROM timeline_events WHERE description LIKE '%delete%'",
+                "SELECT * FROM timeline_events WHERE process_name LIKE '%sdelete%'",
+                "SELECT * FROM timeline_events WHERE description LIKE '%wipe%'"
+            ],
+            "Q7": [  # USB devices
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%USBSTOR%'",
+                "SELECT * FROM timeline_events WHERE description LIKE '%USB%'",
+                "SELECT * FROM timeline_events WHERE event_id IN (20001, 20003)"
+            ],
+            "Q8": [  # File transfers to USB
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%USBSTOR%' AND file_path IS NOT NULL",
+                "SELECT * FROM timeline_events WHERE description LIKE '%removable%'",
+                "SELECT * FROM timeline_events WHERE artifact_type = 'file_system' AND file_path LIKE '%:%'"
+            ],
+            "Q9": [  # Cloud storage
+                "SELECT * FROM timeline_events WHERE file_path LIKE '%Dropbox%'",
+                "SELECT * FROM timeline_events WHERE process_name LIKE '%OneDrive%'",
+                "SELECT * FROM timeline_events WHERE description LIKE '%cloud%'"
+            ],
+            "Q10": [  # Screenshots
+                "SELECT * FROM timeline_events WHERE file_path LIKE '%.png'",
+                "SELECT * FROM timeline_events WHERE description LIKE '%screenshot%'",
+                "SELECT * FROM timeline_events WHERE file_path LIKE '%Snip%'"
+            ],
+            "Q11": [  # Print jobs
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%Print%'",
+                "SELECT * FROM timeline_events WHERE description LIKE '%spool%'",
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%Printers%'"
+            ],
+            "Q12": [  # Software installation/removal
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%Uninstall%'",
+                "SELECT * FROM timeline_events WHERE description LIKE '%install%'",
+                "SELECT * FROM timeline_events WHERE key_path LIKE '%Software%'"
+            ]
+        }
+        
+        # Initialize performance tracking for each question
+        for question_id in self.question_query_patterns.keys():
+            self.question_performance[question_id] = []
+    
+    def get_optimized_queries_for_question(self, question_id: str, case_id: str) -> List[str]:
+        """Get optimized query combinations for a specific forensic question"""
+        if question_id not in self.question_query_patterns:
+            return []
+        
+        base_queries = self.question_query_patterns[question_id]
+        optimized_queries = []
+        
+        for query in base_queries:
+            # Add case-specific filtering
+            case_query = query.replace(
+                "FROM timeline_events WHERE",
+                f"FROM timeline_events WHERE case_id = '{case_id}' AND"
+            )
+            
+            # Apply gradient descent optimization
+            optimized_query = self.optimize_query(case_query)
+            optimized_queries.append(optimized_query)
+        
+        return optimized_queries
+    
+    def learn_from_question_performance(self, question_id: str, query: str, 
+                                      execution_time: float, result_count: int, 
+                                      answer_completeness: float):
+        """Learn from question answering performance to improve future queries"""
+        if question_id not in self.question_performance:
+            self.question_performance[question_id] = []
+        
+        # Performance score combines speed, result count, and answer quality
+        performance_score = (
+            (1.0 / (execution_time + 0.1)) * 0.3 +  # Speed component
+            min(result_count / 100.0, 1.0) * 0.3 +   # Result count component
+            answer_completeness * 0.4                 # Answer quality component
+        )
+        
+        self.question_performance[question_id].append(performance_score)
+        
+        # Update feature weights using gradient descent
+        if len(self.question_performance[question_id]) > 1:
+            recent_performance = self.question_performance[question_id][-5:]  # Last 5 queries
+            avg_performance = np.mean(recent_performance)
+            
+            # Simple gradient update
+            gradient = (avg_performance - 0.5) * self.learning_rate
+            self.feature_weights = np.clip(
+                self.feature_weights + gradient * np.random.normal(0, 0.1, 5),
+                0.1, 2.0
+            )
+    
     def optimize_query(self, query: str, parameters: Dict[str, Any] = None) -> str:
         """Apply optimization transformations to query"""
         optimized = query
@@ -617,15 +1023,13 @@ class FAS5GradientOptimizer:
         return optimized
     
     def _apply_index_hints(self, query: str) -> str:
-        """Add index hints based on learned patterns"""
-        if 'timestamp' in query.lower() and 'between' in query.lower():
-            if 'use index' not in query.lower():
-                query = query.replace('WHERE', 'USE INDEX (idx_timestamp) WHERE', 1)
+        """Add SQLite-compatible optimizations based on learned patterns"""
+        # SQLite doesn't support USE INDEX syntax like MySQL
+        # Instead, we can optimize by reordering WHERE clauses
+        # to put indexed columns first
         
-        if 'case_id' in query.lower() and '=' in query.lower():
-            if 'use index' not in query.lower():
-                query = query.replace('WHERE', 'USE INDEX (idx_case_id) WHERE', 1)
-                
+        # For now, just return the query as-is since SQLite's query planner
+        # is generally good at choosing the right indexes automatically
         return query
     
     def _optimize_where_clauses(self, query: str) -> str:
@@ -825,9 +1229,12 @@ class EnhancedFORAI:
         self.case_id = case_id
         self.db_path = db_path or Path(f"forai_{case_id}.db")
         
-        # Initialize enhanced components
-        self.anomaly_detector = ForensicAnomalyDetector()
+        # Initialize enhanced components with FAS5 integration
+        self.timeline_analyzer = FAS5TimelineAnalyzer()
         self.query_optimizer = FAS5GradientOptimizer(self.db_path)
+        
+        # Legacy compatibility
+        self.anomaly_detector = self.timeline_analyzer
         
         # Initialize database
         self._init_enhanced_database()
@@ -1053,6 +1460,289 @@ class EnhancedFORAI:
             'anomaly_detection': {'total_patterns': len(self.anomaly_detector.artifact_patterns)},
             'query_optimization': self.query_optimizer.get_optimization_statistics()
         }
+    
+    def answer_forensic_question(self, question: str, case_id: str) -> Dict[str, Any]:
+        """Answer forensic questions using enhanced FAS5 integration with isolation forest and gradient descent"""
+        start_time = time.time()
+        
+        # Map natural language questions to question IDs
+        question_mapping = {
+            "computer name": "Q1",
+            "computer identity": "Q1", 
+            "operating system": "Q2",
+            "os version": "Q2",
+            "hard drives": "Q3",
+            "storage devices": "Q3",
+            "user accounts": "Q4",
+            "users": "Q4",
+            "user activity": "Q5",
+            "anti-forensic": "Q6",
+            "evidence destruction": "Q6",
+            "usb devices": "Q7",
+            "usb": "Q7",
+            "file transfers": "Q8",
+            "data transfer": "Q8",
+            "cloud storage": "Q9",
+            "cloud": "Q9",
+            "screenshots": "Q10",
+            "screen captures": "Q10",
+            "print jobs": "Q11",
+            "printing": "Q11",
+            "software": "Q12",
+            "programs": "Q12"
+        }
+        
+        # Determine question ID
+        question_id = None
+        question_lower = question.lower()
+        for keyword, qid in question_mapping.items():
+            if keyword in question_lower:
+                question_id = qid
+                break
+        
+        if not question_id:
+            question_id = "Q1"  # Default to computer identity
+        
+        try:
+            # Get timeline events from FAS5 database
+            timeline_events = self._get_timeline_events_for_case(case_id)
+            
+            if not timeline_events:
+                return {
+                    'question': question,
+                    'answer': "No timeline events found in FAS5 database for this case.",
+                    'confidence': 0.0,
+                    'evidence': [],
+                    'timeline_patterns': [],
+                    'execution_time': time.time() - start_time,
+                    'queries_executed': 0,
+                    'total_events': 0
+                }
+            
+            # Use isolation forest to discover question-relevant patterns
+            self.logger.info(f"Discovering patterns for {question_id} using isolation forest...")
+            patterns = self.timeline_analyzer.discover_question_patterns(timeline_events, question_id)
+            
+            # Get optimized queries using gradient descent
+            self.logger.info(f"Getting optimized queries for {question_id} using gradient descent...")
+            optimized_queries = self.query_optimizer.get_optimized_queries_for_question(question_id, case_id)
+            
+            # Execute optimized queries and collect evidence
+            evidence = []
+            queries_executed = 0
+            
+            for query in optimized_queries:
+                query_start = time.time()
+                results = self._execute_enhanced_query(query, question_id)
+                query_time = time.time() - query_start
+                queries_executed += 1
+                
+                # Score evidence relevance using timeline analyzer
+                for result in results:
+                    relevance_score = self.timeline_analyzer.get_question_relevance_score(result, question_id)
+                    
+                    if relevance_score > 0.3:  # Only include relevant evidence
+                        evidence.append({
+                            'description': result.get('description', 'No description'),
+                            'source': result.get('source', 'Unknown'),
+                            'timestamp': result.get('timestamp', 0),
+                            'relevance_score': relevance_score,
+                            'artifact_type': result.get('artifact_type', 'unknown'),
+                            'file_path': result.get('file_path', ''),
+                            'key_path': result.get('key_path', ''),
+                            'event_id': result.get('event_id', 0)
+                        })
+                
+                # Learn from query performance
+                answer_completeness = min(len(results) / 10.0, 1.0)  # Estimate completeness
+                self.query_optimizer.learn_from_question_performance(
+                    question_id, query, query_time, len(results), answer_completeness
+                )
+            
+            # Sort evidence by relevance
+            evidence.sort(key=lambda x: x['relevance_score'], reverse=True)
+            
+            # Generate answer based on evidence and patterns
+            answer = self._generate_answer_from_evidence(question, question_id, evidence, patterns)
+            
+            # Calculate confidence based on evidence quality and quantity
+            confidence = self._calculate_answer_confidence(evidence, patterns)
+            
+            execution_time = time.time() - start_time
+            
+            return {
+                'question': question,
+                'answer': answer,
+                'confidence': confidence,
+                'evidence': evidence,
+                'timeline_patterns': [
+                    {
+                        'pattern_id': p.pattern_id,
+                        'relevance_score': p.relevance_score,
+                        'artifact_types': p.artifact_types
+                    } for p in patterns
+                ],
+                'execution_time': execution_time,
+                'queries_executed': queries_executed,
+                'total_events': len(timeline_events)
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error answering question {question}: {e}")
+            return {
+                'question': question,
+                'answer': f"Error processing question: {str(e)}",
+                'confidence': 0.0,
+                'evidence': [],
+                'timeline_patterns': [],
+                'execution_time': time.time() - start_time,
+                'queries_executed': 0,
+                'total_events': 0
+            }
+    
+    def _get_timeline_events_for_case(self, case_id: str) -> List[Dict[str, Any]]:
+        """Get timeline events from FAS5 database for a specific case"""
+        events = []
+        
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("""
+                    SELECT * FROM timeline_events 
+                    WHERE case_id = ? 
+                    ORDER BY timestamp ASC
+                """, (case_id,))
+                
+                columns = [description[0] for description in cursor.description]
+                for row in cursor.fetchall():
+                    event = dict(zip(columns, row))
+                    events.append(event)
+                    
+        except sqlite3.Error as e:
+            self.logger.error(f"Database error getting timeline events: {e}")
+            
+        return events
+    
+    def _execute_enhanced_query(self, query: str, question_id: str) -> List[Dict[str, Any]]:
+        """Execute enhanced query with error handling"""
+        results = []
+        
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(query)
+                columns = [description[0] for description in cursor.description]
+                
+                for row in cursor.fetchall():
+                    result = dict(zip(columns, row))
+                    results.append(result)
+                    
+        except sqlite3.Error as e:
+            self.logger.error(f"Query execution error for {question_id}: {e}")
+            
+        return results
+    
+    def _generate_answer_from_evidence(self, question: str, question_id: str, 
+                                     evidence: List[Dict[str, Any]], 
+                                     patterns: List) -> str:
+        """Generate natural language answer from evidence and patterns"""
+        
+        if not evidence:
+            return f"No evidence found to answer the question: {question}"
+        
+        # Question-specific answer generation
+        if question_id == "Q1":  # Computer identity
+            computer_names = [e for e in evidence if 'computername' in (e.get('key_path') or '').lower()]
+            if computer_names:
+                return f"Computer name: {computer_names[0].get('description', 'Unknown')}"
+            return "Computer name could not be determined from available evidence."
+            
+        elif question_id == "Q2":  # Operating system
+            os_evidence = [e for e in evidence if 'productname' in (e.get('key_path') or '').lower() or 
+                          'windows' in (e.get('description') or '').lower()]
+            if os_evidence:
+                return f"Operating system: {os_evidence[0].get('description', 'Unknown')}"
+            return "Operating system could not be determined from available evidence."
+            
+        elif question_id == "Q3":  # Hard drives
+            storage_count = len([e for e in evidence if 'disk' in (e.get('description') or '').lower()])
+            return f"Found evidence of {storage_count} storage devices/partitions."
+            
+        elif question_id in ["Q4", "Q5"]:  # User accounts/activity
+            users = set(e.get('user_name', '') for e in evidence if e.get('user_name'))
+            users.discard('')
+            users.discard('SYSTEM')
+            users.discard('system')
+            
+            # Also extract users from descriptions
+            for e in evidence:
+                desc = (e.get('description') or '').lower()
+                if 'user account:' in desc:
+                    user = desc.split('user account:')[1].strip()
+                    if user:
+                        users.add(user)
+            
+            if users:
+                return f"User accounts found: {', '.join(sorted(users))}"
+            return "No user account evidence found."
+            
+        elif question_id == "Q6":  # Anti-forensic
+            deletion_events = len([e for e in evidence if 'delete' in (e.get('description') or '').lower()])
+            if deletion_events > 0:
+                return f"Found {deletion_events} potential anti-forensic activities (deletions/wipes)."
+            return "No clear anti-forensic activities detected."
+            
+        elif question_id in ["Q7", "Q8"]:  # USB devices/transfers
+            usb_devices = len([e for e in evidence if 'usb' in (e.get('description') or '').lower()])
+            if usb_devices > 0:
+                return f"Found evidence of {usb_devices} USB device activities."
+            return "No USB device activities detected."
+            
+        elif question_id == "Q9":  # Cloud storage
+            cloud_activities = len([e for e in evidence if any(service in (e.get('description') or '').lower() 
+                                                             for service in ['dropbox', 'onedrive', 'cloud'])])
+            if cloud_activities > 0:
+                return f"Found {cloud_activities} cloud storage activities."
+            return "No cloud storage activities detected."
+            
+        elif question_id == "Q10":  # Screenshots
+            screenshots = len([e for e in evidence if 'screenshot' in (e.get('description') or '').lower() 
+                             or (e.get('file_path') or '').endswith(('.png', '.jpg'))])
+            if screenshots > 0:
+                return f"Found {screenshots} screenshot-related activities."
+            return "No screenshot activities detected."
+            
+        elif question_id == "Q11":  # Print jobs
+            print_jobs = len([e for e in evidence if 'print' in (e.get('description') or '').lower()])
+            if print_jobs > 0:
+                return f"Found {print_jobs} printing activities."
+            return "No printing activities detected."
+            
+        elif question_id == "Q12":  # Software changes
+            software_changes = len([e for e in evidence if any(term in (e.get('description') or '').lower() 
+                                                             for term in ['install', 'uninstall', 'software'])])
+            if software_changes > 0:
+                return f"Found {software_changes} software installation/removal activities."
+            return "No software changes detected."
+        
+        # Default answer
+        return f"Found {len(evidence)} pieces of evidence related to the question."
+    
+    def _calculate_answer_confidence(self, evidence: List[Dict[str, Any]], patterns: List) -> float:
+        """Calculate confidence score for the answer"""
+        if not evidence:
+            return 0.0
+        
+        # Base confidence from evidence count
+        evidence_confidence = min(len(evidence) / 10.0, 0.7)
+        
+        # Pattern confidence
+        pattern_confidence = min(len(patterns) / 5.0, 0.2) if patterns else 0.0
+        
+        # Relevance confidence (average of top evidence)
+        top_evidence = evidence[:5]
+        relevance_confidence = np.mean([e['relevance_score'] for e in top_evidence]) * 0.1
+        
+        total_confidence = evidence_confidence + pattern_confidence + relevance_confidence
+        return min(total_confidence, 1.0)
 
 # ============================================================================
 # COMMAND LINE INTERFACE
@@ -1148,9 +1838,45 @@ def main():
             print(f"Results: Query executed successfully")
         
         elif args.question:
-            # Question answering (placeholder)
+            # Enhanced question answering with FAS5 integration
             print(f"Answering question: {args.question}")
-            print("Question answering integration not yet implemented")
+            
+            try:
+                answer = forai.answer_forensic_question(args.question, args.case_id)
+                
+                print(f"\n=== FORENSIC QUESTION ANSWER ===")
+                print(f"Question: {answer['question']}")
+                print(f"Answer: {answer['answer']}")
+                print(f"Confidence: {answer['confidence']:.2%}")
+                print(f"Evidence Count: {len(answer['evidence'])}")
+                
+                if answer['evidence']:
+                    print(f"\n=== SUPPORTING EVIDENCE ===")
+                    for i, evidence in enumerate(answer['evidence'][:5], 1):  # Show top 5
+                        print(f"{i}. {evidence['description']}")
+                        print(f"   Source: {evidence['source']}")
+                        print(f"   Timestamp: {evidence['timestamp']}")
+                        print(f"   Relevance: {evidence['relevance_score']:.2%}")
+                        print()
+                
+                if answer['timeline_patterns']:
+                    print(f"=== DISCOVERED PATTERNS ===")
+                    for pattern in answer['timeline_patterns'][:3]:  # Show top 3
+                        print(f"Pattern: {pattern['pattern_id']}")
+                        print(f"Relevance: {pattern['relevance_score']:.2%}")
+                        print(f"Artifact Types: {', '.join(pattern['artifact_types'])}")
+                        print()
+                
+                print(f"=== QUERY PERFORMANCE ===")
+                print(f"Execution Time: {answer['execution_time']:.3f}s")
+                print(f"Queries Executed: {answer['queries_executed']}")
+                print(f"Total Events Analyzed: {answer['total_events']}")
+                
+            except Exception as e:
+                print(f"Error answering question: {e}")
+                if args.verbose:
+                    import traceback
+                    traceback.print_exc()
         
         else:
             print("Please specify --full-analysis, --target-drive, --artifacts-dir, --query, or --question")
