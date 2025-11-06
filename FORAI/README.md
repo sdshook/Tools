@@ -1,98 +1,133 @@
-# FORAI - Forensic AI Analysis Tool
+# FORAI - Enhanced Forensic AI Analysis Tool
 # (c) 2025, All Rights Reserved - Shane D. Shook, PhD
 
-**FORAI** (Forensic AI) is a streamlined, high-performance digital forensics analysis tool that combines deterministic evidence extraction with AI-powered semantic analysis for rapid forensic triage and investigation.
+**FORAI** (Forensic AI) is an advanced digital forensics analysis tool that combines FAS5 timeline integration with adaptive learning capabilities including isolation forest anomaly detection and gradient descent query optimization for maximum accuracy in answering the 12 standard forensic questions.
 
 ## 🎯 Project Overview
 
 FORAI revolutionizes digital forensic analysis by integrating:
-- **Deterministic fact extraction** for 100% accurate forensic data
-- **AI-powered narrative generation** for comprehensive reporting
-- **Performance-optimized architecture** for real-time analysis
+- **FAS5 timeline integration** for structured forensic data processing
+- **Isolation forest anomaly detection** for pattern discovery in timeline events
+- **Gradient descent query optimization** for adaptive learning and improved accuracy
+- **Question-specific analysis** for the 12 standard forensic questions with confidence scoring
+- **Evidence compilation** with chain of custody tracking from timeline events
 
-### Key Innovation: Hybrid Deterministic-AI Approach
+### Key Innovation: Adaptive Learning with FAS5 Integration
 
-Unlike traditional forensic tools that rely purely on keyword searches or AI tools that hallucinate facts, FORAI uses a **hybrid approach**:
+FORAI uses an **enhanced adaptive approach** inspired by WebGuard's learning capabilities:
 
-1. **Deterministic extractors** provide ground-truth facts (USB devices, file hashes, timestamps)
-2. **Semantic search** finds relevant evidence patterns quickly
-3. **AI summarization** creates human-readable narratives from verified facts
-4. **Validation layer** ensures AI claims match deterministic evidence
+1. **FAS5 Timeline Analysis** - Processes KAPE → log2timeline → psort → FAS5 SQLite database workflow
+2. **Isolation Forest Pattern Discovery** - Identifies anomalous patterns in timeline events for each forensic question
+3. **Gradient Descent Query Optimization** - Learns from query performance to improve future question answering
+4. **Question-Specific Feature Extraction** - Tailored analysis for each of the 12 standard forensic questions
+5. **Evidence Relevance Scoring** - Ranks evidence by relevance to specific forensic questions
 
-## 🚀 Workflow Architecture
+## 🚀 Enhanced Workflow Architecture
 
 ```
-Digital Evidence → KAPE Collection → Plaso Timeline → FORAI Analysis → Forensic Report
+Digital Evidence → KAPE Collection → log2timeline → psort → FAS5 SQLite → Enhanced FORAI Analysis
 
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   User Query    │───▶│ Deterministic    │───▶│ Instant Answer  │
-│                 │    │ Extractors       │    │ (100% accurate) │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │
-         ▼                       ▼ (if no deterministic answer)
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│    Semantic    │───▶│ Exact SQL        │───▶│ AI Narrative    │
-│ Search (fast)   │    │ Retrieval        │    │ + Validation    │
+│ Forensic Query  │───▶│ FAS5 Timeline    │───▶│ Question-Specific│
+│ (Q1-Q12)        │    │ Analyzer         │    │ Pattern Discovery│
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│      RHL        │    │ Evidence Facts   │    │ Validated       │
-│ (reward good    │    │ (ground truth)   │    │ Final Answer    │
-│ patterns)       │    │                  │    │                 │
+│ Isolation Forest│───▶│ Gradient Descent │───▶│ Evidence        │
+│ Anomaly Detection│    │ Query Optimizer  │    │ Compilation     │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│ Relevance       │    │ Performance      │    │ Confident       │
+│ Scoring         │    │ Learning         │    │ Answer + Chain  │
+│ (Timeline-based)│    │ (Adaptive)       │    │ of Custody      │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
-## ✨ New Features (v3.0)
+## ✨ Enhanced Features (v4.0) - FAS5 Integration with Adaptive Learning
 
-### 🤖 **Autonomous Analysis Mode**
-- **Automatically answers all 12 standard forensic questions**
-- **Comprehensive confidence scoring** for each answer
-- **Structured reporting** with supporting evidence
-- **Intelligent recommendations** for follow-up actions
+### 🧠 **Isolation Forest Anomaly Detection**
+- **Timeline-specific pattern discovery** for each of the 12 standard forensic questions
+- **Question-aware feature extraction** tailored to forensic artifact types
+- **Anomalous event identification** in FAS5 timeline data
+- **Pattern relevance scoring** based on forensic significance
 
-### 🔧 **Flexible LLM Configuration**
-- **Local LLM support**: Use models from local folder (e.g., `D:\FORAI\LLM`)
-- **API provider support**: OpenAI, Anthropic, and other cloud providers
-- **Token-based authentication** for secure API access
-- **Automatic fallback** to deterministic methods when LLM unavailable
+### ⚡ **Gradient Descent Query Optimization**
+- **Adaptive query learning** that improves performance over time
+- **Question-specific query patterns** optimized for Q1-Q12
+- **Performance feedback integration** for continuous improvement
+- **SQLite-compatible optimizations** for FAS5 database queries
 
-### 📊 **Enhanced Reporting**
-- **Confidence analysis** with high/medium/low categorization
-- **Evidence validation** ensuring AI claims match forensic facts
-- **Processing metrics** including timing and accuracy statistics
-- **Actionable recommendations** based on analysis results
+### 🎯 **Enhanced Question Answering System**
+- **FAS5 timeline integration** for structured forensic data processing
+- **Evidence compilation** with relevance scoring and chain of custody
+- **Confidence calculation** based on evidence quality and quantity
+- **Natural language answer generation** from timeline evidence
 
-## 🎯 Benefits for AI-Supported Forensic Triage
+### 📊 **Advanced Evidence Analysis**
+- **Timeline event correlation** across multiple artifact types
+- **Evidence relevance scoring** using machine learning techniques
+- **Chain of custody tracking** from source timeline events
+- **Comprehensive confidence metrics** for forensic reliability
 
-### 1. **Speed & Efficiency**
-- **10-50x faster** than traditional forensic tools
-- **Sub-second responses** for standard forensic questions
-- **Eliminates manual timeline analysis** for common queries
+## 🎯 Benefits of Enhanced FAS5 Integration
 
-### 2. **Accuracy & Reliability**
-- **100% accurate facts** from deterministic extractors
-- **Reduced AI hallucination** through validation layers
-- **Ground-truth verification** of all AI-generated claims
+### 1. **Adaptive Learning & Accuracy**
+- **Isolation forest pattern discovery** identifies relevant timeline events automatically
+- **Gradient descent optimization** improves query performance over time
+- **Question-specific learning** tailored to each of the 12 standard forensic questions
+- **Evidence relevance scoring** ensures highest quality answers
 
-### 3. **Intelligent Triage**
-- **Semantic evidence correlation** finds related artifacts automatically
-- **Reinforced Hebbian Learning system** improves relevance over time
-- **Prioritized results** based on forensic significance
+### 2. **FAS5 Timeline Integration**
+- **Structured forensic workflow** from KAPE → log2timeline → psort → FAS5 SQLite
+- **Timeline event correlation** across multiple artifact types
+- **Chain of custody tracking** from source timeline events
+- **Comprehensive evidence compilation** with forensic reliability metrics
 
-### 4. **Comprehensive Coverage**
-- **12 standard forensic questions** answered deterministically
-- **Custom question support** with AI-powered analysis
-- **Multi-format reporting** (JSON, PDF, HTML)
+### 3. **Enhanced Question Answering**
+- **Sub-second responses** for standard forensic questions with confidence scores
+- **Natural language answer generation** from verified timeline evidence
+- **Adaptive query optimization** learns from performance feedback
+- **Evidence-based confidence calculation** for forensic reliability
 
-### 5. **Scalability**
-- **Memory-efficient** PSI indexing for large datasets
-- **Parallel processing** for artifact collection
-- **Incremental analysis** for ongoing investigations
+### 4. **Machine Learning Integration**
+- **Anomaly detection** in timeline patterns for each forensic question
+- **Feature extraction** tailored to forensic artifact characteristics
+- **Performance learning** that adapts to case-specific patterns
+- **Confidence scoring** based on evidence quality and quantity
 
-## 📋 Standard Forensic Questions (Deterministic Coverage)
+### 5. **Forensic Reliability**
+- **Chain of custody preservation** throughout the analysis process
+- **Evidence source tracking** from original timeline events
+- **Confidence metrics** for each piece of supporting evidence
+- **Comprehensive audit trail** for forensic court requirements
 
-FORAI provides instant, deterministic answers to these critical forensic questions:
+## 🔬 WebGuard-Inspired Adaptive Learning
+
+FORAI incorporates advanced adaptive learning capabilities inspired by WebGuard's sophisticated threat detection system:
+
+### **Adaptive Threshold Management**
+- **Dynamic confidence thresholds** that adjust based on evidence quality
+- **Question-specific threshold optimization** for each of the 12 standard forensic questions
+- **Performance-based threshold adjustment** using gradient descent learning
+
+### **Retrospective Learning System**
+- **False negative learning** from missed evidence patterns
+- **Pattern similarity detection** to improve future question answering
+- **Temporal decay factors** for evidence relevance over time
+- **Experience-weighted adjustments** based on historical performance
+
+### **Experiential Anomaly Detection**
+- **Isolation forest integration** with forensic timeline analysis
+- **Memory-guided pattern recognition** for evidence correlation
+- **EQ/IQ balanced decision making** to prevent analysis paralysis
+- **Fear mitigation algorithms** for confident forensic conclusions
+
+## 📋 Standard Forensic Questions (Enhanced Coverage)
+
+FORAI provides intelligent, adaptive answers to these critical forensic questions with confidence scoring:
 
 1. **Computer Identity**: What is the computer name?
 2. **Hardware Details**: What is the computer make, model, and serial number?
@@ -223,22 +258,73 @@ python FORAI.py --case-id CASE001 --autonomous-analysis --fast-mode --llm-folder
 python FORAI.py --case-id CASE001 --question "What USB devices were connected?"
 ```
 
-### 4. Ask Forensic Questions
+### 4. Enhanced Question Answering with Adaptive Learning
 
 ```bash
-# Standard forensic questions (instant answers)
-python FORAI.py --case-id CASE001 --question "What is the computername?"
-python FORAI.py --case-id CASE001 --question "What USB devices were connected?"
-python FORAI.py --case-id CASE001 --question "What user accounts exist?"
+# Standard forensic questions with enhanced FAS5 integration
+python FORAI.py --case-id CASE001 --question "What is the computer name?" --enable-all-enhancements --verbose
+python FORAI.py --case-id CASE001 --question "What USB devices were connected?" --enable-anomaly-detection --verbose
+python FORAI.py --case-id CASE001 --question "What user accounts exist?" --enable-query-optimization --verbose
 
-# Custom questions with time filtering
-python FORAI.py --case-id CASE001 --question "What suspicious file transfers occurred?" --days-back 30
-python FORAI.py --case-id CASE001 --question "What network activity occurred?" --date-from 20241201 --date-to 20241215
+# Enhanced analysis with isolation forest and gradient descent
+python FORAI.py --case-id CASE001 --question "What operating system is installed?" --enable-all-enhancements
+python FORAI.py --case-id CASE001 --question "What anti-forensic activity occurred?" --enable-anomaly-detection
+
+# Adaptive learning examples showing confidence scores and evidence compilation
+python FORAI.py --case-id CASE001 --question "What software was installed?" --enable-all-enhancements --verbose
+```
+
+## 📊 Enhanced Output Examples
+
+### 🎯 **Question Answering with Confidence Scoring**
+
+```bash
+$ python FORAI.py --case-id CASE001 --question "What is the computer name?" --enable-all-enhancements --verbose
+
+=== FORENSIC QUESTION ANSWER ===
+Question: What is the computer name?
+Answer: Computer name: DESKTOP-ABC123
+Confidence: 45.0%
+Evidence Count: 4
+
+=== SUPPORTING EVIDENCE ===
+1. DESKTOP-ABC123 (Relevance: 50.0%)
+   Source: Registry
+   Timestamp: 2023-11-04 12:00:00
+   Relevance: 50.0%
+
+=== QUERY PERFORMANCE ===
+Execution Time: 0.009s
+Queries Executed: 3
+Total Events Analyzed: 6
+```
+
+### 🧠 **Isolation Forest Pattern Discovery**
+
+```bash
+$ python FORAI.py --case-id CASE001 --question "What USB devices were connected?" --enable-anomaly-detection --verbose
+
+=== FORENSIC QUESTION ANSWER ===
+Question: What USB devices were connected?
+Answer: Found evidence of 2 USB device activities.
+Confidence: 25.0%
+Evidence Count: 2
+
+=== DISCOVERED PATTERNS ===
+Pattern: USB_DEVICE_PATTERN_001
+Relevance: 75.0%
+Artifact Types: registry, event_log
+
+=== SUPPORTING EVIDENCE ===
+1. USB Mass Storage Device (Relevance: 50.0%)
+   Source: Registry
+   Timestamp: 2023-11-04 12:05:00
+   Artifact Type: registry
 ```
 
 ## 📊 CLI Usage Examples
 
-### 🤖 Autonomous Analysis (NEW!)
+### 🤖 Enhanced Analysis with Adaptive Learning
 
 ```bash
 # Autonomous analysis with local LLM
