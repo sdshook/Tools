@@ -184,30 +184,32 @@ Timeline Database → FORAI → Forensic Answers + Reports
 ### Core Dependencies
 
 ```bash
-# Python packages
-pip install llama-cpp-python plaso tqdm fpdf2 sqlite3
+# Required Python packages
+pip install numpy tqdm fpdf2
+
+# Optional packages for enhanced features
+pip install psutil  # For system monitoring
 
 # System requirements
 # - Python 3.8+
-# - 8GB+ RAM (16GB recommended)
+# - 8GB+ RAM (16GB recommended for large cases)
 # - KAPE (for artifact collection)
-# - Plaso (for timeline generation)
+# - Plaso (log2timeline and psort for timeline generation)
 ```
 
-### BHSM Integration
+### External Tool Requirements
 
-FORAI requires the BHSM module for optimal performance:
-
-```bash
-# Ensure BHSM.py is in the same directory or Python path
-# BHSM provides: SimEmbedder, PSIIndex, BDHMemory
-```
-
-### Optional Dependencies
+FORAI integrates with these forensic tools:
 
 ```bash
-# For advanced features
-pip install pandas numpy matplotlib seaborn
+# Required external tools (must be in PATH or specified location)
+# - KAPE.exe (Kroll Artifact Parser and Extractor)
+# - log2timeline.py (part of Plaso suite)
+# - psort.py (part of Plaso suite)
+
+# Installation:
+# 1. Download KAPE from https://www.kroll.com/en/services/cyber-risk/incident-response-litigation-support/kroll-artifact-parser-extractor-kape
+# 2. Install Plaso: pip install plaso
 ```
 
 ## 🚀 Quick Start Guide
@@ -447,12 +449,12 @@ python FORAI.py --case-id CASE001 --full-analysis --target-drive C:
 | Argument | Description | Example |
 |----------|-------------|---------|
 | `--case-id` | Unique case identifier | `CASE001` |
-| `--init-db` | Initialize case database | |
-| `--build-psi` | Build PSI semantic index | |
+| `--fas5-db` | Path to existing SQLite database | `CASE001.db` |
+| `--enable-ml` | Enable ML features (default: true) | |
 | `--full-analysis` | Complete end-to-end analysis | |
 | `--target-drive` | Drive to analyze (live system) | `C:` |
 | `--artifacts-dir` | Path to KAPE output folder (raw artifacts) | `"C:\\KAPE\\Output"` |
-| `--parse-artifacts` | Process raw artifacts into timeline DB | |
+| `--report` | Report format (json/pdf) | `json` |
 | `--fast-mode` | Enable fast processing (reduced parsers, optimized) | |
 | `--question` | Specific forensic question | `"What USB devices were connected?"` |
 | `--search` | Search evidence database | `"malware"` |
@@ -495,40 +497,36 @@ backdoor
 - **AI Hallucination**: Reduced by 90%+ through validation
 - **False Positives**: Minimized through ground-truth verification
 
-## 🧠 BHSM Integration Benefits
+## 🧠 Machine Learning Architecture
 
-### SimEmbedder
-- **Deterministic embeddings** for consistent semantic search
-- **Fast hashing-based vectors** (32-dimensional)
-- **Cached computations** for repeated queries
+### Isolation Forest Anomaly Detection
+- **32-dimensional feature extraction** from forensic timeline events
+- **Anomaly scoring** for pattern discovery in evidence
+- **Question-specific training** for each of the 12 forensic questions
 
-### PSIIndex (Persistent Semantic Index)
-- **Sub-second semantic search** across evidence
-- **Memory-efficient storage** for large datasets
-- **Incremental updates** for ongoing investigations
-
-### BDHMemory (BiDirectional Reinforced Hebbian Memory)
-- **Learning system** that improves over time
-- **Reward-based updates** for successful evidence patterns
-- **Automatic consolidation** of important evidence to PSI
+### Gradient Descent Query Optimization
+- **Performance learning** from query execution metrics
+- **Adaptive optimization** that improves over time
+- **SQLite-specific optimizations** for forensic databases
 
 ## 🔍 Technical Architecture
 
 ### Core Components
 
-1. **ForensicExtractors**: Deterministic fact extraction for all 12 standard questions
-2. **ForensicValidator**: AI output verification against ground truth
-3. **ForensicAnalyzer**: Main analysis engine with optimized query flow
-4. **ModernLLM**: Singleton LLM instance with thread safety
-5. **ModernReportGenerator**: Multi-format report generation
+1. **FORAI**: Main forensic analysis class with complete workflow integration
+2. **FAS5TimelineAnalyzer**: Timeline analysis with ML-enhanced pattern discovery
+3. **IsolationForest**: Anomaly detection for forensic pattern discovery
+4. **GradientDescentOptimizer**: Query performance optimization and learning
+5. **ForensicEvidence**: Evidence data structure with chain of custody
 
 ### Data Flow
 
-1. **Evidence Collection**: KAPE → Plaso → SQLite database
-2. **Semantic Indexing**: PSI pre-indexing for fast retrieval
-3. **Query Processing**: Deterministic → PSI → SQL → AI → Validation
-4. **Learning**: BDH reward system for pattern recognition
-5. **Reporting**: Structured output with chain of custody
+1. **Artifact Collection**: KAPE.exe execution for comprehensive artifact gathering
+2. **Timeline Creation**: log2timeline.py processing of collected artifacts
+3. **Database Generation**: psort.py conversion to SQLite with forensic schema
+4. **ML Analysis**: Isolation Forest pattern discovery and Gradient Descent optimization
+5. **Question Answering**: Evidence-based responses with confidence scoring
+6. **Reporting**: JSON/PDF reports with complete chain of custody
 
 ## 🛡️ Validation & Quality Assurance
 
@@ -577,14 +575,15 @@ backdoor
    pip install llama-cpp-python plaso tqdm fpdf2
    ```
 
-2. **BHSM Not Found**
-   - Ensure BHSM.py is in the same directory
-   - Check Python path configuration
+2. **External Tool Not Found**
+   - Ensure KAPE.exe is installed and in PATH
+   - Install Plaso: `pip install plaso`
+   - Verify log2timeline.py and psort.py are available
 
 3. **Performance Issues**
-   - Build PSI index: `--build-psi`
-   - Increase system RAM (16GB+ recommended)
-   - Use SSD storage for databases
+   - Increase system RAM (16GB+ recommended for large cases)
+   - Use SSD storage for databases and artifacts
+   - Consider using --fast-mode for reduced parser sets
 
 4. **Model Loading Errors**
    - Verify TinyLLaMA model path
@@ -616,13 +615,13 @@ Copyright (c) 2025 Shane D. Shook. All Rights Reserved.
 
 ## 🎉 Conclusion
 
-FORAI combines the speed and accuracy of deterministic analysis with the intelligence of AI-powered semantic search. By eliminating traditional bottlenecks and reducing AI hallucination, FORAI enables forensic professionals to conduct rapid, accurate triage analysis at scale.
+FORAI provides a complete, production-ready forensic analysis workflow that integrates industry-standard tools (KAPE, Plaso) with advanced machine learning algorithms. By implementing real forensic tool execution and evidence-based analysis, FORAI enables forensic professionals to conduct comprehensive investigations with confidence.
 
 **Key Benefits:**
-- ⚡ **10-50x faster** than traditional tools
-- 🎯 **100% accurate** deterministic facts
-- 🧠 **AI-powered** semantic correlation
-- 📊 **Comprehensive** reporting and documentation
-- 🔄 **Learning system** that improves over time
+- 🔧 **Production-ready** with real tool integration (KAPE, log2timeline, psort)
+- 🎯 **Evidence-based** answers from actual timeline data
+- 🧠 **ML-enhanced** pattern discovery using Isolation Forest
+- 📊 **Court-ready** reporting with complete chain of custody
+- 🔄 **Adaptive learning** that improves query performance over time
 
 Transform your forensic workflow with FORAI - where deterministic precision meets autonomous intelligence.
