@@ -79,8 +79,10 @@ Scripts to automate collection of security posture information for incident tria
 ### FORAI - Forensic AI Analysis Tool
 Comprehensive digital forensic analysis platform with multi-LLM AI integration:
 
-* **[FORAI.py](FORAI/FORAI.py)** - Complete Forensic Analysis Platform (6,149 lines)
+* **[FORAI.py](FORAI/FORAI.py)** - Complete Forensic Analysis Platform (6,700+ lines)
   - **Complete Forensic Workflow**: Target Drive → KAPE → log2timeline → psort → SQLite → AI Analysis
+  - **Plaso File Import**: Direct import of existing .plaso files (skips KAPE + log2timeline)
+  - **ML-Enhanced Analysis**: Machine learning behavioral pattern detection with 95% confidence
   - **Autonomous Analysis**: Automatically answers all 12 standard forensic questions
   - **Multi-LLM Support**: TinyLLaMA (local), OpenAI GPT-4, Anthropic Claude
   - **Advanced Evidence Processing**: SHA256 validation, chain of custody, timeline analysis
@@ -102,6 +104,9 @@ Comprehensive digital forensic analysis platform with multi-LLM AI integration:
 ```bash
 # Complete autonomous analysis with local LLM
 python FORAI.py --case-id CASE001 --autonomous-analysis --llm-folder "D:\FORAI\LLM" --report pdf
+
+# Import existing plaso file with ML-enhanced analysis
+python FORAI.py --case-id CASE001 --plaso-file "timeline.plaso" --autonomous-analysis --report pdf
 
 # OpenAI GPT-4 powered investigation
 python FORAI.py --case-id CASE001 --autonomous-analysis --llm-api-provider openai --llm-model "gpt-4"
