@@ -1727,22 +1727,68 @@ class EnhancedFORAI:
         return f"Found {len(evidence)} pieces of evidence related to the question."
     
     def _calculate_answer_confidence(self, evidence: List[Dict[str, Any]], patterns: List) -> float:
-        """Calculate confidence score for the answer"""
+        """Calculate forensic-grade confidence score for deterministic evidence"""
         if not evidence:
             return 0.0
         
-        # Base confidence from evidence count
-        evidence_confidence = min(len(evidence) / 10.0, 0.7)
+        # For forensic analysis, we need high confidence when we have clear evidence
+        # This is factual data from timeline databases, not probabilistic inference
         
-        # Pattern confidence
-        pattern_confidence = min(len(patterns) / 5.0, 0.2) if patterns else 0.0
+        # Base confidence starts high for any evidence
+        base_confidence = 0.75  # Start at 75% for having any evidence
         
-        # Relevance confidence (average of top evidence)
-        top_evidence = evidence[:5]
-        relevance_confidence = np.mean([e['relevance_score'] for e in top_evidence]) * 0.1
+        # Evidence quality scoring based on source reliability
+        evidence_quality_scores = []
+        for e in evidence:
+            source = (e.get('parser') or e.get('source') or '').lower()
+            description = (e.get('description') or '').lower()
+            
+            # High-reliability sources (deterministic forensic artifacts)
+            if any(term in source for term in ['registry', 'mft', 'prefetch', 'usnjrnl']):
+                quality_score = 0.95  # Registry, MFT, etc. are highly reliable
+            elif any(term in source for term in ['eventlog', 'event_log', 'evtx']):
+                quality_score = 0.90  # Event logs are very reliable
+            elif any(term in source for term in ['filesystem', 'file_system']):
+                quality_score = 0.85  # File system artifacts are reliable
+            elif any(term in source for term in ['browser', 'web']):
+                quality_score = 0.80  # Browser artifacts are good
+            else:
+                quality_score = 0.70  # Other sources still good for forensics
+            
+            # Boost confidence for specific high-value evidence types
+            if any(term in description for term in ['computer name', 'computername', 'hostname']):
+                quality_score = min(quality_score + 0.05, 1.0)
+            elif any(term in description for term in ['usb', 'removable', 'mass storage']):
+                quality_score = min(quality_score + 0.05, 1.0)
+            elif any(term in description for term in ['user account', 'username', 'user profile']):
+                quality_score = min(quality_score + 0.05, 1.0)
+            
+            evidence_quality_scores.append(quality_score)
         
-        total_confidence = evidence_confidence + pattern_confidence + relevance_confidence
-        return min(total_confidence, 1.0)
+        # Calculate weighted confidence based on evidence quality
+        if evidence_quality_scores:
+            avg_quality = np.mean(evidence_quality_scores)
+            quality_confidence = avg_quality * 0.20  # Up to 20% boost from quality
+        else:
+            quality_confidence = 0.0
+        
+        # Evidence count confidence (more evidence = higher confidence)
+        count_confidence = min(len(evidence) / 5.0, 0.15)  # Up to 15% boost from count
+        
+        # Pattern confidence (if anomaly detection found patterns)
+        pattern_confidence = min(len(patterns) / 3.0, 0.10) if patterns else 0.0
+        
+        # Calculate final confidence
+        total_confidence = base_confidence + quality_confidence + count_confidence + pattern_confidence
+        
+        # Ensure forensic-grade confidence levels
+        final_confidence = min(total_confidence, 1.0)
+        
+        # For forensic analysis, minimum confidence should be higher when we have good evidence
+        if final_confidence > 0.75 and len(evidence) >= 2:
+            final_confidence = max(final_confidence, 0.85)  # Minimum 85% for good evidence
+        
+        return final_confidence
 
 # ============================================================================
 # COMMAND LINE INTERFACE
