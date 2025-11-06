@@ -52,6 +52,361 @@ except ImportError:
 
 import numpy as np
 
+# LLM Integration - Support multiple providers
+try:
+    import openai
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
+
+# ============================================================================
+# LLM INTEGRATION SYSTEM
+# ============================================================================
+
+class ForensicLLMAnalyzer:
+    """LLM-powered forensic analysis and report generation system"""
+    
+    def __init__(self, provider: str = "openai", api_key: Optional[str] = None, model: str = None):
+        self.provider = provider.lower()
+        self.api_key = api_key or os.getenv(f"{provider.upper()}_API_KEY")
+        
+        if self.provider == "openai" and OPENAI_AVAILABLE:
+            self.model = model or "gpt-4"
+            if self.api_key:
+                openai.api_key = self.api_key
+        elif self.provider == "anthropic" and ANTHROPIC_AVAILABLE:
+            self.model = model or "claude-3-sonnet-20240229"
+            if self.api_key:
+                self.client = anthropic.Anthropic(api_key=self.api_key)
+        elif self.provider == "local" and REQUESTS_AVAILABLE:
+            self.model = model or "llama3"
+            self.base_url = "http://localhost:11434/api/generate"  # Ollama default
+        else:
+            raise ValueError(f"LLM provider '{provider}' not available or not supported")
+    
+    def analyze_evidence_with_llm(self, question: str, evidence_list: List[ForensicEvidence], 
+                                 context: str = "") -> Dict[str, Any]:
+        """Use LLM to analyze forensic evidence and generate comprehensive answers"""
+        
+        # Prepare evidence context for LLM
+        evidence_context = self._prepare_evidence_context(evidence_list)
+        
+        prompt = f"""You are a digital forensics expert analyzing evidence for a legal case. 
+        
+FORENSIC QUESTION: {question}
+
+CASE CONTEXT: {context}
+
+AVAILABLE EVIDENCE:
+{evidence_context}
+
+Please provide a comprehensive forensic analysis including:
+1. DIRECT ANSWER: Clear, factual answer to the question
+2. EVIDENCE SUMMARY: Key supporting evidence with timestamps
+3. CONFIDENCE ASSESSMENT: Your confidence level (0-100%) and reasoning
+4. INVESTIGATIVE NOTES: Additional observations or recommendations
+5. LEGAL CONSIDERATIONS: Any chain of custody or admissibility notes
+
+Format your response as structured JSON with these exact keys:
+- "direct_answer"
+- "evidence_summary" 
+- "confidence_score"
+- "confidence_reasoning"
+- "investigative_notes"
+- "legal_considerations"
+- "supporting_evidence_ids"
+"""
+        
+        try:
+            response = self._call_llm(prompt)
+            return self._parse_llm_response(response)
+        except Exception as e:
+            logging.error(f"LLM analysis failed: {e}")
+            return self._fallback_analysis(question, evidence_list)
+    
+    def generate_report_summary(self, case_id: str, results: Dict[str, Any], 
+                               case_context: str = "") -> Dict[str, str]:
+        """Generate professional report header, summary, and conclusions using LLM"""
+        
+        # Prepare results summary for LLM
+        results_summary = self._prepare_results_summary(results)
+        
+        prompt = f"""You are a senior digital forensics examiner preparing a formal forensic report.
+
+CASE ID: {case_id}
+CASE CONTEXT: {case_context}
+
+ANALYSIS RESULTS:
+{results_summary}
+
+Generate a professional forensic report with these sections:
+
+1. EXECUTIVE SUMMARY: High-level overview of findings and conclusions
+2. CASE OVERVIEW: Brief description of the investigation scope and methodology  
+3. KEY FINDINGS: Most significant discoveries with supporting evidence
+4. TECHNICAL SUMMARY: Technical details and methodologies used
+5. CONCLUSIONS: Final conclusions and recommendations
+6. LIMITATIONS: Any limitations or caveats in the analysis
+
+Format as JSON with keys: "executive_summary", "case_overview", "key_findings", 
+"technical_summary", "conclusions", "limitations"
+"""
+        
+        try:
+            response = self._call_llm(prompt)
+            return self._parse_report_response(response)
+        except Exception as e:
+            logging.error(f"Report generation failed: {e}")
+            return self._fallback_report_summary(case_id, results)
+    
+    def answer_adhoc_question(self, question: str, database_path: str, 
+                             context: str = "") -> Dict[str, Any]:
+        """Answer ad-hoc forensic questions using LLM with database context"""
+        
+        # Query database for relevant evidence
+        relevant_evidence = self._query_database_for_question(question, database_path)
+        
+        prompt = f"""You are a digital forensics expert answering an investigative question.
+
+QUESTION: {question}
+CONTEXT: {context}
+
+RELEVANT FORENSIC DATA:
+{self._prepare_evidence_context(relevant_evidence)}
+
+Provide a thorough forensic analysis addressing:
+1. Direct answer to the question
+2. Supporting evidence with timestamps and sources
+3. Confidence level and reasoning
+4. Additional investigative leads or recommendations
+
+Format as JSON with keys: "answer", "supporting_evidence", "confidence", 
+"reasoning", "recommendations"
+"""
+        
+        try:
+            response = self._call_llm(prompt)
+            return self._parse_adhoc_response(response)
+        except Exception as e:
+            logging.error(f"Ad-hoc question analysis failed: {e}")
+            return {"answer": f"Error analyzing question: {e}", "confidence": 0}
+    
+    def _prepare_evidence_context(self, evidence_list: List[ForensicEvidence]) -> str:
+        """Prepare evidence for LLM context"""
+        if not evidence_list:
+            return "No evidence available."
+        
+        context_parts = []
+        for i, evidence in enumerate(evidence_list[:20]):  # Limit to top 20 for context
+            context_parts.append(f"""
+Evidence {i+1}:
+- ID: {evidence.evidence_id}
+- Type: {evidence.evidence_type}
+- Timestamp: {evidence.timestamp}
+- Source: {evidence.source_file}
+- Parser: {evidence.parser_name}
+- Description: {evidence.description}
+- Confidence: {evidence.confidence_score:.2f}
+- Relevance: {evidence.relevance_score:.2f}
+""")
+        
+        return "\n".join(context_parts)
+    
+    def _prepare_results_summary(self, results: Dict[str, Any]) -> str:
+        """Prepare analysis results for report generation"""
+        summary_parts = []
+        for question_id, result in results.items():
+            summary_parts.append(f"""
+{question_id}: {result.question}
+Answer: {result.answer}
+Confidence: {result.confidence:.2f}
+Evidence Count: {result.evidence_count}
+""")
+        return "\n".join(summary_parts)
+    
+    def _call_llm(self, prompt: str) -> str:
+        """Call the configured LLM provider"""
+        if self.provider == "openai" and OPENAI_AVAILABLE:
+            response = openai.ChatCompletion.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2000,
+                temperature=0.1
+            )
+            return response.choices[0].message.content
+        
+        elif self.provider == "anthropic" and ANTHROPIC_AVAILABLE:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=2000,
+                temperature=0.1,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text
+        
+        elif self.provider == "local" and REQUESTS_AVAILABLE:
+            payload = {
+                "model": self.model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.1, "num_predict": 2000}
+            }
+            response = requests.post(self.base_url, json=payload)
+            if response.status_code == 200:
+                return response.json().get("response", "")
+            else:
+                raise Exception(f"Local LLM request failed: {response.status_code}")
+        
+        else:
+            raise Exception(f"LLM provider {self.provider} not properly configured")
+    
+    def _parse_llm_response(self, response: str) -> Dict[str, Any]:
+        """Parse LLM response into structured format"""
+        try:
+            # Try to extract JSON from response
+            import json
+            json_start = response.find('{')
+            json_end = response.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                json_str = response[json_start:json_end]
+                return json.loads(json_str)
+        except:
+            pass
+        
+        # Fallback parsing
+        return {
+            "direct_answer": response[:500],
+            "evidence_summary": "See full response",
+            "confidence_score": 75,
+            "confidence_reasoning": "LLM analysis completed",
+            "investigative_notes": response[500:1000] if len(response) > 500 else "",
+            "legal_considerations": "Standard chain of custody applies",
+            "supporting_evidence_ids": []
+        }
+    
+    def _parse_report_response(self, response: str) -> Dict[str, str]:
+        """Parse report generation response"""
+        try:
+            import json
+            json_start = response.find('{')
+            json_end = response.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                return json.loads(response[json_start:json_end])
+        except:
+            pass
+        
+        # Fallback
+        return {
+            "executive_summary": response[:300],
+            "case_overview": "Digital forensic analysis conducted using FORAI",
+            "key_findings": response[300:600] if len(response) > 300 else "See detailed results",
+            "technical_summary": "Analysis performed using KAPE, log2timeline, and ML algorithms",
+            "conclusions": response[600:900] if len(response) > 600 else "Analysis completed",
+            "limitations": "Standard forensic analysis limitations apply"
+        }
+    
+    def _parse_adhoc_response(self, response: str) -> Dict[str, Any]:
+        """Parse ad-hoc question response"""
+        try:
+            import json
+            json_start = response.find('{')
+            json_end = response.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                return json.loads(response[json_start:json_end])
+        except:
+            pass
+        
+        return {
+            "answer": response[:500],
+            "supporting_evidence": "See analysis details",
+            "confidence": 75,
+            "reasoning": "LLM analysis completed",
+            "recommendations": response[500:] if len(response) > 500 else "No additional recommendations"
+        }
+    
+    def _query_database_for_question(self, question: str, database_path: str) -> List[ForensicEvidence]:
+        """Query forensic database for evidence relevant to ad-hoc question"""
+        if not os.path.exists(database_path):
+            return []
+        
+        try:
+            conn = sqlite3.connect(database_path)
+            cursor = conn.cursor()
+            
+            # Simple keyword-based search - could be enhanced with semantic search
+            keywords = question.lower().split()
+            search_terms = " OR ".join([f"description LIKE '%{kw}%'" for kw in keywords if len(kw) > 3])
+            
+            query = f"""
+            SELECT evidence_id, evidence_type, source_file, parser_name, timestamp, 
+                   description, confidence_score, relevance_score
+            FROM evidence 
+            WHERE {search_terms}
+            ORDER BY relevance_score DESC, confidence_score DESC
+            LIMIT 50
+            """
+            
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            
+            evidence_list = []
+            for row in rows:
+                evidence = ForensicEvidence(
+                    evidence_id=row[0],
+                    evidence_type=row[1],
+                    source_file=row[2],
+                    parser_name=row[3],
+                    timestamp=row[4],
+                    description=row[5],
+                    data_content={},
+                    confidence_score=row[6],
+                    relevance_score=row[7],
+                    chain_of_custody=[]
+                )
+                evidence_list.append(evidence)
+            
+            conn.close()
+            return evidence_list
+            
+        except Exception as e:
+            logging.error(f"Database query failed: {e}")
+            return []
+    
+    def _fallback_analysis(self, question: str, evidence_list: List[ForensicEvidence]) -> Dict[str, Any]:
+        """Fallback analysis when LLM is unavailable"""
+        return {
+            "direct_answer": f"Found {len(evidence_list)} pieces of evidence related to: {question}",
+            "evidence_summary": f"Evidence types: {set(e.evidence_type for e in evidence_list)}",
+            "confidence_score": 60,
+            "confidence_reasoning": "Basic pattern matching analysis",
+            "investigative_notes": "LLM analysis unavailable - using fallback method",
+            "legal_considerations": "Manual review recommended",
+            "supporting_evidence_ids": [e.evidence_id for e in evidence_list[:10]]
+        }
+    
+    def _fallback_report_summary(self, case_id: str, results: Dict[str, Any]) -> Dict[str, str]:
+        """Fallback report generation when LLM is unavailable"""
+        return {
+            "executive_summary": f"Forensic analysis completed for case {case_id} with {len(results)} questions analyzed.",
+            "case_overview": "Digital forensic examination conducted using FORAI automated analysis system.",
+            "key_findings": f"Analysis covered {len(results)} forensic questions with varying confidence levels.",
+            "technical_summary": "Analysis performed using KAPE artifact collection, log2timeline processing, and machine learning algorithms.",
+            "conclusions": "Forensic analysis completed. Manual review of findings recommended.",
+            "limitations": "Automated analysis - human expert review recommended for legal proceedings."
+        }
+
 # ============================================================================
 # FORENSIC DATA STRUCTURES
 # ============================================================================
@@ -316,12 +671,13 @@ class GradientDescentOptimizer:
 class FAS5TimelineAnalyzer:
     """Enhanced FAS5 timeline analyzer with ML capabilities"""
     
-    def __init__(self, db_path: str, case_id: str):
+    def __init__(self, db_path: str, case_id: str, llm_analyzer: Optional[ForensicLLMAnalyzer] = None):
         self.db_path = db_path
         self.case_id = case_id
         self.logger = logging.getLogger(__name__)
         self.isolation_forest = IsolationForest()
         self.query_optimizer = GradientDescentOptimizer()
+        self.llm_analyzer = llm_analyzer
         
         # Initialize forensic questions
         self.forensic_questions = self._initialize_forensic_questions()
@@ -706,14 +1062,37 @@ class FAS5TimelineAnalyzer:
     def _generate_answer_from_evidence(self, question: ForensicQuestion, 
                                      evidence: List[ForensicEvidence], 
                                      patterns: List[Dict[str, Any]]) -> str:
-        """Generate natural language answer from evidence"""
+        """Generate natural language answer from evidence using LLM analysis"""
         if not evidence:
             return f"No evidence found to answer: {question.question_text}"
         
         # Sort evidence by relevance
         evidence.sort(key=lambda e: e.relevance_score, reverse=True)
         
-        # Generate question-specific answers
+        # Use LLM for comprehensive analysis if available
+        if self.llm_analyzer:
+            try:
+                case_context = f"Case ID: {self.case_id}, Question: {question.question_text}"
+                llm_result = self.llm_analyzer.analyze_evidence_with_llm(
+                    question.question_text, 
+                    evidence, 
+                    case_context
+                )
+                
+                # Return the direct answer from LLM analysis
+                return llm_result.get("direct_answer", f"Found {len(evidence)} pieces of evidence")
+                
+            except Exception as e:
+                self.logger.warning(f"LLM analysis failed, using fallback: {e}")
+        
+        # Fallback to pattern-based analysis
+        return self._fallback_answer_generation(question, evidence, patterns)
+    
+    def _fallback_answer_generation(self, question: ForensicQuestion, 
+                                   evidence: List[ForensicEvidence], 
+                                   patterns: List[Dict[str, Any]]) -> str:
+        """Fallback answer generation when LLM is unavailable"""
+        # Generate question-specific answers using pattern matching
         if question.question_id == "Q1":  # Computer name
             for e in evidence:
                 desc = e.description.lower()
@@ -791,15 +1170,32 @@ class FAS5TimelineAnalyzer:
 class FORAI:
     """Enhanced Forensic AI Analysis Tool"""
     
-    def __init__(self, case_id: str, fas5_db: str = None):
+    def __init__(self, case_id: str, fas5_db: str = None, llm_provider: str = "openai", 
+                 llm_api_key: str = None, llm_model: str = None):
         self.case_id = case_id
         self.fas5_db = fas5_db or f"{case_id}.db"
         self.logger = self._setup_logging()
         self.analyzer = None
         
+        # Initialize LLM analyzer
+        if llm_provider:
+            try:
+                self.llm_analyzer = ForensicLLMAnalyzer(
+                    provider=llm_provider, 
+                    api_key=llm_api_key, 
+                    model=llm_model
+                )
+                self.logger.info(f"LLM analyzer initialized: {llm_provider}")
+            except Exception as e:
+                self.logger.warning(f"LLM analyzer initialization failed: {e}")
+                self.llm_analyzer = None
+        else:
+            self.llm_analyzer = None
+            self.logger.info("LLM analyzer disabled")
+        
         # Initialize analyzer if database exists
         if os.path.exists(self.fas5_db):
-            self.analyzer = FAS5TimelineAnalyzer(self.fas5_db, case_id)
+            self.analyzer = FAS5TimelineAnalyzer(self.fas5_db, case_id, self.llm_analyzer)
         else:
             self.logger.warning(f"FAS5 database not found: {self.fas5_db}")
     
@@ -1056,6 +1452,27 @@ class FORAI:
         
         return self.analyzer.answer_forensic_question(question_id)
     
+    def answer_adhoc_question(self, question: str, context: str = "") -> Dict[str, Any]:
+        """Answer ad-hoc forensic questions using LLM analysis"""
+        if not self.llm_analyzer:
+            return {
+                "answer": "LLM analyzer not available for ad-hoc questions",
+                "confidence": 0,
+                "error": "No LLM configured"
+            }
+        
+        try:
+            self.logger.info(f"Processing ad-hoc question: {question}")
+            result = self.llm_analyzer.answer_adhoc_question(question, self.fas5_db, context)
+            return result
+        except Exception as e:
+            self.logger.error(f"Ad-hoc question analysis failed: {e}")
+            return {
+                "answer": f"Error processing question: {e}",
+                "confidence": 0,
+                "error": str(e)
+            }
+    
     def generate_report(self, results: Dict[str, AnalysisResult], format: str = "json") -> str:
         """Generate forensic analysis report"""
         if format.lower() == "json":
@@ -1066,20 +1483,45 @@ class FORAI:
             raise ValueError("Supported formats: json, pdf")
     
     def _generate_json_report(self, results: Dict[str, AnalysisResult]) -> str:
-        """Generate JSON report"""
+        """Generate JSON report with LLM-generated summaries"""
+        # Generate LLM report summary if available
+        report_summary = {}
+        if self.llm_analyzer:
+            try:
+                case_context = f"Digital forensic analysis for case {self.case_id}"
+                report_summary = self.llm_analyzer.generate_report_summary(
+                    self.case_id, results, case_context
+                )
+            except Exception as e:
+                self.logger.warning(f"LLM report summary generation failed: {e}")
+        
         report = {
             "case_id": self.case_id,
             "analysis_timestamp": time.time(),
             "total_questions": len(results),
+            "report_summary": report_summary,  # LLM-generated professional summary
             "results": {}
         }
         
         for question_id, result in results.items():
+            # Generate LLM analysis for each question if available
+            llm_analysis = {}
+            if self.llm_analyzer:
+                try:
+                    llm_analysis = self.llm_analyzer.analyze_evidence_with_llm(
+                        result.question, 
+                        result.supporting_evidence,
+                        f"Case {self.case_id}"
+                    )
+                except Exception as e:
+                    self.logger.warning(f"LLM analysis failed for {question_id}: {e}")
+            
             report["results"][question_id] = {
                 "question": result.question,
                 "answer": result.answer,
                 "confidence": result.confidence,
                 "evidence_count": result.evidence_count,
+                "llm_analysis": llm_analysis,  # Comprehensive LLM analysis
                 "supporting_evidence": [
                     {
                         "evidence_id": e.evidence_id,
@@ -1099,30 +1541,107 @@ class FORAI:
         return report_file
     
     def _generate_pdf_report(self, results: Dict[str, AnalysisResult]) -> str:
-        """Generate PDF report"""
+        """Generate professional PDF report with LLM-generated summaries"""
         if not FPDF:
             raise ImportError("fpdf2 required for PDF reports")
         
+        # Generate LLM report summary if available
+        report_summary = {}
+        if self.llm_analyzer:
+            try:
+                case_context = f"Digital forensic analysis for case {self.case_id}"
+                report_summary = self.llm_analyzer.generate_report_summary(
+                    self.case_id, results, case_context
+                )
+            except Exception as e:
+                self.logger.warning(f"LLM report summary generation failed: {e}")
+        
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font('Arial', 'B', 16)
-        pdf.cell(0, 10, f'FORAI Forensic Analysis Report - Case {self.case_id}', 0, 1, 'C')
+        
+        # Report Header
+        pdf.set_font('Arial', 'B', 18)
+        pdf.cell(0, 15, 'DIGITAL FORENSIC ANALYSIS REPORT', 0, 1, 'C')
+        
+        pdf.set_font('Arial', 'B', 14)
+        pdf.cell(0, 10, f'Case ID: {self.case_id}', 0, 1, 'C')
         
         pdf.set_font('Arial', '', 12)
-        pdf.cell(0, 10, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1)
+        pdf.cell(0, 10, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
+        pdf.cell(0, 10, 'Analysis Tool: FORAI (Forensic AI)', 0, 1, 'C')
         pdf.ln(10)
+        
+        # Executive Summary (LLM-generated)
+        if report_summary.get("executive_summary"):
+            pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, 'EXECUTIVE SUMMARY', 0, 1)
+            pdf.set_font('Arial', '', 11)
+            pdf.multi_cell(0, 6, report_summary["executive_summary"])
+            pdf.ln(5)
+        
+        # Case Overview (LLM-generated)
+        if report_summary.get("case_overview"):
+            pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, 'CASE OVERVIEW', 0, 1)
+            pdf.set_font('Arial', '', 11)
+            pdf.multi_cell(0, 6, report_summary["case_overview"])
+            pdf.ln(5)
+        
+        # Key Findings (LLM-generated)
+        if report_summary.get("key_findings"):
+            pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, 'KEY FINDINGS', 0, 1)
+            pdf.set_font('Arial', '', 11)
+            pdf.multi_cell(0, 6, report_summary["key_findings"])
+            pdf.ln(5)
+        
+        # Detailed Analysis Results
+        pdf.set_font('Arial', 'B', 16)
+        pdf.cell(0, 15, 'DETAILED ANALYSIS RESULTS', 0, 1)
         
         for question_id, result in results.items():
             pdf.set_font('Arial', 'B', 14)
             pdf.cell(0, 10, f'{question_id}: {result.question}', 0, 1)
             
             pdf.set_font('Arial', '', 12)
-            pdf.multi_cell(0, 10, f'Answer: {result.answer}')
-            pdf.cell(0, 10, f'Confidence: {result.confidence:.1%}', 0, 1)
-            pdf.cell(0, 10, f'Evidence Count: {result.evidence_count}', 0, 1)
+            pdf.multi_cell(0, 8, f'Answer: {result.answer}')
+            pdf.cell(0, 8, f'Confidence: {result.confidence:.1%}', 0, 1)
+            pdf.cell(0, 8, f'Evidence Count: {result.evidence_count}', 0, 1)
+            
+            # Add top supporting evidence
+            if result.supporting_evidence:
+                pdf.set_font('Arial', 'I', 10)
+                pdf.cell(0, 6, 'Key Supporting Evidence:', 0, 1)
+                for i, evidence in enumerate(result.supporting_evidence[:3]):  # Top 3 evidence
+                    pdf.multi_cell(0, 5, f'  {i+1}. {evidence.description[:100]}...')
+            
+            pdf.ln(8)
+        
+        # Technical Summary (LLM-generated)
+        if report_summary.get("technical_summary"):
+            pdf.add_page()
+            pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, 'TECHNICAL SUMMARY', 0, 1)
+            pdf.set_font('Arial', '', 11)
+            pdf.multi_cell(0, 6, report_summary["technical_summary"])
             pdf.ln(5)
         
-        report_file = f"{self.case_id}_report.pdf"
+        # Conclusions (LLM-generated)
+        if report_summary.get("conclusions"):
+            pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, 'CONCLUSIONS', 0, 1)
+            pdf.set_font('Arial', '', 11)
+            pdf.multi_cell(0, 6, report_summary["conclusions"])
+            pdf.ln(5)
+        
+        # Limitations (LLM-generated)
+        if report_summary.get("limitations"):
+            pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, 'LIMITATIONS', 0, 1)
+            pdf.set_font('Arial', '', 11)
+            pdf.multi_cell(0, 6, report_summary["limitations"])
+        
+        report_file = f"{self.case_id}_forensic_report.pdf"
         pdf.output(report_file)
         return report_file
 
@@ -1139,10 +1658,18 @@ def main():
     parser.add_argument("--artifacts-dir", help="Directory containing collected artifacts")
     parser.add_argument("--fas5-db", help="Path to existing FAS5 database")
     parser.add_argument("--question", help="Specific forensic question to answer")
+    parser.add_argument("--adhoc-question", help="Ad-hoc forensic question for LLM analysis")
     parser.add_argument("--full-analysis", action="store_true", help="Perform complete analysis")
     parser.add_argument("--enable-ml", action="store_true", default=True, help="Enable ML features")
     parser.add_argument("--report", choices=["json", "pdf"], default="json", help="Report format")
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
+    
+    # LLM Configuration
+    parser.add_argument("--llm-provider", choices=["openai", "anthropic", "local"], 
+                       default="openai", help="LLM provider for analysis")
+    parser.add_argument("--llm-api-key", help="API key for LLM provider")
+    parser.add_argument("--llm-model", help="Specific LLM model to use")
+    parser.add_argument("--disable-llm", action="store_true", help="Disable LLM features")
     
     args = parser.parse_args()
     
@@ -1151,8 +1678,15 @@ def main():
         logging.basicConfig(level=logging.INFO)
     
     try:
-        # Initialize FORAI
-        forai = FORAI(args.case_id, args.fas5_db)
+        # Initialize FORAI with LLM configuration
+        llm_provider = None if args.disable_llm else args.llm_provider
+        forai = FORAI(
+            case_id=args.case_id, 
+            fas5_db=args.fas5_db,
+            llm_provider=llm_provider,
+            llm_api_key=args.llm_api_key,
+            llm_model=args.llm_model
+        )
         
         if args.full_analysis:
             # Perform full analysis
@@ -1193,8 +1727,25 @@ def main():
                     print(f"{i}. {evidence.description[:100]}...")
                     print(f"   Source: {evidence.parser_name} | Confidence: {evidence.confidence_score:.1%}")
         
+        elif args.adhoc_question:
+            # Answer ad-hoc question using LLM
+            result = forai.answer_adhoc_question(args.adhoc_question)
+            
+            print(f"\n=== AD-HOC FORENSIC ANALYSIS ===")
+            print(f"Question: {args.adhoc_question}")
+            print(f"Answer: {result.get('answer', 'No answer available')}")
+            print(f"Confidence: {result.get('confidence', 0):.1%}")
+            
+            if result.get('reasoning'):
+                print(f"\n=== ANALYSIS REASONING ===")
+                print(result['reasoning'])
+            
+            if result.get('recommendations'):
+                print(f"\n=== RECOMMENDATIONS ===")
+                print(result['recommendations'])
+        
         else:
-            print("Please specify --full-analysis or --question")
+            print("Please specify --full-analysis, --question, or --adhoc-question")
             return 1
     
     except Exception as e:
