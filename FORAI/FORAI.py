@@ -137,7 +137,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict, Set, Union, Any, Iterator
-from concurrent.futures import ThreadPoolExecutor, as_completed
+# ThreadPoolExecutor removed - not currently used in codebase
 from collections import defaultdict
 from functools import lru_cache, wraps
 

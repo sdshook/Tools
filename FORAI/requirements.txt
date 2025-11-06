@@ -1,0 +1,40 @@
+# FORAI.py Dependencies
+# Core dependencies for forensic analysis functionality
+
+# Progress bars and user interface
+tqdm>=4.65.0
+
+# PDF report generation
+fpdf2>=2.8.0
+
+# Mathematical operations and ML features
+numpy>=1.21.0
+
+# Optional ML dependencies (graceful fallback if not available)
+scikit-learn>=1.0.0
+
+# Optional local LLM support (graceful fallback if not available)
+# llama-cpp-python>=0.2.0  # Uncomment if using local LLM
+
+# Optional system monitoring (graceful fallback if not available)
+# psutil>=5.8.0  # Uncomment if system monitoring needed
+
+# Standard library dependencies (usually included with Python)
+# sqlite3 - Database operations
+# json - Data serialization  
+# pathlib - File path handling
+# datetime - Timestamp processing
+# hashlib - Cryptographic functions
+# argparse - Command line parsing
+# logging - Application logging
+# re - Regular expressions
+# os - Operating system interface
+# sys - System-specific parameters
+# time - Time-related functions
+# subprocess - Process management
+# shutil - File operations
+# zipfile - Archive handling
+# collections - Specialized container datatypes
+# functools - Higher-order functions
+# dataclasses - Data classes
+# typing - Type hints
