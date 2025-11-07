@@ -138,9 +138,9 @@ FORAI features a revolutionary Bidirectional Hebbian Synaptic Memory (BHSM) syst
 
 ### ⚡ **Performance Advantages: BHSM vs Legacy Implementation**
 
-*The following comparison shows performance improvements between the previous FAS5-based FORAI implementation and the current BHSM-powered version:*
+*The following comparison shows performance improvements between the previous fts5-based FORAI implementation and the current BHSM-powered version:*
 
-| **Metric** | **Legacy FAS5 Implementation** | **Current BHSM Implementation** | **Improvement** |
+| **Metric** | **Legacy fts5 Implementation** | **Current BHSM Implementation** | **Improvement** |
 |------------|--------------------------------|----------------------------------|-----------------|
 | **Search Speed** | Keyword-based text matching | Semantic vector search | **10x faster** |
 | **Response Time** | Variable (50-200ms) | Sub-10ms deterministic | **5-20x faster** |
