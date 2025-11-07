@@ -407,6 +407,8 @@ BHSM_AVAILABLE = True  # Always available since integrated
 
 # ============================================================================
 # ENHANCED BHSM ADAPTIVE LEARNING CAPABILITIES
+# Bio-inspired Hebbian Sparse Memory (BHSM) originated adaptive learning system
+# These capabilities extend the core BHSM memory and learning functions
 # ============================================================================
 
 @dataclass

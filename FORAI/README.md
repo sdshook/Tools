@@ -108,26 +108,26 @@ FORAI features a revolutionary Bio-inspired Hebbian Sparse Memory (BHSM) system 
 - **Hebbian plasticity** mimicking biological neural networks
 - **Continuous adaptation** to forensic investigation patterns
 
-### 🔄 **NEW: Retrospective Learning System**
+### 🔄 **NEW: Retrospective Learning System** *(BHSM-originated)*
 - **Missed Evidence Tracking** - learns from investigation gaps
 - **Pattern Recognition** - identifies recurring forensic signatures
 - **Confidence Adjustment** - dynamic scoring based on historical accuracy
 - **Similarity Matching** - prevents future evidence oversights
 
-### 🎛️ **NEW: Adaptive Threshold System**
+### 🎛️ **NEW: Adaptive Threshold System** *(BHSM-originated)*
 - **Evidence-Type Specific Thresholds** - customized for different artifact types
 - **Performance-Based Adjustments** - automatic threshold optimization
 - **Dynamic Confidence Scoring** - real-time assessment of evidence reliability
 - **Learning Rate Adaptation** - faster convergence on optimal thresholds
 
-### 🔬 **NEW: Enhanced Forensic Feature Extraction**
+### 🔬 **NEW: Enhanced Forensic Feature Extraction** *(BHSM-originated)*
 - **32-Dimensional Feature Vectors** - comprehensive forensic characterization
 - **Anti-Forensic Detection** - identifies evidence tampering attempts
 - **Data Exfiltration Patterns** - recognizes unauthorized data movement
 - **Temporal Anomaly Detection** - spots unusual timing patterns
 - **Privilege Escalation Indicators** - detects unauthorized access attempts
 
-### 🚨 **NEW: Forensic Anomaly Detection**
+### 🚨 **NEW: Forensic Anomaly Detection** *(BHSM-originated)*
 - **Isolation Forest Algorithm** - unsupervised anomaly detection
 - **Timeline Pattern Analysis** - identifies unusual event sequences
 - **Severity Classification** - CRITICAL/HIGH/MEDIUM/LOW anomaly scoring
