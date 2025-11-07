@@ -45,13 +45,17 @@ Target Drive → KAPE.exe → log2timeline.py → psort.py → SQLite DB → FOR
 - **psort.py execution** with CSV-to-SQLite conversion
 - **Proper error handling** and timeout management for all external tools
 
-### 🧠 **BHSM PSI Semantic Search System**
-- **Bio-inspired Hebbian Sparse Memory (BHSM)** for adaptive learning
-- **Persistent Semantic Index (PSI)** with 32-dimensional embeddings
+### 🧠 **Enhanced BHSM PSI Adaptive Learning System**
+- **Bio-inspired Hebbian Sparse Memory (BHSM)** with advanced adaptive learning
+- **Persistent Semantic Index (PSI)** with 32-dimensional forensic-specific embeddings
 - **SimEmbedder** for semantic vector generation and similarity matching
 - **BDHMemory** with reward-gated learning and memory consolidation
+- **Retrospective Learning System** - learns from missed evidence patterns
+- **Adaptive Threshold System** - dynamic confidence scoring by evidence type
+- **Enhanced Feature Extraction** - 32D forensic-specific feature vectors
+- **Anomaly Detection** - Isolation Forest for timeline pattern analysis
 - **10x faster performance** with sub-10ms deterministic answers
-- **Superior semantic accuracy** over traditional keyword-based search
+- **Superior semantic accuracy** over traditional FAS5 keyword-based search
 
 ### 🎯 **Evidence-Based Question Answering**
 - **12 standard forensic questions** with real SQL query patterns
@@ -82,9 +86,9 @@ FORAI provides intelligent, adaptive answers to these critical forensic question
 11. **Document Printing**: What documents were printed?
 12. **Software Changes**: What software was installed or modified?
 
-## 🤖 BHSM PSI Semantic Search System
+## 🤖 Enhanced BHSM PSI Adaptive Learning System
 
-FORAI features a revolutionary Bio-inspired Hebbian Sparse Memory (BHSM) system with Persistent Semantic Index (PSI) for superior forensic analysis:
+FORAI features a revolutionary Bio-inspired Hebbian Sparse Memory (BHSM) system with advanced adaptive learning capabilities, completely replacing the legacy FAS5 system for superior forensic analysis:
 
 ### 🧠 **SimEmbedder - Semantic Vector Generation**
 - **32-dimensional embeddings** for forensic evidence representation
@@ -104,11 +108,39 @@ FORAI features a revolutionary Bio-inspired Hebbian Sparse Memory (BHSM) system 
 - **Hebbian plasticity** mimicking biological neural networks
 - **Continuous adaptation** to forensic investigation patterns
 
-### ⚡ **Performance Advantages**
-- **10x faster** than traditional FTS5-based search systems
+### 🔄 **NEW: Retrospective Learning System**
+- **Missed Evidence Tracking** - learns from investigation gaps
+- **Pattern Recognition** - identifies recurring forensic signatures
+- **Confidence Adjustment** - dynamic scoring based on historical accuracy
+- **Similarity Matching** - prevents future evidence oversights
+
+### 🎛️ **NEW: Adaptive Threshold System**
+- **Evidence-Type Specific Thresholds** - customized for different artifact types
+- **Performance-Based Adjustments** - automatic threshold optimization
+- **Dynamic Confidence Scoring** - real-time assessment of evidence reliability
+- **Learning Rate Adaptation** - faster convergence on optimal thresholds
+
+### 🔬 **NEW: Enhanced Forensic Feature Extraction**
+- **32-Dimensional Feature Vectors** - comprehensive forensic characterization
+- **Anti-Forensic Detection** - identifies evidence tampering attempts
+- **Data Exfiltration Patterns** - recognizes unauthorized data movement
+- **Temporal Anomaly Detection** - spots unusual timing patterns
+- **Privilege Escalation Indicators** - detects unauthorized access attempts
+
+### 🚨 **NEW: Forensic Anomaly Detection**
+- **Isolation Forest Algorithm** - unsupervised anomaly detection
+- **Timeline Pattern Analysis** - identifies unusual event sequences
+- **Severity Classification** - CRITICAL/HIGH/MEDIUM/LOW anomaly scoring
+- **Automated Recommendations** - actionable insights for investigators
+
+### ⚡ **Performance Advantages Over Legacy FAS5**
+- **10x faster** than traditional FAS5 keyword-based search systems
 - **Sub-10ms response times** for deterministic answers
 - **Superior semantic accuracy** over keyword-based approaches
 - **Reduced false positives** through contextual understanding
+- **Adaptive learning** improves accuracy over time (FAS5 was static)
+- **Forensic-specific features** vs generic text search (FAS5 limitation)
+- **Anomaly detection** capabilities completely absent in FAS5
 - **Scalable performance** maintaining speed with database growth
 
 ## 📊 Data Processing Pipeline

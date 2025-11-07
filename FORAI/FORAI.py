@@ -138,12 +138,18 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict, Set, Union, Any, Iterator
 # ThreadPoolExecutor removed - not currently used in codebase
-from collections import defaultdict
+from collections import defaultdict, deque
 from functools import lru_cache, wraps
+import statistics
 
 
 from tqdm import tqdm
-from fpdf import FPDF
+try:
+    from fpdf import FPDF
+    FPDF_AVAILABLE = True
+except ImportError:
+    FPDF_AVAILABLE = False
+    print("⚠️  fpdf2 not available. PDF report generation disabled.")
 import numpy as np
 # psutil imported above with try/except
 
@@ -369,6 +375,12 @@ _GLOBAL_EMBEDDER = None
 _GLOBAL_PSI = None
 _GLOBAL_BDH = None
 
+# Global Enhanced BHSM components
+_GLOBAL_RETROSPECTIVE_LEARNING = None
+_GLOBAL_ADAPTIVE_THRESHOLDS = None
+_GLOBAL_ENHANCED_FEATURES = None
+_GLOBAL_ANOMALY_DETECTOR = None
+
 def get_global_components() -> Tuple[SimEmbedder, PSIIndex, BDHMemory]:
     """Get or create global BHSM components for FORAI"""
     global _GLOBAL_EMBEDDER, _GLOBAL_PSI, _GLOBAL_BDH
@@ -384,7 +396,1177 @@ def get_global_components() -> Tuple[SimEmbedder, PSIIndex, BDHMemory]:
         
     return _GLOBAL_EMBEDDER, _GLOBAL_PSI, _GLOBAL_BDH
 
+def get_enhanced_bhsm_components():
+    """Get or create enhanced BHSM components for FORAI"""
+    global _GLOBAL_RETROSPECTIVE_LEARNING, _GLOBAL_ADAPTIVE_THRESHOLDS, _GLOBAL_ENHANCED_FEATURES, _GLOBAL_ANOMALY_DETECTOR
+
+    if _GLOBAL_RETROSPECTIVE_LEARNING is None:
+        _GLOBAL_RETROSPECTIVE_LEARNING = ForensicRetrospectiveLearning()
+
+    if _GLOBAL_ADAPTIVE_THRESHOLDS is None:
+        _GLOBAL_ADAPTIVE_THRESHOLDS = ForensicAdaptiveThresholds()
+
+    if _GLOBAL_ENHANCED_FEATURES is None:
+        _GLOBAL_ENHANCED_FEATURES = ForensicEnhancedFeatureExtractor()
+
+    if _GLOBAL_ANOMALY_DETECTOR is None:
+        _GLOBAL_ANOMALY_DETECTOR = ForensicAnomalyDetector()
+
+    return _GLOBAL_RETROSPECTIVE_LEARNING, _GLOBAL_ADAPTIVE_THRESHOLDS, _GLOBAL_ENHANCED_FEATURES, _GLOBAL_ANOMALY_DETECTOR
+
 BHSM_AVAILABLE = True  # Always available since integrated
+
+# ============================================================================
+# ENHANCED BHSM ADAPTIVE LEARNING CAPABILITIES
+# ============================================================================
+
+@dataclass
+class MissedEvidenceEvent:
+    """Represents evidence that was initially missed but later discovered"""
+    case_id: str
+    original_analysis_timestamp: float
+    discovery_timestamp: float
+    original_confidence: float
+    actual_importance: float
+    evidence_type: str
+    evidence_text: str
+    feature_vector: np.ndarray
+    discovery_method: str  # "manual_review", "expert_analysis", "court_discovery", "peer_review"
+    consequence_severity: float  # 1.0-3.0 scale
+
+class ForensicRetrospectiveLearning:
+    """Retrospective learning system for FORAI - learns from missed evidence"""
+    
+    def __init__(self, db_path: Optional[Path] = None):
+        self.db_path = db_path or Path("forai_retrospective.db")
+        self.missed_evidence_history = deque(maxlen=1000)
+        self.false_negative_learning_rate = 2.0  # Enhanced learning for mistakes
+        self.temporal_decay_factor = 0.95
+        self.similarity_threshold = 0.7
+        self.learning_stats = {
+            'total_missed_evidence_processed': 0,
+            'patterns_reinforced': 0,
+            'threshold_adjustments_made': 0,
+            'avg_discovery_delay_hours': 0.0,
+            'avg_consequence_severity': 0.0
+        }
+        self._init_database()
+    
+    def _init_database(self):
+        """Initialize retrospective learning database"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS missed_evidence (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    case_id TEXT NOT NULL,
+                    original_timestamp REAL NOT NULL,
+                    discovery_timestamp REAL NOT NULL,
+                    original_confidence REAL NOT NULL,
+                    actual_importance REAL NOT NULL,
+                    evidence_type TEXT NOT NULL,
+                    evidence_text TEXT NOT NULL,
+                    feature_vector BLOB NOT NULL,
+                    discovery_method TEXT NOT NULL,
+                    consequence_severity REAL NOT NULL,
+                    created_at REAL NOT NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_missed_evidence_case ON missed_evidence(case_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_missed_evidence_type ON missed_evidence(evidence_type)")
+    
+    def add_missed_evidence(self, missed_event: MissedEvidenceEvent):
+        """Add newly discovered missed evidence for learning"""
+        discovery_delay = (missed_event.discovery_timestamp - missed_event.original_analysis_timestamp) / 3600.0
+        
+        # Update statistics
+        self.learning_stats['total_missed_evidence_processed'] += 1
+        total = self.learning_stats['total_missed_evidence_processed']
+        
+        # Running average for discovery delay
+        current_avg = self.learning_stats['avg_discovery_delay_hours']
+        self.learning_stats['avg_discovery_delay_hours'] = (current_avg * (total - 1) + discovery_delay) / total
+        
+        # Running average for consequence severity
+        current_severity = self.learning_stats['avg_consequence_severity']
+        self.learning_stats['avg_consequence_severity'] = (current_severity * (total - 1) + missed_event.consequence_severity) / total
+        
+        # Store in memory and database
+        self.missed_evidence_history.append(missed_event)
+        
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                INSERT INTO missed_evidence 
+                (case_id, original_timestamp, discovery_timestamp, original_confidence, 
+                 actual_importance, evidence_type, evidence_text, feature_vector, 
+                 discovery_method, consequence_severity, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                missed_event.case_id,
+                missed_event.original_analysis_timestamp,
+                missed_event.discovery_timestamp,
+                missed_event.original_confidence,
+                missed_event.actual_importance,
+                missed_event.evidence_type,
+                missed_event.evidence_text,
+                missed_event.feature_vector.tobytes(),
+                missed_event.discovery_method,
+                missed_event.consequence_severity,
+                time.time()
+            ))
+        
+        print(f"📚 Retrospective Learning: Added missed {missed_event.evidence_type} evidence "
+              f"(delay: {discovery_delay:.1f}h, severity: {missed_event.consequence_severity:.1f})")
+    
+    def find_similar_missed_evidence_patterns(self, current_features: np.ndarray, evidence_type: str = None) -> List[MissedEvidenceEvent]:
+        """Find similar patterns to current evidence in missed evidence history"""
+        similar_events = []
+        
+        for missed_event in self.missed_evidence_history:
+            # Filter by evidence type if specified
+            if evidence_type and missed_event.evidence_type != evidence_type:
+                continue
+                
+            # Calculate cosine similarity
+            similarity = self._calculate_cosine_similarity(current_features, missed_event.feature_vector)
+            
+            if similarity > self.similarity_threshold:
+                similar_events.append((similarity, missed_event))
+        
+        # Sort by similarity (highest first)
+        similar_events.sort(key=lambda x: x[0], reverse=True)
+        return [event for _, event in similar_events[:5]]  # Top 5 similar events
+    
+    def calculate_confidence_adjustment(self, current_features: np.ndarray, base_confidence: float, evidence_type: str = None) -> float:
+        """Calculate confidence adjustment based on similar missed evidence"""
+        similar_events = self.find_similar_missed_evidence_patterns(current_features, evidence_type)
+        
+        if not similar_events:
+            return base_confidence
+        
+        # Calculate weighted adjustment
+        total_weight = 0.0
+        weighted_adjustment = 0.0
+        
+        for missed_event in similar_events:
+            similarity = self._calculate_cosine_similarity(current_features, missed_event.feature_vector)
+            weight = similarity * missed_event.consequence_severity
+            
+            # Adjustment should increase confidence for patterns similar to missed evidence
+            adjustment = (missed_event.actual_importance - missed_event.original_confidence) * weight
+            
+            weighted_adjustment += adjustment
+            total_weight += weight
+        
+        if total_weight > 0.0:
+            final_adjustment = weighted_adjustment / total_weight
+            adjusted_confidence = max(0.0, min(1.0, base_confidence + final_adjustment * self.false_negative_learning_rate))
+            
+            if final_adjustment > 0.1:
+                print(f"🎯 Retrospective Adjustment: {evidence_type} confidence {base_confidence:.3f} → {adjusted_confidence:.3f} "
+                      f"(+{final_adjustment:.3f} from {len(similar_events)} similar missed patterns)")
+            
+            return adjusted_confidence
+        
+        return base_confidence
+    
+    def _calculate_cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
+        """Calculate cosine similarity between two vectors"""
+        if vec1.shape != vec2.shape:
+            min_len = min(len(vec1), len(vec2))
+            vec1 = vec1[:min_len]
+            vec2 = vec2[:min_len]
+        
+        norm1 = np.linalg.norm(vec1)
+        norm2 = np.linalg.norm(vec2)
+        
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+        
+        return np.dot(vec1, vec2) / (norm1 * norm2)
+    
+    def get_learning_stats(self) -> Dict[str, Any]:
+        """Get retrospective learning statistics"""
+        return self.learning_stats.copy()
+    
+    def cleanup_old_events(self, retention_days: int = 365):
+        """Remove old missed evidence events beyond retention period"""
+        cutoff_timestamp = time.time() - (retention_days * 86400)
+        
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("DELETE FROM missed_evidence WHERE created_at < ?", (cutoff_timestamp,))
+            deleted_count = cursor.rowcount
+            
+        if deleted_count > 0:
+            print(f"🧹 Cleaned up {deleted_count} old retrospective learning events")
+
+class ForensicAdaptiveThresholds:
+    """Adaptive threshold system for forensic evidence confidence scoring"""
+    
+    def __init__(self, db_path: Optional[Path] = None):
+        self.db_path = db_path or Path("forai_thresholds.db")
+        
+        # Evidence type specific thresholds
+        self.evidence_thresholds = {
+            'registry': 0.25,      # Lower threshold - registry evidence often critical
+            'network': 0.30,       # Moderate threshold
+            'usb': 0.20,          # Very low - USB evidence often crucial
+            'browser': 0.40,      # Higher - browser evidence can be noisy
+            'file_system': 0.30,  # Moderate threshold
+            'process': 0.25,      # Lower - process evidence important
+            'log': 0.35,          # Moderate - logs can be verbose
+            'memory': 0.20,       # Very low - memory evidence rare but critical
+            'email': 0.30,        # Moderate threshold
+            'default': 0.30       # Default threshold
+        }
+        
+        # Confidence level multipliers
+        self.confidence_multipliers = {
+            'very_high': 0.8,     # Lower threshold for high confidence
+            'high': 0.9,          # Slightly lower
+            'medium': 1.0,        # No adjustment
+            'low': 1.2,           # Higher threshold for low confidence
+            'very_low': 1.5       # Much higher threshold
+        }
+        
+        # Performance tracking
+        self.performance_history = defaultdict(lambda: {
+            'true_positives': 0,
+            'false_positives': 0,
+            'true_negatives': 0,
+            'false_negatives': 0,
+            'recent_accuracy': 0.0,
+            'recent_precision': 0.0,
+            'recent_recall': 0.0
+        })
+        
+        # Adjustment parameters
+        self.learning_rate = 0.15
+        self.min_threshold = 0.05
+        self.max_threshold = 0.85
+        
+        self._init_database()
+    
+    def _init_database(self):
+        """Initialize adaptive thresholds database"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS threshold_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    evidence_type TEXT NOT NULL,
+                    threshold_value REAL NOT NULL,
+                    performance_accuracy REAL NOT NULL,
+                    performance_precision REAL NOT NULL,
+                    performance_recall REAL NOT NULL,
+                    adjustment_reason TEXT,
+                    timestamp REAL NOT NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_threshold_type ON threshold_history(evidence_type)")
+    
+    def assess_evidence_confidence(self, evidence_type: str, base_similarity: float, feature_confidence: str = 'medium') -> Dict[str, Any]:
+        """Assess evidence and determine confidence with adaptive thresholds"""
+        
+        # Get base threshold for evidence type
+        base_threshold = self.evidence_thresholds.get(evidence_type, self.evidence_thresholds['default'])
+        
+        # Apply confidence multiplier
+        confidence_multiplier = self.confidence_multipliers.get(feature_confidence, 1.0)
+        adjusted_threshold = max(self.min_threshold, min(self.max_threshold, base_threshold * confidence_multiplier))
+        
+        # Determine if evidence meets threshold
+        evidence_detected = base_similarity > adjusted_threshold
+        
+        # Calculate confidence score
+        if evidence_detected:
+            # Evidence detected - confidence based on how far above threshold
+            excess = base_similarity - adjusted_threshold
+            max_excess = 1.0 - adjusted_threshold
+            confidence_score = 0.5 + (excess / max_excess) * 0.5 if max_excess > 0 else 1.0
+        else:
+            # Evidence not detected - confidence based on how far below threshold
+            deficit = adjusted_threshold - base_similarity
+            confidence_score = 0.5 + (deficit / adjusted_threshold) * 0.5 if adjusted_threshold > 0 else 1.0
+        
+        return {
+            'evidence_type': evidence_type,
+            'base_similarity': base_similarity,
+            'base_threshold': base_threshold,
+            'adjusted_threshold': adjusted_threshold,
+            'confidence_multiplier': confidence_multiplier,
+            'evidence_detected': evidence_detected,
+            'confidence_score': confidence_score,
+            'feature_confidence': feature_confidence
+        }
+    
+    def update_performance(self, evidence_type: str, assessment: Dict[str, Any], actual_importance: bool):
+        """Update performance metrics and adjust thresholds"""
+        
+        # Update performance counters
+        perf = self.performance_history[evidence_type]
+        
+        if assessment['evidence_detected'] and actual_importance:
+            perf['true_positives'] += 1
+        elif assessment['evidence_detected'] and not actual_importance:
+            perf['false_positives'] += 1
+        elif not assessment['evidence_detected'] and not actual_importance:
+            perf['true_negatives'] += 1
+        elif not assessment['evidence_detected'] and actual_importance:
+            perf['false_negatives'] += 1
+        
+        # Recalculate metrics
+        total = sum([perf['true_positives'], perf['false_positives'], 
+                    perf['true_negatives'], perf['false_negatives']])
+        
+        if total > 0:
+            perf['recent_accuracy'] = (perf['true_positives'] + perf['true_negatives']) / total
+        
+        predicted_positives = perf['true_positives'] + perf['false_positives']
+        if predicted_positives > 0:
+            perf['recent_precision'] = perf['true_positives'] / predicted_positives
+        
+        actual_positives = perf['true_positives'] + perf['false_negatives']
+        if actual_positives > 0:
+            perf['recent_recall'] = perf['true_positives'] / actual_positives
+        
+        # Adjust threshold based on performance
+        self._adjust_threshold(evidence_type, assessment, actual_importance)
+    
+    def _adjust_threshold(self, evidence_type: str, assessment: Dict[str, Any], actual_importance: bool):
+        """Adjust threshold based on performance feedback"""
+        current_threshold = assessment['adjusted_threshold']
+        
+        if assessment['evidence_detected'] and not actual_importance:
+            # False positive - increase threshold moderately
+            adjustment = self.learning_rate * 0.3
+            reason = "false_positive_reduction"
+        elif not assessment['evidence_detected'] and actual_importance:
+            # False negative - CRITICAL: decrease threshold aggressively
+            confidence_gap = current_threshold - assessment['base_similarity']
+            adjustment = -self.learning_rate * (1.0 + confidence_gap * 2.0)
+            adjustment = max(adjustment, -0.15)  # Cap at 15% reduction
+            reason = "false_negative_correction"
+        else:
+            # Correct prediction - small adjustment toward optimal
+            if actual_importance:
+                optimal_threshold = assessment['base_similarity'] * 0.9
+            else:
+                optimal_threshold = assessment['base_similarity'] * 1.1
+            adjustment = (optimal_threshold - current_threshold) * self.learning_rate * 0.1
+            reason = "optimization"
+        
+        # Apply adjustment
+        new_threshold = max(self.min_threshold, min(self.max_threshold, 
+                                           self.evidence_thresholds[evidence_type] + adjustment))
+        
+        if abs(adjustment) > 0.01:  # Only log significant adjustments
+            print(f"🎛️  Threshold Adjustment: {evidence_type} {self.evidence_thresholds[evidence_type]:.3f} → {new_threshold:.3f} "
+                  f"({reason})")
+            
+            self.evidence_thresholds[evidence_type] = new_threshold
+            
+            # Log to database
+            with sqlite3.connect(self.db_path) as conn:
+                perf = self.performance_history[evidence_type]
+                conn.execute("""
+                    INSERT INTO threshold_history 
+                    (evidence_type, threshold_value, performance_accuracy, performance_precision, 
+                     performance_recall, adjustment_reason, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    evidence_type, new_threshold, perf['recent_accuracy'],
+                    perf['recent_precision'], perf['recent_recall'], reason, time.time()
+                ))
+    
+    def get_threshold_for_evidence_type(self, evidence_type: str) -> float:
+        """Get current threshold for specific evidence type"""
+        return self.evidence_thresholds.get(evidence_type, self.evidence_thresholds['default'])
+    
+    def get_performance_stats(self) -> Dict[str, Dict[str, Any]]:
+        """Get performance statistics for all evidence types"""
+        return dict(self.performance_history)
+
+class ForensicEnhancedFeatureExtractor:
+    """Enhanced feature extraction for forensic evidence analysis"""
+    
+    def __init__(self):
+        # Forensic-specific patterns
+        self.anti_forensic_patterns = [
+            r'sdelete|cipher\s+/w|wipe|shred|bleachbit',
+            r'timestomp|setmace|touch\s+-[amt]',
+            r'log\s*clear|eventlog.*clear|wevtutil.*cl',
+            r'history.*clear|bash_history.*>/dev/null',
+            r'secure.*delete|permanent.*delete'
+        ]
+        
+        self.data_exfiltration_patterns = [
+            r'ftp|sftp|scp|rsync|wget|curl',
+            r'compress|zip|rar|7z|tar\.gz',
+            r'base64|encode|encrypt|cipher',
+            r'email.*attach|smtp|sendmail',
+            r'cloud.*upload|dropbox|gdrive|onedrive'
+        ]
+        
+        self.temporal_anomaly_patterns = [
+            r'batch|scheduled|cron|at\s+\d+',
+            r'midnight|3am|4am|weekend',
+            r'rapid.*succession|bulk.*operation',
+            r'automated|script|programmatic'
+        ]
+        
+        self.privilege_escalation_patterns = [
+            r'runas|sudo|su\s+root|admin',
+            r'uac.*bypass|privilege.*escalat',
+            r'token.*impersonat|access.*token',
+            r'system.*account|service.*account'
+        ]
+        
+        # Compile regex patterns
+        self.compiled_patterns = {
+            'anti_forensic': [re.compile(p, re.IGNORECASE) for p in self.anti_forensic_patterns],
+            'data_exfiltration': [re.compile(p, re.IGNORECASE) for p in self.data_exfiltration_patterns],
+            'temporal_anomaly': [re.compile(p, re.IGNORECASE) for p in self.temporal_anomaly_patterns],
+            'privilege_escalation': [re.compile(p, re.IGNORECASE) for p in self.privilege_escalation_patterns]
+        }
+    
+    def extract_forensic_features(self, evidence_text: str, evidence_metadata: Dict[str, Any] = None) -> np.ndarray:
+        """Extract comprehensive forensic-specific features"""
+        features = np.zeros(32)
+        
+        if not evidence_text:
+            return features
+        
+        text_lower = evidence_text.lower()
+        metadata = evidence_metadata or {}
+        
+        # Features 0-3: Basic text characteristics
+        features[0] = min(len(evidence_text) / 1000.0, 1.0)  # Text length (normalized)
+        features[1] = len(evidence_text.split()) / 100.0     # Word count (normalized)
+        features[2] = self._calculate_entropy(evidence_text)  # Text entropy
+        features[3] = len(set(evidence_text.lower().split())) / max(len(evidence_text.split()), 1)  # Vocabulary diversity
+        
+        # Features 4-7: Anti-forensic activity detection
+        features[4] = self._pattern_match_score(text_lower, self.compiled_patterns['anti_forensic'])
+        features[5] = self._detect_timestamp_manipulation(evidence_text)
+        features[6] = self._detect_log_clearing(evidence_text)
+        features[7] = self._detect_data_destruction(evidence_text)
+        
+        # Features 8-11: Data exfiltration indicators
+        features[8] = self._pattern_match_score(text_lower, self.compiled_patterns['data_exfiltration'])
+        features[9] = self._detect_large_transfers(evidence_text, metadata)
+        features[10] = self._detect_compression_activity(evidence_text)
+        features[11] = self._detect_external_communication(evidence_text)
+        
+        # Features 12-15: Temporal anomaly detection
+        features[12] = self._pattern_match_score(text_lower, self.compiled_patterns['temporal_anomaly'])
+        features[13] = self._detect_off_hours_activity(evidence_text, metadata)
+        features[14] = self._detect_batch_operations(evidence_text)
+        features[15] = self._detect_rapid_succession(evidence_text, metadata)
+        
+        # Features 16-19: Privilege escalation and access
+        features[16] = self._pattern_match_score(text_lower, self.compiled_patterns['privilege_escalation'])
+        features[17] = self._detect_admin_access(evidence_text)
+        features[18] = self._detect_service_account_usage(evidence_text)
+        features[19] = self._detect_token_manipulation(evidence_text)
+        
+        # Features 20-23: File system activity
+        features[20] = self._detect_file_creation_patterns(evidence_text)
+        features[21] = self._detect_file_deletion_patterns(evidence_text)
+        features[22] = self._detect_file_modification_patterns(evidence_text)
+        features[23] = self._detect_hidden_file_activity(evidence_text)
+        
+        # Features 24-27: Network and communication
+        features[24] = self._detect_network_connections(evidence_text)
+        features[25] = self._detect_dns_queries(evidence_text)
+        features[26] = self._detect_port_scanning(evidence_text)
+        features[27] = self._detect_encrypted_communication(evidence_text)
+        
+        # Features 28-31: System and process activity
+        features[28] = self._detect_process_injection(evidence_text)
+        features[29] = self._detect_registry_manipulation(evidence_text)
+        features[30] = self._detect_service_manipulation(evidence_text)
+        features[31] = self._calculate_overall_suspicion_score(features[:31])
+        
+        return features
+    
+    def _pattern_match_score(self, text: str, patterns: List[re.Pattern]) -> float:
+        """Calculate pattern match score for given patterns"""
+        matches = 0
+        total_patterns = len(patterns)
+        
+        for pattern in patterns:
+            if pattern.search(text):
+                matches += 1
+        
+        return matches / max(total_patterns, 1)
+    
+    def _calculate_entropy(self, text: str) -> float:
+        """Calculate Shannon entropy of text"""
+        if not text:
+            return 0.0
+        
+        # Count character frequencies
+        char_counts = defaultdict(int)
+        for char in text:
+            char_counts[char] += 1
+        
+        # Calculate entropy
+        text_len = len(text)
+        entropy = 0.0
+        
+        for count in char_counts.values():
+            probability = count / text_len
+            if probability > 0:
+                entropy -= probability * np.log2(probability)
+        
+        # Normalize to 0-1 range (assuming max entropy ~8 for typical text)
+        return min(entropy / 8.0, 1.0)
+    
+    def _detect_timestamp_manipulation(self, text: str) -> float:
+        """Detect timestamp manipulation indicators"""
+        indicators = [
+            r'timestomp', r'setmace', r'touch\s+-[amt]', r'filetime',
+            r'modify.*time', r'change.*timestamp', r'backdating'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.2
+        
+        return min(score, 1.0)
+    
+    def _detect_log_clearing(self, text: str) -> float:
+        """Detect log clearing activities"""
+        indicators = [
+            r'wevtutil.*cl', r'eventlog.*clear', r'log.*clear',
+            r'history.*clear', r'bash_history.*>', r'zsh_history.*>'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.25
+        
+        return min(score, 1.0)
+    
+    def _detect_data_destruction(self, text: str) -> float:
+        """Detect data destruction activities"""
+        indicators = [
+            r'sdelete', r'cipher\s+/w', r'shred', r'wipe', r'bleachbit',
+            r'secure.*delet', r'permanent.*delet', r'overwrite'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.2
+        
+        return min(score, 1.0)
+    
+    def _detect_large_transfers(self, text: str, metadata: Dict[str, Any]) -> float:
+        """Detect large data transfer activities"""
+        # Check for size indicators in text
+        size_patterns = [
+            r'(\d+)\s*(gb|mb|tb)', r'(\d+)\s*bytes', r'size.*(\d+)',
+            r'transfer.*(\d+)', r'download.*(\d+)', r'upload.*(\d+)'
+        ]
+        
+        score = 0.0
+        for pattern in size_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                try:
+                    if isinstance(match, tuple):
+                        size_val = float(match[0])
+                        unit = match[1].lower() if len(match) > 1 else 'bytes'
+                    else:
+                        size_val = float(match)
+                        unit = 'bytes'
+                    
+                    # Convert to MB for comparison
+                    if unit == 'gb':
+                        size_mb = size_val * 1024
+                    elif unit == 'tb':
+                        size_mb = size_val * 1024 * 1024
+                    elif unit == 'bytes':
+                        size_mb = size_val / (1024 * 1024)
+                    else:
+                        size_mb = size_val
+                    
+                    # Score based on size (>100MB gets higher score)
+                    if size_mb > 100:
+                        score += 0.3
+                    elif size_mb > 10:
+                        score += 0.1
+                        
+                except (ValueError, IndexError):
+                    continue
+        
+        return min(score, 1.0)
+    
+    def _detect_compression_activity(self, text: str) -> float:
+        """Detect compression/archiving activity"""
+        indicators = [
+            r'zip', r'rar', r'7z', r'tar\.gz', r'compress',
+            r'archive', r'pack', r'bundle'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.15
+        
+        return min(score, 1.0)
+    
+    def _detect_external_communication(self, text: str) -> float:
+        """Detect external communication indicators"""
+        indicators = [
+            r'ftp', r'sftp', r'ssh', r'scp', r'rsync',
+            r'email', r'smtp', r'http', r'https', r'curl', r'wget'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.1
+        
+        return min(score, 1.0)
+    
+    def _detect_off_hours_activity(self, text: str, metadata: Dict[str, Any]) -> float:
+        """Detect off-hours activity patterns"""
+        # Check for time indicators in text
+        time_patterns = [
+            r'(\d{1,2}):(\d{2})', r'(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})'
+        ]
+        
+        score = 0.0
+        for pattern in time_patterns:
+            matches = re.findall(pattern, text)
+            for match in matches:
+                try:
+                    if len(match) >= 2:
+                        hour = int(match[0] if len(match) == 2 else match[3])
+                        # Off hours: 10PM - 6AM (22:00 - 06:00)
+                        if hour >= 22 or hour <= 6:
+                            score += 0.2
+                except (ValueError, IndexError):
+                    continue
+        
+        return min(score, 1.0)
+    
+    def _detect_batch_operations(self, text: str) -> float:
+        """Detect batch operation indicators"""
+        indicators = [
+            r'batch', r'bulk', r'mass', r'multiple', r'automated',
+            r'script', r'loop', r'for.*in', r'while.*do'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.15
+        
+        return min(score, 1.0)
+    
+    def _detect_rapid_succession(self, text: str, metadata: Dict[str, Any]) -> float:
+        """Detect rapid succession of events"""
+        # Look for multiple timestamps close together
+        timestamp_pattern = r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})'
+        timestamps = re.findall(timestamp_pattern, text)
+        
+        if len(timestamps) < 2:
+            return 0.0
+        
+        try:
+            # Parse timestamps and check intervals
+            parsed_times = []
+            for ts in timestamps[:10]:  # Limit to first 10 timestamps
+                parsed_times.append(datetime.strptime(ts, '%Y-%m-%d %H:%M:%S'))
+            
+            # Calculate intervals between consecutive timestamps
+            rapid_count = 0
+            for i in range(1, len(parsed_times)):
+                interval = (parsed_times[i] - parsed_times[i-1]).total_seconds()
+                if interval < 5:  # Less than 5 seconds apart
+                    rapid_count += 1
+            
+            return min(rapid_count / max(len(parsed_times) - 1, 1), 1.0)
+            
+        except ValueError:
+            return 0.0
+    
+    def _detect_admin_access(self, text: str) -> float:
+        """Detect administrative access indicators"""
+        indicators = [
+            r'administrator', r'admin', r'root', r'system',
+            r'elevated', r'privilege', r'runas', r'sudo'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.15
+        
+        return min(score, 1.0)
+    
+    def _detect_service_account_usage(self, text: str) -> float:
+        """Detect service account usage"""
+        indicators = [
+            r'service.*account', r'system.*account', r'local.*service',
+            r'network.*service', r'nt\s+authority'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.2
+        
+        return min(score, 1.0)
+    
+    def _detect_token_manipulation(self, text: str) -> float:
+        """Detect token manipulation activities"""
+        indicators = [
+            r'token', r'impersonat', r'access.*token', r'security.*token',
+            r'privilege.*token'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.25
+        
+        return min(score, 1.0)
+    
+    def _detect_file_creation_patterns(self, text: str) -> float:
+        """Detect file creation patterns"""
+        indicators = [
+            r'creat', r'new.*file', r'touch', r'mkdir', r'write'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.1
+        
+        return min(score, 1.0)
+    
+    def _detect_file_deletion_patterns(self, text: str) -> float:
+        """Detect file deletion patterns"""
+        indicators = [
+            r'delet', r'remov', r'unlink', r'rm\s+', r'del\s+'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.15
+        
+        return min(score, 1.0)
+    
+    def _detect_file_modification_patterns(self, text: str) -> float:
+        """Detect file modification patterns"""
+        indicators = [
+            r'modif', r'chang', r'edit', r'updat', r'alter'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.1
+        
+        return min(score, 1.0)
+    
+    def _detect_hidden_file_activity(self, text: str) -> float:
+        """Detect hidden file activity"""
+        indicators = [
+            r'hidden', r'\..*file', r'attrib.*\+h', r'invisible',
+            r'concealed'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.2
+        
+        return min(score, 1.0)
+    
+    def _detect_network_connections(self, text: str) -> float:
+        """Detect network connection activities"""
+        indicators = [
+            r'connect', r'socket', r'tcp', r'udp', r'port',
+            r'network', r'ip.*address'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.1
+        
+        return min(score, 1.0)
+    
+    def _detect_dns_queries(self, text: str) -> float:
+        """Detect DNS query activities"""
+        indicators = [
+            r'dns', r'nslookup', r'dig', r'resolve', r'query'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.15
+        
+        return min(score, 1.0)
+    
+    def _detect_port_scanning(self, text: str) -> float:
+        """Detect port scanning activities"""
+        indicators = [
+            r'port.*scan', r'nmap', r'masscan', r'portscan',
+            r'probe.*port'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.3
+        
+        return min(score, 1.0)
+    
+    def _detect_encrypted_communication(self, text: str) -> float:
+        """Detect encrypted communication"""
+        indicators = [
+            r'encrypt', r'ssl', r'tls', r'https', r'cipher',
+            r'crypto', r'secure'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.1
+        
+        return min(score, 1.0)
+    
+    def _detect_process_injection(self, text: str) -> float:
+        """Detect process injection techniques"""
+        indicators = [
+            r'inject', r'hollowing', r'process.*replac', r'dll.*inject',
+            r'code.*inject'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.3
+        
+        return min(score, 1.0)
+    
+    def _detect_registry_manipulation(self, text: str) -> float:
+        """Detect registry manipulation"""
+        indicators = [
+            r'registry', r'regedit', r'reg\s+add', r'reg\s+delete',
+            r'hkey', r'hklm', r'hkcu'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.15
+        
+        return min(score, 1.0)
+    
+    def _detect_service_manipulation(self, text: str) -> float:
+        """Detect service manipulation"""
+        indicators = [
+            r'service', r'sc\s+', r'net\s+start', r'net\s+stop',
+            r'systemctl', r'daemon'
+        ]
+        
+        score = 0.0
+        for indicator in indicators:
+            if re.search(indicator, text, re.IGNORECASE):
+                score += 0.15
+        
+        return min(score, 1.0)
+    
+    def _calculate_overall_suspicion_score(self, features: np.ndarray) -> float:
+        """Calculate overall suspicion score from all features"""
+        # Weight different categories
+        weights = np.array([
+            0.05,  # Text characteristics (low weight)
+            0.05, 0.05, 0.05,
+            0.15, 0.15, 0.15, 0.15,  # Anti-forensic (high weight)
+            0.10, 0.10, 0.10, 0.10,  # Data exfiltration (medium weight)
+            0.08, 0.08, 0.08, 0.08,  # Temporal anomalies (medium weight)
+            0.12, 0.12, 0.12, 0.12,  # Privilege escalation (high weight)
+            0.06, 0.06, 0.06, 0.06,  # File system (low-medium weight)
+            0.08, 0.08, 0.08, 0.08,  # Network (medium weight)
+            0.10, 0.10, 0.10         # System/process (medium weight)
+        ])
+        
+        # Ensure weights match features length
+        weights = weights[:len(features)]
+        if len(weights) < len(features):
+            # Pad with equal weights for remaining features
+            remaining = len(features) - len(weights)
+            avg_weight = (1.0 - weights.sum()) / remaining if remaining > 0 else 0.0
+            weights = np.concatenate([weights, np.full(remaining, avg_weight)])
+        
+        # Normalize weights to sum to 1
+        weights = weights / weights.sum()
+        
+        return np.dot(features, weights)
+
+class ForensicAnomalyDetector:
+    """Isolation Forest-based anomaly detection for forensic timeline analysis"""
+    
+    def __init__(self, contamination: float = 0.1, n_estimators: int = 100):
+        self.contamination = contamination  # Expected proportion of anomalies
+        self.n_estimators = n_estimators
+        self.isolation_forest = None
+        self.feature_extractor = ForensicEnhancedFeatureExtractor()
+        self.is_trained = False
+        self.anomaly_threshold = -0.1  # Threshold for anomaly detection
+        
+    def train_on_timeline(self, evidence_data: List[Dict[str, Any]]) -> bool:
+        """Train the anomaly detector on forensic timeline data"""
+        if not evidence_data:
+            print("⚠️  No evidence data provided for anomaly detection training")
+            return False
+        
+        try:
+            # Extract features from evidence
+            feature_vectors = []
+            for evidence in evidence_data:
+                text = evidence.get('summary', '') + ' ' + evidence.get('data_json', '')
+                metadata = {
+                    'timestamp': evidence.get('timestamp'),
+                    'artifact': evidence.get('artifact'),
+                    'case_id': evidence.get('case_id')
+                }
+                features = self.feature_extractor.extract_forensic_features(text, metadata)
+                feature_vectors.append(features)
+            
+            if len(feature_vectors) < 10:
+                print("⚠️  Insufficient data for anomaly detection training (need at least 10 samples)")
+                return False
+            
+            # Train Isolation Forest
+            feature_matrix = np.array(feature_vectors)
+            self.isolation_forest = IsolationForest(
+                contamination=self.contamination,
+                n_estimators=self.n_estimators,
+                random_state=42,
+                n_jobs=-1
+            )
+            
+            self.isolation_forest.fit(feature_matrix)
+            self.is_trained = True
+            
+            print(f"🌲 Anomaly Detection: Trained on {len(feature_vectors)} evidence samples")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error training anomaly detector: {e}")
+            return False
+    
+    def detect_anomalies(self, evidence_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Detect anomalous patterns in forensic evidence"""
+        if not self.is_trained:
+            print("⚠️  Anomaly detector not trained. Call train_on_timeline() first.")
+            return []
+        
+        anomalies = []
+        
+        try:
+            for evidence in evidence_data:
+                text = evidence.get('summary', '') + ' ' + evidence.get('data_json', '')
+                metadata = {
+                    'timestamp': evidence.get('timestamp'),
+                    'artifact': evidence.get('artifact'),
+                    'case_id': evidence.get('case_id')
+                }
+                
+                # Extract features
+                features = self.feature_extractor.extract_forensic_features(text, metadata)
+                feature_vector = features.reshape(1, -1)
+                
+                # Get anomaly score
+                anomaly_score = self.isolation_forest.decision_function(feature_vector)[0]
+                is_anomaly = anomaly_score < self.anomaly_threshold
+                
+                if is_anomaly:
+                    anomaly_info = {
+                        'evidence_id': evidence.get('id'),
+                        'case_id': evidence.get('case_id'),
+                        'timestamp': evidence.get('timestamp'),
+                        'artifact': evidence.get('artifact'),
+                        'summary': evidence.get('summary', '')[:200],  # Truncate for display
+                        'anomaly_score': float(anomaly_score),
+                        'anomaly_severity': self._calculate_anomaly_severity(anomaly_score),
+                        'suspicious_features': self._identify_suspicious_features(features),
+                        'confidence': abs(anomaly_score) / 2.0  # Normalize confidence
+                    }
+                    anomalies.append(anomaly_info)
+            
+            if anomalies:
+                # Sort by anomaly severity (most anomalous first)
+                anomalies.sort(key=lambda x: x['anomaly_score'])
+                print(f"🚨 Detected {len(anomalies)} anomalous evidence patterns")
+            
+            return anomalies
+            
+        except Exception as e:
+            print(f"❌ Error detecting anomalies: {e}")
+            return []
+    
+    def _calculate_anomaly_severity(self, anomaly_score: float) -> str:
+        """Calculate severity level based on anomaly score"""
+        if anomaly_score < -0.3:
+            return "CRITICAL"
+        elif anomaly_score < -0.2:
+            return "HIGH"
+        elif anomaly_score < -0.1:
+            return "MEDIUM"
+        else:
+            return "LOW"
+    
+    def _identify_suspicious_features(self, features: np.ndarray) -> List[str]:
+        """Identify which features contribute most to anomaly detection"""
+        suspicious_features = []
+        
+        # Define feature categories and their indices
+        feature_categories = {
+            'anti_forensic': [4, 5, 6, 7],
+            'data_exfiltration': [8, 9, 10, 11],
+            'temporal_anomaly': [12, 13, 14, 15],
+            'privilege_escalation': [16, 17, 18, 19],
+            'file_system': [20, 21, 22, 23],
+            'network': [24, 25, 26, 27],
+            'system_process': [28, 29, 30, 31]
+        }
+        
+        # Check which categories have high feature values
+        for category, indices in feature_categories.items():
+            category_score = np.mean([features[i] for i in indices if i < len(features)])
+            if category_score > 0.3:  # Threshold for suspicious activity
+                suspicious_features.append(category.replace('_', ' ').title())
+        
+        return suspicious_features
+    
+    def analyze_timeline_anomalies(self, case_id: str) -> Dict[str, Any]:
+        """Analyze timeline for anomalous patterns and provide insights"""
+        if not self.is_trained:
+            return {'error': 'Anomaly detector not trained'}
+        
+        try:
+            # Get evidence from database
+            with get_database_connection() as conn:
+                cursor = conn.execute("""
+                    SELECT * FROM evidence 
+                    WHERE case_id = ? 
+                    ORDER BY timestamp
+                """, (case_id,))
+                evidence_data = [dict(row) for row in cursor.fetchall()]
+            
+            if not evidence_data:
+                return {'error': f'No evidence found for case {case_id}'}
+            
+            # Detect anomalies
+            anomalies = self.detect_anomalies(evidence_data)
+            
+            # Analyze patterns
+            analysis = {
+                'case_id': case_id,
+                'total_evidence': len(evidence_data),
+                'anomalies_detected': len(anomalies),
+                'anomaly_rate': len(anomalies) / len(evidence_data) if evidence_data else 0,
+                'anomalies': anomalies,
+                'timeline_insights': self._generate_timeline_insights(anomalies),
+                'recommendations': self._generate_recommendations(anomalies)
+            }
+            
+            return analysis
+            
+        except Exception as e:
+            return {'error': f'Error analyzing timeline anomalies: {e}'}
+    
+    def _generate_timeline_insights(self, anomalies: List[Dict[str, Any]]) -> List[str]:
+        """Generate insights about timeline anomalies"""
+        insights = []
+        
+        if not anomalies:
+            insights.append("No significant anomalies detected in timeline")
+            return insights
+        
+        # Analyze anomaly distribution
+        severity_counts = defaultdict(int)
+        artifact_counts = defaultdict(int)
+        feature_counts = defaultdict(int)
+        
+        for anomaly in anomalies:
+            severity_counts[anomaly['anomaly_severity']] += 1
+            artifact_counts[anomaly['artifact']] += 1
+            for feature in anomaly['suspicious_features']:
+                feature_counts[feature] += 1
+        
+        # Generate insights
+        if severity_counts['CRITICAL'] > 0:
+            insights.append(f"🚨 {severity_counts['CRITICAL']} CRITICAL anomalies require immediate attention")
+        
+        if severity_counts['HIGH'] > 0:
+            insights.append(f"⚠️  {severity_counts['HIGH']} HIGH severity anomalies detected")
+        
+        # Most anomalous artifact types
+        if artifact_counts:
+            top_artifact = max(artifact_counts.items(), key=lambda x: x[1])
+            insights.append(f"📁 Most anomalous artifact type: {top_artifact[0]} ({top_artifact[1]} anomalies)")
+        
+        # Most suspicious feature categories
+        if feature_counts:
+            top_features = sorted(feature_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+            feature_list = [f"{feat} ({count})" for feat, count in top_features]
+            insights.append(f"🔍 Top suspicious activities: {', '.join(feature_list)}")
+        
+        return insights
+    
+    def _generate_recommendations(self, anomalies: List[Dict[str, Any]]) -> List[str]:
+        """Generate recommendations based on detected anomalies"""
+        recommendations = []
+        
+        if not anomalies:
+            recommendations.append("Continue monitoring for unusual patterns")
+            return recommendations
+        
+        # Analyze patterns for recommendations
+        critical_count = sum(1 for a in anomalies if a['anomaly_severity'] == 'CRITICAL')
+        high_count = sum(1 for a in anomalies if a['anomaly_severity'] == 'HIGH')
+        
+        if critical_count > 0:
+            recommendations.append(f"🚨 URGENT: Investigate {critical_count} critical anomalies immediately")
+            recommendations.append("🔍 Perform deep forensic analysis on critical anomalies")
+            recommendations.append("📋 Document findings for incident response")
+        
+        if high_count > 0:
+            recommendations.append(f"⚠️  Review {high_count} high-severity anomalies for potential threats")
+        
+        # Feature-specific recommendations
+        feature_counts = defaultdict(int)
+        for anomaly in anomalies:
+            for feature in anomaly['suspicious_features']:
+                feature_counts[feature] += 1
+        
+        if feature_counts.get('Anti Forensic', 0) > 0:
+            recommendations.append("🛡️  Evidence of anti-forensic activity detected - verify data integrity")
+        
+        if feature_counts.get('Data Exfiltration', 0) > 0:
+            recommendations.append("📤 Potential data exfiltration detected - check network logs and file transfers")
+        
+        if feature_counts.get('Privilege Escalation', 0) > 0:
+            recommendations.append("🔐 Privilege escalation activity detected - review user access and permissions")
+        
+        recommendations.append("📊 Consider expanding timeline collection for additional context")
+        recommendations.append("🔄 Re-run analysis after gathering additional evidence")
+        
+        return recommendations
 
 # ============================================================================
 # STANDARD FORENSIC QUESTIONS
@@ -3350,6 +4532,9 @@ class ForensicAnalyzer:
             # BHSM components required for semantic search
             return "BHSM components not available. Please install required dependencies."
         
+        # Get enhanced BHSM components for adaptive learning
+        retrospective_learning, adaptive_thresholds, enhanced_features, anomaly_detector = get_enhanced_bhsm_components()
+        
         # Generate query embedding
         query_vec = embedder.embed(question)
         
@@ -3440,6 +4625,46 @@ class ForensicAnalyzer:
                     fact['registry_key'] = key_match.group(1)[:100]
             
             facts.append(fact)
+        
+        # Step 4.5: Apply Enhanced BHSM Adaptive Learning
+        enhanced_facts = []
+        for i, fact in enumerate(facts):
+            evidence_text = fact['summary'] + ' ' + evidence_items[i].get('data_json', '')
+            evidence_type = fact['type']
+            
+            # Extract enhanced forensic features
+            enhanced_features_vec = enhanced_features.extract_forensic_features(
+                evidence_text, 
+                evidence_items[i]
+            )
+            
+            # Apply adaptive thresholds for confidence assessment
+            base_similarity = psi_hits[i][0] if i < len(psi_hits) else 0.5
+            confidence_assessment = adaptive_thresholds.assess_evidence_confidence(
+                evidence_type, 
+                base_similarity, 
+                'medium'
+            )
+            
+            # Apply retrospective learning adjustments
+            adjusted_confidence = retrospective_learning.calculate_confidence_adjustment(
+                enhanced_features_vec,
+                confidence_assessment['confidence_score'],
+                evidence_type
+            )
+            
+            # Enhance fact with adaptive learning insights
+            enhanced_fact = fact.copy()
+            enhanced_fact['confidence_score'] = adjusted_confidence
+            enhanced_fact['adaptive_threshold'] = confidence_assessment['adjusted_threshold']
+            enhanced_fact['evidence_detected'] = confidence_assessment['evidence_detected']
+            
+            # Only include high-confidence evidence
+            if adjusted_confidence > confidence_assessment['adjusted_threshold']:
+                enhanced_facts.append(enhanced_fact)
+        
+        # Use enhanced facts instead of original facts
+        facts = enhanced_facts
         
         # Step 5: Use LLM only for summarization with concise facts
         if facts and get_global_llm():
