@@ -46,7 +46,7 @@ Target Drive → KAPE.exe → log2timeline.py → psort.py → SQLite DB → FOR
 - **Proper error handling** and timeout management for all external tools
 
 ### 🧠 **Enhanced BHSM PSI Adaptive Learning System**
-- **Bio-inspired Hebbian Sparse Memory (BHSM)** with advanced adaptive learning
+- **Bidirectional Hebbian Synaptic Memory (BHSM)** with advanced adaptive learning
 - **Persistent Semantic Index (PSI)** with 32-dimensional forensic-specific embeddings
 - **SimEmbedder** for semantic vector generation and similarity matching
 - **BDHMemory** with reward-gated learning and memory consolidation
@@ -88,7 +88,7 @@ FORAI provides intelligent, adaptive answers to these critical forensic question
 
 ## 🤖 Enhanced BHSM PSI Adaptive Learning System
 
-FORAI features a revolutionary Bio-inspired Hebbian Sparse Memory (BHSM) system with advanced adaptive learning capabilities, completely replacing the legacy FAS5 system for superior forensic analysis:
+FORAI features a revolutionary Bidirectional Hebbian Synaptic Memory (BHSM) system with advanced adaptive learning capabilities, completely replacing the legacy FAS5 system for superior forensic analysis:
 
 ### 🧠 **SimEmbedder - Semantic Vector Generation**
 - **32-dimensional embeddings** for forensic evidence representation

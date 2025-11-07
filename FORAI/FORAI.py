@@ -301,7 +301,7 @@ class PSIIndex:
             return cursor.fetchone()[0]
 
 class BDHMemory:
-    """Bidirectional Hebbian Memory with reward gating."""
+    """Bidirectional Hebbian Synaptic Memory with reward gating."""
     
     def __init__(self, store_type: str = "forai", db_path: Optional[Path] = None):
         self.store_type = store_type
@@ -407,7 +407,7 @@ BHSM_AVAILABLE = True  # Always available since integrated
 
 # ============================================================================
 # ENHANCED BHSM ADAPTIVE LEARNING CAPABILITIES
-# Bio-inspired Hebbian Sparse Memory (BHSM) originated adaptive learning system
+# Bidirectional Hebbian Synaptic Memory (BHSM) originated adaptive learning system
 # These capabilities extend the core BHSM memory and learning functions
 # ============================================================================
 
