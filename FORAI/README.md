@@ -46,7 +46,7 @@ Target Drive → KAPE.exe → log2timeline.py → psort.py → SQLite DB → FOR
 - **Proper error handling** and timeout management for all external tools
 
 ### 🧠 **Enhanced BHSM PSI Adaptive Learning System**
-- **Bidirectional Hebbian Synaptic Memory (BHSM)** - a novel Bio-Inspired Hebbian Sparse Memory implementation
+- **Bidirectional Hebbian Synaptic Memory (BHSM)** - bio-inspired Hebbian memory leveraging sparse autoencoding with synaptic plasticity
 - **Persistent Semantic Index (PSI)** with 32-dimensional forensic-specific embeddings
 - **SimEmbedder** for semantic vector generation and similarity matching
 - **BDHMemory** with reward-gated learning and memory consolidation
@@ -90,7 +90,7 @@ FORAI provides intelligent, adaptive answers to these critical forensic question
 
 FORAI features a revolutionary Bidirectional Hebbian Synaptic Memory (BHSM) system with advanced adaptive learning capabilities, completely replacing the legacy FAS5 system for superior forensic analysis.
 
-**BHSM** represents a novel implementation of **Bio-Inspired Hebbian Sparse Memory**, combining bidirectional synaptic learning with sparse activation patterns for efficient forensic memory consolidation and retrieval:
+**BHSM** is a **bio-inspired Hebbian memory approach** that leverages sparse autoencoding techniques while taking advantage of synaptic plasticity for adaptive forensic pattern recognition and memory consolidation:
 
 ### 🧠 **SimEmbedder - Semantic Vector Generation**
 - **32-dimensional embeddings** for forensic evidence representation
@@ -107,7 +107,8 @@ FORAI features a revolutionary Bidirectional Hebbian Synaptic Memory (BHSM) syst
 ### 🎯 **BDHMemory - Adaptive Learning System**
 - **Reward-gated learning** that improves with usage
 - **Memory consolidation** for long-term pattern recognition
-- **Hebbian plasticity** mimicking biological neural networks
+- **Hebbian plasticity** with sparse autoencoding for efficient representation
+- **Synaptic adaptation** strengthening successful forensic pattern pathways
 - **Continuous adaptation** to forensic investigation patterns
 
 ### 🔄 **NEW: Retrospective Learning System** *(BHSM-originated)*
