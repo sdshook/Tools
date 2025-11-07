@@ -129,10 +129,8 @@ import subprocess
 import shutil
 import logging
 import threading
-try:
-    import psutil
-except ImportError:
-    psutil = None
+# Required system monitoring
+import psutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -144,12 +142,8 @@ import statistics
 
 
 from tqdm import tqdm
-try:
-    from fpdf import FPDF
-    FPDF_AVAILABLE = True
-except ImportError:
-    FPDF_AVAILABLE = False
-    print("⚠️  fpdf2 not available. PDF report generation disabled.")
+# Required PDF functionality
+from fpdf import FPDF
 import numpy as np
 # psutil imported above with try/except
 
@@ -161,16 +155,11 @@ except ImportError:
     LLAMA_CPP_AVAILABLE = False
     print("Warning: llama-cpp-python not available. Local LLM functionality will be disabled.")
 
-# Optional imports for ML functionality
-try:
-    from sklearn.ensemble import IsolationForest
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.metrics import accuracy_score
-    import numpy as np
-    ML_AVAILABLE = True
-except ImportError:
-    ML_AVAILABLE = False
-    print("Warning: scikit-learn not available. ML-enhanced analysis will be disabled.")
+# Required ML functionality
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score
+import numpy as np
 
 # ============================================================================
 # INTEGRATED SEMANTIC INDEXING COMPONENTS (BHSM Lite)
@@ -2227,7 +2216,7 @@ def get_global_llm(model_path: str = None, force_reload: bool = False):
                     _GLOBAL_LLM = Llama(
                         model_path=str(model_path),
                         n_ctx=2048,  # Reduced context for faster inference
-                        n_threads=min(4, psutil.cpu_count() if psutil else 4),
+                        n_threads=min(4, psutil.cpu_count()),
                         verbose=False
                     )
                     LOGGER.info(f"Global LLM initialized: {model_path}")
@@ -3017,14 +3006,14 @@ def performance_monitor(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         start_time = time.time()
-        start_memory = psutil.Process().memory_info().rss / 1024 / 1024 if psutil else 0
+        start_memory = psutil.Process().memory_info().rss / 1024 / 1024
         
         try:
             result = func(*args, **kwargs)
             return result
         finally:
             end_time = time.time()
-            end_memory = psutil.Process().memory_info().rss / 1024 / 1024 if psutil else 0
+            end_memory = psutil.Process().memory_info().rss / 1024 / 1024
             
             LOGGER.debug(f"{func.__name__}: {end_time - start_time:.2f}s, "
                         f"Memory: {end_memory - start_memory:+.1f}MB")
@@ -6315,7 +6304,7 @@ class ForensicWorkflowManager:
             
             # Track processing metrics
             start_time = time.time()
-            start_memory = psutil.Process().memory_info().rss / 1024 / 1024 if psutil else 0
+            start_memory = psutil.Process().memory_info().rss / 1024 / 1024
             artifacts_size = sum(f.stat().st_size for f in self.artifacts_path.rglob("*") if f.is_file()) / 1024 / 1024  # MB
             
             self.logger.info(f"Step 1: Creating timeline from artifacts (Size: {artifacts_size:.1f}MB): {self.artifacts_path} -> {plaso_storage_path}")
@@ -6323,12 +6312,8 @@ class ForensicWorkflowManager:
             # Step 1: Create timeline from collected artifacts with performance optimizations
             
             # Determine optimal worker count based on system resources
-            if psutil:
-                cpu_count = psutil.cpu_count(logical=False) or 4  # Physical cores
-                available_memory = psutil.virtual_memory().available // (1024 * 1024)  # MB
-            else:
-                cpu_count = os.cpu_count() or 4
-                available_memory = 8192  # 8GB fallback
+            cpu_count = psutil.cpu_count(logical=False) or 4  # Physical cores
+            available_memory = psutil.virtual_memory().available // (1024 * 1024)  # MB
             
             optimal_workers = min(max(cpu_count - 1, 2), 12)  # Leave 1 core free, max 12 workers
             worker_memory_limit = min(max(available_memory // optimal_workers // 2, 1024), 8192)  # 1-8GB per worker
@@ -6552,7 +6537,7 @@ class ForensicWorkflowManager:
                 
             # Calculate performance metrics
             end_time = time.time()
-            end_memory = psutil.Process().memory_info().rss / 1024 / 1024 if psutil else 0
+            end_memory = psutil.Process().memory_info().rss / 1024 / 1024
             processing_time = end_time - start_time
             memory_delta = end_memory - start_memory
             throughput = artifacts_size / processing_time if processing_time > 0 else 0
@@ -6905,7 +6890,7 @@ class ForensicWorkflowManager:
             
             # Track processing metrics
             start_time = time.time()
-            start_memory = psutil.Process().memory_info().rss / 1024 / 1024 if psutil else 0
+            start_memory = psutil.Process().memory_info().rss / 1024 / 1024
             
             self.logger.info(f"Processing plaso file to SQLite: {plaso_file_path} -> {database_path}")
             
@@ -6978,7 +6963,7 @@ class ForensicWorkflowManager:
                     # Calculate performance metrics
                     end_time = time.time()
                     processing_time = end_time - start_time
-                    end_memory = psutil.Process().memory_info().rss / 1024 / 1024 if psutil else 0
+                    end_memory = psutil.Process().memory_info().rss / 1024 / 1024
                     memory_delta = end_memory - start_memory
                     throughput = plaso_size / processing_time if processing_time > 0 else 0
                     
