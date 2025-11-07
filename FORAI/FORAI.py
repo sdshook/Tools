@@ -5,7 +5,7 @@ FORAI.py (c) 2025 All Rights Reserved Shane D. Shook
 Forensic analysis tool utilizing KAPE and Plaso timeline analysis
 
 WORKFLOW:
-Target Drive → KAPE (Artifacts) → log2timeline (.plaso) → psort (SQLite) → FAS5 Database
+Target Drive → KAPE (Artifacts) → log2timeline (.plaso) → psort (SQLite) → BHSM Database
 
 FEATURES:
 - Native artifact collection for forensic integrity
@@ -65,7 +65,7 @@ CLI USAGE EXAMPLES:
     python FORAI.py --case-id CASE001 --full-analysis --artifacts-dir "C:\\YourExistingKapeOutput" --question "What USB devices were connected?" --verbose
 
 📄 IMPORT EXISTING PLASO FILE (SKIP KAPE + LOG2TIMELINE):
-    # Import existing .plaso file and create FAS5 database
+    # Import existing .plaso file and create BHSM database
     python FORAI.py --case-id CASE001 --plaso-file "C:\\Evidence\\timeline.plaso" --verbose
     
     # Import plaso file with custom keywords and generate report
@@ -5707,12 +5707,12 @@ class ModernReportGenerator:
                     f.write(f"Q: {question}\n")
                     f.write(f"A: {answer}\n\n")
 
-class FAS5SQLiteOutputModule:
-    """Custom Plaso output module for direct FAS5 SQLite database integration."""
+class BHSMSQLiteOutputModule:
+    """Custom Plaso output module for direct BHSM SQLite database integration."""
     
     def __init__(self):
-        self.NAME = 'fas5_sqlite'
-        self.DESCRIPTION = 'Direct FAS5 SQLite database output module'
+        self.NAME = 'bhsm_sqlite'
+        self.DESCRIPTION = 'Direct BHSM SQLite database output module'
         self._database_path = None
         self._connection = None
         self._case_id = None
@@ -5735,7 +5735,7 @@ class FAS5SQLiteOutputModule:
         self._connection.execute('PRAGMA synchronous=NORMAL')
         self._connection.execute('PRAGMA cache_size=10000')
         
-        # Initialize FAS5 schema if needed
+        # Initialize BHSM schema if needed
         self._initialize_schema()
 
     def close_connection(self):
@@ -5746,7 +5746,7 @@ class FAS5SQLiteOutputModule:
             self._connection.close()
 
     def _initialize_schema(self):
-        """Initialize the FAS5 database schema."""
+        """Initialize the BHSM database schema."""
         schema = """
         CREATE TABLE IF NOT EXISTS evidence (
             id          INTEGER PRIMARY KEY,
@@ -6031,7 +6031,7 @@ class ForensicWorkflowManager:
 
     
     def _validate_database_integrity(self, db_path: Path) -> bool:
-        """Validate FAS5 database integrity and content"""
+        """Validate BHSM database integrity and content"""
         try:
             if not db_path.exists():
                 self.logger.error(f"Database does not exist: {db_path}")
@@ -6219,13 +6219,13 @@ class ForensicWorkflowManager:
             self.log_custody_event("ARCHIVE_ERROR", f"Failed to create final archive: {str(e)}")
             return None
             
-    def create_custom_plaso_output_module(self) -> FAS5SQLiteOutputModule:
-        """Create custom Plaso output module for direct FAS5 SQLite integration"""
-        module = FAS5SQLiteOutputModule()
-        database_path = self.parsed_dir / f"{self.case_id}_fas5.db"
+    def create_custom_plaso_output_module(self) -> BHSMSQLiteOutputModule:
+        """Create custom Plaso output module for direct BHSM SQLite integration"""
+        module = BHSMSQLiteOutputModule()
+        database_path = self.parsed_dir / f"{self.case_id}_bhsm.db"
         module.set_database_path(str(database_path), self.case_id)
         
-        self.logger.info(f"Created custom FAS5 SQLite output module for database: {database_path}")
+        self.logger.info(f"Created custom BHSM SQLite output module for database: {database_path}")
         return module
 
     def parse_artifacts_plaso(self, plaso_path: Path, fast_mode: bool = False, date_from: str = None, date_to: str = None, artifacts_dir: Path = None, enable_winevtx: bool = False) -> bool:
@@ -6294,12 +6294,12 @@ class ForensicWorkflowManager:
             if not artifact_files:
                 raise ValueError("Artifacts directory is empty")
                 
-            # Create custom FAS5 SQLite output module
+            # Create custom BHSM SQLite output module
             custom_module = self.create_custom_plaso_output_module()
             
             # File paths for two-step process
             plaso_storage_path = self.parsed_dir / f"{self.case_id}_timeline.plaso"
-            database_path = self.parsed_dir / f"{self.case_id}_fas5.db"
+            database_path = self.parsed_dir / f"{self.case_id}_bhsm.db"
             
             # Pre-optimize database for bulk operations
             self._pre_optimize_database(database_path)
@@ -6533,8 +6533,8 @@ class ForensicWorkflowManager:
             return self._process_json_timeline(json_output_path, custom_module)
                 
             if not database_path.exists():
-                self.logger.error("FAS5 SQLite database was not created")
-                self.log_custody_event("PARSING_ERROR", "FAS5 SQLite database was not created")
+                self.logger.error("BHSM SQLite database was not created")
+                self.log_custody_event("PARSING_ERROR", "BHSM SQLite database was not created")
                 return False
                 
             # Calculate performance metrics
@@ -6848,7 +6848,7 @@ class ForensicWorkflowManager:
             self.logger.warning(f"Database post-optimization failed: {e}")
 
     def import_plaso_file(self, plaso_file_path: Path, plaso_path: Path) -> bool:
-        """Import existing .plaso file and create FAS5 database (skips log2timeline step)"""
+        """Import existing .plaso file and create BHSM database (skips log2timeline step)"""
         try:
             self.log_custody_event("PLASO_IMPORT_START", f"Starting import of existing plaso file: {plaso_file_path}")
             
@@ -6879,9 +6879,9 @@ class ForensicWorkflowManager:
             if not psort_cmd_path:
                 raise FileNotFoundError(f"psort not found in PATH or at {plaso_path}")
             
-            # Create custom FAS5 SQLite output module
+            # Create custom BHSM SQLite output module
             custom_module = self.create_custom_plaso_output_module()
-            database_path = self.parsed_dir / f"{self.case_id}_fas5.db"
+            database_path = self.parsed_dir / f"{self.case_id}_bhsm.db"
             
             # Pre-optimize database for bulk operations
             self._pre_optimize_database(database_path)
@@ -7027,9 +7027,9 @@ class ForensicWorkflowManager:
                 return False
                 
             # Step 3: Validate and use database created by direct SQLite processing
-            db_path = self.parsed_dir / f"{self.case_id}_fas5.db"
+            db_path = self.parsed_dir / f"{self.case_id}_bhsm.db"
             if not db_path.exists():
-                self.logger.error("FAS5 database not found after processing")
+                self.logger.error("BHSM database not found after processing")
                 return False
                 
             # Final validation of the database
@@ -7037,7 +7037,7 @@ class ForensicWorkflowManager:
                 self.logger.error("Final database validation failed")
                 return False
                 
-            self.logger.info(f"Using validated FAS5 database: {db_path}")
+            self.logger.info(f"Using validated BHSM database: {db_path}")
             processor = ForensicProcessor(str(db_path))
             # Database already created with data by custom Plaso module
             
@@ -7227,7 +7227,7 @@ def main():
     parser.add_argument('--collect-artifacts', action='store_true', help='Collect artifacts using KAPE')
     parser.add_argument('--parse-artifacts', action='store_true', help='Parse artifacts using Plaso timeline analysis')
     parser.add_argument('--artifacts-dir', type=Path, help='Use existing artifacts directory (skips KAPE collection)')
-    parser.add_argument('--plaso-file', type=Path, help='Import existing .plaso file (skips log2timeline, goes directly to psort → FAS5 database)')
+    parser.add_argument('--plaso-file', type=Path, help='Import existing .plaso file (skips log2timeline, goes directly to psort → BHSM database)')
     parser.add_argument('--kape-path', type=Path, default=Path('D:/FORAI/tools/kape/kape.exe'), help='Path to KAPE executable')
     parser.add_argument('--plaso-path', type=Path, default=Path('D:/FORAI/tools/plaso'), help='Path to Plaso tools directory')
     parser.add_argument('--fast-mode', action='store_true', help='Enable fast processing mode (reduced parsers, optimized for 12 standard questions)')
@@ -7538,7 +7538,7 @@ def main():
         if args.report:
             # FORENSIC DATABASE VALIDATION (always required for chain of custody)
             print(f"\n🔍 Performing forensic database validation...")
-            db_path = CONFIG.base_dir / "extracts" / f"{args.case_id}_fas5.db"
+            db_path = CONFIG.base_dir / "extracts" / f"{args.case_id}_bhsm.db"
             
             # Initialize workflow for chain of custody logging
             if not 'workflow' in locals():
