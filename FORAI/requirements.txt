@@ -18,6 +18,10 @@ psutil>=5.9.0
 # Optional LLM Support (for advanced analysis)
 # llama-cpp-python>=0.2.0  # Uncomment if local LLM support needed
 
+# Optional API LLM Support (for cloud-based analysis)
+# openai>=1.0.0  # Uncomment if OpenAI API support needed
+# anthropic>=0.7.0  # Uncomment if Anthropic API support needed
+
 # Standard library dependencies (usually included with Python)
 # sqlite3 - Database operations
 # json - Data serialization  
