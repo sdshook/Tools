@@ -2199,13 +2199,38 @@ def create_llm_provider(args) -> LLMProvider:
         if args.llm_folder:
             model_path = args.llm_folder / args.llm_model
         else:
-            model_path = CONFIG.base_dir / "LLM" / args.llm_model
+            # Try to find LLM folder with case-insensitive search
+            model_path = _find_llm_model_path(CONFIG.base_dir, args.llm_model)
         
         config = {
             'provider': 'local',
             'model_path': str(model_path)
         }
         return LocalLLMProvider(config)
+
+def _find_llm_model_path(base_dir: Path, model_filename: str) -> Path:
+    """Find LLM model path with case-insensitive folder detection"""
+    # Try common LLM folder variations
+    llm_folder_variants = ["LLM", "llm", "Llm", "models", "Models"]
+    
+    for folder_name in llm_folder_variants:
+        llm_folder = base_dir / folder_name
+        if llm_folder.exists() and llm_folder.is_dir():
+            model_path = llm_folder / model_filename
+            if model_path.exists():
+                LOGGER.info(f"Found LLM model at: {model_path}")
+                return model_path
+            else:
+                # Try to find any .gguf file in the folder
+                gguf_files = list(llm_folder.glob("*.gguf"))
+                if gguf_files:
+                    LOGGER.info(f"Found LLM model at: {gguf_files[0]} (using first .gguf file found)")
+                    return gguf_files[0]
+    
+    # Fallback to default path (even if it doesn't exist)
+    default_path = base_dir / "LLM" / model_filename
+    LOGGER.warning(f"LLM model not found in any common locations, using default: {default_path}")
+    return default_path
 
 def get_global_llm(model_path: str = None, force_reload: bool = False):
     """Get or create global LLM instance (singleton pattern)"""
@@ -4300,10 +4325,11 @@ class ModernLLM:
             if model_files:
                 self.model_path = model_files[0]  # Use first .gguf file found
             else:
-                # Fallback to default if no .gguf files found
-                self.model_path = CONFIG.base_dir / "LLM" / "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+                # Fallback to auto-detection if no .gguf files found
+                self.model_path = _find_llm_model_path(CONFIG.base_dir, "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
         else:
-            self.model_path = CONFIG.base_dir / "LLM" / "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+            # Use auto-detection for LLM model path
+            self.model_path = _find_llm_model_path(CONFIG.base_dir, "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
         
         # Use global singleton instead of creating new instance
         self.llm = get_global_llm(str(self.model_path))
