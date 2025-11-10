@@ -7630,14 +7630,15 @@ def main():
             
             if db_path.exists():
                 try:
-                    with get_database_connection() as conn:
-                        cursor = conn.execute("SELECT COUNT(*) FROM evidence WHERE case_id = ?", (args.case_id,))
-                        evidence_count = cursor.fetchone()[0]
-                        if evidence_count > 0:
-                            LOGGER.info(f"Database exists with {evidence_count:,} evidence records")
-                            needs_processing = False
-                        else:
-                            LOGGER.info("Database exists but contains no evidence data - processing required")
+                    conn = sqlite3.connect(str(db_path))
+                    cursor = conn.execute("SELECT COUNT(*) FROM evidence WHERE case_id = ?", (args.case_id,))
+                    evidence_count = cursor.fetchone()[0]
+                    conn.close()
+                    if evidence_count > 0:
+                        LOGGER.info(f"Database exists with {evidence_count:,} evidence records")
+                        needs_processing = False
+                    else:
+                        LOGGER.info("Database exists but contains no evidence data - processing required")
                 except sqlite3.OperationalError as e:
                     if "no such table: evidence" in str(e):
                         LOGGER.info("Database exists but missing evidence table - processing required")
@@ -7851,7 +7852,7 @@ def main():
         if args.report:
             # FORENSIC DATABASE VALIDATION (always required for chain of custody)
             print(f"\n🔍 Performing forensic database validation...")
-            db_path = CONFIG.base_dir / "extracts" / f"{args.case_id}_bhsm.db"
+            db_path = Path(CONFIG.db_path)
             
             # Initialize workflow for chain of custody logging
             if not 'workflow' in locals():
