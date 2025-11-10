@@ -7,6 +7,7 @@ Imports plaso CSV timeline files - more reliable than JSON for forensic analysis
 import csv
 import sqlite3
 import sys
+import json
 from pathlib import Path
 from datetime import datetime
 import hashlib
@@ -24,11 +25,16 @@ def create_database_schema(db_path):
         CREATE TABLE IF NOT EXISTS evidence (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             case_id TEXT NOT NULL,
+            host TEXT,
+            user TEXT,
             timestamp TEXT,
             datetime_utc TEXT,
             source TEXT,
             source_long TEXT,
+            source_file TEXT,
             message TEXT,
+            summary TEXT,
+            data_json TEXT,
             parser TEXT,
             display_name TEXT,
             filename TEXT,
@@ -37,7 +43,7 @@ def create_database_schema(db_path):
             format TEXT,
             extra TEXT,
             sha256_hash TEXT,
-            artifact_type TEXT,
+            artifact TEXT,
             flagged INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -184,19 +190,33 @@ def import_csv_timeline(csv_path, db_path, case_id):
                     entry_str = f"{timestamp}{source}{message}{filename}"
                     sha256_hash = hashlib.sha256(entry_str.encode()).hexdigest()[:16]
                     
+                    # Map CSV data to database columns
+                    # Use message as summary and create JSON data structure
+                    summary = message[:500] if message else ''  # Truncate for summary
+                    data_json = json.dumps({
+                        'source': source,
+                        'source_long': source_long,
+                        'message': message,
+                        'parser': parser,
+                        'display_name': display_name,
+                        'filename': filename,
+                        'format': format_type,
+                        'extra': extra
+                    }) if any([source, source_long, message, parser, display_name, filename, format_type, extra]) else ''
+                    
                     batch.append((
-                        case_id, timestamp, datetime_utc, source, source_long,
-                        message, parser, display_name, filename, inode,
+                        case_id, '', '', timestamp, datetime_utc, source, source_long, filename,
+                        message, summary, data_json, parser, display_name, filename, inode,
                         '', format_type, extra, sha256_hash, 'timeline', 0
                     ))
                     
                     if len(batch) >= batch_size:
                         cursor.executemany('''
                             INSERT INTO evidence (
-                                case_id, timestamp, datetime_utc, source, source_long,
-                                message, parser, display_name, filename, inode,
-                                notes, format, extra, sha256_hash, artifact_type, flagged
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                case_id, host, user, timestamp, datetime_utc, source, source_long, source_file,
+                                message, summary, data_json, parser, display_name, filename, inode,
+                                notes, format, extra, sha256_hash, artifact, flagged
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', batch)
                         conn.commit()
                         imported_count += len(batch)
@@ -217,10 +237,10 @@ def import_csv_timeline(csv_path, db_path, case_id):
         if batch:
             cursor.executemany('''
                 INSERT INTO evidence (
-                    case_id, timestamp, datetime_utc, source, source_long,
-                    message, parser, display_name, filename, inode,
-                    notes, format, extra, sha256_hash, artifact_type, flagged
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    case_id, host, user, timestamp, datetime_utc, source, source_long, source_file,
+                    message, summary, data_json, parser, display_name, filename, inode,
+                    notes, format, extra, sha256_hash, artifact, flagged
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', batch)
             conn.commit()
             imported_count += len(batch)
