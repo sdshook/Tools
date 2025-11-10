@@ -6476,14 +6476,14 @@ class ForensicWorkflowManager:
             # Step 2: Process timeline to SQLite
             self.logger.info(f"Step 2: Processing timeline to SQLite: {plaso_storage_path} -> {database_path}")
             
-            # Use standard JSON output and process with our custom module
-            json_output_path = self.parsed_dir / f"{self.case_id}_timeline.json"
+            # Use CSV output for database import (more efficient than JSON)
+            csv_output_path = self.parsed_dir / f"{self.case_id}_timeline.csv"
             
-            # Optimize psort for faster processing
+            # Optimize psort for CSV output
             psort_cmd = [
                 psort_cmd_path,
-                "-o", "json",
-                "-w", str(json_output_path),
+                "-o", "l2tcsv",
+                "-w", str(csv_output_path),
                 "--temporary_directory", str(temp_dir),  # Use same temp directory
                 str(plaso_storage_path)
             ]
@@ -6558,13 +6558,13 @@ class ForensicWorkflowManager:
                 self.log_custody_event("PARSING_ERROR", f"psort processing failed: {result.stderr}")
                 return False
                 
-            # Process JSON output with our custom module
-            if not json_output_path.exists():
-                self.logger.error("JSON timeline was not created by psort")
-                self.log_custody_event("PARSING_ERROR", "JSON timeline was not created")
+            # Process CSV output by calling CSV import script
+            if not csv_output_path.exists():
+                self.logger.error("CSV timeline was not created by psort")
+                self.log_custody_event("PARSING_ERROR", "CSV timeline was not created")
                 return False
                 
-            return self._process_json_timeline(json_output_path, custom_module)
+            return self._process_csv_timeline(csv_output_path)
                 
             if not database_path.exists():
                 self.logger.error("BHSM SQLite database was not created")
@@ -6715,6 +6715,51 @@ class ForensicWorkflowManager:
             
         except Exception as e:
             self.logger.error(f"JSON processing error: {e}")
+            return False
+    
+    def _process_csv_timeline(self, csv_path):
+        """Process CSV timeline output using CSV import script"""
+        try:
+            self.logger.info(f"Processing CSV timeline: {csv_path}")
+            
+            # Find keywords file
+            keywords_file = Path(__file__).parent / "keywords.txt"
+            if not keywords_file.exists():
+                self.logger.warning(f"Keywords file not found: {keywords_file}")
+                # Create empty keywords file as fallback
+                keywords_file.write_text("")
+            
+            # Call CSV import script
+            csv_import_script = Path(__file__).parent / "csv_import.py"
+            if not csv_import_script.exists():
+                self.logger.error(f"CSV import script not found: {csv_import_script}")
+                return False
+            
+            import subprocess
+            import sys
+            
+            cmd = [
+                sys.executable,
+                str(csv_import_script),
+                str(csv_path),
+                self.case_id,
+                str(keywords_file)
+            ]
+            
+            self.logger.info(f"Executing CSV import: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+            
+            if result.returncode != 0:
+                self.logger.error(f"CSV import failed: {result.stderr}")
+                return False
+            
+            self.logger.info("CSV import completed successfully")
+            self.logger.info(result.stdout)
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"CSV processing error: {e}")
             return False
     
     def _process_dynamic_timeline(self, dynamic_path, custom_module):
@@ -6930,14 +6975,14 @@ class ForensicWorkflowManager:
             
             self.logger.info(f"Processing plaso file to SQLite: {plaso_file_path} -> {database_path}")
             
-            # Use standard JSON output and process with our custom module
-            json_output_path = self.parsed_dir / f"{self.case_id}_timeline.json"
+            # Use CSV output for database import (more efficient than JSON)
+            csv_output_path = self.parsed_dir / f"{self.case_id}_timeline.csv"
             
-            # Process plaso file to JSON
+            # Process plaso file to CSV
             psort_cmd = [
                 psort_cmd_path,
-                "-o", "json",
-                "-w", str(json_output_path),
+                "-o", "l2tcsv",
+                "-w", str(csv_output_path),
                 "--temporary_directory", str(temp_dir),
                 str(plaso_file_path)
             ]
@@ -6988,13 +7033,13 @@ class ForensicWorkflowManager:
                 self.log_custody_event("PLASO_IMPORT_ERROR", f"psort processing failed: {result.stderr}")
                 return False
             
-            # Process JSON timeline
-            if json_output_path.exists():
-                success = self._process_json_timeline(json_output_path, custom_module)
+            # Process CSV timeline
+            if csv_output_path.exists():
+                success = self._process_csv_timeline(csv_output_path)
                 
                 if success:
-                    # Post-optimize database
-                    self._post_optimize_database(database_path)
+                    # Database optimization handled by CSV import script
+                    self.logger.info("CSV import completed - database ready")
                     
                     # Calculate performance metrics
                     end_time = time.time()
