@@ -156,10 +156,15 @@ except ImportError:
     print("Warning: llama-cpp-python not available. Local LLM functionality will be disabled.")
 
 # Required ML functionality
-from sklearn.ensemble import IsolationForest
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score
-import numpy as np
+try:
+    from sklearn.ensemble import IsolationForest
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.metrics import accuracy_score
+    import numpy as np
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+    print("Warning: scikit-learn not available. ML functionality will be disabled.")
 
 # ============================================================================
 # INTEGRATED SEMANTIC INDEXING COMPONENTS (BHSM Lite)
