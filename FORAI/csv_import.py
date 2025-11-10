@@ -310,33 +310,25 @@ def main():
         print(f"❌ CSV file not found: {csv_file}")
         sys.exit(1)
     
-    # Create database paths
-    bhsm_db = csv_file.parent / f"{case_id}_bhsm.db"
+    # Create single database path - FORAI.py uses forai.db
     forai_db = csv_file.parent / "forai.db"
     
     print(f"🚀 Starting CSV import for case {case_id}")
     print(f"📁 CSV file: {csv_file}")
-    print(f"🗄️  BHSM database: {bhsm_db}")
-    print(f"🗄️  FORAI database: {forai_db}")
+    print(f"🗄️  Database: {forai_db}")
     
-    # Create databases
-    create_database_schema(bhsm_db)
+    # Create single database
     create_database_schema(forai_db)
     
     # Import timeline from CSV
-    count = import_csv_timeline(csv_file, bhsm_db, case_id)
-    
-    # Copy to forai.db as well
-    import shutil
-    shutil.copy2(bhsm_db, forai_db)
+    count = import_csv_timeline(csv_file, forai_db, case_id)
     
     # Inject keywords
-    inject_keywords(bhsm_db, case_id, keywords_file)
     inject_keywords(forai_db, case_id, keywords_file)
     
     print(f"\n🎉 CSV import completed successfully!")
     print(f"📊 Total records: {count:,}")
-    print(f"🗄️  Database size: {bhsm_db.stat().st_size / 1024 / 1024:.1f} MB")
+    print(f"🗄️  Database size: {forai_db.stat().st_size / 1024 / 1024:.1f} MB")
     print(f"\n✅ Ready for autonomous analysis!")
     print(f"🔬 Forensic integrity maintained - all data preserved")
 
