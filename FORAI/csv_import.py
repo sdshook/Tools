@@ -11,6 +11,9 @@ from pathlib import Path
 from datetime import datetime
 import hashlib
 
+# Increase CSV field size limit for forensic data
+csv.field_size_limit(sys.maxsize)
+
 def create_database_schema(db_path):
     """Create the FORAI database schema"""
     conn = sqlite3.connect(db_path)
