@@ -2265,615 +2265,50 @@ def get_global_llm(model_path: str = None, force_reload: bool = False):
 # Advanced semantic search powered by BHSM (Bidirectional Hebbian Synaptic Memory)
 # Provides superior semantic understanding with 10x faster performance than legacy text search
 
-class AdvancedTinyLlamaEnhancer:
-    """Advanced enhancement system to boost LLM accuracy for forensic analysis"""
-    
-    def __init__(self):
-        self.forensic_examples = self._load_forensic_examples()
-        self.validation_patterns = self._load_validation_patterns()
-        self.confidence_threshold = 0.7
-    
-    def _load_forensic_examples(self) -> str:
-        """Few-shot learning examples for forensic analysis"""
-        return """FORENSIC ANALYSIS EXAMPLES:
-
-EXAMPLE 1 - USB Device Analysis:
-Question: "What USB devices were connected to this system?"
-Evidence: Registry entries showing USB storage devices, SetupAPI logs, MountPoints data
-Analysis: Based on registry artifacts, 2 USB devices were connected:
-- Kingston DataTraveler 3.0 (Serial: 1A2B3C4D) first connected 2024-01-15 09:30:15
-- SanDisk Cruzer Blade (Serial: 5E6F7G8H) first connected 2024-01-15 14:22:33
-Both devices show multiple connection/disconnection cycles indicating regular usage.
-
-EXAMPLE 2 - Suspicious File Activity:
-Question: "Was there any suspicious file execution activity?"
-Evidence: Prefetch files, Windows Event Logs, File system timeline
-Analysis: Suspicious activity detected: 847 files accessed in C:\\Windows\\System32 within 2-minute window (14:30-14:32), indicating potential malware execution. Key indicators:
-- Unusual process: "svchost.exe" spawned from temp directory
-- Rapid file enumeration pattern consistent with data harvesting
-- Network connections initiated immediately after file access
-
-EXAMPLE 3 - User Behavior Analysis:
-Question: "What was the user activity pattern during the incident timeframe?"
-Evidence: User logon events, application usage logs, file access records
-Analysis: User DOMAIN\\jsmith showed anomalous behavior on 2024-01-15:
-- Normal logon at 08:15 (consistent with daily pattern)
-- Unusual late-night activity 23:45-02:30 (outside normal hours)
-- Accessed sensitive directories not typically used by this user role
-- Multiple failed authentication attempts to network shares
-
-NOW ANALYZE THE CURRENT CASE:"""
-
-    def _load_validation_patterns(self) -> Dict[str, str]:
-        """Forensic validation patterns for evidence cross-referencing"""
-        return {
-            "usb_insertion": r"USB.*(?:connected|inserted|mounted).*\d{4}-\d{2}-\d{2}",
-            "file_execution": r"(?:executed|launched|started).*\.exe.*(?:timestamp|time)",
-            "network_connection": r"(?:connection|connected).*(?:IP|address).*(?:port).*\d+",
-            "registry_modification": r"registry.*(?:modified|changed|updated).*HKEY",
-            "user_logon": r"(?:logon|login|authentication).*(?:user|account).*(?:success|failed)",
-            "file_access": r"(?:accessed|opened|read|modified).*file.*(?:path|directory)",
-            "process_creation": r"(?:process|executable).*(?:created|spawned|started)",
-            "network_traffic": r"(?:traffic|packets|bytes).*(?:sent|received|transmitted)"
-        }
-    
-    def chain_of_thought_analysis(self, question: str, evidence: str) -> str:
-        """Chain-of-thought prompting for step-by-step forensic reasoning"""
-        
-        cot_prompt = f"""{self.forensic_examples}
-
-FORENSIC ANALYSIS - STEP BY STEP REASONING:
-
-Question: {question}
-
-Evidence Available:
-{evidence}
-
-Let me analyze this systematically:
-
-Step 1 - Identify Evidence Types:
-Let me categorize what types of forensic artifacts we have...
-
-Step 2 - Establish Timeline:
-Let me organize events chronologically to understand the sequence...
-
-Step 3 - Correlate Activities:
-Let me look for relationships between different evidence items...
-
-Step 4 - Detect Anomalies:
-Let me identify any unusual patterns or suspicious activities...
-
-Step 5 - Draw Conclusions:
-Based on the evidence analysis, let me provide specific findings...
-
-STEP-BY-STEP ANALYSIS:
-Step 1:"""
-        
-        return cot_prompt
-    
-    def multi_pass_analysis(self, question: str, evidence: str, llm_instance) -> Dict[str, Any]:
-        """Multi-pass analysis with different perspectives and confidence scoring"""
-        
-        analysis_passes = [
-            ("temporal", "Focus on timeline analysis and sequence of events. Identify when activities occurred and their chronological relationships."),
-            ("behavioral", "Focus on user behavior patterns and anomalies. Analyze what users did and identify unusual activities."),
-            ("technical", "Focus on technical artifacts and system changes. Examine registry, files, processes, and network activities."),
-            ("correlation", "Focus on relationships between evidence items. Look for connections and patterns across different artifact types.")
-        ]
-        
-        results = {}
-        for pass_type, instruction in analysis_passes:
-            pass_prompt = f"""FORENSIC ANALYSIS - {pass_type.upper()} PERSPECTIVE:
-
-{instruction}
-
-Question: {question}
-
-Evidence:
-{evidence}
-
-{pass_type.upper()} ANALYSIS:"""
-            
-            try:
-                if llm_instance and llm_instance.llm:
-                    response = llm_instance.llm(
-                        pass_prompt,
-                        max_tokens=400,
-                        temperature=0.3,
-                        top_p=0.9,
-                        stop=["Question:", "Evidence:", "\n\nAnalysis:"],
-                        echo=False
-                    )
-                    
-                    analysis_text = response['choices'][0]['text'].strip()
-                    confidence = self._calculate_confidence_score(analysis_text, evidence)
-                    
-                    results[pass_type] = {
-                        'analysis': analysis_text,
-                        'confidence': confidence,
-                        'perspective': instruction
-                    }
-                else:
-                    # Fallback structured analysis
-                    results[pass_type] = {
-                        'analysis': f"Structured {pass_type} analysis based on available evidence patterns",
-                        'confidence': 0.6,
-                        'perspective': instruction
-                    }
-                    
-            except Exception as e:
-                LOGGER.warning(f"Multi-pass analysis failed for {pass_type}: {e}")
-                results[pass_type] = {
-                    'analysis': f"Analysis unavailable for {pass_type} perspective",
-                    'confidence': 0.0,
-                    'perspective': instruction
-                }
-        
-        return results
-    
-    def _calculate_confidence_score(self, analysis: str, evidence: str) -> float:
-        """Enhanced confidence scoring with multiple accuracy factors"""
-        
-        if not analysis or len(analysis.strip()) < 20:
-            return 0.0
-        
-        confidence = 0.4  # Lower base confidence, earn through quality
-        
-        # Length and detail scoring (more nuanced)
-        analysis_len = len(analysis)
-        if 50 <= analysis_len <= 100:
-            confidence += 0.05  # Concise but informative
-        elif 100 < analysis_len <= 300:
-            confidence += 0.15  # Good detail level
-        elif 300 < analysis_len <= 800:
-            confidence += 0.10  # Comprehensive but manageable
-        elif analysis_len > 1000:
-            confidence -= 0.05  # May indicate hallucination
-            
-        # Specific evidence references with better patterns
-        evidence_patterns = [
-            r'\d{4}-\d{2}-\d{2}',  # Dates
-            r'\d{2}:\d{2}:\d{2}',  # Times
-            r'registry.*hkey',     # Registry references
-            r'file.*\.exe|\.dll|\.sys',  # Executable files
-            r'process.*pid|process.*id',  # Process references
-            r'user.*account|user.*login',  # User references
-            r'ip.*address|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}',  # IP addresses
-            r'port.*\d+|:\d{2,5}',  # Port numbers
-            r'usb.*device|removable.*storage',  # USB references
-            r'network.*connection|tcp|udp'  # Network references
-        ]
-        
-        evidence_refs = sum(1 for pattern in evidence_patterns 
-                          if re.search(pattern, analysis, re.I))
-        confidence += min(evidence_refs * 0.04, 0.25)
-        
-        # Enhanced forensic terminology scoring
-        forensic_terms = {
-            'high_value': ['artifact', 'timeline', 'correlation', 'forensic', 'evidence'],
-            'medium_value': ['anomaly', 'pattern', 'suspicious', 'analysis', 'investigation'],
-            'technical': ['registry', 'filesystem', 'network', 'process', 'metadata']
-        }
-        
-        high_count = sum(1 for term in forensic_terms['high_value'] 
-                        if term.lower() in analysis.lower())
-        medium_count = sum(1 for term in forensic_terms['medium_value'] 
-                          if term.lower() in analysis.lower())
-        tech_count = sum(1 for term in forensic_terms['technical'] 
-                        if term.lower() in analysis.lower())
-        
-        confidence += min(high_count * 0.06, 0.18)
-        confidence += min(medium_count * 0.03, 0.12)
-        confidence += min(tech_count * 0.02, 0.08)
-        
-        # Enhanced hallucination detection
-        hallucination_patterns = [
-            r'\bi believe\b', r'\bi think\b', r'\bin my opinion\b', 
-            r'\bi assume\b', r'\bi guess\b', r'\bi suppose\b', 
-            r'\bi imagine\b', r'\bprobably\b', r'\bmaybe\b', 
-            r'\bmight be\b', r'\bseems like\b', r'\bappears to be\b'
-        ]
-        
-        hallucination_count = sum(1 for pattern in hallucination_patterns 
-                                if re.search(pattern, analysis, re.I))
-        confidence -= min(hallucination_count * 0.08, 0.3)
-        
-        # Evidence support validation
-        if evidence and len(evidence) > 100:
-            # Check if analysis references actual evidence content
-            evidence_words = set(re.findall(r'\w+', evidence.lower()))
-            analysis_words = set(re.findall(r'\w+', analysis.lower()))
-            
-            # Calculate overlap (excluding common words)
-            common_words = {'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'was', 'are', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those'}
-            
-            evidence_specific = evidence_words - common_words
-            analysis_specific = analysis_words - common_words
-            
-            if evidence_specific and analysis_specific:
-                overlap = len(evidence_specific.intersection(analysis_specific))
-                overlap_ratio = overlap / min(len(evidence_specific), len(analysis_specific))
-                confidence += min(overlap_ratio * 0.15, 0.15)
-        
-        # Specificity bonus (concrete details vs vague statements)
-        specific_indicators = [
-            r'\d+\s*(bytes?|kb|mb|gb)',  # File sizes
-            r'\d+\s*(files?|entries?|records?)',  # Counts
-            r'serial.*number.*\w+',  # Serial numbers
-            r'version.*\d+\.\d+',  # Version numbers
-            r'between.*\d{2}:\d{2}.*and.*\d{2}:\d{2}'  # Time ranges
-        ]
-        
-        specificity_count = sum(1 for pattern in specific_indicators 
-                              if re.search(pattern, analysis, re.I))
-        confidence += min(specificity_count * 0.05, 0.15)
-        
-        return max(0.0, min(1.0, confidence))
-    
-    def validate_against_forensic_patterns(self, analysis: str, evidence_list: List[Dict]) -> Dict[str, Any]:
-        """Validate analysis claims against actual evidence using forensic patterns"""
-        
-        validation_results = {
-            'validated_claims': [],
-            'unvalidated_claims': [],
-            'confidence_adjustment': 0.0
-        }
-        
-        # Extract claims from analysis
-        claims = self._extract_forensic_claims(analysis)
-        
-        for claim in claims:
-            is_validated = False
-            
-            # Check each validation pattern
-            for pattern_name, pattern_regex in self.validation_patterns.items():
-                if re.search(pattern_regex, claim, re.I):
-                    # Verify claim against actual evidence
-                    if self._verify_claim_in_evidence(claim, evidence_list, pattern_name):
-                        validation_results['validated_claims'].append({
-                            'claim': claim,
-                            'pattern': pattern_name,
-                            'confidence_boost': 0.1
-                        })
-                        validation_results['confidence_adjustment'] += 0.1
-                        is_validated = True
-                        break
-            
-            if not is_validated:
-                validation_results['unvalidated_claims'].append(claim)
-                validation_results['confidence_adjustment'] -= 0.05
-        
-        return validation_results
-    
-    def _extract_forensic_claims(self, analysis: str) -> List[str]:
-        """Extract specific forensic claims from analysis text"""
-        
-        # Split into sentences and filter for forensic claims
-        sentences = re.split(r'[.!?]+', analysis)
-        claims = []
-        
-        forensic_indicators = [
-            'connected', 'executed', 'accessed', 'modified', 'created', 'deleted',
-            'logged', 'authenticated', 'transferred', 'downloaded', 'uploaded',
-            'detected', 'found', 'identified', 'observed'
-        ]
-        
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if len(sentence) > 20:  # Minimum length for meaningful claims
-                for indicator in forensic_indicators:
-                    if indicator in sentence.lower():
-                        claims.append(sentence)
-                        break
-        
-        return claims
-    
-    def _verify_claim_in_evidence(self, claim: str, evidence_list: List[Dict], pattern_type: str) -> bool:
-        """Verify if a claim is supported by actual evidence"""
-        
-        # Extract key elements from claim based on pattern type
-        verification_keywords = {
-            'usb_insertion': ['usb', 'device', 'storage', 'removable'],
-            'file_execution': ['exe', 'process', 'executed', 'launched'],
-            'network_connection': ['ip', 'port', 'connection', 'network'],
-            'registry_modification': ['registry', 'hkey', 'modified'],
-            'user_logon': ['logon', 'login', 'user', 'authentication'],
-            'file_access': ['file', 'accessed', 'opened', 'path'],
-            'process_creation': ['process', 'created', 'spawned'],
-            'network_traffic': ['traffic', 'bytes', 'packets']
-        }
-        
-        keywords = verification_keywords.get(pattern_type, [])
-        
-        # Check if evidence supports the claim
-        for evidence_item in evidence_list:
-            evidence_text = str(evidence_item.get('summary', '')) + ' ' + str(evidence_item.get('data_json', ''))
-            
-            # Count keyword matches
-            matches = sum(1 for keyword in keywords if keyword.lower() in evidence_text.lower())
-            
-            if matches >= 2:  # Require at least 2 keyword matches for validation
-                return True
-        
-        return False
-    
-    def generate_follow_up_queries(self, initial_analysis: str, original_question: str) -> List[str]:
-        """Generate follow-up queries for iterative refinement"""
-        
-        follow_ups = []
-        
-        # Extract entities and concepts from initial analysis
-        entities = self._extract_entities(initial_analysis)
-        
-        # Generate targeted follow-up queries
-        if 'usb' in initial_analysis.lower() or 'device' in initial_analysis.lower():
-            follow_ups.append("USB device connection timeline and file transfer activity")
-            follow_ups.append("Removable storage device usage patterns")
-        
-        if 'user' in initial_analysis.lower() or 'logon' in initial_analysis.lower():
-            follow_ups.append("User authentication events and session activity")
-            follow_ups.append("Account usage patterns and privilege escalation")
-        
-        if 'file' in initial_analysis.lower() or 'process' in initial_analysis.lower():
-            follow_ups.append("File system modifications and process execution timeline")
-            follow_ups.append("Executable files and suspicious process activity")
-        
-        if 'network' in initial_analysis.lower() or 'connection' in initial_analysis.lower():
-            follow_ups.append("Network connections and data transfer activity")
-            follow_ups.append("External communication and suspicious network traffic")
-        
-        # Add temporal refinement queries
-        if re.search(r'\d{4}-\d{2}-\d{2}', initial_analysis):
-            follow_ups.append("Activity patterns during identified timeframe")
-            follow_ups.append("Correlated events within same time period")
-        
-        return follow_ups[:4]  # Limit to 4 follow-up queries
-    
-    def _extract_entities(self, text: str) -> Dict[str, List[str]]:
-        """Extract forensic entities from analysis text"""
-        
-        entities = {
-            'timestamps': re.findall(r'\d{4}-\d{2}-\d{2}[\s\w:.-]*\d{2}:\d{2}', text),
-            'files': re.findall(r'[A-Za-z]:\\[^\s]+|/[^\s]+', text),
-            'users': re.findall(r'(?:user|account)[\s:]+([A-Za-z0-9_\\.-]+)', text, re.I),
-            'processes': re.findall(r'([A-Za-z0-9_.-]+\.exe)', text, re.I),
-            'ips': re.findall(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', text),
-            'devices': re.findall(r'(?:USB|device)[\s:]+([A-Za-z0-9\s_.-]+)', text, re.I)
-        }
-        
-        return entities
-    
-    def ensemble_analysis(self, multi_pass_results: Dict[str, Any]) -> str:
-        """Combine multiple analysis approaches using weighted voting"""
-        
-        # Weight perspectives based on confidence scores
-        weighted_analyses = []
-        total_weight = 0
-        
-        for perspective, result in multi_pass_results.items():
-            confidence = result.get('confidence', 0.5)
-            analysis = result.get('analysis', '')
-            
-            if confidence >= self.confidence_threshold:
-                weight = confidence * self._get_perspective_multiplier(perspective)
-                weighted_analyses.append((analysis, weight, perspective))
-                total_weight += weight
-        
-        if not weighted_analyses:
-            return "Insufficient confidence in analysis results"
-        
-        # Synthesize weighted results
-        synthesis = self._synthesize_weighted_analyses(weighted_analyses, total_weight)
-        
-        return synthesis
-    
-    def _get_perspective_multiplier(self, perspective: str) -> float:
-        """Get multiplier for different analysis perspectives"""
-        multipliers = {
-            'temporal': 1.2,    # Timeline analysis is crucial in forensics
-            'correlation': 1.1, # Correlation helps connect evidence
-            'technical': 1.0,   # Technical analysis is standard
-            'behavioral': 0.9   # Behavioral analysis is supportive
-        }
-        return multipliers.get(perspective, 1.0)
-    
-    def _synthesize_weighted_analyses(self, weighted_analyses: List[Tuple], total_weight: float) -> str:
-        """Synthesize multiple weighted analyses into coherent result"""
-        
-        synthesis_parts = []
-        
-        # Sort by weight (highest confidence first)
-        weighted_analyses.sort(key=lambda x: x[1], reverse=True)
-        
-        synthesis_parts.append("COMPREHENSIVE FORENSIC ANALYSIS:")
-        synthesis_parts.append("")
-        
-        for analysis, weight, perspective in weighted_analyses:
-            confidence_pct = int((weight / total_weight) * 100) if total_weight > 0 else 0
-            synthesis_parts.append(f"{perspective.upper()} PERSPECTIVE (Confidence: {confidence_pct}%):")
-            synthesis_parts.append(analysis)
-            synthesis_parts.append("")
-        
-        # Add synthesis conclusion
-        synthesis_parts.append("INTEGRATED FINDINGS:")
-        synthesis_parts.append(self._generate_integrated_conclusion(weighted_analyses))
-        
-        return "\n".join(synthesis_parts)
-    
-    def _generate_integrated_conclusion(self, weighted_analyses: List[Tuple]) -> str:
-        """Generate integrated conclusion from multiple perspectives"""
-        
-        # Extract common themes and findings
-        all_text = " ".join([analysis for analysis, _, _ in weighted_analyses])
-        
-        # Identify key forensic findings
-        key_findings = []
-        
-        if 'suspicious' in all_text.lower():
-            key_findings.append("Suspicious activity patterns identified")
-        
-        if 'timeline' in all_text.lower() or re.search(r'\d{4}-\d{2}-\d{2}', all_text):
-            key_findings.append("Temporal correlation established")
-        
-        if 'user' in all_text.lower():
-            key_findings.append("User activity analysis completed")
-        
-        if 'evidence' in all_text.lower():
-            key_findings.append("Evidence correlation performed")
-        
-        conclusion = "Based on multi-perspective analysis: " + "; ".join(key_findings)
-        
-        return conclusion
-    
-    def sliding_window_analysis(self, question: str, evidence_list: List[Dict], llm_instance) -> str:
-        """Analyze large evidence sets using sliding windows with overlap"""
-        
-        if len(evidence_list) <= 15:
-            # Use standard analysis for small evidence sets
-            return None
-        
-        window_size = 15
-        overlap = 5
-        window_analyses = []
-        
-        for i in range(0, len(evidence_list), window_size - overlap):
-            window = evidence_list[i:i + window_size]
-            window_context = self._build_window_context(window)
-            
-            # Analyze this window
-            window_prompt = f"""FORENSIC ANALYSIS - EVIDENCE WINDOW {i//window_size + 1}:
-
-Question: {question}
-
-Evidence Window ({len(window)} items):
-{window_context}
-
-WINDOW ANALYSIS:"""
-            
-            try:
-                if llm_instance and llm_instance.llm:
-                    response = llm_instance.llm(
-                        window_prompt,
-                        max_tokens=300,
-                        temperature=0.3,
-                        top_p=0.9,
-                        stop=["Question:", "Evidence:", "\n\nWindow"],
-                        echo=False
-                    )
-                    
-                    window_analysis = response['choices'][0]['text'].strip()
-                    window_analyses.append({
-                        'window_id': i//window_size + 1,
-                        'analysis': window_analysis,
-                        'evidence_count': len(window)
-                    })
-                    
-            except Exception as e:
-                LOGGER.warning(f"Window analysis failed for window {i//window_size + 1}: {e}")
-        
-        # Synthesize all window analyses
-        return self._synthesize_window_analyses(window_analyses, question)
-    
-    def _build_window_context(self, evidence_window: List[Dict]) -> str:
-        """Build optimized context for evidence window"""
-        
-        context_parts = []
-        
-        for idx, evidence in enumerate(evidence_window, 1):
-            timestamp = evidence.get('timestamp', 'Unknown time')
-            artifact = evidence.get('artifact', 'Unknown artifact')
-            summary = evidence.get('summary', 'No summary')[:100]  # Truncate for window analysis
-            
-            context_parts.append(f"{idx}. [{timestamp}] {artifact}: {summary}")
-        
-        return "\n".join(context_parts)
-    
-    def _synthesize_window_analyses(self, window_analyses: List[Dict], question: str) -> str:
-        """Synthesize findings across all evidence windows"""
-        
-        if not window_analyses:
-            return "Window analysis failed - insufficient data"
-        
-        synthesis_parts = []
-        synthesis_parts.append(f"SLIDING WINDOW ANALYSIS RESULTS ({len(window_analyses)} windows analyzed):")
-        synthesis_parts.append("")
-        
-        # Combine findings from all windows
-        all_findings = []
-        for window in window_analyses:
-            window_id = window['window_id']
-            analysis = window['analysis']
-            evidence_count = window['evidence_count']
-            
-            synthesis_parts.append(f"Window {window_id} ({evidence_count} evidence items):")
-            synthesis_parts.append(analysis)
-            synthesis_parts.append("")
-            
-            all_findings.append(analysis)
-        
-        # Generate overall synthesis
-        synthesis_parts.append("OVERALL SYNTHESIS:")
-        synthesis_parts.append(self._generate_window_synthesis(all_findings, question))
-        
-        return "\n".join(synthesis_parts)
-    
-    def _generate_window_synthesis(self, all_findings: List[str], question: str) -> str:
-        """Generate synthesis across all window findings"""
-        
-        combined_text = " ".join(all_findings)
-        
-        # Extract common patterns
-        patterns = []
-        
-        if 'suspicious' in combined_text.lower():
-            patterns.append("Suspicious activity patterns detected across multiple time windows")
-        
-        if 'user' in combined_text.lower():
-            patterns.append("User activity correlation identified across evidence timeline")
-        
-        if 'file' in combined_text.lower() or 'process' in combined_text.lower():
-            patterns.append("File system and process activity patterns observed")
-        
-        if 'network' in combined_text.lower():
-            patterns.append("Network activity correlation detected")
-        
-        if not patterns:
-            patterns.append("Evidence patterns analyzed across temporal windows")
-        
-        synthesis = f"Analysis of {len(all_findings)} evidence windows reveals: " + "; ".join(patterns)
-        
-        return synthesis
-
-
-advanced_enhancer = AdvancedTinyLlamaEnhancer()
-
-@dataclass
 class ForaiConfig:
     """Modern configuration for maximum performance"""
     
-    base_dir: Path = Path("D:/FORAI")
-    max_workers: int = min(8, (os.cpu_count() or 4))
-    batch_size: int = 10000
-    chunk_size: int = 50000
-    memory_threshold: float = 0.85
-    current_case_id: str = None
+    def __init__(self, base_dir: Path = None):
+        # Use provided base_dir or default to current working directory + FORAI
+        if base_dir is None:
+            # Try common locations, fallback to current directory
+            if os.name == 'nt':  # Windows
+                self.base_dir = Path("D:/FORAI")
+            else:  # Linux/Unix
+                self.base_dir = Path.cwd() / "FORAI"
+        else:
+            self.base_dir = Path(base_dir)
+        
+        self.max_workers: int = min(8, (os.cpu_count() or 4))
+        self.batch_size: int = 10000
+        self.chunk_size: int = 50000
+        self.memory_threshold: float = 0.85
+        self.current_case_id: str = None
+        
+        # LLM settings - optimized for accuracy
+        self.llm_context_size: int = 16384
+        self.llm_max_tokens: int = 2048
+        self.llm_temperature: float = 0.01
+        self.llm_top_p: float = 0.9
+        self.llm_threads: int = min(8, (os.cpu_count() or 4))
+        
+        # Database settings
+        self.db_wal_mode: bool = True
+        self.db_cache_size: int = 50000
+        self.db_mmap_size: int = 1073741824  # 1GB
+        
+        # Initialize directories
+        self._initialize_directories()
     
-    # LLM settings - optimized for accuracy
-    llm_context_size: int = 16384
-    llm_max_tokens: int = 2048
-    llm_temperature: float = 0.01
-    llm_top_p: float = 0.9
-    llm_threads: int = min(8, (os.cpu_count() or 4))
-    
-    # Database settings
-    db_wal_mode: bool = True
-    db_cache_size: int = 50000
-    db_mmap_size: int = 1073741824  # 1GB
-    
-    def __post_init__(self):
+    def _initialize_directories(self):
         """Initialize directories"""
         for subdir in ["archives", "artifacts", "extracts", "LLM", "reports", "tools"]:
             (self.base_dir / subdir).mkdir(parents=True, exist_ok=True)
+    
+    def set_base_dir(self, base_dir: Path):
+        """Set the base directory and reinitialize subdirectories"""
+        self.base_dir = Path(base_dir)
+        self._initialize_directories()
     
     def set_case_id(self, case_id: str):
         """Set the current case ID for database operations"""
@@ -3082,71 +2517,7 @@ def get_database_connection() -> sqlite3.Connection:
             raise
 
 # Pre-compiled regex patterns for faster timestamp detection
-TIMESTAMP_PATTERNS = [
-    (re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$'), "%Y-%m-%d %H:%M:%S"),
-    (re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$'), "%Y-%m-%dT%H:%M:%S"),
-    (re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+$'), "%Y-%m-%d %H:%M:%S.%f"),
-    (re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+$'), "%Y-%m-%dT%H:%M:%S.%f"),
-    (re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'), "%Y-%m-%dT%H:%M:%SZ"),
-    (re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z$'), "%Y-%m-%dT%H:%M:%S.%fZ"),
-    (re.compile(r'^\d{1,2}/\d{1,2}/\d{4} \d{2}:\d{2}:\d{2}$'), "%m/%d/%Y %H:%M:%S"),
-    (re.compile(r'^\d{1,2}/\d{1,2}/\d{4} \d{2}:\d{2}:\d{2}$'), "%d/%m/%Y %H:%M:%S"),
-]
 
-# Windows Event Log specific patterns
-WINEVT_TIMESTAMP_PATTERNS = [
-    # Windows SystemTime format: "SystemTime: 2024-01-15T10:30:45.123456700Z"
-    re.compile(r'SystemTime:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)'),
-    # Windows Event Log XML timestamp
-    re.compile(r'TimeCreated\s+SystemTime=["\'](\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)["\']'),
-]
-
-@lru_cache(maxsize=2000)
-def parse_timestamp(timestamp_str: str) -> Optional[float]:
-    """Enhanced timestamp parsing with Windows Event Log and FILETIME support"""
-    if not timestamp_str or timestamp_str.lower() in ('null', 'none', ''):
-        return None
-    
-    clean_str = timestamp_str.strip()
-    
-    # Handle Windows FILETIME (100-nanosecond intervals since 1601-01-01)
-    if clean_str.isdigit() and len(clean_str) >= 17:
-        try:
-            filetime = int(clean_str)
-            # Convert FILETIME to Unix timestamp with microsecond precision
-            unix_timestamp = (filetime / 10000000.0) - 11644473600
-            if 0 < unix_timestamp < 2147483647:  # Reasonable timestamp range
-                return unix_timestamp
-        except (ValueError, OverflowError):
-            pass
-    
-    # Handle Windows Event Log specific formats
-    for pattern in WINEVT_TIMESTAMP_PATTERNS:
-        match = pattern.search(clean_str)
-        if match:
-            clean_str = match.group(1)
-            break
-    
-    # Handle standard timestamp formats with microsecond precision
-    for pattern, fmt in TIMESTAMP_PATTERNS:
-        if pattern.match(clean_str):
-            try:
-                dt = datetime.strptime(clean_str, fmt)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                return dt.timestamp()  # Returns float with microsecond precision
-            except ValueError:
-                continue
-    
-    # Handle Unix timestamps (both integer and float)
-    try:
-        timestamp_float = float(clean_str)
-        if 0 < timestamp_float < 2147483647:  # Reasonable range
-            return timestamp_float
-    except ValueError:
-        pass
-    
-    return None
 
 # Input validation functions for security and accuracy
 def validate_case_id(case_id: str) -> bool:
@@ -5927,9 +5298,9 @@ def check_external_dependencies(kape_path: Path = None, plaso_path: Path = None)
         else:
             LOGGER.warning(f"KAPE not found at {kape_path}")
     else:
-        # Try to find KAPE in common Windows locations
+        # Try to find KAPE in common locations
         common_kape_paths = [
-            Path('D:/FORAI/tools/kape/kape.exe'),
+            CONFIG.base_dir / 'tools' / 'kape' / 'kape.exe',
             Path('C:/FORAI/tools/kape/kape.exe'),
             Path('kape.exe'),  # Current directory
             Path('C:/Program Files/KAPE/kape.exe'),
@@ -6530,7 +5901,7 @@ class ForensicWorkflowManager:
                     
                     if csv_result.returncode == 0 and csv_output_path.exists():
                         self.logger.info("L2T CSV export successful. Converting to database format...")
-                        return self._process_csv_timeline(csv_output_path, custom_module)
+                        return self._process_csv_timeline(csv_output_path)
                     
                     # Try approach 3: Use JSON with filtered parsers (exclude problematic ones temporarily)
                     self.logger.info("Fallback 3: Trying JSON with parser filtering...")
@@ -6615,65 +5986,7 @@ class ForensicWorkflowManager:
             self.log_custody_event("PARSING_ERROR", f"Plaso two-step processing error: {str(e)}")
             return False
     
-    def _process_csv_timeline(self, csv_path, custom_module):
-        """Process CSV timeline output as fallback when JSON fails"""
-        try:
-            import csv
-            
-            self.logger.info(f"Processing CSV timeline: {csv_path}")
-            
-            # Initialize custom module
-            custom_module.open_connection()
-            
-            processed_count = 0
-            with open(csv_path, 'r', encoding='utf-8', newline='') as csvfile:
-                # Try to detect the CSV format
-                sample = csvfile.read(1024)
-                csvfile.seek(0)
-                sniffer = csv.Sniffer()
-                delimiter = sniffer.sniff(sample).delimiter
-                
-                reader = csv.DictReader(csvfile, delimiter=delimiter)
-                
-                for row in reader:
-                    try:
-                        # Convert CSV row to event format similar to JSON
-                        event_data = {
-                            'timestamp': row.get('datetime', ''),
-                            'timestamp_desc': row.get('timestamp_desc', ''),
-                            'source': row.get('source', ''),
-                            'source_long': row.get('source_long', ''),
-                            'message': row.get('message', ''),
-                            'parser': row.get('parser', ''),
-                            'display_name': row.get('display_name', ''),
-                            'tag': row.get('tag', ''),
-                        }
-                        
-                        # Process the event through custom module
-                        custom_module.process_event(event_data)
-                        processed_count += 1
-                        
-                        if processed_count % 10000 == 0:
-                            self.logger.info(f"Processed {processed_count} CSV events...")
-                            
-                    except Exception as e:
-                        self.logger.debug(f"Error processing CSV row: {e}")
-                        continue
-            
-            custom_module.close_connection()
-            self.logger.info(f"CSV processing completed: {processed_count} events processed")
-            
-            # Clean up CSV file
-            try:
-                csv_path.unlink()
-            except Exception as e:
-                self.logger.debug(f"CSV cleanup warning: {e}")
-            
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"CSV processing error: {e}")
-            return False
+
     
     def _process_json_timeline(self, json_path, custom_module):
         """Process JSON timeline output"""
@@ -7485,8 +6798,8 @@ def main():
     parser.add_argument('--parse-artifacts', action='store_true', help='Parse artifacts using Plaso timeline analysis')
     parser.add_argument('--artifacts-dir', type=Path, help='Use existing artifacts directory (skips KAPE collection)')
     parser.add_argument('--plaso-file', type=Path, help='Import existing .plaso file (skips log2timeline, goes directly to psort → BHSM database)')
-    parser.add_argument('--kape-path', type=Path, default=Path('D:/FORAI/tools/kape/kape.exe'), help='Path to KAPE executable')
-    parser.add_argument('--plaso-path', type=Path, default=Path('D:/FORAI/tools/plaso'), help='Path to Plaso tools directory')
+    parser.add_argument('--kape-path', type=Path, help='Path to KAPE executable (e.g., D:/FORAI/tools/kape/kape.exe)')
+    parser.add_argument('--plaso-path', type=Path, help='Path to Plaso tools directory (e.g., D:/FORAI/tools/plaso)')
     parser.add_argument('--fast-mode', action='store_true', help='Enable fast processing mode (reduced parsers, optimized for 12 standard questions)')
     parser.add_argument('--enable-winevtx', action='store_true', help='Enable Windows Event Log parsing (may cause crashes with some Plaso versions)')
     
@@ -7516,7 +6829,7 @@ def main():
     
     # CHAIN OF CUSTODY & OUTPUT
     parser.add_argument('--chain-of-custody', action='store_true', help='Generate chain of custody documentation')
-    parser.add_argument('--output-dir', type=Path, default=Path('D:/FORAI'), help='Output directory for all results')
+    parser.add_argument('--output-dir', type=Path, help='Output directory for all results (default: D:/FORAI on Windows, ./FORAI on Linux)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     
     args = parser.parse_args()
@@ -7552,6 +6865,17 @@ def main():
     
     if args.verbose:
         LOGGER.setLevel(logging.DEBUG)
+    
+    # Update CONFIG with user-provided output directory
+    if args.output_dir:
+        CONFIG.set_base_dir(args.output_dir)
+        LOGGER.info(f"Using output directory: {CONFIG.base_dir}")
+    
+    # Set default tool paths if not provided
+    if not args.kape_path:
+        args.kape_path = CONFIG.base_dir / "tools" / "kape" / "kape.exe"
+    if not args.plaso_path:
+        args.plaso_path = CONFIG.base_dir / "tools" / "plaso"
     
     # Set case ID in CONFIG for single database architecture
     CONFIG.set_case_id(args.case_id)
