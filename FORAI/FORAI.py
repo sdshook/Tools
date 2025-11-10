@@ -7624,6 +7624,58 @@ def main():
         elif args.autonomous_analysis:
             LOGGER.info(f"Starting autonomous analysis for case {args.case_id}")
             
+            # Check if database exists and has data
+            db_path = Path(CONFIG.db_path)
+            needs_processing = True
+            
+            if db_path.exists():
+                try:
+                    with get_database_connection() as conn:
+                        cursor = conn.execute("SELECT COUNT(*) FROM evidence WHERE case_id = ?", (args.case_id,))
+                        evidence_count = cursor.fetchone()[0]
+                        if evidence_count > 0:
+                            LOGGER.info(f"Database exists with {evidence_count:,} evidence records")
+                            needs_processing = False
+                        else:
+                            LOGGER.info("Database exists but contains no evidence data - processing required")
+                except sqlite3.OperationalError as e:
+                    if "no such table: evidence" in str(e):
+                        LOGGER.info("Database exists but missing evidence table - processing required")
+                    else:
+                        LOGGER.error(f"Database error: {e}")
+                        needs_processing = True
+            else:
+                LOGGER.info("Database does not exist - processing required")
+            
+            # Process .plaso file if database needs data
+            if needs_processing and args.plaso_file:
+                LOGGER.info(f"Processing .plaso file to populate database: {args.plaso_file}")
+                
+                # Initialize workflow manager for processing
+                workflow = ForensicWorkflowManager(args.case_id, args.output_dir, args.verbose)
+                
+                # Load custom keywords
+                keywords = load_keywords(args)
+                if keywords:
+                    workflow.log_custody_event("KEYWORDS_LOADING", 
+                                             f"Loading {len(keywords)} custom keywords for case-insensitive flagging")
+                
+                # Process the .plaso file
+                success = workflow.process_plaso_file(Path(args.plaso_file))
+                if not success:
+                    LOGGER.error("Failed to process .plaso file - cannot proceed with analysis")
+                    sys.exit(1)
+                
+                # Inject keywords after database creation
+                if keywords:
+                    workflow._inject_keywords_to_database(keywords)
+                    workflow.log_custody_event("KEYWORDS_INJECTED", f"Injected {len(keywords)} keywords into database")
+                
+                LOGGER.info("Database populated successfully from .plaso file")
+            elif needs_processing and not args.plaso_file:
+                LOGGER.error("Database is empty but no --plaso-file provided for processing")
+                sys.exit(1)
+            
             # Create LLM provider
             llm_provider = create_llm_provider(args)
             
