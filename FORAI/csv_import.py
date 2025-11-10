@@ -310,18 +310,14 @@ def main():
         print(f"❌ CSV file not found: {csv_file}")
         sys.exit(1)
     
-    # Create both databases - FORAI.py architecture requires both:
-    # 1. BHSM database for BHSM functionality and report generation
-    # 2. forai.db for autonomous analysis
+    # Create single BHSM database - FORAI.py now uses single database architecture
     bhsm_db = csv_file.parent / f"{case_id}_bhsm.db"
-    forai_db = csv_file.parent / "forai.db"
     
     print(f"🚀 Starting CSV import for case {case_id}")
     print(f"📁 CSV file: {csv_file}")
     print(f"🗄️  BHSM Database: {bhsm_db}")
-    print(f"🗄️  FORAI Database: {forai_db}")
     
-    # Create BHSM database (primary database with BHSM functionality)
+    # Create BHSM database with full functionality
     create_database_schema(bhsm_db)
     
     # Import timeline from CSV into BHSM database
@@ -330,18 +326,12 @@ def main():
     # Inject keywords into BHSM database
     inject_keywords(bhsm_db, case_id, keywords_file)
     
-    # Copy BHSM database to forai.db for autonomous analysis
-    import shutil
-    print(f"🔗 Linking BHSM database to forai.db for autonomous analysis...")
-    shutil.copy2(bhsm_db, forai_db)
-    
     print(f"\n🎉 CSV import completed successfully!")
     print(f"📊 Total records: {count:,}")
     print(f"🗄️  BHSM Database size: {bhsm_db.stat().st_size / 1024 / 1024:.1f} MB")
-    print(f"🗄️  FORAI Database size: {forai_db.stat().st_size / 1024 / 1024:.1f} MB")
     print(f"\n✅ Ready for autonomous analysis!")
-    print(f"🔬 BHSM functionality preserved - behavioral analysis enabled")
-    print(f"🔗 Both databases created for full FORAI.py compatibility")
+    print(f"🔬 Single BHSM database with full behavioral analysis functionality")
+    print(f"🎯 Optimized architecture - one database for all operations")
 
 if __name__ == "__main__":
     main()

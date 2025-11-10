@@ -2856,6 +2856,7 @@ class ForaiConfig:
     batch_size: int = 10000
     chunk_size: int = 50000
     memory_threshold: float = 0.85
+    current_case_id: str = None
     
     # LLM settings - optimized for accuracy
     llm_context_size: int = 16384
@@ -2874,9 +2875,18 @@ class ForaiConfig:
         for subdir in ["archives", "artifacts", "extracts", "LLM", "reports", "tools"]:
             (self.base_dir / subdir).mkdir(parents=True, exist_ok=True)
     
+    def set_case_id(self, case_id: str):
+        """Set the current case ID for database operations"""
+        self.current_case_id = case_id
+    
     @property
     def db_path(self) -> Path:
-        return self.base_dir / "extracts" / "forai.db"
+        """Return path to the BHSM database for the current case"""
+        if self.current_case_id:
+            return self.base_dir / "extracts" / f"{self.current_case_id}_bhsm.db"
+        else:
+            # Fallback for backward compatibility
+            return self.base_dir / "extracts" / "forai.db"
 
 CONFIG = ForaiConfig()
 
@@ -7319,6 +7329,10 @@ def main():
     
     if args.verbose:
         LOGGER.setLevel(logging.DEBUG)
+    
+    # Set case ID in CONFIG for single database architecture
+    CONFIG.set_case_id(args.case_id)
+    LOGGER.info(f"Using BHSM database: {CONFIG.db_path}")
     
     # Check external tool dependencies
     if args.full_analysis or args.collect_artifacts or args.parse_artifacts:
