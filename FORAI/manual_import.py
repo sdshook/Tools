@@ -73,54 +73,78 @@ def import_json_timeline(json_path, db_path, case_id):
     batch = []
     
     try:
+        print("🔍 Loading JSON file (this may take a moment for large files)...")
         with open(json_path, 'r', encoding='utf-8') as f:
-            for line_num, line in enumerate(f, 1):
-                if line_num % 10000 == 0:
-                    print(f"📈 Processing line {line_num:,}...")
+            data = json.load(f)
+        
+        print(f"📊 Found {len(data)} events in JSON file")
+        
+        for event_key, event_data in data.items():
+            if imported_count % 10000 == 0 and imported_count > 0:
+                print(f"📈 Processed {imported_count:,} events...")
+            
+            try:
+                # Extract fields from plaso JSON event structure
+                timestamp = str(event_data.get('timestamp', ''))
                 
-                try:
-                    entry = json.loads(line.strip())
+                # Convert timestamp to readable datetime if it's a WebKit timestamp
+                datetime_utc = ''
+                if timestamp and timestamp != '0' and timestamp != '-11644473600000000':
+                    try:
+                        # Convert WebKit timestamp to Unix timestamp
+                        webkit_ts = int(timestamp)
+                        if webkit_ts > 0:
+                            unix_ts = (webkit_ts / 1000000) - 11644473600
+                            datetime_utc = datetime.fromtimestamp(unix_ts).isoformat()
+                    except:
+                        pass
+                
+                source = event_data.get('data_type', '')
+                source_long = event_data.get('parser', '')
+                message = event_data.get('message', '')
+                parser = event_data.get('parser', '')
+                display_name = event_data.get('display_name', '')
+                filename = event_data.get('filename', '')
+                inode = event_data.get('inode', '')
+                format_type = event_data.get('data_type', '')
+                
+                # Store additional data as JSON
+                extra_data = {
+                    'host': event_data.get('host', ''),
+                    'url': event_data.get('url', ''),
+                    'cookie_name': event_data.get('cookie_name', ''),
+                    'timestamp_desc': event_data.get('timestamp_desc', ''),
+                    'md5_hash': event_data.get('md5_hash', ''),
+                    'pathspec': event_data.get('pathspec', {}),
+                    'query': event_data.get('query', '')
+                }
+                extra = json.dumps(extra_data)
+                
+                # Create SHA256 hash of the entry
+                entry_str = f"{timestamp}{source}{message}{filename}"
+                sha256_hash = hashlib.sha256(entry_str.encode()).hexdigest()[:16]
+                
+                batch.append((
+                    case_id, timestamp, datetime_utc, source, source_long,
+                    message, parser, display_name, filename, inode,
+                    '', format_type, extra, sha256_hash, 'timeline', 0
+                ))
+                
+                if len(batch) >= batch_size:
+                    cursor.executemany('''
+                        INSERT INTO evidence (
+                            case_id, timestamp, datetime_utc, source, source_long,
+                            message, parser, display_name, filename, inode,
+                            notes, format, extra, sha256_hash, artifact_type, flagged
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', batch)
+                    conn.commit()
+                    imported_count += len(batch)
+                    batch = []
                     
-                    # Extract fields from JSON entry
-                    timestamp = entry.get('timestamp', '')
-                    datetime_utc = entry.get('datetime', '')
-                    source = entry.get('source', '')
-                    source_long = entry.get('source_long', '')
-                    message = entry.get('message', '')
-                    parser = entry.get('parser', '')
-                    display_name = entry.get('display_name', '')
-                    filename = entry.get('filename', '')
-                    inode = entry.get('inode', '')
-                    format_type = entry.get('format', '')
-                    extra = json.dumps(entry.get('extra', {})) if entry.get('extra') else ''
-                    
-                    # Create SHA256 hash of the entry
-                    entry_str = f"{timestamp}{source}{message}{filename}"
-                    sha256_hash = hashlib.sha256(entry_str.encode()).hexdigest()[:16]
-                    
-                    batch.append((
-                        case_id, timestamp, datetime_utc, source, source_long,
-                        message, parser, display_name, filename, inode,
-                        '', format_type, extra, sha256_hash, 'timeline', 0
-                    ))
-                    
-                    if len(batch) >= batch_size:
-                        cursor.executemany('''
-                            INSERT INTO evidence (
-                                case_id, timestamp, datetime_utc, source, source_long,
-                                message, parser, display_name, filename, inode,
-                                notes, format, extra, sha256_hash, artifact_type, flagged
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', batch)
-                        conn.commit()
-                        imported_count += len(batch)
-                        batch = []
-                        
-                except json.JSONDecodeError:
-                    continue
-                except Exception as e:
-                    print(f"⚠️  Warning: Error processing line {line_num}: {e}")
-                    continue
+            except Exception as e:
+                print(f"⚠️  Warning: Error processing event {event_key}: {e}")
+                continue
         
         # Insert remaining batch
         if batch:
