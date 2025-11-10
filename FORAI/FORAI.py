@@ -6718,49 +6718,199 @@ class ForensicWorkflowManager:
             return False
     
     def _process_csv_timeline(self, csv_path):
-        """Process CSV timeline output using CSV import script"""
+        """Process CSV timeline output directly into BHSM database"""
         try:
             self.logger.info(f"Processing CSV timeline: {csv_path}")
             
-            # Find keywords file
-            keywords_file = Path(__file__).parent / "keywords.txt"
-            if not keywords_file.exists():
-                self.logger.warning(f"Keywords file not found: {keywords_file}")
-                # Create empty keywords file as fallback
-                keywords_file.write_text("")
+            # Get database path using CONFIG (single database architecture)
+            database_path = Path(CONFIG.db_path)
             
-            # Call CSV import script
-            csv_import_script = Path(__file__).parent / "csv_import.py"
-            if not csv_import_script.exists():
-                self.logger.error(f"CSV import script not found: {csv_import_script}")
-                return False
+            # Create database schema
+            self._create_bhsm_database_schema(database_path)
             
-            import subprocess
-            import sys
+            # Import CSV data
+            count = self._import_csv_to_database(csv_path, database_path)
             
-            cmd = [
-                sys.executable,
-                str(csv_import_script),
-                str(csv_path),
-                self.case_id,
-                str(keywords_file)
-            ]
+            # Load and inject keywords
+            self._inject_keywords_to_database(database_path)
             
-            self.logger.info(f"Executing CSV import: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+            self.logger.info(f"CSV processing completed: {count:,} records imported")
             
-            if result.returncode != 0:
-                self.logger.error(f"CSV import failed: {result.stderr}")
-                return False
-            
-            self.logger.info("CSV import completed successfully")
-            self.logger.info(result.stdout)
+            # Clean up CSV file to save space
+            try:
+                csv_path.unlink()
+                self.logger.info("CSV file cleaned up to save disk space")
+            except Exception as e:
+                self.logger.debug(f"CSV cleanup warning: {e}")
             
             return True
             
         except Exception as e:
             self.logger.error(f"CSV processing error: {e}")
             return False
+    
+    def _create_bhsm_database_schema(self, database_path):
+        """Create BHSM database schema with all required tables"""
+        try:
+            with sqlite3.connect(str(database_path)) as conn:
+                # Enable optimizations for bulk insert
+                conn.execute("PRAGMA synchronous=OFF")
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA cache_size=10000")
+                
+                # Create timeline table with correct schema
+                conn.execute('''
+                    CREATE TABLE IF NOT EXISTS timeline (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        case_id TEXT NOT NULL,
+                        timestamp TEXT NOT NULL,
+                        artifact TEXT NOT NULL,
+                        host TEXT,
+                        user TEXT,
+                        source_file TEXT,
+                        summary TEXT,
+                        data_json TEXT,
+                        hash TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                
+                # Create indexes for performance
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_case_id ON timeline(case_id)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_timestamp ON timeline(timestamp)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_artifact ON timeline(artifact)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_host ON timeline(host)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_user ON timeline(user)')
+                
+                # Create keywords table
+                conn.execute('''
+                    CREATE TABLE IF NOT EXISTS keywords (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        case_id TEXT NOT NULL,
+                        keyword TEXT NOT NULL,
+                        category TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_keywords_case_id ON keywords(case_id)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_keywords_keyword ON keywords(keyword)')
+                
+                conn.commit()
+                self.logger.info(f"BHSM database schema created: {database_path}")
+                
+        except Exception as e:
+            self.logger.error(f"Database schema creation error: {e}")
+            raise
+    
+    def _import_csv_to_database(self, csv_path, database_path):
+        """Import CSV timeline data into BHSM database"""
+        try:
+            import csv
+            import json
+            import hashlib
+            
+            count = 0
+            batch_size = 10000
+            batch_data = []
+            
+            with sqlite3.connect(str(database_path)) as conn:
+                with open(csv_path, 'r', encoding='utf-8', errors='ignore') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    
+                    for row in reader:
+                        try:
+                            # Extract data from CSV row
+                            timestamp = row.get('datetime', row.get('timestamp', ''))
+                            artifact = row.get('source', row.get('artifact', ''))
+                            host = row.get('hostname', row.get('host', ''))
+                            user = row.get('username', row.get('user', ''))
+                            source_file = row.get('filename', row.get('source_file', ''))
+                            summary = row.get('message', row.get('summary', ''))
+                            
+                            # Create JSON data from all fields
+                            data_json = json.dumps(dict(row))
+                            
+                            # Create hash for deduplication
+                            hash_input = f"{timestamp}{artifact}{summary}".encode('utf-8')
+                            hash_value = hashlib.sha256(hash_input).hexdigest()[:16]
+                            
+                            batch_data.append((
+                                self.case_id,
+                                timestamp,
+                                artifact,
+                                host,
+                                user,
+                                source_file,
+                                summary,
+                                data_json,
+                                hash_value
+                            ))
+                            
+                            count += 1
+                            
+                            # Insert in batches for performance
+                            if len(batch_data) >= batch_size:
+                                conn.executemany('''
+                                    INSERT OR IGNORE INTO timeline 
+                                    (case_id, timestamp, artifact, host, user, source_file, summary, data_json, hash)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                ''', batch_data)
+                                batch_data = []
+                                
+                                if count % 50000 == 0:
+                                    self.logger.info(f"Imported {count:,} records...")
+                                    
+                        except Exception as e:
+                            self.logger.debug(f"Error processing CSV row: {e}")
+                            continue
+                    
+                    # Insert remaining batch
+                    if batch_data:
+                        conn.executemany('''
+                            INSERT OR IGNORE INTO timeline 
+                            (case_id, timestamp, artifact, host, user, source_file, summary, data_json, hash)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', batch_data)
+                    
+                    conn.commit()
+            
+            self.logger.info(f"CSV import completed: {count:,} records processed")
+            return count
+            
+        except Exception as e:
+            self.logger.error(f"CSV import error: {e}")
+            raise
+    
+    def _inject_keywords_to_database(self, database_path):
+        """Load and inject keywords into BHSM database"""
+        try:
+            keywords_file = Path(__file__).parent / "keywords.txt"
+            
+            if not keywords_file.exists():
+                self.logger.warning(f"Keywords file not found: {keywords_file}")
+                return
+            
+            with sqlite3.connect(str(database_path)) as conn:
+                # Clear existing keywords for this case
+                conn.execute("DELETE FROM keywords WHERE case_id = ?", (self.case_id,))
+                
+                # Load keywords from file
+                keywords_text = keywords_file.read_text(encoding='utf-8')
+                keywords = [kw.strip() for kw in keywords_text.split('\n') if kw.strip()]
+                
+                # Insert keywords
+                for keyword in keywords:
+                    conn.execute('''
+                        INSERT INTO keywords (case_id, keyword, category)
+                        VALUES (?, ?, ?)
+                    ''', (self.case_id, keyword, 'forensic'))
+                
+                conn.commit()
+                self.logger.info(f"Injected {len(keywords)} keywords into database")
+                
+        except Exception as e:
+            self.logger.warning(f"Keywords injection error: {e}")
     
     def _process_dynamic_timeline(self, dynamic_path, custom_module):
         """Process dynamic format timeline output"""
