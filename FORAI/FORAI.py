@@ -6758,7 +6758,24 @@ class ForensicWorkflowManager:
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.execute("PRAGMA cache_size=10000")
                 
-                # Create timeline table with correct schema
+                # Create evidence table (primary table for autonomous analysis)
+                conn.execute('''
+                    CREATE TABLE IF NOT EXISTS evidence (
+                        id INTEGER PRIMARY KEY,
+                        case_id TEXT NOT NULL,
+                        host TEXT,
+                        user TEXT,
+                        timestamp REAL NOT NULL,
+                        artifact TEXT NOT NULL,
+                        source_file TEXT NOT NULL,
+                        summary TEXT,
+                        data_json TEXT,
+                        file_hash TEXT,
+                        created INTEGER DEFAULT (unixepoch())
+                    )
+                ''')
+                
+                # Create timeline table (for compatibility)
                 conn.execute('''
                     CREATE TABLE IF NOT EXISTS timeline (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -6775,7 +6792,14 @@ class ForensicWorkflowManager:
                     )
                 ''')
                 
-                # Create indexes for performance
+                # Create indexes for evidence table (primary)
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_evidence_case_id ON evidence(case_id)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_evidence_timestamp ON evidence(timestamp)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_evidence_artifact ON evidence(artifact)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_evidence_host ON evidence(host)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_evidence_user ON evidence(user)')
+                
+                # Create indexes for timeline table (compatibility)
                 conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_case_id ON timeline(case_id)')
                 conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_timestamp ON timeline(timestamp)')
                 conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_artifact ON timeline(artifact)')
@@ -6821,41 +6845,75 @@ class ForensicWorkflowManager:
                     for row in reader:
                         try:
                             # Extract data from CSV row
-                            timestamp = row.get('datetime', row.get('timestamp', ''))
+                            timestamp_str = row.get('datetime', row.get('timestamp', ''))
                             artifact = row.get('source', row.get('artifact', ''))
                             host = row.get('hostname', row.get('host', ''))
                             user = row.get('username', row.get('user', ''))
                             source_file = row.get('filename', row.get('source_file', ''))
                             summary = row.get('message', row.get('summary', ''))
                             
+                            # Convert timestamp to REAL for evidence table
+                            try:
+                                from datetime import datetime
+                                if timestamp_str:
+                                    dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                                    timestamp_real = dt.timestamp()
+                                else:
+                                    timestamp_real = 0.0
+                            except:
+                                timestamp_real = 0.0
+                            
                             # Create JSON data from all fields
                             data_json = json.dumps(dict(row))
                             
                             # Create hash for deduplication
-                            hash_input = f"{timestamp}{artifact}{summary}".encode('utf-8')
+                            hash_input = f"{timestamp_str}{artifact}{summary}".encode('utf-8')
                             hash_value = hashlib.sha256(hash_input).hexdigest()[:16]
                             
-                            batch_data.append((
-                                self.case_id,
-                                timestamp,
-                                artifact,
-                                host,
-                                user,
-                                source_file,
-                                summary,
-                                data_json,
-                                hash_value
-                            ))
+                            # Data for both tables
+                            batch_data.append({
+                                'case_id': self.case_id,
+                                'timestamp_str': timestamp_str,
+                                'timestamp_real': timestamp_real,
+                                'artifact': artifact,
+                                'host': host,
+                                'user': user,
+                                'source_file': source_file,
+                                'summary': summary,
+                                'data_json': data_json,
+                                'hash_value': hash_value
+                            })
                             
                             count += 1
                             
                             # Insert in batches for performance
                             if len(batch_data) >= batch_size:
+                                # Insert into evidence table (primary)
+                                evidence_data = [(
+                                    row['case_id'], row['host'], row['user'], row['timestamp_real'],
+                                    row['artifact'], row['source_file'], row['summary'], 
+                                    row['data_json'], row['hash_value']
+                                ) for row in batch_data]
+                                
+                                conn.executemany('''
+                                    INSERT OR IGNORE INTO evidence 
+                                    (case_id, host, user, timestamp, artifact, source_file, summary, data_json, file_hash)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                ''', evidence_data)
+                                
+                                # Insert into timeline table (compatibility)
+                                timeline_data = [(
+                                    row['case_id'], row['timestamp_str'], row['artifact'], row['host'],
+                                    row['user'], row['source_file'], row['summary'], 
+                                    row['data_json'], row['hash_value']
+                                ) for row in batch_data]
+                                
                                 conn.executemany('''
                                     INSERT OR IGNORE INTO timeline 
                                     (case_id, timestamp, artifact, host, user, source_file, summary, data_json, hash)
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                ''', batch_data)
+                                ''', timeline_data)
+                                
                                 batch_data = []
                                 
                                 if count % 50000 == 0:
@@ -6867,11 +6925,31 @@ class ForensicWorkflowManager:
                     
                     # Insert remaining batch
                     if batch_data:
+                        # Insert into evidence table (primary)
+                        evidence_data = [(
+                            row['case_id'], row['host'], row['user'], row['timestamp_real'],
+                            row['artifact'], row['source_file'], row['summary'], 
+                            row['data_json'], row['hash_value']
+                        ) for row in batch_data]
+                        
+                        conn.executemany('''
+                            INSERT OR IGNORE INTO evidence 
+                            (case_id, host, user, timestamp, artifact, source_file, summary, data_json, file_hash)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', evidence_data)
+                        
+                        # Insert into timeline table (compatibility)
+                        timeline_data = [(
+                            row['case_id'], row['timestamp_str'], row['artifact'], row['host'],
+                            row['user'], row['source_file'], row['summary'], 
+                            row['data_json'], row['hash_value']
+                        ) for row in batch_data]
+                        
                         conn.executemany('''
                             INSERT OR IGNORE INTO timeline 
                             (case_id, timestamp, artifact, host, user, source_file, summary, data_json, hash)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', batch_data)
+                        ''', timeline_data)
                     
                     conn.commit()
             
