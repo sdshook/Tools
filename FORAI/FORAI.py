@@ -6775,36 +6775,12 @@ class ForensicWorkflowManager:
                     )
                 ''')
                 
-                # Create timeline table (for compatibility)
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS timeline (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        case_id TEXT NOT NULL,
-                        timestamp TEXT NOT NULL,
-                        artifact TEXT NOT NULL,
-                        host TEXT,
-                        user TEXT,
-                        source_file TEXT,
-                        summary TEXT,
-                        data_json TEXT,
-                        hash TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                ''')
-                
-                # Create indexes for evidence table (primary)
+                # Create indexes for evidence table
                 conn.execute('CREATE INDEX IF NOT EXISTS idx_evidence_case_id ON evidence(case_id)')
                 conn.execute('CREATE INDEX IF NOT EXISTS idx_evidence_timestamp ON evidence(timestamp)')
                 conn.execute('CREATE INDEX IF NOT EXISTS idx_evidence_artifact ON evidence(artifact)')
                 conn.execute('CREATE INDEX IF NOT EXISTS idx_evidence_host ON evidence(host)')
                 conn.execute('CREATE INDEX IF NOT EXISTS idx_evidence_user ON evidence(user)')
-                
-                # Create indexes for timeline table (compatibility)
-                conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_case_id ON timeline(case_id)')
-                conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_timestamp ON timeline(timestamp)')
-                conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_artifact ON timeline(artifact)')
-                conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_host ON timeline(host)')
-                conn.execute('CREATE INDEX IF NOT EXISTS idx_timeline_user ON timeline(user)')
                 
                 # Create keywords table
                 conn.execute('''
@@ -6901,19 +6877,6 @@ class ForensicWorkflowManager:
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ''', evidence_data)
                                 
-                                # Insert into timeline table (compatibility)
-                                timeline_data = [(
-                                    row['case_id'], row['timestamp_str'], row['artifact'], row['host'],
-                                    row['user'], row['source_file'], row['summary'], 
-                                    row['data_json'], row['hash_value']
-                                ) for row in batch_data]
-                                
-                                conn.executemany('''
-                                    INSERT OR IGNORE INTO timeline 
-                                    (case_id, timestamp, artifact, host, user, source_file, summary, data_json, hash)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                ''', timeline_data)
-                                
                                 batch_data = []
                                 
                                 if count % 50000 == 0:
@@ -6937,19 +6900,6 @@ class ForensicWorkflowManager:
                             (case_id, host, user, timestamp, artifact, source_file, summary, data_json, file_hash)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', evidence_data)
-                        
-                        # Insert into timeline table (compatibility)
-                        timeline_data = [(
-                            row['case_id'], row['timestamp_str'], row['artifact'], row['host'],
-                            row['user'], row['source_file'], row['summary'], 
-                            row['data_json'], row['hash_value']
-                        ) for row in batch_data]
-                        
-                        conn.executemany('''
-                            INSERT OR IGNORE INTO timeline 
-                            (case_id, timestamp, artifact, host, user, source_file, summary, data_json, hash)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', timeline_data)
                     
                     conn.commit()
             
