@@ -1907,13 +1907,37 @@ class ForensicMLAnalyzer:
                     n_estimators=100
                 )
                 
-                # If we have historical data, fit the model
-                if question_id in self.training_data and len(self.training_data[question_id]) > 10:
-                    training_features = np.array(self.training_data[question_id])
-                    self.isolation_forests[question_id].fit(training_features)
+                # BIDIRECTIONAL HEBBIAN LEARNING: Use accumulated training data
+                if question_id in self.training_data and len(self.training_data[question_id]) >= 5:
+                    # Extract features from stored training samples
+                    training_features = []
+                    for sample in self.training_data[question_id]:
+                        training_features.append(sample['features'])
+                    
+                    training_matrix = np.array(training_features)
+                    
+                    # Weight samples by reward signal (Hebbian plasticity)
+                    sample_weights = np.array([sample['reward'] for sample in self.training_data[question_id]])
+                    
+                    # Fit isolation forest on reward-weighted historical data
+                    # Note: IsolationForest doesn't support sample_weight, so we duplicate high-reward samples
+                    weighted_features = []
+                    for i, sample in enumerate(self.training_data[question_id]):
+                        # Duplicate samples based on reward (Hebbian strengthening)
+                        duplicates = max(1, int(sample['reward'] * 3))  # 1-3 duplicates based on reward
+                        for _ in range(duplicates):
+                            weighted_features.append(sample['features'])
+                    
+                    weighted_matrix = np.array(weighted_features)
+                    self.isolation_forests[question_id].fit(weighted_matrix)
+                    
+                    LOGGER.debug(f"Trained isolation forest for {question_id} with {len(training_features)} "
+                               f"original samples -> {len(weighted_features)} weighted samples "
+                               f"(avg reward: {np.mean(sample_weights):.3f})")
                 else:
-                    # Fit on current data (less reliable but functional)
+                    # Not enough training data yet - fit on current data as bootstrap
                     self.isolation_forests[question_id].fit(X)
+                    LOGGER.debug(f"Bootstrap training isolation forest for {question_id} with current sample")
             
             # Get anomaly score
             anomaly_score = self.isolation_forests[question_id].decision_function(X)[0]
@@ -1969,15 +1993,15 @@ class ForensicMLAnalyzer:
             
             # If we have ground truth, update weights
             if ground_truth_score is not None:
-                # Calculate gradient
+                # Calculate gradient (corrected for logistic regression)
                 error = score - ground_truth_score
-                gradient_w = error * features * score * (1 - score)
-                gradient_b = error * score * (1 - score)
+                gradient_w = error * features  # Sigmoid derivative already in error
+                gradient_b = error            # Sigmoid derivative already in error
                 
-                # Update with momentum
+                # Update with momentum (corrected implementation)
                 optimizer['momentum'] = (optimizer['momentum_decay'] * optimizer['momentum'] + 
-                                       optimizer['learning_rate'] * gradient_w)
-                optimizer['weights'] -= optimizer['momentum']
+                                       gradient_w)
+                optimizer['weights'] -= optimizer['learning_rate'] * optimizer['momentum']
                 optimizer['bias'] -= optimizer['learning_rate'] * gradient_b
                 
                 # Recalculate score with updated weights
@@ -2002,6 +2026,64 @@ class ForensicMLAnalyzer:
         """Sigmoid activation function with numerical stability"""
         return 1 / (1 + np.exp(-np.clip(x, -500, 500)))
     
+    def _store_deterministic_learning(self, question_id: str, evidence_items: List[Dict], 
+                                    deterministic_result: Dict) -> None:
+        """
+        BIDIRECTIONAL HEBBIAN LEARNING: Store each deterministic query as training data
+        This implements reward-gated synaptic plasticity where successful deterministic
+        queries strengthen the isolation forest's ability to detect similar patterns
+        """
+        if not evidence_items:
+            return
+            
+        try:
+            # Extract features from current evidence
+            features = self.extract_behavioral_features(evidence_items, question_id)
+            if len(features) == 0:
+                return
+            
+            # Initialize training data storage for this question if needed
+            if question_id not in self.training_data:
+                self.training_data[question_id] = []
+            
+            # Store features with reward signal based on deterministic confidence
+            confidence = deterministic_result.get('confidence', 0.5)
+            evidence_count = deterministic_result.get('evidence_count', len(evidence_items))
+            
+            # Reward signal: higher confidence + more evidence = stronger learning
+            reward_signal = confidence * min(1.0, evidence_count / 10.0)  # Cap at 10 evidence items
+            
+            # Create training sample with reward-weighted features
+            training_sample = {
+                'features': features.tolist(),
+                'reward': reward_signal,
+                'timestamp': time.time(),
+                'evidence_count': evidence_count,
+                'confidence': confidence
+            }
+            
+            # Add to training data (implement sliding window to prevent memory overflow)
+            self.training_data[question_id].append(training_sample)
+            
+            # Keep only last 1000 samples per question (sliding window)
+            if len(self.training_data[question_id]) > 1000:
+                # Remove oldest samples, keeping highest reward samples preferentially
+                sorted_samples = sorted(self.training_data[question_id], 
+                                      key=lambda x: (x['reward'], x['timestamp']), reverse=True)
+                self.training_data[question_id] = sorted_samples[:800]  # Keep top 800
+            
+            # HEBBIAN PLASTICITY: Strengthen connections for high-reward patterns
+            if reward_signal > 0.7:  # High-confidence deterministic results
+                # Force retrain isolation forest with new high-reward data
+                if question_id in self.isolation_forests:
+                    del self.isolation_forests[question_id]  # Force retrain on next use
+                    
+            LOGGER.debug(f"Stored training sample for {question_id}: reward={reward_signal:.3f}, "
+                        f"total_samples={len(self.training_data[question_id])}")
+                        
+        except Exception as e:
+            LOGGER.warning(f"Failed to store deterministic learning for {question_id}: {e}")
+    
     def enhance_forensic_analysis(self, question_id: str, evidence_items: List[Dict], 
                                 deterministic_result: Dict) -> Dict[str, Any]:
         """Combine deterministic results with ML enhancement for improved accuracy"""
@@ -2009,9 +2091,13 @@ class ForensicMLAnalyzer:
             return deterministic_result
         
         try:
-            # Get ML analysis
+            # BIDIRECTIONAL HEBBIAN LEARNING: Store deterministic query as training data
+            self._store_deterministic_learning(question_id, evidence_items, deterministic_result)
+            
+            # Get ML analysis (now with accumulated training data)
             isolation_result = self.analyze_with_isolation_forest(evidence_items, question_id)
-            gradient_result = self.optimize_with_gradient_descent(question_id, evidence_items)
+            gradient_result = self.optimize_with_gradient_descent(question_id, evidence_items, 
+                                                                deterministic_result.get('confidence', 0.8))
             
             # Combine results
             enhanced_result = deterministic_result.copy()
@@ -2020,7 +2106,8 @@ class ForensicMLAnalyzer:
             enhanced_result['ml_analysis'] = {
                 'anomaly_detection': isolation_result,
                 'optimized_scoring': gradient_result,
-                'ml_confidence': (isolation_result['confidence'] + gradient_result['confidence']) / 2
+                'ml_confidence': (isolation_result['confidence'] + gradient_result['confidence']) / 2,
+                'training_samples': len(self.training_data.get(question_id, []))
             }
             
             # Adjust overall confidence based on ML analysis
