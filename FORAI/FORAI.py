@@ -119,6 +119,7 @@ CLI USAGE EXAMPLES:
     # Interactive mode saves sessions to D:/FORAI/reports/AnalystNotes.txt
     # Each query strengthens isolation forest through bidirectional Hebbian learning
     # Real-time BHSM learning status display shows training sample accumulation
+    # Use 'exit', 'quit', 'done' to end session, or 'q!' to exit FORAI completely
 
 📋 KEYWORD FILE EXAMPLES:
     # Create a keywords file (one keyword per line, case-insensitive)
@@ -6940,7 +6941,7 @@ def launch_interactive_analysis(case_id: str, llm_folder: str = None) -> None:
     print("💡 Ask forensic questions to explore your case data interactively")
     print("🧠 Each query will strengthen the BHSM isolation forest through experiential learning")
     print("📝 Session will be saved to D:/FORAI/reports/AnalystNotes.txt")
-    print("🚪 Type 'exit', 'quit', or 'done' to end the session")
+    print("🚪 Type 'exit', 'quit', 'done' to end session, or 'q!' to exit FORAI completely")
     print("="*80)
     
     # Initialize the forensic analyzer
@@ -6981,7 +6982,19 @@ def launch_interactive_analysis(case_id: str, llm_folder: str = None) -> None:
                 question = input("🔍 FORAI> ").strip()
                 
                 # Check for exit commands
-                if question.lower() in ['exit', 'quit', 'done', '']:
+                if question.lower() in ['exit', 'quit', 'done', ''] or question == 'q!':
+                    if question == 'q!':
+                        print("\n🚪 Exiting FORAI completely...")
+                        # Write session footer before exiting
+                        session_end = datetime.now()
+                        session_duration = session_end - session_start
+                        with open(session_file, "a", encoding="utf-8") as f:
+                            f.write(f"\n{'='*80}\n")
+                            f.write(f"SESSION TERMINATED WITH q! - {session_end.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            f.write(f"Total Questions: {question_count}\n")
+                            f.write(f"Session Duration: {session_duration}\n")
+                            f.write(f"{'='*80}\n\n")
+                        sys.exit(0)  # Exit the entire program
                     break
                 
                 if not question:
@@ -7023,7 +7036,7 @@ def launch_interactive_analysis(case_id: str, llm_folder: str = None) -> None:
                                 avg_reward = sum(s.get('reward', 0) for s in samples) / len(samples)
                                 print(f"   {q_id}: {len(samples)} samples (avg reward: {avg_reward:.3f})")
                 
-                print(f"\n💡 Question {question_count} complete. Ask another question or type 'exit' to finish.\n")
+                print(f"\n💡 Question {question_count} complete. Ask another question, type 'exit' to finish, or 'q!' to exit FORAI.\n")
                 
             except KeyboardInterrupt:
                 print("\n\n🛑 Session interrupted by user")

@@ -479,7 +479,7 @@ python FORAI.py --case-id CASE001 --interactive
 # - Saves sessions to D:/FORAI/reports/AnalystNotes.txt
 # - Each query strengthens isolation forest through bidirectional Hebbian learning
 # - Real-time BHSM learning status display shows training sample accumulation
-# - Type 'exit', 'quit', or 'done' to end session
+# - Type 'exit', 'quit', 'done' to end session, or 'q!' to exit FORAI completely
 ```
 
 **Interactive Mode Example Session:**
@@ -489,7 +489,7 @@ python FORAI.py --case-id CASE001 --interactive
 💡 Ask forensic questions to explore your case data interactively
 🧠 Each query will strengthen the BHSM isolation forest through experiential learning
 📝 Session will be saved to D:/FORAI/reports/AnalystNotes.txt
-🚪 Type 'exit', 'quit', or 'done' to end the session
+🚪 Type 'exit', 'quit', 'done' to end session, or 'q!' to exit FORAI completely
 ================================================================================
 
 🔍 FORAI> What USB devices were connected during the incident timeframe?
@@ -509,18 +509,46 @@ Found evidence of 3 USB storage devices connected:
 
 💡 Question 1 complete. Ask another question or type 'exit' to finish.
 
-🔍 FORAI> exit
+🔍 FORAI> What network connections were established?
 
-================================================================================
-📊 SESSION SUMMARY
-================================================================================
-Questions Asked: 1
-Session Duration: 0:03:45
-Session Log: D:/FORAI/reports/AnalystNotes.txt
-🧠 BHSM Final Status: 15 total training samples
-🎯 Isolation forest strengthened through experiential learning
-✅ Interactive analysis session completed
-================================================================================
+⏳ Analyzing question 2...
+
+📋 ANALYSIS RESULT (1.87s):
+------------------------------------------------------------
+Found 12 network connections during analysis timeframe:
+1. TCP 192.168.1.100:443 -> suspicious-domain.com:80 (2024-12-01 15:30:22)
+2. UDP 192.168.1.100:53 -> 8.8.8.8:53 (DNS queries - normal)
+3. TCP 192.168.1.100:80 -> malware-c2.net:8080 (FLAGGED - C2 communication)
+------------------------------------------------------------
+🧠 BHSM Learning Status: 23 training samples accumulated
+   Q7: 8 samples (avg reward: 0.847)
+   Q8: 7 samples (avg reward: 0.723)
+   Q9: 8 samples (avg reward: 0.912)
+
+💡 Question 2 complete. Ask another question or type 'exit' to finish.
+
+🔍 FORAI> What files were deleted during the incident?
+
+⏳ Analyzing question 3...
+
+📋 ANALYSIS RESULT (3.12s):
+------------------------------------------------------------
+Found evidence of 5 file deletions:
+1. C:\Users\Admin\Desktop\sensitive_data.xlsx (Deleted: 2024-12-01 16:45:33)
+2. C:\Temp\malware_payload.exe (Deleted: 2024-12-01 16:47:12)
+3. C:\Windows\System32\drivers\rootkit.sys (Deleted: 2024-12-01 16:48:01)
+------------------------------------------------------------
+🧠 BHSM Learning Status: 31 training samples accumulated
+   Q7: 8 samples (avg reward: 0.847)
+   Q8: 7 samples (avg reward: 0.723)
+   Q9: 8 samples (avg reward: 0.912)
+   Q10: 8 samples (avg reward: 0.789)
+
+💡 Question 3 complete. Ask another question or type 'exit' to finish.
+
+🔍 FORAI> q!
+
+🚪 Exiting FORAI completely...
 ```
 
 ### Working with Existing Data
