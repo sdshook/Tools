@@ -6912,6 +6912,147 @@ def inject_keywords(case_id: str, keywords: List[str]) -> None:
     except Exception as e:
         LOGGER.error(f"Error injecting keywords: {e}")
 
+def launch_interactive_analysis(case_id: str, llm_folder: str = None) -> None:
+    """
+    Launch interactive forensic analysis mode with BHSM experiential learning
+    Saves session to D:/FORAI/reports/AnalystNotes.txt
+    """
+    import os
+    from datetime import datetime
+    
+    print("\n" + "="*80)
+    print("🔍 FORAI INTERACTIVE ANALYSIS MODE")
+    print("="*80)
+    print("💡 Ask forensic questions to explore your case data interactively")
+    print("🧠 Each query will strengthen the BHSM isolation forest through experiential learning")
+    print("📝 Session will be saved to D:/FORAI/reports/AnalystNotes.txt")
+    print("🚪 Type 'exit', 'quit', or 'done' to end the session")
+    print("="*80)
+    
+    # Initialize the forensic analyzer
+    try:
+        analyzer = ForensicAnalyzer(case_id, llm_folder)
+        
+        # Create reports directory if it doesn't exist
+        reports_dir = "D:/FORAI/reports"
+        os.makedirs(reports_dir, exist_ok=True)
+        
+        # Initialize session log file
+        session_file = os.path.join(reports_dir, "AnalystNotes.txt")
+        session_start = datetime.now()
+        
+        # Write session header
+        with open(session_file, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*80}\n")
+            f.write(f"FORAI INTERACTIVE SESSION - {session_start.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Case ID: {case_id}\n")
+            f.write(f"{'='*80}\n\n")
+        
+        print(f"📝 Session logging to: {session_file}")
+        print(f"🗂️  Case ID: {case_id}")
+        
+        # Check if LLM is available
+        if analyzer.llm:
+            print("🤖 LLM: Available for enhanced analysis")
+        else:
+            print("⚠️  LLM: Not available - using deterministic analysis only")
+        
+        print("\n💬 Ready for your forensic questions...\n")
+        
+        question_count = 0
+        
+        while True:
+            try:
+                # Get user input
+                question = input("🔍 FORAI> ").strip()
+                
+                # Check for exit commands
+                if question.lower() in ['exit', 'quit', 'done', '']:
+                    break
+                
+                if not question:
+                    continue
+                
+                question_count += 1
+                timestamp = datetime.now().strftime('%H:%M:%S')
+                
+                print(f"\n⏳ Analyzing question {question_count}...")
+                
+                # Process the question through FORAI's analysis engine
+                start_time = time.perf_counter()
+                answer = analyzer.answer_forensic_question(question)
+                elapsed = time.perf_counter() - start_time
+                
+                # Display the answer
+                print(f"\n📋 ANALYSIS RESULT ({elapsed:.2f}s):")
+                print("-" * 60)
+                print(answer)
+                print("-" * 60)
+                
+                # Log to session file
+                with open(session_file, "a", encoding="utf-8") as f:
+                    f.write(f"[{timestamp}] Q{question_count}: {question}\n")
+                    f.write(f"Analysis Time: {elapsed:.2f}s\n")
+                    f.write(f"Answer: {answer}\n")
+                    f.write(f"{'-'*60}\n\n")
+                
+                # Show BHSM learning status if ML is available
+                if hasattr(analyzer, 'ml_analyzer') and analyzer.ml_analyzer:
+                    ml_analyzer = analyzer.ml_analyzer
+                    total_training_samples = sum(len(samples) for samples in ml_analyzer.training_data.values())
+                    if total_training_samples > 0:
+                        print(f"🧠 BHSM Learning Status: {total_training_samples} training samples accumulated")
+                        
+                        # Show per-question learning progress
+                        for q_id, samples in ml_analyzer.training_data.items():
+                            if len(samples) > 0:
+                                avg_reward = sum(s.get('reward', 0) for s in samples) / len(samples)
+                                print(f"   {q_id}: {len(samples)} samples (avg reward: {avg_reward:.3f})")
+                
+                print(f"\n💡 Question {question_count} complete. Ask another question or type 'exit' to finish.\n")
+                
+            except KeyboardInterrupt:
+                print("\n\n🛑 Session interrupted by user")
+                break
+            except Exception as e:
+                print(f"\n❌ Error processing question: {e}")
+                LOGGER.error(f"Interactive analysis error: {e}")
+                continue
+        
+        # Session summary
+        session_end = datetime.now()
+        session_duration = session_end - session_start
+        
+        print(f"\n{'='*80}")
+        print("📊 SESSION SUMMARY")
+        print("="*80)
+        print(f"Questions Asked: {question_count}")
+        print(f"Session Duration: {session_duration}")
+        print(f"Session Log: {session_file}")
+        
+        # Write session footer
+        with open(session_file, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*80}\n")
+            f.write(f"SESSION ENDED - {session_end.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Total Questions: {question_count}\n")
+            f.write(f"Session Duration: {session_duration}\n")
+            f.write(f"{'='*80}\n\n")
+        
+        # Show BHSM final learning status
+        if hasattr(analyzer, 'ml_analyzer') and analyzer.ml_analyzer:
+            ml_analyzer = analyzer.ml_analyzer
+            total_training_samples = sum(len(samples) for samples in ml_analyzer.training_data.values())
+            if total_training_samples > 0:
+                print(f"🧠 BHSM Final Status: {total_training_samples} total training samples")
+                print("🎯 Isolation forest strengthened through experiential learning")
+        
+        print("✅ Interactive analysis session completed")
+        print("="*80)
+        
+    except Exception as e:
+        print(f"\n❌ Failed to initialize interactive analysis: {e}")
+        LOGGER.error(f"Interactive analysis initialization error: {e}")
+
 def main():
     """Modern main workflow"""
     parser = argparse.ArgumentParser(
@@ -6968,6 +7109,7 @@ def main():
     
     # CHAIN OF CUSTODY & OUTPUT
     parser.add_argument('--chain-of-custody', action='store_true', help='Generate chain of custody documentation')
+    parser.add_argument('--interactive', '-i', action='store_true', help='Launch interactive analysis mode after workflow completion')
     parser.add_argument('--output-dir', type=Path, help='Output directory for all results (default: D:/FORAI on Windows, ./FORAI on Linux)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     
@@ -7388,6 +7530,11 @@ def main():
                 workflow = ForensicWorkflowManager(args.case_id, args.output_dir, args.verbose)
             custody_file = workflow.generate_chain_of_custody_report()
             print(f"\n📜 Chain of custody generated: {custody_file}")
+        
+        # Interactive Analysis Mode - Launch after workflow completion
+        if args.interactive and hasattr(args, 'case_id') and args.case_id:
+            # Launch interactive mode when explicitly requested
+            launch_interactive_analysis(args.case_id, args.llm_folder)
     
     except Exception as e:
         LOGGER.error(f"Error in main workflow: {e}")
