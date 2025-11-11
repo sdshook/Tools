@@ -527,35 +527,31 @@ Found 12 network connections during analysis timeframe:
 
 💡 Question 2 complete. Ask another question or type 'exit' to finish.
 
-🔍 FORAI> What websites were visited during the incident timeframe and were any credentials entered?
+🔍 FORAI> were any new uncommon services or tasks created, and if so what time?
 
 ⏳ Analyzing question 3...
 
-📋 ANALYSIS RESULT (3.87s):
+📋 ANALYSIS RESULT (4.21s):
 ------------------------------------------------------------
-Found browser activity across 3 browsers during analysis timeframe:
+Found 4 uncommon services/tasks created during analysis timeframe:
 
-CHROME HISTORY:
-1. suspicious-domain.com/login - Visited: 2024-12-01 15:30:22
-   Status: FLAGGED - Known malicious domain
+SERVICES:
+1. "WindowsUpdateHelper" - Created: 2024-12-01 15:42:17
+   Path: C:\Windows\System32\svchost.exe -k netsvcs -p -s WindowsUpdateHelper
+   Status: SUSPICIOUS - Non-standard Windows Update service name
    
-2. webmail.company.com - Visited: 2024-12-01 15:45:33
-   Form data: Username field populated
-   Status: SUSPICIOUS - Credential entry detected
+2. "SystemMaintenanceService" - Created: 2024-12-02 03:15:44
+   Path: C:\ProgramData\Microsoft\Windows\SystemMaintenance\sysupdate.exe
+   Status: FLAGGED - Executable in unusual location
+
+SCHEDULED TASKS:
+3. "Microsoft\Windows\SystemRestore\BackupTask" - Created: 2024-12-01 16:30:12
+   Action: C:\Windows\Temp\backup_tool.exe /silent
+   Status: SUSPICIOUS - Non-standard backup location
    
-3. banking-site-fake.net/secure - Visited: 2024-12-02 09:15:44
-   Status: FLAGGED - Phishing site mimicking legitimate bank
-
-FIREFOX HISTORY:
-4. legitimate-bank.com/login - Visited: 2024-12-02 14:22:11
-   Form data: Password manager activated
-   Status: NORMAL - Legitimate banking site
-
-CREDENTIAL ANALYSIS:
-- 3 sites with form submissions detected
-- 2 flagged as potentially malicious
-- Password manager used on 1 legitimate site
-- No stored passwords found in browser vaults
+4. "GoogleUpdateTaskMachineUA" - Created: 2024-12-03 08:22:55
+   Action: C:\Users\Public\Documents\chrome_updater.exe
+   Status: FLAGGED - Fake Google updater in wrong directory
 ------------------------------------------------------------
 🧠 BHSM Learning Status: 31 training samples accumulated
    Q7: 8 samples (avg reward: 0.847)
