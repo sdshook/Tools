@@ -3,6 +3,40 @@
 
 **FORAI** (Forensic AI) is a production-ready digital forensics analysis tool that implements the complete forensic workflow from artifact collection to intelligent analysis. FORAI integrates KAPE, log2timeline, and psort with advanced ML algorithms for automated forensic question answering.
 
+## 🏛️ **Forensic Legal Requirements & Value Proposition**
+
+FORAI is specifically designed to meet the stringent requirements of forensic investigations and legal proceedings, providing capabilities that API-based large language models cannot offer:
+
+### ⚖️ **Perfect Reproducibility**
+- **Same model file = identical responses to identical prompts** - Critical for legal consistency
+- **Deterministic inference (with temperature=0)** - Eliminates response variance
+- **No network dependencies or API changes** - Prevents external factors from affecting analysis
+- **Complete audit trail** - Full documentation of analysis methods and evidence processing
+
+### 🔒 **Legal Defensibility**
+Expert testimony capability:
+> *"I used TinyLlama version 1.1B-Chat-v1.0, quantized to Q4_K_M format, with deterministic settings, enhanced by our validated BHSM semantic search system. The exact model file and analysis can be reproduced by opposing counsel using the provided SHA256 hash."*
+
+### 🧠 **BHSM Adds Forensic Rigor**
+- **PSI**: Transparent semantic search with explainable similarity scores
+- **BDH**: Documented learning patterns and adaptation history  
+- **Deterministic Evidence Retrieval**: SQL queries with full audit logs
+- **Validation Layer**: ForensicValidator class ensures consistency across analyses
+
+### ✅ **Forensic Investigation Requirements Met**
+- ✅ **Reproducibility**: Identical model, identical results
+- ✅ **Transparency**: Full visibility into analysis methods
+- ✅ **Auditability**: Complete logs of evidence processing
+- ✅ **Reliability**: No external dependencies or API changes
+- ✅ **Legal Admissibility**: Scientifically sound methodology
+
+### 🚫 **Why API-Based LLMs Fail Forensic Requirements**
+- **Model Opacity**: Unknown which model version is actually used
+- **Response Variance**: Same evidence can produce different conclusions on different days
+- **Network Dependencies**: Unreliable in field investigations
+- **No Reproducibility**: Cannot guarantee identical results for legal proceedings
+- **Context Window Jitter**: Variable context limits affect evidence inclusion/exclusion
+
 ## 🎯 Project Overview
 
 FORAI provides a complete forensic analysis pipeline:
