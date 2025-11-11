@@ -5167,14 +5167,6 @@ class BHSMSQLiteOutputModule:
             created     INTEGER DEFAULT (unixepoch())
         ) STRICT;
 
-        CREATE TABLE IF NOT EXISTS sources (
-            file_path   TEXT PRIMARY KEY,
-            file_hash   TEXT,
-            file_size   INTEGER,
-            processed   INTEGER DEFAULT (unixepoch()),
-            status      TEXT DEFAULT 'complete'
-        ) STRICT;
-
         CREATE INDEX IF NOT EXISTS idx_evidence_timestamp ON evidence(timestamp);
         CREATE INDEX IF NOT EXISTS idx_evidence_case_id ON evidence(case_id);
         CREATE INDEX IF NOT EXISTS idx_evidence_artifact ON evidence(artifact);
@@ -6754,17 +6746,18 @@ def inject_keywords(case_id: str, keywords: List[str]) -> None:
                 }
                 
                 conn.execute("""
-                    INSERT INTO evidence (case_id, timestamp, artifact, summary, data_json, source_file, host, user)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO evidence (case_id, host, user, timestamp, artifact, source_file, summary, data_json, file_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     case_id,
+                    'INTELLIGENCE',
+                    'SYSTEM',
                     timestamp,
                     'Custom Keywords - Flagged Term',
+                    'custom_keywords',
                     f'Keyword flagged for monitoring: {keyword}',
                     json.dumps(evidence_data),
-                    'custom_keywords',
-                    'INTELLIGENCE',
-                    'SYSTEM'
+                    None  # file_hash - None for custom keywords
                 ))
             
             conn.commit()
