@@ -463,6 +463,66 @@ python FORAI.py --case-id CASE001 --report pdf --keywords-file investigation_ter
 python FORAI.py --case-id CASE001 --chain-of-custody
 ```
 
+### 🔍 Interactive Analysis Mode (BHSM Experiential Learning)
+
+```bash
+# Launch interactive mode after full analysis with BHSM learning
+python FORAI.py --case-id CASE001 --full-analysis --target-drive C: --interactive --verbose
+
+# Interactive mode after autonomous analysis with LLM
+python FORAI.py --case-id CASE001 --autonomous-analysis --llm-folder "D:\FORAI\LLM" --interactive
+
+# Interactive mode with existing case database
+python FORAI.py --case-id CASE001 --interactive
+
+# Interactive mode features:
+# - Saves sessions to D:/FORAI/reports/AnalystNotes.txt
+# - Each query strengthens isolation forest through bidirectional Hebbian learning
+# - Real-time BHSM learning status display shows training sample accumulation
+# - Type 'exit', 'quit', or 'done' to end session
+```
+
+**Interactive Mode Example Session:**
+```
+🔍 FORAI INTERACTIVE ANALYSIS MODE
+================================================================================
+💡 Ask forensic questions to explore your case data interactively
+🧠 Each query will strengthen the BHSM isolation forest through experiential learning
+📝 Session will be saved to D:/FORAI/reports/AnalystNotes.txt
+🚪 Type 'exit', 'quit', or 'done' to end the session
+================================================================================
+
+🔍 FORAI> What USB devices were connected during the incident timeframe?
+
+⏳ Analyzing question 1...
+
+📋 ANALYSIS RESULT (2.34s):
+------------------------------------------------------------
+Found evidence of 3 USB storage devices connected:
+1. SanDisk Cruzer (Serial: 4C530001) - Connected 2024-12-01 14:23:15
+2. Kingston DataTraveler (Serial: 001CC0EC) - Connected 2024-12-02 09:45:22
+3. Unknown USB Device (VID_0781&PID_5567) - Connected 2024-12-03 16:12:08
+------------------------------------------------------------
+🧠 BHSM Learning Status: 15 training samples accumulated
+   Q7: 8 samples (avg reward: 0.847)
+   Q8: 7 samples (avg reward: 0.723)
+
+💡 Question 1 complete. Ask another question or type 'exit' to finish.
+
+🔍 FORAI> exit
+
+================================================================================
+📊 SESSION SUMMARY
+================================================================================
+Questions Asked: 1
+Session Duration: 0:03:45
+Session Log: D:/FORAI/reports/AnalystNotes.txt
+🧠 BHSM Final Status: 15 total training samples
+🎯 Isolation forest strengthened through experiential learning
+✅ Interactive analysis session completed
+================================================================================
+```
+
 ### Working with Existing Data
 
 ```bash
@@ -548,6 +608,7 @@ python FORAI.py --case-id CASE001 --full-analysis --target-drive C:
 | `--date-to` | End date filter | `20241215` |
 | `--report` | Generate report (json/pdf) | `pdf` |
 | `--chain-of-custody` | Generate custody documentation | |
+| `--interactive`, `-i` | Launch interactive analysis mode | |
 | `--performance-test` | Run performance comparison | |
 | `--verbose` | Detailed output | |
 

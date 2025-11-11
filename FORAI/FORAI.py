@@ -106,6 +106,20 @@ CLI USAGE EXAMPLES:
     # Verbose mode for detailed logging
     python FORAI.py --case-id CASE001 --search "malware" --verbose
 
+🔍 INTERACTIVE ANALYSIS MODE (BHSM EXPERIENTIAL LEARNING):
+    # Launch interactive mode after full analysis with BHSM learning
+    python FORAI.py --case-id CASE001 --full-analysis --target-drive C: --interactive --verbose
+    
+    # Interactive mode after autonomous analysis with LLM
+    python FORAI.py --case-id CASE001 --autonomous-analysis --llm-folder "D:\\FORAI\\LLM" --interactive
+    
+    # Interactive mode with existing case database
+    python FORAI.py --case-id CASE001 --interactive
+    
+    # Interactive mode saves sessions to D:/FORAI/reports/AnalystNotes.txt
+    # Each query strengthens isolation forest through bidirectional Hebbian learning
+    # Real-time BHSM learning status display shows training sample accumulation
+
 📋 KEYWORD FILE EXAMPLES:
     # Create a keywords file (one keyword per line, case-insensitive)
     echo -e "mimikatz\npowershell\nnetcat\nmalicious.com\nbackdoor\ntrojan" > suspicious_terms.txt
