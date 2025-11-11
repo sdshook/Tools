@@ -527,16 +527,31 @@ Found 12 network connections during analysis timeframe:
 
 💡 Question 2 complete. Ask another question or type 'exit' to finish.
 
-🔍 FORAI> What files were deleted during the incident?
+🔍 FORAI> were any new uncommon services or tasks created, and if so what time?
 
 ⏳ Analyzing question 3...
 
-📋 ANALYSIS RESULT (3.12s):
+📋 ANALYSIS RESULT (4.21s):
 ------------------------------------------------------------
-Found evidence of 5 file deletions:
-1. C:\Users\Admin\Desktop\sensitive_data.xlsx (Deleted: 2024-12-01 16:45:33)
-2. C:\Temp\malware_payload.exe (Deleted: 2024-12-01 16:47:12)
-3. C:\Windows\System32\drivers\rootkit.sys (Deleted: 2024-12-01 16:48:01)
+Found 4 uncommon services/tasks created during analysis timeframe:
+
+SERVICES:
+1. "WindowsUpdateHelper" - Created: 2024-12-01 15:42:17
+   Path: C:\Windows\System32\svchost.exe -k netsvcs -p -s WindowsUpdateHelper
+   Status: SUSPICIOUS - Non-standard Windows Update service name
+   
+2. "SystemMaintenanceService" - Created: 2024-12-02 03:15:44
+   Path: C:\ProgramData\Microsoft\Windows\SystemMaintenance\sysupdate.exe
+   Status: FLAGGED - Executable in unusual location
+
+SCHEDULED TASKS:
+3. "Microsoft\Windows\SystemRestore\BackupTask" - Created: 2024-12-01 16:30:12
+   Action: C:\Windows\Temp\backup_tool.exe /silent
+   Status: SUSPICIOUS - Non-standard backup location
+   
+4. "GoogleUpdateTaskMachineUA" - Created: 2024-12-03 08:22:55
+   Action: C:\Users\Public\Documents\chrome_updater.exe
+   Status: FLAGGED - Fake Google updater in wrong directory
 ------------------------------------------------------------
 🧠 BHSM Learning Status: 31 training samples accumulated
    Q7: 8 samples (avg reward: 0.847)
@@ -545,6 +560,28 @@ Found evidence of 5 file deletions:
    Q10: 8 samples (avg reward: 0.789)
 
 💡 Question 3 complete. Ask another question or type 'exit' to finish.
+
+🔍 FORAI> What files were deleted during the incident?
+
+⏳ Analyzing question 4...
+
+📋 ANALYSIS RESULT (3.12s):
+------------------------------------------------------------
+Found evidence of 5 file deletions:
+1. C:\Users\Admin\Desktop\sensitive_data.xlsx (Deleted: 2024-12-01 16:45:33)
+2. C:\Temp\malware_payload.exe (Deleted: 2024-12-01 16:47:12)
+3. C:\Windows\System32\drivers\rootkit.sys (Deleted: 2024-12-01 16:48:01)
+4. C:\Users\Admin\Downloads\confidential_report.pdf (Deleted: 2024-12-02 11:23:44)
+5. C:\ProgramData\logs\access_history.log (Deleted: 2024-12-03 14:15:22)
+------------------------------------------------------------
+🧠 BHSM Learning Status: 39 training samples accumulated
+   Q7: 8 samples (avg reward: 0.847)
+   Q8: 7 samples (avg reward: 0.723)
+   Q9: 8 samples (avg reward: 0.912)
+   Q10: 8 samples (avg reward: 0.789)
+   Q11: 8 samples (avg reward: 0.834)
+
+💡 Question 4 complete. Ask another question, type 'exit' to finish, or 'q!' to exit FORAI.
 
 🔍 FORAI> q!
 
