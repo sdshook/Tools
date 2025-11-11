@@ -2611,7 +2611,7 @@ def build_psi_from_db(case_id: str = None) -> bool:
                 psi.add_doc(
                     doc_id=doc_id,
                     text=text_content,
-                    vec=vec,
+                    vector=vec,
                     tags=[row[3] or "unknown"],  # artifact as tag
                     valence=0.0,  # Neutral valence initially
                     protected=False
@@ -3128,27 +3128,80 @@ class ForensicExtractors:
         
         return print_jobs
 
+    @staticmethod
+    def extract_hard_drives(conn: sqlite3.Connection, case_id: str = None) -> List[Dict[str, Any]]:
+        """Extract hard drive and storage device information"""
+        query = """
+            SELECT id, timestamp, summary, data_json, artifact, host, user
+            FROM evidence
+            WHERE (
+                LOWER(summary) LIKE '%hard drive%' OR
+                LOWER(summary) LIKE '%disk%' OR
+                LOWER(summary) LIKE '%storage%' OR
+                LOWER(artifact) LIKE '%disk%' OR
+                LOWER(artifact) LIKE '%storage%' OR
+                LOWER(data_json) LIKE '%drive%' OR
+                LOWER(data_json) LIKE '%disk%'
+            )
+        """
+        
+        params = []
+        if case_id:
+            query += " AND case_id = ?"
+            params.append(case_id)
+        
+        query += " ORDER BY timestamp DESC LIMIT 100"
+        
+        cursor = conn.execute(query, params)
+        results = []
+        
+        for row in cursor:
+            result = {
+                'id': row[0],
+                'timestamp': row[1],
+                'summary': row[2],
+                'data_json': row[3],
+                'artifact': row[4],
+                'host': row[5],
+                'user': row[6]
+            }
+            
+            # Parse JSON data if available
+            if row[3]:
+                try:
+                    data = json.loads(row[3])
+                    result.update(data)
+                except json.JSONDecodeError:
+                    pass
+            
+            results.append(result)
+        
+        return results
+
 def try_deterministic_answer(conn: sqlite3.Connection, question: str, case_id: str = None) -> Optional[str]:
     """Try to answer question using deterministic extractors first - covers all 12 standard questions"""
     question_lower = question.lower()
     
     # Q1: Computer name
     if any(term in question_lower for term in ['computername', 'computer name']):
-        identity = ForensicExtractors.extract_computer_identity(conn, case_id)
-        if identity.get('computer_name'):
-            return f"Computer name: {identity['computer_name']}"
+        identity_list = ForensicExtractors.extract_computer_identity(conn, case_id)
+        if identity_list:
+            for identity in identity_list:
+                if identity.get('computer_name'):
+                    return f"Computer name: {identity['computer_name']}"
     
     # Q2: Computer make/model/serial
     if any(term in question_lower for term in ['make', 'model', 'serialnumber', 'computer make']):
-        identity = ForensicExtractors.extract_computer_identity(conn, case_id)
-        if identity:
+        identity_list = ForensicExtractors.extract_computer_identity(conn, case_id)
+        if identity_list:
             answer = "Computer details:\n"
-            if identity.get('manufacturer'):
-                answer += f"- Make: {identity['manufacturer']}\n"
-            if identity.get('model'):
-                answer += f"- Model: {identity['model']}\n"
-            if identity.get('serial_number'):
-                answer += f"- Serial: {identity['serial_number']}\n"
+            for identity in identity_list:
+                if identity.get('manufacturer'):
+                    answer += f"- Make: {identity['manufacturer']}\n"
+                if identity.get('model'):
+                    answer += f"- Model: {identity['model']}\n"
+                if identity.get('serial_number'):
+                    answer += f"- Serial: {identity['serial_number']}\n"
             return answer if len(answer) > 20 else None
     
     # Q3: Internal hard drives
@@ -3961,15 +4014,21 @@ class ForensicAnalyzer:
                 query += " AND timestamp >= ?"
                 params.append(cutoff_date)
             
-            if date_from:
-                formatted_date = f"{date_from[:4]}-{date_from[4:6]}-{date_from[6:8]}"
-                query += " AND timestamp >= ?"
-                params.append(formatted_date)
+            if date_from and len(str(date_from)) >= 8:
+                try:
+                    formatted_date = f"{date_from[:4]}-{date_from[4:6]}-{date_from[6:8]}"
+                    query += " AND timestamp >= ?"
+                    params.append(formatted_date)
+                except (ValueError, TypeError) as e:
+                    LOGGER.warning(f"Invalid date_from format: {date_from}, error: {e}")
                 
-            if date_to:
-                formatted_date = f"{date_to[:4]}-{date_to[4:6]}-{date_to[6:8]}"
-                query += " AND timestamp <= ?"
-                params.append(formatted_date)
+            if date_to and len(str(date_to)) >= 8:
+                try:
+                    formatted_date = f"{date_to[:4]}-{date_to[4:6]}-{date_to[6:8]}"
+                    query += " AND timestamp <= ?"
+                    params.append(formatted_date)
+                except (ValueError, TypeError) as e:
+                    LOGGER.warning(f"Invalid date_to format: {date_to}, error: {e}")
             
             if case_id:
                 query += " AND case_id = ?"
