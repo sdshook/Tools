@@ -310,13 +310,13 @@ python FORAI.py --case-id CASE001 --plaso-file "timeline.plaso" --question "What
 ### Fast Processing Mode (⚡ Performance Optimized)
 
 ```bash
-# Fast mode with reduced parsers (3-5x faster for standard questions)
+# Fast mode with reduced parsers (3-5x faster processing)
 python FORAI.py --case-id CASE001 --full-analysis --target-drive C: --fast-mode --verbose
 
 # Fast mode with date filtering (major performance boost)
 python FORAI.py --case-id CASE001 --parse-artifacts --artifacts-dir "C:\\KAPE\\Output" --fast-mode --date-from 20241201 --date-to 20241215
 
-# Fast autonomous analysis (optimized for 12 standard questions)
+# Fast autonomous analysis (optimized processing with LLM)
 python FORAI.py --case-id CASE001 --autonomous-analysis --fast-mode --llm-folder "D:\\FORAI\\LLM" --report pdf
 ```
 
@@ -577,7 +577,7 @@ python FORAI.py --case-id CASE001 --question "What USB devices were connected?" 
 FORAI includes several performance optimizations to speed up the Plaso timeline generation process:
 
 ### Fast Mode (`--fast-mode`)
-- **3-5x faster processing** for standard forensic questions
+- **3-5x faster processing** while maintaining ability to answer all forensic questions
 - Uses only essential parsers: MFT, Prefetch, Registry, Event Logs, USN Journal, Recycle Bin
 - Automatically optimizes worker count based on CPU cores
 - Dynamically adjusts memory allocation based on available RAM
@@ -598,9 +598,11 @@ FORAI includes several performance optimizations to speed up the Plaso timeline 
 ### Performance Comparison
 | Mode | Processing Time | Parsers Used | Use Case |
 |------|----------------|--------------|----------|
-| **Standard** | 100% (baseline) | 20+ parsers | Comprehensive analysis |
-| **Fast Mode** | 20-30% | 6 essential parsers | Standard 12 questions |
-| **Fast + Date Filter** | 5-15% | 6 parsers + date range | Targeted investigation |
+| **Standard** | 100% (baseline) | 20+ parsers | Maximum forensic coverage, all 12 questions |
+| **Fast Mode** | 20-30% | 6 essential parsers | Faster processing, all 12 questions |
+| **Fast + Date Filter** | 5-15% | 6 parsers + date range | Targeted timeframe, all 12 questions |
+
+**Note:** All modes can answer the 12 basic forensic questions. The difference is processing speed and forensic artifact coverage depth.
 
 ### Example Performance Commands
 ```bash
