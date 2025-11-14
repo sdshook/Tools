@@ -5553,15 +5553,15 @@ class ForensicWorkflowManager:
         self.verbose = verbose
         self.logger = LOGGER
         
-        # Use existing FORAI directory structure
-        self.artifacts_dir = self.output_dir / "artifacts"
-        self.parsed_dir = self.output_dir / "extracts"  # Parsed extracts go in extracts folder
-        self.reports_dir = self.output_dir / "reports"
-        self.custody_dir = self.output_dir / "reports"  # Chain of custody goes in reports folder
-        self.archives_dir = self.output_dir / "archives"
-        self.llm_dir = self.output_dir / "LLM"
+        # Use CONFIG's directory structure (respects existing FORAI installations)
+        self.artifacts_dir = CONFIG.artifacts_dir
+        self.parsed_dir = CONFIG.extracts_dir  # Parsed extracts go in extracts folder
+        self.reports_dir = CONFIG.reports_dir
+        self.custody_dir = CONFIG.reports_dir  # Chain of custody goes in reports folder
+        self.archives_dir = CONFIG.archives_dir
+        self.llm_dir = CONFIG.llm_dir
         
-        # Ensure directories exist (but don't create output_dir itself)
+        # Ensure directories exist (CONFIG already handles existing installations)
         for dir_path in [self.artifacts_dir, self.parsed_dir, self.reports_dir, self.archives_dir]:
             dir_path.mkdir(exist_ok=True)
             
@@ -7312,7 +7312,7 @@ def main():
                                              f"Loading {len(keywords)} custom keywords for case-insensitive flagging")
                 
                 # Process the .plaso file
-                success = workflow.import_plaso_file(Path(args.plaso_file), args.plaso_path)
+                success = workflow.import_plaso_file(args.plaso_file.resolve(), args.plaso_path)
                 if not success:
                     LOGGER.error("Failed to process .plaso file - cannot proceed with analysis")
                     sys.exit(1)
