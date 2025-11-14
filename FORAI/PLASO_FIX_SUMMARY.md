@@ -29,6 +29,9 @@ Changed the processing order to try formats in order of reliability:
 - Added general exception handling for unexpected errors
 - Added specific error messages for different failure scenarios
 - Added timeout handling (1 hour per format attempt)
+- **NEW**: Added specific `AttributeError` handling for Windows Event Log issues
+- **NEW**: Added last format detection with helpful error messages
+- **NEW**: Wrapped processing function calls in try-catch to prevent crashes
 
 ### 3. Better Logging
 - Format-specific success/failure messages
@@ -83,8 +86,9 @@ for format_name, output_filename, process_func in formats_to_try:
 2. **If Dynamic Fails**: Try `json` format (good structured data)
 3. **If JSON Fails**: Try `l2tcsv` format (last resort)
 4. **Better Error Messages**: Clear indication of which format failed and why
-5. **No More Crashes**: Proper exception handling prevents script termination
-6. **Clean Output**: fpdf warning suppressed
+5. **No More Crashes**: Proper exception handling prevents script termination even if l2tcsv fails with AttributeError
+6. **Helpful Guidance**: When all formats fail, users get specific guidance on next steps
+7. **Clean Output**: fpdf warning suppressed
 
 ## Testing
 
