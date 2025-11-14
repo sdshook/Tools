@@ -135,6 +135,10 @@ CLI USAGE EXAMPLES:
 import os
 import sys
 import argparse
+import warnings
+
+# Suppress fpdf2/PyFPDF conflict warning
+warnings.filterwarnings("ignore", message="You have both PyFPDF & fpdf2 installed")
 import hashlib
 import sqlite3
 import json
@@ -6672,103 +6676,84 @@ class ForensicWorkflowManager:
             
             self.logger.info(f"Processing plaso file to SQLite: {plaso_file_path} -> {database_path}")
             
-            # Use CSV output for database import (more efficient than JSON)
-            csv_output_path = self.parsed_dir / f"{self.case_id}_timeline.csv"
-            
-            # Process plaso file to CSV
-            psort_cmd = [
-                psort_cmd_path,
-                "-o", "l2tcsv",
-                "-w", str(csv_output_path),
-                "--temporary_directory", str(temp_dir),
-                str(plaso_file_path)
+            # Try formats in order of preference: dynamic (recommended), then JSON, then CSV as fallback
+            formats_to_try = [
+                ("dynamic", f"{self.case_id}_timeline.txt", self._process_dynamic_timeline),
+                ("json", f"{self.case_id}_timeline.json", self._process_json_timeline),
+                ("l2tcsv", f"{self.case_id}_timeline.csv", self._process_csv_timeline)
             ]
             
-            self.logger.info(f"Executing psort: {' '.join(psort_cmd)}")
-            result = subprocess.run(psort_cmd, capture_output=True, text=True, timeout=3600)
-            
-            if result.returncode != 0:
-                # Try alternative formats if JSON fails
-                self.logger.warning(f"JSON export failed, trying alternative formats...")
+            for format_name, output_filename, process_func in formats_to_try:
+                output_path = self.parsed_dir / output_filename
                 
-                # Try dynamic format
-                dynamic_output_path = self.parsed_dir / f"{self.case_id}_timeline.txt"
-                dynamic_cmd = [
+                # Process plaso file with current format
+                psort_cmd = [
                     psort_cmd_path,
-                    "-o", "dynamic",
-                    "-w", str(dynamic_output_path),
+                    "-o", format_name,
+                    "-w", str(output_path),
                     "--temporary_directory", str(temp_dir),
                     str(plaso_file_path)
                 ]
                 
-                dynamic_result = subprocess.run(dynamic_cmd, capture_output=True, text=True, timeout=3600)
+                self.logger.info(f"Trying {format_name} format: {' '.join(psort_cmd)}")
                 
-                if dynamic_result.returncode == 0 and dynamic_output_path.exists():
-                    self.logger.info("Dynamic format export successful")
-                    success = self._process_dynamic_timeline(dynamic_output_path, custom_module)
-                    if success:
-                        self._post_optimize_database(database_path)
-                        return True
-                
-                # Try CSV format as last resort
-                csv_output_path = self.parsed_dir / f"{self.case_id}_timeline.csv"
-                csv_cmd = [
-                    psort_cmd_path,
-                    "-o", "l2tcsv",
-                    "-w", str(csv_output_path),
-                    "--temporary_directory", str(temp_dir),
-                    str(plaso_file_path)
-                ]
-                
-                csv_result = subprocess.run(csv_cmd, capture_output=True, text=True, timeout=3600)
-                
-                if csv_result.returncode == 0 and csv_output_path.exists():
-                    self.logger.warning("CSV export successful, but with limited data structure")
-                    # Note: CSV processing would need additional implementation
-                    # For now, we'll consider this a partial success
-                
-                self.log_custody_event("PLASO_IMPORT_ERROR", f"psort processing failed: {result.stderr}")
-                return False
+                try:
+                    result = subprocess.run(psort_cmd, capture_output=True, text=True, timeout=3600)
+                    
+                    if result.returncode == 0 and output_path.exists():
+                        self.logger.info(f"{format_name} format export successful")
+                        # Call processing function with appropriate parameters
+                        if format_name == "l2tcsv":
+                            success = process_func(output_path)
+                        else:
+                            success = process_func(output_path, custom_module)
+                        if success:
+                            self._post_optimize_database(database_path)
+                            
+                            # Calculate performance metrics
+                            end_time = time.time()
+                            processing_time = end_time - start_time
+                            end_memory = psutil.Process().memory_info().rss / 1024 / 1024
+                            memory_delta = end_memory - start_memory
+                            throughput = plaso_size / processing_time if processing_time > 0 else 0
+                            
+                            # Clean up temporary files
+                            try:
+                                if temp_dir.exists():
+                                    shutil.rmtree(temp_dir, ignore_errors=True)
+                            except Exception as e:
+                                self.logger.debug(f"Cleanup warning: {e}")
+                            
+                            # Log performance metrics
+                            db_size = database_path.stat().st_size / 1024 / 1024  # MB
+                            self.log_custody_event("PLASO_IMPORT_SUCCESS",
+                                                 f"Plaso file import completed using {format_name} format. "
+                                                 f"Time: {processing_time:.2f}s, Memory: {memory_delta:+.1f}MB, "
+                                                 f"Throughput: {throughput:.1f}MB/s, Database: {db_size:.1f}MB")
+                            
+                            self.logger.info(f"✅ Plaso file import completed successfully using {format_name} format")
+                            self.logger.info(f"📊 Performance: {processing_time:.2f}s, {throughput:.1f}MB/s, Database: {db_size:.1f}MB")
+                            return True
+                        else:
+                            self.logger.warning(f"Failed to process {format_name} timeline, trying next format...")
+                            continue
+                    else:
+                        error_msg = result.stderr if result.stderr else "Unknown error"
+                        self.logger.warning(f"{format_name} format failed: {error_msg}")
+                        if format_name == "l2tcsv" and "has significant limitations" in error_msg:
+                            self.logger.info("l2tcsv format has known limitations, this is expected")
+                        continue
+                        
+                except subprocess.TimeoutExpired:
+                    self.logger.error(f"{format_name} format processing timed out after 1 hour")
+                    continue
+                except Exception as e:
+                    self.logger.error(f"Error processing {format_name} format: {e}")
+                    continue
             
-            # Process CSV timeline
-            if csv_output_path.exists():
-                success = self._process_csv_timeline(csv_output_path)
-                
-                if success:
-                    # Database optimization handled by CSV import script
-                    self.logger.info("CSV import completed - database ready")
-                    
-                    # Calculate performance metrics
-                    end_time = time.time()
-                    processing_time = end_time - start_time
-                    end_memory = psutil.Process().memory_info().rss / 1024 / 1024
-                    memory_delta = end_memory - start_memory
-                    throughput = plaso_size / processing_time if processing_time > 0 else 0
-                    
-                    # Clean up temporary files
-                    try:
-                        json_output_path.unlink()
-                        if temp_dir.exists():
-                            shutil.rmtree(temp_dir, ignore_errors=True)
-                    except Exception as e:
-                        self.logger.debug(f"Cleanup warning: {e}")
-                    
-                    # Log performance metrics
-                    db_size = database_path.stat().st_size / 1024 / 1024  # MB
-                    self.log_custody_event("PLASO_IMPORT_SUCCESS",
-                                         f"Plaso file import completed. "
-                                         f"Time: {processing_time:.2f}s, Memory: {memory_delta:+.1f}MB, "
-                                         f"Throughput: {throughput:.1f}MB/s, Database: {db_size:.1f}MB")
-                    
-                    self.logger.info(f"✅ Plaso file import completed successfully")
-                    self.logger.info(f"📊 Performance: {processing_time:.2f}s, {throughput:.1f}MB/s, Database: {db_size:.1f}MB")
-                    return True
-                else:
-                    self.log_custody_event("PLASO_IMPORT_ERROR", "Failed to process JSON timeline")
-                    return False
-            else:
-                self.log_custody_event("PLASO_IMPORT_ERROR", "JSON output file was not created")
-                return False
+            # If we get here, all formats failed
+            self.log_custody_event("PLASO_IMPORT_ERROR", "All psort output formats failed")
+            return False
                 
         except Exception as e:
             self.logger.error(f"Plaso file import failed: {e}")
