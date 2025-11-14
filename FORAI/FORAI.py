@@ -7346,9 +7346,22 @@ def main():
                     workflow.log_custody_event("KEYWORDS_LOADING", 
                                              f"Loading {len(keywords)} custom keywords for case-insensitive flagging")
                 
-                # Process the .plaso file
-                resolved_plaso_path = args.plaso_file.resolve()
-                LOGGER.info(f"Resolved plaso file path: {resolved_plaso_path}")
+                # Process the .plaso file - check extracts directory first
+                plaso_file_path = args.plaso_file
+                
+                # If it's just a filename, check in extracts directory first
+                if not plaso_file_path.is_absolute() and plaso_file_path.parent == Path('.'):
+                    extracts_path = CONFIG.extracts_dir / plaso_file_path.name
+                    if extracts_path.exists():
+                        resolved_plaso_path = extracts_path
+                        LOGGER.info(f"Found plaso file in extracts directory: {resolved_plaso_path}")
+                    else:
+                        resolved_plaso_path = plaso_file_path.resolve()
+                        LOGGER.info(f"Using specified plaso file path: {resolved_plaso_path}")
+                else:
+                    resolved_plaso_path = plaso_file_path.resolve()
+                    LOGGER.info(f"Using absolute plaso file path: {resolved_plaso_path}")
+                
                 success = workflow.import_plaso_file(resolved_plaso_path, args.plaso_path)
                 if not success:
                     LOGGER.error("Failed to process .plaso file - cannot proceed with analysis")
