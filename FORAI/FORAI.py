@@ -2483,8 +2483,8 @@ class ForaiConfig:
 
 CONFIG = ForaiConfig()
 
-def setup_logging() -> logging.Logger:
-    """Setup structured logging"""
+def setup_logging(reports_dir: Path = None, case_id: str = None) -> logging.Logger:
+    """Setup structured logging with optional file logging to reports directory"""
     logger = logging.getLogger("FORAI")
     logger.setLevel(logging.INFO)
     logger.handlers.clear()
@@ -2494,9 +2494,38 @@ def setup_logging() -> logging.Logger:
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    # Console handler (always present)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    # File handler for errors (if reports directory is provided)
+    if reports_dir and case_id:
+        try:
+            reports_dir = Path(reports_dir)
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create error log file in reports directory
+            error_log_path = reports_dir / f"{case_id}_errors.log"
+            
+            # File handler for all messages (INFO and above)
+            file_handler = logging.FileHandler(error_log_path, mode='a', encoding='utf-8')
+            file_handler.setFormatter(formatter)
+            file_handler.setLevel(logging.INFO)
+            logger.addHandler(file_handler)
+            
+            # Separate file handler for errors only (WARNING and above)
+            error_file_path = reports_dir / f"{case_id}_errors_only.log"
+            error_handler = logging.FileHandler(error_file_path, mode='a', encoding='utf-8')
+            error_handler.setFormatter(formatter)
+            error_handler.setLevel(logging.WARNING)
+            logger.addHandler(error_handler)
+            
+            logger.info(f"Error logging enabled: {error_log_path}")
+            logger.info(f"Critical error logging enabled: {error_file_path}")
+            
+        except Exception as e:
+            logger.warning(f"Could not setup file logging: {e}")
     
     return logger
 
@@ -5589,20 +5618,32 @@ class ForensicWorkflowManager:
         self.case_id = case_id
         self.output_dir = Path(output_dir)
         self.verbose = verbose
-        self.logger = LOGGER
         
         # Use CONFIG's directory structure (respects existing FORAI installations)
         self.artifacts_dir = CONFIG.artifacts_dir
         self.parsed_dir = CONFIG.extracts_dir  # Parsed extracts go in extracts folder
-        self.reports_dir = CONFIG.reports_dir
-        self.custody_dir = CONFIG.reports_dir  # Chain of custody goes in reports folder
+        
+        # Use output_dir for reports if specified, otherwise use CONFIG default
+        if output_dir and output_dir != CONFIG.base_dir:
+            self.reports_dir = self.output_dir / "reports"
+            self.custody_dir = self.reports_dir  # Chain of custody goes in reports folder
+        else:
+            self.reports_dir = CONFIG.reports_dir
+            self.custody_dir = CONFIG.reports_dir
+            
         self.archives_dir = CONFIG.archives_dir
         self.llm_dir = CONFIG.llm_dir
+        
+        # Setup logging with error logging to reports directory
+        self.logger = setup_logging(self.reports_dir, self.case_id)
         
         # Ensure directories exist only if not using existing installation
         if not CONFIG.existing_installation_detected:
             for dir_path in [self.artifacts_dir, self.parsed_dir, self.reports_dir, self.archives_dir]:
-                dir_path.mkdir(exist_ok=True)
+                dir_path.mkdir(parents=True, exist_ok=True)
+        else:
+            # Always ensure reports directory exists for error logging
+            self.reports_dir.mkdir(parents=True, exist_ok=True)
             
         self.chain_of_custody = []
         self.start_time = datetime.now(timezone.utc)
@@ -5626,6 +5667,49 @@ class ForensicWorkflowManager:
             
         self.chain_of_custody.append(event)
         self.logger.info(f"Chain of Custody: {event_type} - {description}")
+        
+    def log_workflow_error(self, step: str, error: Exception, context: dict = None):
+        """Log workflow errors with detailed context for troubleshooting"""
+        error_details = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'case_id': self.case_id,
+            'workflow_step': step,
+            'error_type': type(error).__name__,
+            'error_message': str(error),
+            'context': context or {}
+        }
+        
+        # Log to both custody chain and error logs
+        self.log_custody_event("WORKFLOW_ERROR", f"Error in {step}: {error}")
+        self.logger.error(f"Workflow Error in {step}: {type(error).__name__}: {error}")
+        
+        if context:
+            self.logger.error(f"Error Context: {context}")
+            
+        # Write detailed error to separate error report file
+        try:
+            error_report_path = self.reports_dir / f"{self.case_id}_workflow_errors.json"
+            
+            # Load existing errors or create new list
+            existing_errors = []
+            if error_report_path.exists():
+                try:
+                    with open(error_report_path, 'r', encoding='utf-8') as f:
+                        existing_errors = json.load(f)
+                except Exception:
+                    existing_errors = []
+            
+            # Add new error
+            existing_errors.append(error_details)
+            
+            # Write back to file
+            with open(error_report_path, 'w', encoding='utf-8') as f:
+                json.dump(existing_errors, f, indent=2, ensure_ascii=False)
+                
+            self.logger.info(f"Detailed error logged to: {error_report_path}")
+            
+        except Exception as log_error:
+            self.logger.warning(f"Could not write detailed error log: {log_error}")
         
     def _calculate_hash(self, file_path: str, algorithm: str) -> str:
         """Calculate file hash for chain of custody"""
@@ -6710,19 +6794,33 @@ class ForensicWorkflowManager:
                             else:
                                 success = process_func(output_path, custom_module)
                         except AttributeError as ae:
-                            self.logger.error(f"AttributeError in {format_name} processing (likely Windows Event Log issue): {ae}")
+                            context = {
+                                'format': format_name,
+                                'output_path': str(output_path),
+                                'plaso_file': str(plaso_file_path),
+                                'is_last_format': is_last_format,
+                                'likely_cause': 'Windows Event Log formatting issue in plaso library'
+                            }
+                            self.log_workflow_error(f"PLASO_PROCESSING_{format_name.upper()}", ae, context)
+                            
                             if is_last_format:
                                 self.logger.error("This was the last available format. The plaso file may contain problematic Windows Event Log entries.")
                                 self.logger.error("Consider using plaso tools directly to filter out problematic entries, or try a different plaso version.")
-                                self.log_custody_event("PLASO_IMPORT_ERROR", f"All formats failed - final error: AttributeError in {format_name}: {ae}")
                             else:
                                 self.logger.warning(f"Skipping {format_name} format due to plaso library issue, trying next format...")
                             continue
                         except Exception as pe:
-                            self.logger.error(f"Error processing {format_name} timeline data: {pe}")
+                            context = {
+                                'format': format_name,
+                                'output_path': str(output_path),
+                                'plaso_file': str(plaso_file_path),
+                                'is_last_format': is_last_format,
+                                'error_type': type(pe).__name__
+                            }
+                            self.log_workflow_error(f"PLASO_PROCESSING_{format_name.upper()}", pe, context)
+                            
                             if is_last_format:
                                 self.logger.error("This was the last available format. Unable to process plaso file with any supported format.")
-                                self.log_custody_event("PLASO_IMPORT_ERROR", f"All formats failed - final error: {pe}")
                             else:
                                 self.logger.warning(f"Processing failed for {format_name} format, trying next format...")
                             continue
@@ -6764,20 +6862,43 @@ class ForensicWorkflowManager:
                             self.logger.info("l2tcsv format has known limitations, this is expected")
                         continue
                         
-                except subprocess.TimeoutExpired:
-                    self.logger.error(f"{format_name} format processing timed out after 1 hour")
+                except subprocess.TimeoutExpired as te:
+                    context = {
+                        'format': format_name,
+                        'timeout_seconds': 3600,
+                        'command': ' '.join(psort_cmd),
+                        'plaso_file': str(plaso_file_path)
+                    }
+                    self.log_workflow_error(f"PLASO_TIMEOUT_{format_name.upper()}", te, context)
                     continue
                 except Exception as e:
-                    self.logger.error(f"Error processing {format_name} format: {e}")
+                    context = {
+                        'format': format_name,
+                        'command': ' '.join(psort_cmd),
+                        'plaso_file': str(plaso_file_path),
+                        'error_type': type(e).__name__
+                    }
+                    self.log_workflow_error(f"PLASO_SUBPROCESS_{format_name.upper()}", e, context)
                     continue
             
             # If we get here, all formats failed
-            self.log_custody_event("PLASO_IMPORT_ERROR", "All psort output formats failed")
+            final_error = Exception("All psort output formats failed - unable to process plaso file")
+            context = {
+                'formats_tried': [fmt[0] for fmt in formats_to_try],
+                'plaso_file': str(plaso_file_path),
+                'plaso_size_mb': plaso_size,
+                'temp_dir': str(temp_dir)
+            }
+            self.log_workflow_error("PLASO_IMPORT_COMPLETE_FAILURE", final_error, context)
             return False
                 
         except Exception as e:
-            self.logger.error(f"Plaso file import failed: {e}")
-            self.log_custody_event("PLASO_IMPORT_ERROR", f"Import failed: {str(e)}")
+            context = {
+                'plaso_file': str(plaso_file_path),
+                'database_path': str(self.parsed_dir / f"{self.case_id}_bhsm.db"),
+                'error_type': type(e).__name__
+            }
+            self.log_workflow_error("PLASO_IMPORT_GENERAL_ERROR", e, context)
             return False
             
     def run_full_analysis(self, target: str, kape_path: Path, plaso_path: Path, 
@@ -7289,24 +7410,42 @@ def main():
             ]
             
             # Run complete analysis with time filtering
-            success = workflow.run_full_analysis(target, args.kape_path, args.plaso_path, questions, 
-                                                args.date_from, args.date_to, args.days_back, keywords, args.artifacts_dir, args.fast_mode)
-            
-            if success:
-                print(f"\n🎉 FULL FORENSIC ANALYSIS COMPLETED SUCCESSFULLY!")
-                print(f"📁 Results Directory: {args.output_dir}")
-                print(f"📊 Artifacts: {workflow.artifacts_dir}")
-                print(f"📋 Parsed Data: {workflow.parsed_dir}")
-                print(f"📄 Reports: {workflow.reports_dir}")
-                print(f"🔗 Chain of Custody: {workflow.custody_dir}")
-                print(f"📦 Final Archive: {workflow.output_dir}/archive")
+            try:
+                success = workflow.run_full_analysis(target, args.kape_path, args.plaso_path, questions, 
+                                                    args.date_from, args.date_to, args.days_back, keywords, args.artifacts_dir, args.fast_mode)
                 
-                # Generate chain of custody if requested
-                if args.chain_of_custody:
-                    custody_file = workflow.generate_chain_of_custody_report()
-                    print(f"📜 Chain of Custody: {custody_file}")
-            else:
-                print("❌ Full forensic analysis failed. Check logs for details.")
+                if success:
+                    print(f"\n🎉 FULL FORENSIC ANALYSIS COMPLETED SUCCESSFULLY!")
+                    print(f"📁 Results Directory: {args.output_dir}")
+                    print(f"📊 Artifacts: {workflow.artifacts_dir}")
+                    print(f"📋 Parsed Data: {workflow.parsed_dir}")
+                    print(f"📄 Reports: {workflow.reports_dir}")
+                    print(f"🔗 Chain of Custody: {workflow.custody_dir}")
+                    print(f"📦 Final Archive: {workflow.output_dir}/archive")
+                    
+                    # Generate chain of custody if requested
+                    if args.chain_of_custody:
+                        try:
+                            custody_file = workflow.generate_chain_of_custody_report()
+                            print(f"📜 Chain of Custody: {custody_file}")
+                        except Exception as custody_error:
+                            workflow.log_workflow_error("CHAIN_OF_CUSTODY_GENERATION", custody_error, {
+                                'case_id': args.case_id,
+                                'output_dir': str(args.output_dir)
+                            })
+                            print("⚠️ Chain of custody report generation failed. Check error logs.")
+                else:
+                    print("❌ Full forensic analysis failed. Check logs for details.")
+                    print(f"📄 Error logs available in: {workflow.reports_dir}")
+            except Exception as workflow_error:
+                workflow.log_workflow_error("FULL_ANALYSIS_WORKFLOW", workflow_error, {
+                    'case_id': args.case_id,
+                    'target': target,
+                    'output_dir': str(args.output_dir),
+                    'questions_count': len(questions)
+                })
+                print("❌ Critical workflow error occurred. Check error logs for details.")
+                print(f"📄 Error logs available in: {workflow.reports_dir}")
                 sys.exit(1)
             return
         
@@ -7367,15 +7506,27 @@ def main():
                     resolved_plaso_path = plaso_file_path.resolve()
                     LOGGER.info(f"Using absolute plaso file path: {resolved_plaso_path}")
                 
-                success = workflow.import_plaso_file(resolved_plaso_path, args.plaso_path)
-                if not success:
-                    LOGGER.error("Failed to process .plaso file - cannot proceed with analysis")
+                try:
+                    success = workflow.import_plaso_file(resolved_plaso_path, args.plaso_path)
+                    if not success:
+                        LOGGER.error("Failed to process .plaso file - cannot proceed with analysis")
+                        print(f"📄 Error logs available in: {workflow.reports_dir}")
+                        sys.exit(1)
+                    
+                    # Inject keywords after database creation
+                    if keywords:
+                        workflow._inject_keywords_to_database(keywords)
+                        workflow.log_custody_event("KEYWORDS_INJECTED", f"Injected {len(keywords)} keywords into database")
+                        
+                except Exception as plaso_error:
+                    workflow.log_workflow_error("AUTONOMOUS_PLASO_PROCESSING", plaso_error, {
+                        'case_id': args.case_id,
+                        'plaso_file': str(resolved_plaso_path),
+                        'keywords_count': len(keywords) if keywords else 0
+                    })
+                    LOGGER.error("Critical error during plaso processing - cannot proceed with analysis")
+                    print(f"📄 Error logs available in: {workflow.reports_dir}")
                     sys.exit(1)
-                
-                # Inject keywords after database creation
-                if keywords:
-                    workflow._inject_keywords_to_database(keywords)
-                    workflow.log_custody_event("KEYWORDS_INJECTED", f"Injected {len(keywords)} keywords into database")
                 
                 LOGGER.info("Database populated successfully from .plaso file")
             elif needs_processing and not args.plaso_file:
