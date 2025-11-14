@@ -6683,7 +6683,8 @@ class ForensicWorkflowManager:
                 ("l2tcsv", f"{self.case_id}_timeline.csv", self._process_csv_timeline)
             ]
             
-            for format_name, output_filename, process_func in formats_to_try:
+            for i, (format_name, output_filename, process_func) in enumerate(formats_to_try):
+                is_last_format = (i == len(formats_to_try) - 1)
                 output_path = self.parsed_dir / output_filename
                 
                 # Process plaso file with current format
@@ -6702,11 +6703,30 @@ class ForensicWorkflowManager:
                     
                     if result.returncode == 0 and output_path.exists():
                         self.logger.info(f"{format_name} format export successful")
-                        # Call processing function with appropriate parameters
-                        if format_name == "l2tcsv":
-                            success = process_func(output_path)
-                        else:
-                            success = process_func(output_path, custom_module)
+                        # Call processing function with appropriate parameters and robust error handling
+                        try:
+                            if format_name == "l2tcsv":
+                                success = process_func(output_path)
+                            else:
+                                success = process_func(output_path, custom_module)
+                        except AttributeError as ae:
+                            self.logger.error(f"AttributeError in {format_name} processing (likely Windows Event Log issue): {ae}")
+                            if is_last_format:
+                                self.logger.error("This was the last available format. The plaso file may contain problematic Windows Event Log entries.")
+                                self.logger.error("Consider using plaso tools directly to filter out problematic entries, or try a different plaso version.")
+                                self.log_custody_event("PLASO_IMPORT_ERROR", f"All formats failed - final error: AttributeError in {format_name}: {ae}")
+                            else:
+                                self.logger.warning(f"Skipping {format_name} format due to plaso library issue, trying next format...")
+                            continue
+                        except Exception as pe:
+                            self.logger.error(f"Error processing {format_name} timeline data: {pe}")
+                            if is_last_format:
+                                self.logger.error("This was the last available format. Unable to process plaso file with any supported format.")
+                                self.log_custody_event("PLASO_IMPORT_ERROR", f"All formats failed - final error: {pe}")
+                            else:
+                                self.logger.warning(f"Processing failed for {format_name} format, trying next format...")
+                            continue
+                        
                         if success:
                             self._post_optimize_database(database_path)
                             
