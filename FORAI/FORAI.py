@@ -5862,7 +5862,7 @@ class ForensicWorkflowManager:
                 raise FileNotFoundError(f"psort not found in PATH or at {plaso_path}")
                 
             # Use the artifacts directory created by KAPE
-            if not hasattr(self, 'artifacts_path') or not self.artifacts_path.exists():
+            if not hasattr(self, 'artifacts_path') or not self.artifacts_path or not self.artifacts_path.exists():
                 raise FileNotFoundError(f"Artifacts directory not found. KAPE collection may have failed.")
                 
             # Validate artifacts directory has content
@@ -5976,7 +5976,7 @@ class ForensicWorkflowManager:
             
             # Add debug info about the command and environment
             self.logger.debug(f"Working directory: {os.getcwd()}")
-            self.logger.debug(f"Artifacts path exists: {self.artifacts_path.exists()}")
+            self.logger.debug(f"Artifacts path exists: {self.artifacts_path.exists() if self.artifacts_path else False}")
             self.logger.debug(f"Output directory exists: {plaso_storage_path.parent.exists()}")
             
             try:
