@@ -7312,7 +7312,7 @@ def main():
                                              f"Loading {len(keywords)} custom keywords for case-insensitive flagging")
                 
                 # Process the .plaso file
-                success = workflow.parse_artifacts_plaso(Path(args.plaso_file))
+                success = workflow.import_plaso_file(Path(args.plaso_file), args.plaso_path)
                 if not success:
                     LOGGER.error("Failed to process .plaso file - cannot proceed with analysis")
                     sys.exit(1)
