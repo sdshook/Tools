@@ -7348,22 +7348,16 @@ def main():
                 
                 # Process the .plaso file - check extracts directory first
                 plaso_file_path = args.plaso_file
-                LOGGER.info(f"Original plaso file path: {plaso_file_path}")
-                LOGGER.info(f"Is absolute: {plaso_file_path.is_absolute()}")
-                LOGGER.info(f"Parent: {plaso_file_path.parent}")
-                LOGGER.info(f"CONFIG.extracts_dir: {CONFIG.extracts_dir}")
                 
                 # If it's just a filename, check in extracts directory first
                 if not plaso_file_path.is_absolute() and plaso_file_path.parent == Path('.'):
                     extracts_path = CONFIG.extracts_dir / plaso_file_path.name
-                    LOGGER.info(f"Checking extracts path: {extracts_path}")
-                    LOGGER.info(f"Extracts path exists: {extracts_path.exists()}")
                     if extracts_path.exists():
                         resolved_plaso_path = extracts_path
                         LOGGER.info(f"Found plaso file in extracts directory: {resolved_plaso_path}")
                     else:
                         resolved_plaso_path = plaso_file_path.resolve()
-                        LOGGER.info(f"Using specified plaso file path: {resolved_plaso_path}")
+                        LOGGER.info(f"Plaso file not found in extracts, using specified path: {resolved_plaso_path}")
                 else:
                     resolved_plaso_path = plaso_file_path.resolve()
                     LOGGER.info(f"Using absolute plaso file path: {resolved_plaso_path}")
