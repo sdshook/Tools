@@ -2399,6 +2399,9 @@ class ForaiConfig:
         self.db_cache_size: int = 50000
         self.db_mmap_size: int = 1073741824  # 1GB
         
+        # Track if existing installation was detected
+        self.existing_installation_detected: bool = False
+        
         # Initialize directories
         self._initialize_directories()
     
@@ -2421,6 +2424,7 @@ class ForaiConfig:
             if all((parent / subdir).exists() for subdir in expected_dirs):
                 # Found existing FORAI installation, use parent as base
                 self.base_dir = parent
+                self.existing_installation_detected = True
                 print(f"Detected existing FORAI installation at: {parent}")
                 print(f"Using existing directory structure instead of creating new subdirectories")
                 return
@@ -2433,6 +2437,36 @@ class ForaiConfig:
     def set_case_id(self, case_id: str):
         """Set the current case ID for database operations"""
         self.current_case_id = case_id
+    
+    @property
+    def artifacts_dir(self) -> Path:
+        """Return path to artifacts directory"""
+        return self.base_dir / "artifacts"
+    
+    @property
+    def extracts_dir(self) -> Path:
+        """Return path to extracts directory"""
+        return self.base_dir / "extracts"
+    
+    @property
+    def reports_dir(self) -> Path:
+        """Return path to reports directory"""
+        return self.base_dir / "reports"
+    
+    @property
+    def archives_dir(self) -> Path:
+        """Return path to archives directory"""
+        return self.base_dir / "archives"
+    
+    @property
+    def llm_dir(self) -> Path:
+        """Return path to LLM directory"""
+        return self.base_dir / "llm"
+    
+    @property
+    def tools_dir(self) -> Path:
+        """Return path to tools directory"""
+        return self.base_dir / "tools"
     
     @property
     def db_path(self) -> Path:
@@ -5561,9 +5595,10 @@ class ForensicWorkflowManager:
         self.archives_dir = CONFIG.archives_dir
         self.llm_dir = CONFIG.llm_dir
         
-        # Ensure directories exist (CONFIG already handles existing installations)
-        for dir_path in [self.artifacts_dir, self.parsed_dir, self.reports_dir, self.archives_dir]:
-            dir_path.mkdir(exist_ok=True)
+        # Ensure directories exist only if not using existing installation
+        if not CONFIG.existing_installation_detected:
+            for dir_path in [self.artifacts_dir, self.parsed_dir, self.reports_dir, self.archives_dir]:
+                dir_path.mkdir(exist_ok=True)
             
         self.chain_of_custody = []
         self.start_time = datetime.now(timezone.utc)
@@ -7312,7 +7347,9 @@ def main():
                                              f"Loading {len(keywords)} custom keywords for case-insensitive flagging")
                 
                 # Process the .plaso file
-                success = workflow.import_plaso_file(args.plaso_file.resolve(), args.plaso_path)
+                resolved_plaso_path = args.plaso_file.resolve()
+                LOGGER.info(f"Resolved plaso file path: {resolved_plaso_path}")
+                success = workflow.import_plaso_file(resolved_plaso_path, args.plaso_path)
                 if not success:
                     LOGGER.error("Failed to process .plaso file - cannot proceed with analysis")
                     sys.exit(1)
@@ -7344,8 +7381,9 @@ def main():
             report = report_generator.generate_autonomous_report(results)
             
             # Save report in requested format(s)
-            output_dir = args.output_dir / "reports"
-            output_dir.mkdir(parents=True, exist_ok=True)
+            output_dir = CONFIG.reports_dir
+            if not CONFIG.existing_installation_detected:
+                output_dir.mkdir(parents=True, exist_ok=True)
             
             # Always save JSON report
             json_report_path = report_generator.save_report(report, 'json')
