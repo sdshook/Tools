@@ -2409,7 +2409,25 @@ class ForaiConfig:
     
     def set_base_dir(self, base_dir: Path):
         """Set the base directory and reinitialize subdirectories"""
-        self.base_dir = Path(base_dir)
+        base_dir = Path(base_dir)
+        
+        # Check if the provided directory is a subdirectory of an existing FORAI installation
+        # Look for parent directories that contain the expected FORAI structure
+        potential_forai_root = base_dir
+        while potential_forai_root.parent != potential_forai_root:  # Stop at filesystem root
+            parent = potential_forai_root.parent
+            # Check if parent contains FORAI directory structure
+            expected_dirs = ["archives", "artifacts", "extracts", "reports", "tools"]
+            if all((parent / subdir).exists() for subdir in expected_dirs):
+                # Found existing FORAI installation, use parent as base
+                self.base_dir = parent
+                print(f"Detected existing FORAI installation at: {parent}")
+                print(f"Using existing directory structure instead of creating new subdirectories")
+                return
+            potential_forai_root = parent
+        
+        # No existing FORAI installation found, use provided directory as base
+        self.base_dir = base_dir
         self._initialize_directories()
     
     def set_case_id(self, case_id: str):
@@ -5807,7 +5825,7 @@ class ForensicWorkflowManager:
                 log2timeline_cmd_path = "log2timeline"
                 self.logger.info("Found log2timeline in system PATH")
             # Then try specified plaso directory
-            elif plaso_path.exists():
+            elif plaso_path and plaso_path.exists():
                 potential_path = plaso_path / "log2timeline.exe"
                 if potential_path.exists():
                     log2timeline_cmd_path = str(potential_path)
@@ -5829,7 +5847,7 @@ class ForensicWorkflowManager:
                 psort_cmd_path = "psort"
                 self.logger.info("Found psort in system PATH")
             # Then try specified plaso directory
-            elif plaso_path.exists():
+            elif plaso_path and plaso_path.exists():
                 potential_path = plaso_path / "psort.exe"
                 if potential_path.exists():
                     psort_cmd_path = str(potential_path)
@@ -6588,7 +6606,7 @@ class ForensicWorkflowManager:
             if shutil.which("psort"):
                 psort_cmd_path = "psort"
                 self.logger.info("Found psort in system PATH")
-            elif plaso_path.exists():
+            elif plaso_path and plaso_path.exists():
                 potential_path = plaso_path / "psort.exe"
                 if potential_path.exists():
                     psort_cmd_path = str(potential_path)
