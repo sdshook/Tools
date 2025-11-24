@@ -72,6 +72,14 @@ path = "src/bin/debug_feature_extraction.rs"
 name = "knowledge_export_demo"
 path = "examples/knowledge_export_demo.rs"
 
+[[bin]]
+name = "webguard_knowledge_sharing_demo"
+path = "examples/webguard_knowledge_sharing_demo.rs"
+
+[[bin]]
+name = "knowledge_transfer_utility"
+path = "examples/knowledge_transfer_utility.rs"
+
 # [[bin]]
 # name = "comprehensive_multipass_test"
 # path = "tests/scripts/comprehensive_multipass_test.rs"
