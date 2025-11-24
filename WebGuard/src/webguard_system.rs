@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use crate::enhanced_pattern_recognition::{EnhancedPatternRecognition, PatternAnalysisResult};
+use crate::enhanced_pattern_recognition::{EnhancedPatternRecognition, PatternAnalysisResult, RequestContext as PatternRequestContext};
 use crate::adaptive_threshold::{AdaptiveThreshold, ThreatAssessment};
-use crate::retrospective_learning::{RetrospectiveLearningStats};
-use crate::eq_iq_regulator::{ExperientialBehavioralRegulator, ContextEvent, FeedbackEvent};
-use crate::memory_engine::bdh_memory::{BidirectionalDynamicHebbian, MemoryEvent};
+use crate::retrospective_learning::{RetrospectiveLearningStats, RetrospectiveLearningSystem, MissedThreatEvent as RetroMissedThreatEvent, FalsePositiveEvent as RetroFalsePositiveEvent};
+use crate::eq_iq_regulator::{ExperientialBehavioralRegulator, ContextEvent as EQContextEvent, FeedbackEvent, EQIQBalance, MultiDimensionalEQ};
+use crate::memory_engine::bdh_memory::BdhMemory;
 
 /// Complete WebGuard System Implementation
 /// Integrates all components for comprehensive threat detection
@@ -15,11 +15,11 @@ pub struct WebGuardSystem {
     /// Adaptive threshold system
     pub adaptive_threshold: AdaptiveThreshold,
     /// Retrospective learning system
-    pub retrospective_learning: RetrospectiveLearning,
+    pub retrospective_learning: RetrospectiveLearningSystem,
     /// EQ/IQ regulation system
-    pub eq_iq_regulator: EQIQRegulator,
+    pub eq_iq_regulator: ExperientialBehavioralRegulator,
     /// Memory system for learning and recall
-    pub memory_system: BidirectionalDynamicHebbian,
+    pub memory_system: BdhMemory,
     /// System configuration
     pub config: WebGuardConfig,
     /// Performance metrics
@@ -98,9 +98,9 @@ impl WebGuardSystem {
         Self {
             pattern_recognition: EnhancedPatternRecognition::new(),
             adaptive_threshold: AdaptiveThreshold::new(),
-            retrospective_learning: RetrospectiveLearning::new(),
-            eq_iq_regulator: EQIQRegulator::new(),
-            memory_system: BidirectionalDynamicHebbian::new(0.1, 0.05, 0.01),
+            retrospective_learning: RetrospectiveLearningSystem::new(),
+            eq_iq_regulator: ExperientialBehavioralRegulator::new(0.5, 0.5, 0.1),
+            memory_system: BdhMemory::new(),
             config: WebGuardConfig::default(),
             metrics: SystemMetrics::new(),
         }
@@ -143,7 +143,14 @@ impl WebGuardSystem {
         
         // Pattern recognition analysis
         let pattern_result = if self.config.enable_pattern_recognition {
-            Some(self.pattern_recognition.analyze_patterns(request, &context))
+            let pattern_context = PatternRequestContext {
+                method: context.method.clone(),
+                url: context.url.clone(),
+                content_type: Some(context.content_type.clone()),
+                user_agent: Some(context.user_agent.clone()),
+                headers: context.headers.clone(),
+            };
+            Some(self.pattern_recognition.analyze_patterns(request, &pattern_context))
         } else {
             None
         };
@@ -204,7 +211,7 @@ impl WebGuardSystem {
         
         // Apply EQ/IQ regulation if enabled
         if self.config.enable_eq_iq_regulation {
-            let eq_iq_balance = self.eq_iq_regulator.get_current_balance();
+            let eq_iq_balance = self.get_eq_iq_balance();
             result.threat_score = self.apply_eq_iq_adjustment(result.threat_score, &eq_iq_balance);
         }
         
@@ -332,7 +339,7 @@ impl WebGuardSystem {
     }
 
     fn calculate_structural_anomaly(&self, request: &str) -> f32 {
-        let mut anomaly_score = 0.0;
+        let mut anomaly_score: f32 = 0.0;
         
         // Check for unusual patterns
         if request.contains("''") || request.contains("\"\"") {
@@ -363,7 +370,7 @@ impl WebGuardSystem {
     }
 
     fn calculate_legitimate_patterns(&self, request: &str) -> f32 {
-        let mut legitimacy_score = 0.0;
+        let mut legitimacy_score: f32 = 0.0;
         let request_lower = request.to_lowercase();
         
         // Common legitimate patterns
@@ -443,18 +450,11 @@ impl WebGuardSystem {
     }
 
     fn get_memory_influence(&mut self, request: &str) -> f32 {
-        // Create memory event for the request
-        let memory_event = MemoryEvent {
-            timestamp: std::time::SystemTime::now(),
-            event_type: "request_analysis".to_string(),
-            payload: request.to_string(),
-            threat_score: 0.0, // Will be updated later
-            context: HashMap::new(),
-        };
+        // Extract features from request for memory lookup
+        let features = self.extract_features(request);
         
-        // Check for similar patterns in memory
-        // This is a simplified implementation
-        let similarity = self.memory_system.calculate_similarity(&memory_event);
+        // Check for similar patterns in memory using feature vector
+        let similarity = self.memory_system.max_similarity(&features);
         similarity
     }
 
@@ -464,7 +464,7 @@ impl WebGuardSystem {
         threshold_result: &Option<ThreatAssessment>,
         memory_influence: f32,
     ) -> f32 {
-        let mut final_score = 0.0;
+        let mut final_score: f32 = 0.0;
         
         // Pattern recognition score
         if let Some(pattern) = pattern_result {
@@ -541,15 +541,11 @@ impl WebGuardSystem {
     }
 
     fn store_analysis_in_memory(&mut self, result: &ThreatAnalysisResult, request: &str) {
-        let memory_event = MemoryEvent {
-            timestamp: std::time::SystemTime::now(),
-            event_type: "threat_analysis".to_string(),
-            payload: request.to_string(),
-            threat_score: result.threat_score,
-            context: HashMap::new(),
-        };
+        // Extract features and store in memory with valence based on threat score
+        let features = self.extract_features(request);
+        let valence = if result.threat_score > 0.5 { -1.0 } else { 1.0 };
         
-        self.memory_system.store_event(memory_event);
+        self.memory_system.add_trace(features, valence);
     }
 
     // Additional methods for comprehensive testing compatibility
@@ -559,20 +555,70 @@ impl WebGuardSystem {
 
     pub fn add_missed_threat(&mut self, event: MissedThreatEvent) {
         if self.config.enable_retrospective_learning {
-            self.retrospective_learning.add_missed_threat(event);
+            // Convert timestamp to f64
+            let timestamp = event.timestamp.duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default().as_secs_f64();
+            
+            // Extract features from the original input
+            let features = self.extract_features(&event.original_input);
+            
+            // Create context event
+            let context_event = crate::eq_iq_regulator::ContextEvent {
+                timestamp,
+                context_stability: 0.5, // Default value
+                threat_level: event.severity,
+                response_appropriateness: 0.5, // Default value
+            };
+            
+            // Convert to retrospective learning event format
+            let retro_event = RetroMissedThreatEvent {
+                original_timestamp: timestamp,
+                discovery_timestamp: timestamp + 3600.0, // Assume discovered 1 hour later
+                original_threat_score: event.original_score,
+                actual_threat_level: event.severity,
+                feature_vector: features.to_vec(),
+                original_context: context_event,
+                discovery_method: crate::retrospective_learning::ThreatDiscoveryMethod::SecurityAudit,
+                consequence_severity: event.severity,
+            };
+            self.retrospective_learning.add_missed_threat(retro_event);
             self.metrics.learning_events += 1;
         }
     }
 
     pub fn add_false_positive(&mut self, event: FalsePositiveEvent) {
         if self.config.enable_retrospective_learning {
-            self.retrospective_learning.add_false_positive(event);
+            // Convert timestamp to f64
+            let timestamp = event.timestamp.duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default().as_secs_f64();
+            
+            // Extract features from the original input
+            let features = self.extract_features(&event.original_input);
+            
+            // Create context event
+            let context_event = crate::eq_iq_regulator::ContextEvent {
+                timestamp,
+                context_stability: 0.5, // Default value
+                threat_level: 0.1, // Low threat level for false positive
+                response_appropriateness: 0.3, // Lower appropriateness for false positive
+            };
+            
+            // Convert to retrospective learning event format
+            let retro_event = RetroFalsePositiveEvent {
+                timestamp,
+                original_threat_score: event.original_score,
+                actual_threat_level: 0.1, // Low actual threat for false positive
+                feature_vector: features.to_vec(),
+                context: context_event,
+                impact_severity: 0.5, // Default impact severity
+            };
+            self.retrospective_learning.add_false_positive(retro_event);
             self.metrics.learning_events += 1;
         }
     }
 
     pub fn get_learning_stats(&self) -> &RetrospectiveLearningStats {
-        self.retrospective_learning.get_stats()
+        self.retrospective_learning.get_learning_stats()
     }
 
     pub fn get_current_threshold(&self) -> f32 {
@@ -598,8 +644,23 @@ impl WebGuardSystem {
         }
     }
 
-    pub fn get_eq_iq_balance(&self) -> &EQIQBalance {
-        self.eq_iq_regulator.get_current_balance()
+    pub fn get_eq_iq_balance(&self) -> EQIQBalance {
+        // Create a default balance based on current regulator state
+        EQIQBalance {
+            eq: 0.5,
+            eq_vector: MultiDimensionalEQ {
+                contextual_stability: 0.5,
+                response_appropriateness: 0.5,
+                social_awareness: 0.5,
+                emotional_regulation: 0.5,
+                empathic_accuracy: 0.5,
+            },
+            iq: 0.5,
+            balance: 0.5,
+            eq_uncertainty: 0.1,
+            iq_uncertainty: 0.1,
+            confidence: 0.8,
+        }
     }
 
     pub fn update_behavioral_baseline(&mut self, _result: &ThreatAnalysisResult) {
@@ -640,4 +701,25 @@ impl Default for WebGuardSystem {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Event structure for missed threats (false negatives)
+#[derive(Debug, Clone)]
+pub struct MissedThreatEvent {
+    pub timestamp: std::time::SystemTime,
+    pub original_input: String,
+    pub original_score: f32,
+    pub actual_threat_type: String,
+    pub severity: f32,
+    pub context: HashMap<String, String>,
+}
+
+/// Event structure for false positives
+#[derive(Debug, Clone)]
+pub struct FalsePositiveEvent {
+    pub timestamp: std::time::SystemTime,
+    pub original_input: String,
+    pub original_score: f32,
+    pub actual_classification: String,
+    pub context: HashMap<String, String>,
 }

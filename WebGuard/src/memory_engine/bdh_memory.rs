@@ -22,7 +22,7 @@ pub struct ExperientialContext {
 
 pub const EMBED_DIM: usize = 32;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MemoryTrace {
     pub id: String,
     pub vec: [f32; EMBED_DIM],
@@ -33,7 +33,7 @@ pub struct MemoryTrace {
     pub activation_history: Vec<f32>,      // Recent activation levels for temporal Hebbian learning
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HebbianConnection {
     pub source_id: String,
     pub target_id: String,
@@ -41,6 +41,7 @@ pub struct HebbianConnection {
     pub last_update: f32,
 }
 
+#[derive(Debug)]
 pub struct BdhMemory {
     pub traces: Vec<MemoryTrace>,
     pub hebbian_connections: Vec<HebbianConnection>, // Explicit bidirectional connections
