@@ -1,0 +1,21 @@
+{
+  "total_samples": 1000,
+  "benign_samples": 950,
+  "threat_samples": 50,
+  "threat_types": {
+    "sql_injection": 18,
+    "command_injection": 17,
+    "ssrf": 4,
+    "path_traversal": 7,
+    "xss": 2,
+    "ldap_injection": 1,
+    "unknown": 1
+  },
+  "methods": {
+    "POST": 266,
+    "GET": 240,
+    "DELETE": 244,
+    "PUT": 250
+  },
+  "generation_time": "2025-11-24T15:17:53.010421"
+}
