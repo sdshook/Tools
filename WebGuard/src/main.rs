@@ -9,6 +9,11 @@ mod actuators;
 mod evidence;
 mod persistence;
 mod eq_iq_regulator;
+mod retrospective_learning;
+mod advanced_feature_extractor;
+mod adaptive_threshold;
+mod enhanced_pattern_recognition;
+mod experiential_anomaly;
 
 use anyhow::Result;
 use tracing::info;

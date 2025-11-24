@@ -7,7 +7,7 @@ use tracing::{info, debug};
 use crate::memory_engine::bdh_memory::{BdhMemory, EMBED_DIM};
 use crate::memory_engine::psi_index::{PsiIndex, PsiEntry};
 use crate::memory_engine::valence::ValenceController;
-use crate::retrospective_learning::{RetrospectiveLearningSystem, ThreatDiscoveryMethod, MissedThreatEvent, RetrospectiveLearningStats};
+use crate::retrospective_learning::{RetrospectiveLearningSystem, ThreatDiscoveryMethod, MissedThreatEvent, RetrospectiveLearningStats, FalsePositiveEvent};
 use crate::eq_iq_regulator::ExperientialBehavioralRegulator;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -310,6 +310,56 @@ impl HostMeshCognition {
         }
     }
 
+    /// Get balanced learning configuration
+    pub fn get_balanced_learning_config(&self) -> Option<(f32, f32, f32, f32)> {
+        if let Ok(retro_learning) = self.retrospective_learning.try_lock() {
+            Some((
+                retro_learning.false_negative_learning_rate,
+                retro_learning.false_positive_learning_rate,
+                retro_learning.regularization_factor,
+                retro_learning.max_adjustment_magnitude,
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// Report a false positive for balanced learning
+    pub fn report_false_positive(&self,
+                                  timestamp: f64,
+                                  original_threat_score: f32,
+                                  actual_threat_level: f32,
+                                  feature_vector: Vec<f32>,
+                                  impact_severity: f32) {
+        
+        let false_positive = FalsePositiveEvent {
+            timestamp,
+            original_threat_score,
+            actual_threat_level,
+            feature_vector,
+            context: crate::eq_iq_regulator::ContextEvent {
+                timestamp,
+                context_stability: 0.7, // Higher stability for false positives (normal behavior)
+                threat_level: actual_threat_level,
+                response_appropriateness: 0.1, // Low appropriateness for false positive
+            },
+            impact_severity,
+        };
+
+        if let Ok(mut retro_learning) = self.retrospective_learning.try_lock() {
+            retro_learning.add_false_positive(false_positive);
+            info!("Added false positive to retrospective learning system: original_score={:.3}, actual_level={:.3}, impact={:.3}",
+                  original_threat_score, actual_threat_level, impact_severity);
+        }
+    }
+
+    /// Add a false positive event for balanced learning (legacy method)
+    pub fn add_false_positive(&self, false_positive: FalsePositiveEvent) {
+        if let Ok(mut retro_learning) = self.retrospective_learning.try_lock() {
+            retro_learning.add_false_positive(false_positive);
+        }
+    }
+
     /// Export missed threat patterns for analysis
     pub fn export_missed_threat_patterns(&self) -> Vec<std::collections::HashMap<String, serde_json::Value>> {
         if let Ok(retro_learning) = self.retrospective_learning.try_lock() {
@@ -338,8 +388,10 @@ impl HostMeshCognition {
         let similarity = self.calculate_similarity(&embedding)?;
         let valence = self.calculate_valence(&embedding)?;
         
-        // Apply retrospective learning adjustment
-        let adjusted_similarity = similarity; // Simplified for now
+        // Apply retrospective learning adjustment using balanced learning
+        let feature_slice: Vec<f32> = features.iter().take(27).cloned().collect();
+        let retrospective_adjustment = self.get_retrospective_threat_adjustment(&feature_slice, similarity);
+        let adjusted_similarity = (similarity + retrospective_adjustment).clamp(0.0, 1.0);
         
         // Generate trace ID
         let trace_id = format!("trace_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis());

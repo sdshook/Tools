@@ -275,14 +275,16 @@ impl AdaptiveThreshold {
         
         let adjustment = match (assessment.threat_detected, actual_threat) {
             (true, false) => {
-                // False positive - increase threshold moderately (security-first: prefer false positives)
-                learning_rate * 0.3
+                // False positive - increase threshold with balanced learning rate
+                let fp_adjustment = learning_rate * 0.8; // Increased from 0.3 for balance
+                // Apply regularization to prevent overcorrection
+                fp_adjustment * (1.0 - self.performance_history.false_positive_rate * 0.3)
             },
             (false, true) => {
-                // False negative - CRITICAL: decrease threshold aggressively (security-first priority)
+                // False negative - decrease threshold with moderated aggression
                 let confidence_gap = current_threshold - assessment.base_similarity;
-                let aggressive_adjustment = -learning_rate * (1.0 + confidence_gap * 2.0);
-                aggressive_adjustment.max(-0.15) // Cap at 15% reduction per false negative
+                let fn_adjustment = -learning_rate * (0.8 + confidence_gap * 1.0); // Reduced aggression
+                fn_adjustment.max(-0.10) // Reduced cap from 15% to 10% per false negative
             },
             _ => {
                 // Correct prediction - small adjustment toward optimal
