@@ -7,7 +7,7 @@ use serde::{Serialize, Deserialize};
 
 pub const EMBED_DIM: usize = 32;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PsiEntry {
     pub id: String,
     pub vec: [f32; EMBED_DIM],
@@ -19,6 +19,7 @@ pub struct PsiEntry {
 /// PSI (Persistent Semantic Index) - Core memory cache structure
 /// Provides persistent storage for BDH memory patterns to enable
 /// experiential learning beyond context window limitations
+#[derive(Debug)]
 pub struct PsiIndex {
     entries: Vec<PsiEntry>,
     max_entries: usize,

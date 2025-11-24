@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use crate::enhanced_pattern_recognition::{EnhancedPatternRecognition, PatternAnalysisResult};
+use crate::enhanced_pattern_recognition::{ExperientialKnowledgeBase, ExperientialAnalysisResult};
 use crate::adaptive_threshold::{AdaptiveThreshold, ThreatAssessment};
 
 /// Simplified WebGuard System Implementation
 /// Uses only the working components for comprehensive threat detection
 #[derive(Debug)]
 pub struct SimpleWebGuardSystem {
-    /// Enhanced pattern recognition engine
-    pub pattern_recognition: EnhancedPatternRecognition,
+    /// Experiential knowledge base
+    pub experiential_kb: ExperientialKnowledgeBase,
     /// Adaptive threshold system
     pub adaptive_threshold: AdaptiveThreshold,
     /// System statistics
@@ -54,7 +54,7 @@ impl SimpleWebGuardSystem {
     /// Create a new WebGuard system instance
     pub fn new() -> Self {
         Self {
-            pattern_recognition: EnhancedPatternRecognition::new(),
+            experiential_kb: ExperientialKnowledgeBase::new(),
             adaptive_threshold: AdaptiveThreshold::new(),
             stats: SystemStats::default(),
         }
@@ -64,8 +64,8 @@ impl SimpleWebGuardSystem {
     pub fn analyze_request(&mut self, request: &str) -> AnalysisResult {
         self.stats.total_requests += 1;
 
-        // Create a simple context for pattern analysis
-        let context = crate::enhanced_pattern_recognition::RequestContext {
+        // Create a simple context for experiential analysis
+        let context = crate::enhanced_pattern_recognition::PatternRequestContext {
             method: "GET".to_string(),
             url: request.to_string(),
             content_type: Some("text/plain".to_string()),
@@ -73,20 +73,20 @@ impl SimpleWebGuardSystem {
             headers: HashMap::new(),
         };
 
-        // Analyze patterns
-        let pattern_result = self.pattern_recognition.analyze_patterns(request, &context);
+        // Analyze using experiential knowledge base
+        let experiential_result = self.experiential_kb.analyze_experiential(request, &context);
         
         // Simple threshold-based detection (bypass complex adaptive system for now)
         let threat_threshold = 0.3; // Lower threshold for better detection
-        let is_threat = pattern_result.overall_threat_score > threat_threshold;
+        let is_threat = experiential_result.overall_threat_score > threat_threshold;
         
         // Calculate confidence based on how far from threshold
         let confidence = if is_threat {
             // For threats, confidence increases with score above threshold
-            ((pattern_result.overall_threat_score - threat_threshold) / (1.0 - threat_threshold)).min(1.0)
+            ((experiential_result.overall_threat_score - threat_threshold) / (1.0 - threat_threshold)).min(1.0)
         } else {
             // For non-threats, confidence increases as score gets further below threshold
-            (1.0 - (pattern_result.overall_threat_score / threat_threshold)).max(0.0)
+            (1.0 - (experiential_result.overall_threat_score / threat_threshold)).max(0.0)
         };
 
         // Update statistics
@@ -94,38 +94,32 @@ impl SimpleWebGuardSystem {
             self.stats.threats_detected += 1;
         }
 
-        // Determine primary threat type from category scores
-        let threat_type = if is_threat && !pattern_result.category_scores.is_empty() {
-            // Find the category with highest score
-            let max_category = pattern_result.category_scores
-                .iter()
-                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
-                .map(|(category, _)| format!("{:?}", category));
-            max_category
+        // Determine primary threat type from matched patterns
+        let threat_type = if is_threat && !experiential_result.matched_learned_patterns.is_empty() {
+            Some(experiential_result.matched_learned_patterns[0].pattern.pattern.clone())
         } else {
             None
         };
 
         // Create patterns matched list
-        let patterns_matched: Vec<String> = pattern_result.detected_patterns
-            .iter()
-            .map(|p| p.pattern.clone())
+        let patterns_matched: Vec<String> = experiential_result.matched_learned_patterns.iter()
+            .map(|p| p.pattern.pattern.clone())
             .collect();
 
         // Create analysis details
         let analysis_details = format!(
-            "Threat Score: {:.3}, Threshold: {:.3}, Patterns: {}, Categories: {}",
-            pattern_result.overall_threat_score,
+            "Threat Score: {:.3}, Threshold: {:.3}, Patterns: {}, Indicators: {}",
+            experiential_result.overall_threat_score,
             threat_threshold,
             patterns_matched.len(),
-            pattern_result.category_scores.len()
+            experiential_result.triggered_indicators.len()
         );
 
         AnalysisResult {
             is_threat,
             confidence,
             threat_type,
-            threat_score: pattern_result.overall_threat_score,
+            threat_score: experiential_result.overall_threat_score,
             patterns_matched,
             analysis_details,
         }

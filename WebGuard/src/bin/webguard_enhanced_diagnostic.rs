@@ -1,7 +1,7 @@
 use webguard::{
     advanced_feature_extractor::AdvancedFeatureExtractor,
     adaptive_threshold::{AdaptiveThreshold, ThreatAssessment},
-    enhanced_pattern_recognition::{EnhancedPatternRecognition, RequestContext},
+    enhanced_pattern_recognition::{ExperientialKnowledgeBase, PatternRequestContext},
 };
 use std::collections::HashMap;
 use std::time::Instant;
@@ -48,7 +48,7 @@ fn main() {
     // Initialize enhanced components
     let feature_extractor = AdvancedFeatureExtractor::new();
     let mut adaptive_threshold = AdaptiveThreshold::new();
-    let pattern_recognition = EnhancedPatternRecognition::new();
+    let pattern_recognition = ExperientialKnowledgeBase::new();
     // Mesh cognition integration will be added later
     
     // Create comprehensive test scenarios
@@ -68,7 +68,7 @@ fn main() {
         let threat_assessment = adaptive_threshold.assess_threat(&features);
         
         // Perform pattern recognition analysis
-        let context = RequestContext {
+        let context = PatternRequestContext {
             method: "POST".to_string(),
             url: "/test".to_string(),
             content_type: Some("application/x-www-form-urlencoded".to_string()),
@@ -101,8 +101,8 @@ fn main() {
             features,
             threat_assessment: threat_assessment.clone(),
             pattern_analysis_score: pattern_analysis.overall_threat_score,
-            detected_patterns_count: pattern_analysis.detected_patterns.len(),
-            behavioral_anomalies_count: pattern_analysis.behavioral_anomalies.len(),
+            detected_patterns_count: pattern_analysis.matched_learned_patterns.len(),
+            behavioral_anomalies_count: pattern_analysis.triggered_indicators.len(),
             threat_detected: final_threat_detected,
             confidence_score: final_confidence,
             correct_detection,

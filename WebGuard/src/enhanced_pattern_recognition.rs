@@ -1,125 +1,372 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
+use crate::memory_engine::psi_index::{PsiIndex, PsiEntry, EMBED_DIM};
+use crate::mesh_cognition::HostMeshCognition;
 
-/// Enhanced pattern recognition system for complex attack detection
+/// Experiential Knowledge Base - Learns patterns through experience and shares knowledge
+/// Replaces static pattern matching with dynamic experiential learning
 #[derive(Debug, Clone)]
-pub struct EnhancedPatternRecognition {
-    /// N-gram analyzers for different attack types
-    pub ngram_analyzers: HashMap<AttackCategory, NgramAnalyzer>,
-    /// Behavioral pattern detectors
-    pub behavioral_detectors: Vec<BehavioralDetector>,
-    /// Context-aware pattern weights
-    pub context_weights: ContextWeights,
-    /// Attack signature database
-    pub signature_db: AttackSignatureDatabase,
+pub struct ExperientialKnowledgeBase {
+    /// Learned patterns from actual experience (not static)
+    pub learned_patterns: HashMap<String, LearnedPattern>,
+    /// Learned behavioral indicators
+    pub behavioral_indicators: HashMap<String, BehavioralIndicator>,
+    /// PSI connector for persistent memory
+    pub psi_connector: Option<Arc<Mutex<PsiIndex>>>,
+    /// Knowledge transfer interface
+    pub knowledge_transfer: KnowledgeTransfer,
+    /// Learning statistics
+    pub learning_stats: LearningStatistics,
+    /// Configuration for experiential learning
+    pub config: ExperientialConfig,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub enum AttackCategory {
-    SqlInjection,
-    XssAttack,
-    PathTraversal,
-    CommandInjection,
-    FileInclusion,
-    EncodingAttack,
+/// Learned pattern from experiential learning (not static/hard-coded)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearnedPattern {
+    /// The pattern learned from experience
+    pub pattern: String,
+    /// Threat weight learned from validation results
+    pub threat_weight: f32,
+    /// Benign weight learned from validation results  
+    pub benign_weight: f32,
+    /// Confidence based on validation count and success rate
+    pub confidence: f32,
+    /// Which WebGuard instance originally learned this pattern
+    pub learning_source: String,
+    /// How many times this pattern has been validated
+    pub validation_count: u32,
+    /// Success rate in actual threat detection
+    pub success_rate: f32,
+    /// False positive rate observed
+    pub false_positive_rate: f32,
+    /// Context tags where this pattern applies
+    pub context_tags: Vec<String>,
+    /// When this pattern was first learned
+    pub learned_timestamp: u64,
+    /// Last time this pattern was updated
+    pub last_updated: u64,
+    /// Learning method that discovered this pattern
+    pub discovery_method: DiscoveryMethod,
 }
 
-#[derive(Debug, Clone)]
-pub struct NgramAnalyzer {
-    /// N-gram size (2, 3, 4, etc.)
-    pub n: usize,
-    /// Known malicious n-grams with their threat scores
-    pub malicious_ngrams: HashMap<String, f32>,
-    /// Known benign n-grams with their legitimacy scores
-    pub benign_ngrams: HashMap<String, f32>,
-    /// Minimum frequency threshold for n-gram consideration
-    pub min_frequency: usize,
+/// How a pattern was discovered through experiential learning
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DiscoveryMethod {
+    /// Learned from successful threat detection
+    ThreatValidation,
+    /// Learned from false positive correction
+    FalsePositiveCorrection,
+    /// Learned from behavioral analysis
+    BehavioralLearning,
+    /// Imported from another WebGuard instance
+    KnowledgeTransfer,
+    /// Learned from retrospective analysis
+    RetrospectiveLearning,
 }
 
-#[derive(Debug, Clone)]
-pub struct BehavioralDetector {
+/// Behavioral indicator learned from experience
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BehavioralIndicator {
+    /// Name of the behavioral indicator
     pub name: String,
-    pub detector_type: BehavioralType,
+    /// Type of behavioral pattern
+    pub indicator_type: BehavioralType,
+    /// Weight learned from experience
     pub weight: f32,
+    /// Threshold learned from experience
     pub threshold: f32,
-}
-
-#[derive(Debug, Clone)]
-pub enum BehavioralType {
-    /// Detects unusual character frequency patterns
-    CharacterFrequency,
-    /// Detects suspicious length patterns
-    LengthAnomaly,
-    /// Detects encoding inconsistencies
-    EncodingAnomaly,
-    /// Detects structural anomalies in requests
-    StructuralAnomaly,
-    /// Detects timing-based attack patterns
-    TimingPattern,
-    /// Detects payload obfuscation attempts
-    ObfuscationPattern,
-}
-
-#[derive(Debug, Clone)]
-pub struct ContextWeights {
-    /// Weights based on request context (GET, POST, headers, etc.)
-    pub request_context: HashMap<String, f32>,
-    /// Weights based on URL patterns
-    pub url_patterns: HashMap<String, f32>,
-    /// Weights based on parameter names
-    pub parameter_patterns: HashMap<String, f32>,
-    /// Weights based on content type
-    pub content_type_weights: HashMap<String, f32>,
-}
-
-#[derive(Debug, Clone)]
-pub struct AttackSignatureDatabase {
-    /// Known attack signatures with metadata
-    pub signatures: Vec<AttackSignature>,
-    /// Signature matching cache for performance
-    pub match_cache: HashMap<String, Vec<usize>>,
+    /// Confidence in this indicator
+    pub confidence: f32,
+    /// Validation statistics
+    pub validation_stats: ValidationStats,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AttackSignature {
-    pub id: String,
-    pub name: String,
-    pub category: String,
-    pub pattern: String,
-    pub severity: f32,
-    pub confidence: f32,
-    pub description: String,
-    pub references: Vec<String>,
+pub enum BehavioralType {
+    /// Learned character frequency patterns
+    CharacterFrequency,
+    /// Learned length anomaly patterns
+    LengthAnomaly,
+    /// Learned encoding anomaly patterns
+    EncodingAnomaly,
+    /// Learned structural anomaly patterns
+    StructuralAnomaly,
+    /// Learned timing patterns
+    TimingPattern,
+    /// Learned obfuscation patterns
+    ObfuscationPattern,
 }
 
+/// Statistics for pattern validation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationStats {
+    pub true_positives: u32,
+    pub false_positives: u32,
+    pub true_negatives: u32,
+    pub false_negatives: u32,
+    pub total_validations: u32,
+}
+
+/// Knowledge transfer interface for sharing learned patterns
 #[derive(Debug, Clone)]
-pub struct PatternAnalysisResult {
+pub struct KnowledgeTransfer {
+    /// Export format version
+    pub version: String,
+    /// Minimum confidence threshold for export
+    pub export_threshold: f32,
+    /// Maximum age for patterns to export (in seconds)
+    pub max_export_age: u64,
+}
+
+/// Learning statistics for the knowledge base
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningStatistics {
+    /// Total patterns learned
+    pub total_patterns_learned: u32,
+    /// Patterns learned from threats
+    pub threat_patterns_learned: u32,
+    /// Patterns learned from benign traffic
+    pub benign_patterns_learned: u32,
+    /// Patterns imported from other instances
+    pub imported_patterns: u32,
+    /// Patterns exported to other instances
+    pub exported_patterns: u32,
+    /// Average confidence of learned patterns
+    pub average_confidence: f32,
+    /// Learning start time
+    pub learning_start_time: u64,
+}
+
+/// Configuration for experiential learning
+#[derive(Debug, Clone)]
+pub struct ExperientialConfig {
+    /// Minimum validation count before pattern is trusted
+    pub min_validation_count: u32,
+    /// Minimum confidence threshold for pattern use
+    pub min_confidence_threshold: f32,
+    /// Maximum false positive rate allowed
+    pub max_false_positive_rate: f32,
+    /// Learning rate for pattern weight updates
+    pub learning_rate: f32,
+    /// Enable knowledge sharing with other instances
+    pub enable_knowledge_sharing: bool,
+    /// Enable PSI integration for persistent memory
+    pub enable_psi_integration: bool,
+}
+
+/// Result of experiential pattern analysis
+#[derive(Debug, Clone)]
+pub struct ExperientialAnalysisResult {
+    /// Overall threat score based on learned patterns
     pub overall_threat_score: f32,
-    pub category_scores: HashMap<AttackCategory, f32>,
-    pub detected_patterns: Vec<DetectedPattern>,
-    pub behavioral_anomalies: Vec<BehavioralAnomaly>,
-    pub context_adjustments: f32,
+    /// Confidence in the analysis based on pattern validation history
     pub confidence_level: f32,
+    /// Patterns that matched from learned knowledge
+    pub matched_learned_patterns: Vec<MatchedLearnedPattern>,
+    /// Behavioral indicators that triggered
+    pub triggered_indicators: Vec<TriggeredIndicator>,
+    /// New patterns discovered during analysis
+    pub discovered_patterns: Vec<String>,
+    /// Learning feedback for pattern weight updates
+    pub learning_feedback: LearningFeedback,
 }
 
+/// A learned pattern that matched during analysis
 #[derive(Debug, Clone)]
-pub struct DetectedPattern {
-    pub pattern: String,
-    pub category: AttackCategory,
-    pub score: f32,
+pub struct MatchedLearnedPattern {
+    /// The learned pattern that matched
+    pub pattern: LearnedPattern,
+    /// Match strength (0.0 to 1.0)
+    pub match_strength: f32,
+    /// Positions where pattern was found
     pub positions: Vec<usize>,
+    /// Context of the match
     pub context: String,
 }
 
+/// A behavioral indicator that was triggered
 #[derive(Debug, Clone)]
-pub struct BehavioralAnomaly {
-    pub anomaly_type: BehavioralType,
-    pub score: f32,
-    pub description: String,
+pub struct TriggeredIndicator {
+    /// The behavioral indicator that triggered
+    pub indicator: BehavioralIndicator,
+    /// Trigger strength (0.0 to 1.0)
+    pub trigger_strength: f32,
+    /// Evidence that caused the trigger
     pub evidence: String,
+    /// Description of what was detected
+    pub description: String,
 }
 
-impl EnhancedPatternRecognition {
+/// Feedback for updating learned patterns
+#[derive(Debug, Clone)]
+pub struct LearningFeedback {
+    /// Patterns that should have their weights increased
+    pub reinforce_patterns: Vec<String>,
+    /// Patterns that should have their weights decreased
+    pub weaken_patterns: Vec<String>,
+    /// New patterns to learn from this analysis
+    pub new_patterns_to_learn: Vec<String>,
+    /// Context information for learning
+    pub learning_context: HashMap<String, String>,
+}
+
+impl ExperientialKnowledgeBase {
+    /// Create a new experiential knowledge base
+    pub fn new() -> Self {
+        Self {
+            learned_patterns: HashMap::new(),
+            behavioral_indicators: HashMap::new(),
+            psi_connector: None,
+            knowledge_transfer: KnowledgeTransfer {
+                version: "1.0".to_string(),
+                export_threshold: 0.7,
+                max_export_age: 86400 * 30, // 30 days
+            },
+            learning_stats: LearningStatistics {
+                total_patterns_learned: 0,
+                threat_patterns_learned: 0,
+                benign_patterns_learned: 0,
+                imported_patterns: 0,
+                exported_patterns: 0,
+                average_confidence: 0.0,
+                learning_start_time: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            },
+            config: ExperientialConfig {
+                min_validation_count: 3,
+                min_confidence_threshold: 0.6,
+                max_false_positive_rate: 0.1,
+                learning_rate: 0.1,
+                enable_knowledge_sharing: true,
+                enable_psi_integration: true,
+            },
+        }
+    }
+
+    /// Connect to PSI for persistent memory
+    pub fn connect_psi(&mut self, psi: Arc<Mutex<PsiIndex>>) {
+        self.psi_connector = Some(psi);
+    }
+
+    /// Analyze request using learned patterns (not static patterns)
+    pub fn analyze_experiential(&self, request: &str, context: &PatternRequestContext) -> ExperientialAnalysisResult {
+        let mut matched_patterns = Vec::new();
+        let mut triggered_indicators = Vec::new();
+        let mut discovered_patterns = Vec::new();
+        let mut overall_score = 0.0;
+        let mut total_confidence = 0.0;
+        let mut pattern_count = 0;
+
+        // Analyze using learned patterns only
+        for (pattern_key, learned_pattern) in &self.learned_patterns {
+            if learned_pattern.confidence >= self.config.min_confidence_threshold
+                && learned_pattern.validation_count >= self.config.min_validation_count
+                && learned_pattern.false_positive_rate <= self.config.max_false_positive_rate
+            {
+                if let Some(match_result) = self.match_learned_pattern(request, learned_pattern) {
+                    matched_patterns.push(match_result);
+                    overall_score += learned_pattern.threat_weight * learned_pattern.confidence;
+                    total_confidence += learned_pattern.confidence;
+                    pattern_count += 1;
+                }
+            }
+        }
+
+        // Analyze using learned behavioral indicators
+        for (indicator_key, indicator) in &self.behavioral_indicators {
+            if indicator.confidence >= self.config.min_confidence_threshold {
+                if let Some(trigger_result) = self.check_behavioral_indicator(request, indicator) {
+                    triggered_indicators.push(trigger_result);
+                    overall_score += indicator.weight * indicator.confidence;
+                    total_confidence += indicator.confidence;
+                    pattern_count += 1;
+                }
+            }
+        }
+
+        // Discover new patterns for learning
+        discovered_patterns = self.discover_new_patterns(request);
+
+        // Calculate final scores
+        let final_score = if pattern_count > 0 {
+            overall_score / pattern_count as f32
+        } else {
+            0.0
+        };
+
+        let confidence = if pattern_count > 0 {
+            total_confidence / pattern_count as f32
+        } else {
+            0.0
+        };
+
+        ExperientialAnalysisResult {
+            overall_threat_score: final_score.min(1.0),
+            confidence_level: confidence,
+            matched_learned_patterns: matched_patterns,
+            triggered_indicators,
+            discovered_patterns,
+            learning_feedback: self.generate_learning_feedback(request, final_score),
+        }
+    }
+
+    /// Match a learned pattern against the request
+    fn match_learned_pattern(&self, request: &str, pattern: &LearnedPattern) -> Option<MatchedLearnedPattern> {
+        let request_lower = request.to_lowercase();
+        let pattern_lower = pattern.pattern.to_lowercase();
+        
+        if request_lower.contains(&pattern_lower) {
+            let positions = self.find_pattern_positions(&request_lower, &pattern_lower);
+            let match_strength = self.calculate_match_strength(request, &pattern.pattern);
+            
+            Some(MatchedLearnedPattern {
+                pattern: pattern.clone(),
+                match_strength,
+                positions,
+                context: format!("Pattern '{}' found in request", pattern.pattern),
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Check if a behavioral indicator is triggered
+    fn check_behavioral_indicator(&self, request: &str, indicator: &BehavioralIndicator) -> Option<TriggeredIndicator> {
+        match indicator.indicator_type {
+            BehavioralType::CharacterFrequency => {
+                let anomaly_score = self.analyze_character_frequency(request);
+                if anomaly_score > indicator.threshold {
+                    Some(TriggeredIndicator {
+                        indicator: indicator.clone(),
+                        trigger_strength: anomaly_score,
+                        evidence: format!("Character frequency anomaly: {:.2}", anomaly_score),
+                        description: "Unusual character distribution detected".to_string(),
+                    })
+                } else {
+                    None
+                }
+            }
+            BehavioralType::LengthAnomaly => {
+                let length_score = self.analyze_length_anomaly(request);
+                if length_score > indicator.threshold {
+                    Some(TriggeredIndicator {
+                        indicator: indicator.clone(),
+                        trigger_strength: length_score,
+                        evidence: format!("Length anomaly: {:.2}", length_score),
+                        description: "Unusual request length detected".to_string(),
+                    })
+                } else {
+                    None
+                }
+            }
+            _ => None, // Other behavioral types can be implemented as needed
+        }
+    }
+
     /// URL decode a string, handling common URL encoding patterns
     fn url_decode(input: &str) -> String {
         let mut result = String::new();
@@ -197,736 +444,297 @@ impl EnhancedPatternRecognition {
         variants
     }
 
-    pub fn new() -> Self {
-        let mut ngram_analyzers = HashMap::new();
-        
-        // Initialize N-gram analyzers for each attack category
-        ngram_analyzers.insert(AttackCategory::SqlInjection, Self::create_sql_ngram_analyzer());
-        ngram_analyzers.insert(AttackCategory::XssAttack, Self::create_xss_ngram_analyzer());
-        ngram_analyzers.insert(AttackCategory::PathTraversal, Self::create_path_ngram_analyzer());
-        ngram_analyzers.insert(AttackCategory::CommandInjection, Self::create_cmd_ngram_analyzer());
-        ngram_analyzers.insert(AttackCategory::FileInclusion, Self::create_file_ngram_analyzer());
-        ngram_analyzers.insert(AttackCategory::EncodingAttack, Self::create_encoding_ngram_analyzer());
-        
-        Self {
-            ngram_analyzers,
-            behavioral_detectors: Self::create_behavioral_detectors(),
-            context_weights: ContextWeights::new(),
-            signature_db: AttackSignatureDatabase::new(),
+    /// Learn a new pattern from experiential feedback
+    pub fn learn_pattern(&mut self, pattern: String, is_threat: bool, context: Vec<String>, discovery_method: DiscoveryMethod) {
+        let pattern_key = pattern.clone();
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        if let Some(existing_pattern) = self.learned_patterns.get_mut(&pattern_key) {
+            // Update existing pattern
+            existing_pattern.validation_count += 1;
+            existing_pattern.last_updated = current_time;
+            
+            if is_threat {
+                existing_pattern.threat_weight = (existing_pattern.threat_weight + self.config.learning_rate).min(1.0);
+                existing_pattern.benign_weight = (existing_pattern.benign_weight - self.config.learning_rate * 0.5).max(0.0);
+            } else {
+                existing_pattern.benign_weight = (existing_pattern.benign_weight + self.config.learning_rate).min(1.0);
+                existing_pattern.threat_weight = (existing_pattern.threat_weight - self.config.learning_rate * 0.5).max(0.0);
+            }
+            
+            // Recalculate confidence and success rate
+            self.update_pattern_confidence(&pattern_key);
+        } else {
+            // Create new learned pattern
+            let new_pattern = LearnedPattern {
+                pattern: pattern.clone(),
+                threat_weight: if is_threat { 0.5 } else { 0.1 },
+                benign_weight: if is_threat { 0.1 } else { 0.5 },
+                confidence: 0.3, // Start with low confidence
+                learning_source: "local".to_string(), // TODO: Get actual instance ID
+                validation_count: 1,
+                success_rate: 1.0, // Start optimistic
+                false_positive_rate: 0.0,
+                context_tags: context,
+                learned_timestamp: current_time,
+                last_updated: current_time,
+                discovery_method,
+            };
+            
+            self.learned_patterns.insert(pattern_key, new_pattern);
+            self.learning_stats.total_patterns_learned += 1;
+            
+            if is_threat {
+                self.learning_stats.threat_patterns_learned += 1;
+            } else {
+                self.learning_stats.benign_patterns_learned += 1;
+            }
+        }
+
+        // Store in PSI if connected
+        if self.config.enable_psi_integration {
+            self.store_pattern_in_psi(&pattern, is_threat);
         }
     }
 
-    /// Perform comprehensive pattern analysis on input
-    pub fn analyze_patterns(&self, input: &str, context: &RequestContext) -> PatternAnalysisResult {
-        let mut category_scores = HashMap::new();
-        let mut detected_patterns = Vec::new();
-        let mut behavioral_anomalies = Vec::new();
-        
-        // Preprocess input to handle URL encoding and other normalizations
-        let input_variants = Self::preprocess_input(input);
-        
-        // N-gram analysis for each category, testing all input variants
-        for (category, analyzer) in &self.ngram_analyzers {
-            let mut max_score = 0.0;
-            let mut best_patterns = Vec::new();
+    /// Update pattern confidence based on validation history
+    fn update_pattern_confidence(&mut self, pattern_key: &str) {
+        if let Some(pattern) = self.learned_patterns.get_mut(pattern_key) {
+            // Confidence increases with validation count and success rate
+            let validation_factor = (pattern.validation_count as f32 / 10.0).min(1.0);
+            let success_factor = pattern.success_rate;
+            let fp_penalty = 1.0 - pattern.false_positive_rate;
             
-            // Test each preprocessed variant
-            for variant in &input_variants {
-                let (score, patterns) = self.analyze_ngrams(variant, analyzer, category);
-                if score > max_score {
-                    max_score = score;
-                    best_patterns = patterns;
+            pattern.confidence = (validation_factor * success_factor * fp_penalty).min(1.0);
+        }
+    }
+
+    /// Store learned pattern in PSI for persistent memory
+    fn store_pattern_in_psi(&self, pattern: &str, is_threat: bool) {
+        if let Some(psi) = &self.psi_connector {
+            if let Ok(mut psi_lock) = psi.lock() {
+                // Create embedding for the pattern (simplified)
+                let mut embedding = [0.0f32; EMBED_DIM];
+                let pattern_bytes = pattern.as_bytes();
+                for (i, &byte) in pattern_bytes.iter().enumerate() {
+                    if i < EMBED_DIM {
+                        embedding[i] = (byte as f32) / 255.0;
+                    }
+                }
+                
+                let entry = PsiEntry {
+                    id: format!("pattern_{}", pattern),
+                    vec: embedding,
+                    valence: if is_threat { -0.8 } else { 0.8 }, // Negative valence for threats
+                    uses: 1,
+                    tags: vec!["learned_pattern".to_string(), if is_threat { "threat" } else { "benign" }.to_string()],
+                };
+                
+                psi_lock.add(entry);
+            }
+        }
+    }
+
+    /// Export learned knowledge for sharing with other WebGuard instances
+    pub fn export_knowledge(&self) -> Result<String, Box<dyn std::error::Error>> {
+        let mut exportable_patterns = HashMap::new();
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Only export high-confidence, validated patterns
+        for (key, pattern) in &self.learned_patterns {
+            if pattern.confidence >= self.knowledge_transfer.export_threshold
+                && pattern.validation_count >= self.config.min_validation_count
+                && (current_time - pattern.learned_timestamp) <= self.knowledge_transfer.max_export_age
+            {
+                exportable_patterns.insert(key.clone(), pattern.clone());
+            }
+        }
+
+        let export_data = ExportedKnowledge {
+            version: self.knowledge_transfer.version.clone(),
+            export_timestamp: current_time,
+            source_instance: "local".to_string(), // TODO: Get actual instance ID
+            patterns: exportable_patterns,
+            behavioral_indicators: self.behavioral_indicators.clone(),
+            learning_stats: self.learning_stats.clone(),
+        };
+
+        Ok(serde_json::to_string(&export_data)?)
+    }
+
+    /// Import learned knowledge from another WebGuard instance
+    pub fn import_knowledge(&mut self, knowledge_json: &str) -> Result<u32, Box<dyn std::error::Error>> {
+        let imported: ExportedKnowledge = serde_json::from_str(knowledge_json)?;
+        let mut imported_count = 0;
+
+        // Import patterns with validation
+        for (key, imported_pattern) in imported.patterns {
+            // Only import high-quality patterns
+            if imported_pattern.confidence >= self.config.min_confidence_threshold
+                && imported_pattern.validation_count >= self.config.min_validation_count
+            {
+                // Mark as imported knowledge
+                let mut pattern = imported_pattern;
+                pattern.discovery_method = DiscoveryMethod::KnowledgeTransfer;
+                pattern.learning_source = imported.source_instance.clone();
+                
+                self.learned_patterns.insert(key, pattern);
+                imported_count += 1;
+            }
+        }
+
+        // Import behavioral indicators
+        for (key, indicator) in imported.behavioral_indicators {
+            if indicator.confidence >= self.config.min_confidence_threshold {
+                self.behavioral_indicators.insert(key, indicator);
+            }
+        }
+
+        self.learning_stats.imported_patterns += imported_count;
+        Ok(imported_count)
+    }
+
+    /// Generate learning feedback for pattern weight updates
+    fn generate_learning_feedback(&self, request: &str, threat_score: f32) -> LearningFeedback {
+        let mut reinforce_patterns = Vec::new();
+        let mut weaken_patterns = Vec::new();
+        let mut new_patterns = Vec::new();
+        let mut context = HashMap::new();
+
+        // If high threat score, reinforce matching patterns
+        if threat_score > 0.7 {
+            for (key, pattern) in &self.learned_patterns {
+                if request.to_lowercase().contains(&pattern.pattern.to_lowercase()) {
+                    reinforce_patterns.push(pattern.pattern.clone());
                 }
             }
-            
-            category_scores.insert(category.clone(), max_score);
-            detected_patterns.extend(best_patterns);
         }
-        
-        // Behavioral analysis
-        for detector in &self.behavioral_detectors {
-            if let Some(anomaly) = self.detect_behavioral_anomaly(input, detector) {
-                behavioral_anomalies.push(anomaly);
+
+        // Discover potential new patterns
+        new_patterns = self.discover_new_patterns(request);
+
+        context.insert("request_length".to_string(), request.len().to_string());
+        context.insert("threat_score".to_string(), threat_score.to_string());
+
+        LearningFeedback {
+            reinforce_patterns,
+            weaken_patterns,
+            new_patterns_to_learn: new_patterns,
+            learning_context: context,
+        }
+    }
+
+    /// Discover new patterns from request for learning
+    fn discover_new_patterns(&self, request: &str) -> Vec<String> {
+        let mut patterns = Vec::new();
+        let request_lower = request.to_lowercase();
+
+        // Extract potential patterns (simplified approach)
+        // Look for suspicious character sequences
+        let suspicious_chars = ['<', '>', '\'', '"', '&', '|', ';', '(', ')', '{', '}'];
+        for &ch in &suspicious_chars {
+            if request_lower.contains(ch) {
+                // Extract context around suspicious character
+                if let Some(pos) = request_lower.find(ch) {
+                    let start = pos.saturating_sub(5);
+                    let end = (pos + 6).min(request_lower.len());
+                    let pattern = request_lower[start..end].to_string();
+                    if !patterns.contains(&pattern) {
+                        patterns.push(pattern);
+                    }
+                }
             }
         }
-        
-        // Context-aware adjustments
-        let context_adjustments = self.calculate_context_adjustments(input, context);
-        
-        // Signature matching on all input variants
-        for variant in &input_variants {
-            let signature_matches = self.match_signatures(variant);
-            detected_patterns.extend(signature_matches);
-        }
-        
-        // Calculate overall threat score using maximum-based scoring to avoid dilution
-        let base_score = category_scores.values().cloned().fold(0.0f32, f32::max);
-        let behavioral_score = behavioral_anomalies.iter().map(|a| a.score).fold(0.0f32, f32::max);
-        let overall_threat_score = (base_score.max(behavioral_score) + context_adjustments).min(1.0).max(0.0);
-        
-        // Calculate confidence level
-        let confidence_level = self.calculate_confidence_level(&category_scores, &behavioral_anomalies, &detected_patterns);
-        
-        PatternAnalysisResult {
-            overall_threat_score,
-            category_scores,
-            detected_patterns,
-            behavioral_anomalies,
-            context_adjustments,
-            confidence_level,
-        }
+
+        patterns
     }
 
-    fn create_sql_ngram_analyzer() -> NgramAnalyzer {
-        let mut malicious_ngrams = HashMap::new();
-        let mut benign_ngrams = HashMap::new();
+    /// Helper methods for pattern matching
+    fn find_pattern_positions(&self, text: &str, pattern: &str) -> Vec<usize> {
+        let mut positions = Vec::new();
+        let mut start = 0;
         
-        // SQL injection 2-grams
-        malicious_ngrams.insert("' or".to_string(), 0.9);
-        malicious_ngrams.insert("or '".to_string(), 0.9);
-        malicious_ngrams.insert("' and".to_string(), 0.8);
-        malicious_ngrams.insert("and '".to_string(), 0.8);
-        malicious_ngrams.insert("union select".to_string(), 0.95);
-        malicious_ngrams.insert("select *".to_string(), 0.7);
-        malicious_ngrams.insert("drop table".to_string(), 0.95);
-        malicious_ngrams.insert("delete from".to_string(), 0.9);
-        malicious_ngrams.insert("insert into".to_string(), 0.8);
-        malicious_ngrams.insert("update set".to_string(), 0.8);
-        malicious_ngrams.insert("-- ".to_string(), 0.6);
-        malicious_ngrams.insert("/*".to_string(), 0.5);
-        malicious_ngrams.insert("*/".to_string(), 0.5);
-        malicious_ngrams.insert("waitfor delay".to_string(), 0.9);
-        malicious_ngrams.insert("sleep(".to_string(), 0.9);
-        malicious_ngrams.insert("benchmark(".to_string(), 0.9);
-        
-        // SQL injection 3-grams
-        malicious_ngrams.insert("' or '1'='1".to_string(), 0.95);
-        malicious_ngrams.insert("' or 1=1".to_string(), 0.95);
-        malicious_ngrams.insert("union all select".to_string(), 0.95);
-        malicious_ngrams.insert("information_schema.tables".to_string(), 0.9);
-        malicious_ngrams.insert("information_schema.columns".to_string(), 0.9);
-        
-        // Benign SQL-like patterns
-        benign_ngrams.insert("select option".to_string(), 0.8);
-        benign_ngrams.insert("order by".to_string(), 0.7);
-        benign_ngrams.insert("group by".to_string(), 0.7);
-        
-        NgramAnalyzer {
-            n: 2,
-            malicious_ngrams,
-            benign_ngrams,
-            min_frequency: 1,
+        while let Some(pos) = text[start..].find(pattern) {
+            positions.push(start + pos);
+            start += pos + 1;
         }
+        
+        positions
     }
 
-    fn create_xss_ngram_analyzer() -> NgramAnalyzer {
-        let mut malicious_ngrams = HashMap::new();
-        let mut benign_ngrams = HashMap::new();
+    fn calculate_match_strength(&self, request: &str, pattern: &str) -> f32 {
+        // Simple match strength calculation
+        let pattern_len = pattern.len() as f32;
+        let request_len = request.len() as f32;
         
-        // XSS 2-grams
-        malicious_ngrams.insert("<script".to_string(), 0.9);
-        malicious_ngrams.insert("script>".to_string(), 0.9);
-        malicious_ngrams.insert("javascript:".to_string(), 0.9);
-        malicious_ngrams.insert("vbscript:".to_string(), 0.9);
-        malicious_ngrams.insert("onload=".to_string(), 0.8);
-        malicious_ngrams.insert("onclick=".to_string(), 0.8);
-        malicious_ngrams.insert("onmouseover=".to_string(), 0.8);
-        malicious_ngrams.insert("onerror=".to_string(), 0.8);
-        malicious_ngrams.insert("<iframe".to_string(), 0.7);
-        malicious_ngrams.insert("<object".to_string(), 0.7);
-        malicious_ngrams.insert("<embed".to_string(), 0.7);
-        malicious_ngrams.insert("expression(".to_string(), 0.8);
-        malicious_ngrams.insert("document.write".to_string(), 0.8);
-        malicious_ngrams.insert("document.cookie".to_string(), 0.8);
-        malicious_ngrams.insert("alert(".to_string(), 0.7);
-        malicious_ngrams.insert("eval(".to_string(), 0.8);
-        
-        // XSS 3-grams
-        malicious_ngrams.insert("<script>alert".to_string(), 0.95);
-        malicious_ngrams.insert("javascript:alert(".to_string(), 0.95);
-        malicious_ngrams.insert("<img src=x".to_string(), 0.8);
-        malicious_ngrams.insert("onerror=alert".to_string(), 0.9);
-        
-        // Benign HTML patterns
-        benign_ngrams.insert("<div class".to_string(), 0.9);
-        benign_ngrams.insert("<span id".to_string(), 0.8);
-        benign_ngrams.insert("<a href".to_string(), 0.8);
-        
-        NgramAnalyzer {
-            n: 2,
-            malicious_ngrams,
-            benign_ngrams,
-            min_frequency: 1,
-        }
+        // Longer patterns in shorter requests have higher strength
+        (pattern_len / request_len).min(1.0)
     }
 
-    fn create_path_ngram_analyzer() -> NgramAnalyzer {
-        let mut malicious_ngrams = HashMap::new();
-        let mut benign_ngrams = HashMap::new();
-        
-        // Path traversal patterns
-        malicious_ngrams.insert("../".to_string(), 0.8);
-        malicious_ngrams.insert("..\\".to_string(), 0.8);
-        malicious_ngrams.insert("/etc/passwd".to_string(), 0.95);
-        malicious_ngrams.insert("/etc/shadow".to_string(), 0.95);
-        malicious_ngrams.insert("\\windows\\system32".to_string(), 0.9);
-        malicious_ngrams.insert("\\boot.ini".to_string(), 0.9);
-        malicious_ngrams.insert("%2e%2e%2f".to_string(), 0.9);
-        malicious_ngrams.insert("file://".to_string(), 0.7);
-        malicious_ngrams.insert("..%2f".to_string(), 0.8);
-        malicious_ngrams.insert("..%5c".to_string(), 0.8);
-        
-        // Benign path patterns
-        benign_ngrams.insert("/api/".to_string(), 0.9);
-        benign_ngrams.insert("/static/".to_string(), 0.9);
-        benign_ngrams.insert("/assets/".to_string(), 0.9);
-        
-        NgramAnalyzer {
-            n: 3, // Changed from 2 to 3 to catch "../" patterns
-            malicious_ngrams,
-            benign_ngrams,
-            min_frequency: 1,
-        }
-    }
-
-    fn create_cmd_ngram_analyzer() -> NgramAnalyzer {
-        let mut malicious_ngrams = HashMap::new();
-        let mut benign_ngrams = HashMap::new();
-        
-        // Command injection patterns
-        malicious_ngrams.insert("; cat".to_string(), 0.9);
-        malicious_ngrams.insert("| cat".to_string(), 0.9);
-        malicious_ngrams.insert("&& cat".to_string(), 0.9);
-        malicious_ngrams.insert("; ls".to_string(), 0.9);
-        malicious_ngrams.insert("| ls".to_string(), 0.9);
-        malicious_ngrams.insert("; dir".to_string(), 0.9);
-        malicious_ngrams.insert("| dir".to_string(), 0.9);
-        malicious_ngrams.insert("; whoami".to_string(), 0.9);
-        malicious_ngrams.insert("| whoami".to_string(), 0.9);
-        malicious_ngrams.insert("; id".to_string(), 0.9);
-        malicious_ngrams.insert("| id".to_string(), 0.9);
-        malicious_ngrams.insert("`cat".to_string(), 0.9);
-        malicious_ngrams.insert("$(cat".to_string(), 0.9);
-        malicious_ngrams.insert("powershell -".to_string(), 0.8);
-        malicious_ngrams.insert("cmd /c".to_string(), 0.8);
-        malicious_ngrams.insert("/bin/bash".to_string(), 0.8);
-        malicious_ngrams.insert("/bin/sh".to_string(), 0.8);
-        
-        NgramAnalyzer {
-            n: 2,
-            malicious_ngrams,
-            benign_ngrams,
-            min_frequency: 1,
-        }
-    }
-
-    fn create_file_ngram_analyzer() -> NgramAnalyzer {
-        let mut malicious_ngrams = HashMap::new();
-        let mut benign_ngrams = HashMap::new();
-        
-        // File inclusion patterns
-        malicious_ngrams.insert("include(\"".to_string(), 0.7);
-        malicious_ngrams.insert("require(\"".to_string(), 0.7);
-        malicious_ngrams.insert("include('".to_string(), 0.7);
-        malicious_ngrams.insert("require('".to_string(), 0.7);
-        malicious_ngrams.insert("http://".to_string(), 0.6);
-        malicious_ngrams.insert("https://".to_string(), 0.5);
-        malicious_ngrams.insert("ftp://".to_string(), 0.7);
-        malicious_ngrams.insert("php://".to_string(), 0.8);
-        malicious_ngrams.insert("data://".to_string(), 0.8);
-        malicious_ngrams.insert("expect://".to_string(), 0.9);
-        malicious_ngrams.insert("zip://".to_string(), 0.8);
-        
-        NgramAnalyzer {
-            n: 2,
-            malicious_ngrams,
-            benign_ngrams,
-            min_frequency: 1,
-        }
-    }
-
-    fn create_encoding_ngram_analyzer() -> NgramAnalyzer {
-        let mut malicious_ngrams = HashMap::new();
-        let mut benign_ngrams = HashMap::new();
-        
-        // Encoding attack patterns
-        malicious_ngrams.insert("%3c%73%63%72%69%70%74".to_string(), 0.95); // <script
-        malicious_ngrams.insert("%27%20%6f%72%20%27".to_string(), 0.9); // ' or '
-        malicious_ngrams.insert("\\x3c\\x73\\x63\\x72\\x69\\x70\\x74".to_string(), 0.95);
-        malicious_ngrams.insert("\\u003c\\u0073\\u0063\\u0072\\u0069\\u0070\\u0074".to_string(), 0.95);
-        malicious_ngrams.insert("&#x3c;&#x73;&#x63;&#x72;&#x69;&#x70;&#x74;".to_string(), 0.95);
-        malicious_ngrams.insert("%2527".to_string(), 0.8); // Double-encoded '
-        malicious_ngrams.insert("%252f".to_string(), 0.8); // Double-encoded /
-        
-        NgramAnalyzer {
-            n: 3,
-            malicious_ngrams,
-            benign_ngrams,
-            min_frequency: 1,
-        }
-    }
-
-    fn create_behavioral_detectors() -> Vec<BehavioralDetector> {
-        vec![
-            BehavioralDetector {
-                name: "Character Frequency Anomaly".to_string(),
-                detector_type: BehavioralType::CharacterFrequency,
-                weight: 0.3,
-                threshold: 0.7,
-            },
-            BehavioralDetector {
-                name: "Length Anomaly".to_string(),
-                detector_type: BehavioralType::LengthAnomaly,
-                weight: 0.2,
-                threshold: 0.8,
-            },
-            BehavioralDetector {
-                name: "Encoding Inconsistency".to_string(),
-                detector_type: BehavioralType::EncodingAnomaly,
-                weight: 0.4,
-                threshold: 0.6,
-            },
-            BehavioralDetector {
-                name: "Structural Anomaly".to_string(),
-                detector_type: BehavioralType::StructuralAnomaly,
-                weight: 0.3,
-                threshold: 0.7,
-            },
-            BehavioralDetector {
-                name: "Obfuscation Pattern".to_string(),
-                detector_type: BehavioralType::ObfuscationPattern,
-                weight: 0.5,
-                threshold: 0.5,
-            },
-        ]
-    }
-
-    fn analyze_ngrams(&self, input: &str, analyzer: &NgramAnalyzer, category: &AttackCategory) -> (f32, Vec<DetectedPattern>) {
-        let ngrams = self.extract_ngrams(input, analyzer.n);
-        let mut total_score = 0.0;
-        let mut detected_patterns = Vec::new();
-        let mut ngram_count = 0;
-        
-        for (ngram, positions) in ngrams {
-            let mut pattern_score = 0.0;
-            
-            // Check against malicious patterns
-            if let Some(&malicious_score) = analyzer.malicious_ngrams.get(&ngram) {
-                pattern_score += malicious_score;
-                detected_patterns.push(DetectedPattern {
-                    pattern: ngram.clone(),
-                    category: category.clone(),
-                    score: malicious_score,
-                    positions: positions.clone(),
-                    context: format!("Malicious {}-gram detected", analyzer.n),
-                });
-            }
-            
-            // Check against benign patterns (reduces score)
-            if let Some(&benign_score) = analyzer.benign_ngrams.get(&ngram) {
-                pattern_score -= benign_score * 0.5; // Reduce impact of benign patterns
-            }
-            
-            total_score += pattern_score.max(0.0);
-            ngram_count += 1;
-        }
-        
-        // Use maximum score instead of average to avoid dilution
-        let max_pattern_score = detected_patterns.iter()
-            .map(|p| p.score)
-            .fold(0.0f32, f32::max);
-        
-        // If we have multiple malicious patterns, boost the score
-        let pattern_count_multiplier = if detected_patterns.len() > 1 {
-            1.0 + (detected_patterns.len() as f32 * 0.1).min(0.5)
-        } else {
-            1.0
-        };
-        
-        let final_score = (max_pattern_score * pattern_count_multiplier).min(1.0);
-        
-        (final_score, detected_patterns)
-    }
-
-    fn extract_ngrams(&self, input: &str, n: usize) -> HashMap<String, Vec<usize>> {
-        let mut ngrams = HashMap::new();
-        let input_lower = input.to_lowercase();
-        
-        // Extract both character-level and word-level n-grams
-        // Character-level n-grams for fine-grained analysis
-        let chars: Vec<char> = input_lower.chars().collect();
-        for i in 0..=chars.len().saturating_sub(n) {
-            let ngram: String = chars[i..i + n].iter().collect();
-            ngrams.entry(ngram).or_insert_with(Vec::new).push(i);
-        }
-        
-        // Word-level n-grams for semantic analysis
-        let words: Vec<&str> = input_lower.split_whitespace().collect();
-        if words.len() >= n {
-            for i in 0..=words.len() - n {
-                let ngram = words[i..i + n].join(" ");
-                ngrams.entry(ngram).or_insert_with(Vec::new).push(i);
-            }
-        }
-        
-        // Also extract substring patterns for attack detection
-        // SQL injection patterns
-        if input_lower.contains("' or") {
-            ngrams.entry("' or".to_string()).or_insert_with(Vec::new).push(0);
-        }
-        if input_lower.contains("or '") {
-            ngrams.entry("or '".to_string()).or_insert_with(Vec::new).push(0);
-        }
-        if input_lower.contains("union select") {
-            ngrams.entry("union select".to_string()).or_insert_with(Vec::new).push(0);
-        }
-        if input_lower.contains("' and") {
-            ngrams.entry("' and".to_string()).or_insert_with(Vec::new).push(0);
-        }
-        if input_lower.contains("and '") {
-            ngrams.entry("and '".to_string()).or_insert_with(Vec::new).push(0);
-        }
-        if input_lower.contains("--") {
-            ngrams.entry("-- ".to_string()).or_insert_with(Vec::new).push(0);
-        }
-        
-        // XSS patterns
-        if input_lower.contains("<script") {
-            ngrams.entry("<script".to_string()).or_insert_with(Vec::new).push(0);
-        }
-        if input_lower.contains("script>") {
-            ngrams.entry("script>".to_string()).or_insert_with(Vec::new).push(0);
-        }
-        if input_lower.contains("javascript:") {
-            ngrams.entry("javascript:".to_string()).or_insert_with(Vec::new).push(0);
-        }
-        if input_lower.contains("onload=") {
-            ngrams.entry("onload=".to_string()).or_insert_with(Vec::new).push(0);
-        }
-        if input_lower.contains("onclick=") {
-            ngrams.entry("onclick=".to_string()).or_insert_with(Vec::new).push(0);
-        }
-        if input_lower.contains("onerror=") {
-            ngrams.entry("onerror=".to_string()).or_insert_with(Vec::new).push(0);
-        }
-        
-        ngrams
-    }
-
-    fn detect_behavioral_anomaly(&self, input: &str, detector: &BehavioralDetector) -> Option<BehavioralAnomaly> {
-        let score = match detector.detector_type {
-            BehavioralType::CharacterFrequency => self.analyze_character_frequency(input),
-            BehavioralType::LengthAnomaly => self.analyze_length_anomaly(input),
-            BehavioralType::EncodingAnomaly => self.analyze_encoding_anomaly(input),
-            BehavioralType::StructuralAnomaly => self.analyze_structural_anomaly(input),
-            BehavioralType::TimingPattern => 0.0, // Would require timing data
-            BehavioralType::ObfuscationPattern => self.analyze_obfuscation_pattern(input),
-        };
-        
-        if score > detector.threshold {
-            Some(BehavioralAnomaly {
-                anomaly_type: detector.detector_type.clone(),
-                score,
-                description: detector.name.clone(),
-                evidence: format!("Score: {:.3}, Threshold: {:.3}", score, detector.threshold),
-            })
-        } else {
-            None
-        }
-    }
-
-    fn analyze_character_frequency(&self, input: &str) -> f32 {
+    fn analyze_character_frequency(&self, request: &str) -> f32 {
+        // Simplified character frequency analysis
         let mut char_counts = HashMap::new();
-        let total_chars = input.len() as f32;
-        
-        for c in input.chars() {
-            *char_counts.entry(c).or_insert(0) += 1;
+        for ch in request.chars() {
+            *char_counts.entry(ch).or_insert(0) += 1;
         }
         
-        // Calculate entropy and unusual character frequency
+        // Calculate entropy-like measure
+        let total_chars = request.len() as f32;
         let mut entropy = 0.0;
-        let mut suspicious_chars = 0;
-        
-        for (&_char, &count) in &char_counts {
-            let frequency = count as f32 / total_chars;
-            entropy -= frequency * frequency.log2();
-            
-            // Count suspicious characters
-            if "';\"<>&|`$(){}[]".contains(_char) {
-                suspicious_chars += count;
-            }
+        for count in char_counts.values() {
+            let freq = *count as f32 / total_chars;
+            entropy -= freq * freq.log2();
         }
         
-        let suspicious_ratio = suspicious_chars as f32 / total_chars;
-        let normalized_entropy = entropy / 8.0; // Normalize to 0-1
-        
-        (suspicious_ratio + normalized_entropy) / 2.0
+        // Normalize to 0-1 range (higher = more anomalous)
+        (entropy / 8.0).min(1.0)
     }
 
-    fn analyze_length_anomaly(&self, input: &str) -> f32 {
-        let length = input.len();
+    fn analyze_length_anomaly(&self, request: &str) -> f32 {
+        // Simple length anomaly detection
+        let len = request.len();
         
-        // Typical web request lengths
-        if length < 50 {
-            0.0 // Very short, likely normal
-        } else if length < 200 {
-            0.1 // Normal range
-        } else if length < 500 {
-            0.3 // Getting longer
-        } else if length < 1000 {
-            0.6 // Quite long
-        } else if length < 2000 {
-            0.8 // Very long
+        // Typical web requests are 50-500 characters
+        if len < 50 {
+            0.2 // Slightly suspicious
+        } else if len > 1000 {
+            0.8 // Very suspicious
+        } else if len > 500 {
+            0.4 // Moderately suspicious
         } else {
-            1.0 // Extremely long, suspicious
+            0.0 // Normal
         }
     }
 
-    fn analyze_encoding_anomaly(&self, input: &str) -> f32 {
-        let mut encoding_score = 0.0;
-        
-        // URL encoding density
-        let url_encoded = input.matches('%').count();
-        let url_encoding_ratio = url_encoded as f32 / input.len() as f32;
-        encoding_score += url_encoding_ratio * 2.0;
-        
-        // Hex encoding
-        let hex_encoded = input.matches("\\x").count();
-        let hex_encoding_ratio = hex_encoded as f32 / input.len() as f32;
-        encoding_score += hex_encoding_ratio * 3.0;
-        
-        // Unicode encoding
-        let unicode_encoded = input.matches("\\u").count() + input.matches("&#").count();
-        let unicode_encoding_ratio = unicode_encoded as f32 / input.len() as f32;
-        encoding_score += unicode_encoding_ratio * 2.5;
-        
-        // Double encoding (suspicious)
-        if input.contains("%25") {
-            encoding_score += 0.5;
-        }
-        
-        encoding_score.min(1.0)
-    }
-
-    fn analyze_structural_anomaly(&self, input: &str) -> f32 {
-        let mut anomaly_score = 0.0;
-        
-        // Unbalanced brackets/quotes
-        let open_parens = input.matches('(').count();
-        let close_parens = input.matches(')').count();
-        let paren_imbalance = (open_parens as i32 - close_parens as i32).abs() as f32 / (open_parens + close_parens).max(1) as f32;
-        anomaly_score += paren_imbalance * 0.3;
-        
-        let single_quotes = input.matches('\'').count();
-        let double_quotes = input.matches('"').count();
-        if single_quotes % 2 != 0 || double_quotes % 2 != 0 {
-            anomaly_score += 0.4;
-        }
-        
-        // Unusual character sequences
-        if input.contains("''") || input.contains("\"\"") || input.contains(";;") {
-            anomaly_score += 0.3;
-        }
-        
-        // Multiple encoding schemes in one request
-        let encoding_types = [
-            input.contains('%'),
-            input.contains("\\x"),
-            input.contains("\\u"),
-            input.contains("&#"),
-        ].iter().filter(|&&x| x).count();
-        
-        if encoding_types > 2 {
-            anomaly_score += 0.4;
-        }
-        
-        anomaly_score.min(1.0)
-    }
-
-    fn analyze_obfuscation_pattern(&self, input: &str) -> f32 {
-        let mut obfuscation_score: f32 = 0.0;
-        
-        // Multiple encoding layers
-        if input.contains("%25") { // Double URL encoding
-            obfuscation_score += 0.4;
-        }
-        
-        // Mixed case in keywords (common obfuscation)
-        let keywords = ["script", "union", "select", "alert", "eval"];
-        for keyword in &keywords {
-            let variations = [
-                keyword.to_uppercase(),
-                keyword.chars().enumerate().map(|(i, c)| {
-                    if i % 2 == 0 { c.to_uppercase().collect::<String>() } else { c.to_lowercase().collect::<String>() }
-                }).collect::<String>(),
-            ];
-            
-            for variation in &variations {
-                if input.contains(variation) {
-                    obfuscation_score += 0.2;
-                }
-            }
-        }
-        
-        // Excessive whitespace or comments
-        if input.matches("/*").count() > 2 || input.matches("--").count() > 1 {
-            obfuscation_score += 0.3;
-        }
-        
-        // Character substitution patterns
-        if input.contains("0x") || input.contains("char(") || input.contains("chr(") {
-            obfuscation_score += 0.3;
-        }
-        
-        obfuscation_score.min(1.0)
-    }
-
-    fn calculate_context_adjustments(&self, _input: &str, context: &RequestContext) -> f32 {
-        let mut adjustment = 0.0;
-        
-        // Adjust based on HTTP method
-        match context.method.as_str() {
-            "GET" => adjustment -= 0.1, // GET requests slightly less suspicious
-            "POST" => adjustment += 0.0, // Neutral
-            "PUT" | "DELETE" => adjustment += 0.1, // Slightly more suspicious
-            _ => adjustment += 0.2, // Unusual methods more suspicious
-        }
-        
-        // Adjust based on content type
-        if let Some(content_type) = &context.content_type {
-            match content_type.as_str() {
-                "application/json" => adjustment -= 0.05,
-                "application/x-www-form-urlencoded" => adjustment += 0.0,
-                "multipart/form-data" => adjustment += 0.05,
-                _ => adjustment += 0.1,
-            }
-        }
-        
-        // Adjust based on URL patterns
-        if context.url.contains("/api/") {
-            adjustment -= 0.1; // API endpoints less suspicious
-        } else if context.url.contains("/admin/") {
-            adjustment += 0.2; // Admin endpoints more critical
-        }
-        
-        adjustment
-    }
-
-    fn match_signatures(&self, input: &str) -> Vec<DetectedPattern> {
-        let mut matches = Vec::new();
-        
-        for signature in &self.signature_db.signatures {
-            if input.contains(&signature.pattern) {
-                matches.push(DetectedPattern {
-                    pattern: signature.pattern.clone(),
-                    category: self.string_to_category(&signature.category),
-                    score: signature.severity,
-                    positions: vec![0], // Would need proper position tracking
-                    context: signature.description.clone(),
-                });
-            }
-        }
-        
-        matches
-    }
-
-    fn string_to_category(&self, category: &str) -> AttackCategory {
-        match category.to_lowercase().as_str() {
-            "sql" | "sqli" | "sql_injection" => AttackCategory::SqlInjection,
-            "xss" | "cross_site_scripting" => AttackCategory::XssAttack,
-            "path" | "path_traversal" => AttackCategory::PathTraversal,
-            "cmd" | "command_injection" => AttackCategory::CommandInjection,
-            "file" | "file_inclusion" => AttackCategory::FileInclusion,
-            "encoding" | "encoding_attack" => AttackCategory::EncodingAttack,
-            _ => AttackCategory::SqlInjection, // Default
-        }
-    }
-
-    fn calculate_confidence_level(&self, category_scores: &HashMap<AttackCategory, f32>, 
-                                 behavioral_anomalies: &[BehavioralAnomaly], 
-                                 detected_patterns: &[DetectedPattern]) -> f32 {
-        let max_category_score = category_scores.values().fold(0.0f32, |a, &b| a.max(b));
-        let avg_behavioral_score = if behavioral_anomalies.is_empty() {
-            0.0
-        } else {
-            behavioral_anomalies.iter().map(|a| a.score).sum::<f32>() / behavioral_anomalies.len() as f32
-        };
-        let pattern_confidence = if detected_patterns.is_empty() {
-            0.0
-        } else {
-            detected_patterns.iter().map(|p| p.score).sum::<f32>() / detected_patterns.len() as f32
-        };
-        
-        (max_category_score + avg_behavioral_score + pattern_confidence) / 3.0
+    /// Legacy compatibility method - now uses experiential analysis
+    pub fn analyze_patterns(&self, request: &str, context: &PatternRequestContext) -> ExperientialAnalysisResult {
+        self.analyze_experiential(request, context)
     }
 }
 
+/// Structure for exporting/importing learned knowledge between WebGuard instances
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportedKnowledge {
+    pub version: String,
+    pub export_timestamp: u64,
+    pub source_instance: String,
+    pub patterns: HashMap<String, LearnedPattern>,
+    pub behavioral_indicators: HashMap<String, BehavioralIndicator>,
+    pub learning_stats: LearningStatistics,
+}
+
+/// Request context for pattern analysis
 #[derive(Debug, Clone)]
-pub struct RequestContext {
+pub struct PatternRequestContext {
     pub method: String,
     pub url: String,
     pub content_type: Option<String>,
     pub user_agent: Option<String>,
     pub headers: HashMap<String, String>,
-}
-
-impl ContextWeights {
-    pub fn new() -> Self {
-        let mut request_context = HashMap::new();
-        request_context.insert("GET".to_string(), 0.9);
-        request_context.insert("POST".to_string(), 1.0);
-        request_context.insert("PUT".to_string(), 1.1);
-        request_context.insert("DELETE".to_string(), 1.1);
-        
-        let mut content_type_weights = HashMap::new();
-        content_type_weights.insert("application/json".to_string(), 0.9);
-        content_type_weights.insert("application/x-www-form-urlencoded".to_string(), 1.0);
-        content_type_weights.insert("multipart/form-data".to_string(), 1.1);
-        
-        Self {
-            request_context,
-            url_patterns: HashMap::new(),
-            parameter_patterns: HashMap::new(),
-            content_type_weights,
-        }
-    }
-}
-
-impl AttackSignatureDatabase {
-    pub fn new() -> Self {
-        let signatures = vec![
-            AttackSignature {
-                id: "SQL001".to_string(),
-                name: "Classic SQL Injection".to_string(),
-                category: "sql_injection".to_string(),
-                pattern: "' or '1'='1".to_string(),
-                severity: 0.95,
-                confidence: 0.9,
-                description: "Classic SQL injection bypass attempt".to_string(),
-                references: vec!["OWASP-A03".to_string()],
-            },
-            AttackSignature {
-                id: "XSS001".to_string(),
-                name: "Basic XSS Script Tag".to_string(),
-                category: "xss".to_string(),
-                pattern: "<script>alert(".to_string(),
-                severity: 0.9,
-                confidence: 0.95,
-                description: "Basic XSS attempt using script tag".to_string(),
-                references: vec!["OWASP-A07".to_string()],
-            },
-            // Add more signatures as needed
-        ];
-        
-        Self {
-            signatures,
-            match_cache: HashMap::new(),
-        }
-    }
-}
-
-impl Default for EnhancedPatternRecognition {
-    fn default() -> Self {
-        Self::new()
-    }
 }

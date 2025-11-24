@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use crate::enhanced_pattern_recognition::{EnhancedPatternRecognition, PatternAnalysisResult, RequestContext as PatternRequestContext};
+use crate::enhanced_pattern_recognition::{ExperientialKnowledgeBase, ExperientialAnalysisResult, PatternRequestContext};
 use crate::adaptive_threshold::{AdaptiveThreshold, ThreatAssessment};
 use crate::retrospective_learning::{RetrospectiveLearningStats, RetrospectiveLearningSystem, MissedThreatEvent as RetroMissedThreatEvent, FalsePositiveEvent as RetroFalsePositiveEvent};
 use crate::eq_iq_regulator::{ExperientialBehavioralRegulator, ContextEvent as EQContextEvent, FeedbackEvent, EQIQBalance, MultiDimensionalEQ};
@@ -10,8 +10,8 @@ use crate::memory_engine::bdh_memory::BdhMemory;
 /// Integrates all components for comprehensive threat detection
 #[derive(Debug)]
 pub struct WebGuardSystem {
-    /// Enhanced pattern recognition engine
-    pub pattern_recognition: EnhancedPatternRecognition,
+    /// Experiential knowledge base (replaces static pattern recognition)
+    pub experiential_kb: ExperientialKnowledgeBase,
     /// Adaptive threshold system
     pub adaptive_threshold: AdaptiveThreshold,
     /// Retrospective learning system
@@ -28,7 +28,8 @@ pub struct WebGuardSystem {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebGuardConfig {
-    pub enable_pattern_recognition: bool,
+    pub enable_experiential_learning: bool,
+    pub enable_knowledge_sharing: bool,
     pub enable_adaptive_thresholds: bool,
     pub enable_retrospective_learning: bool,
     pub enable_eq_iq_regulation: bool,
@@ -55,10 +56,11 @@ pub struct ThreatAnalysisResult {
     pub confidence: f32,
     pub detected_attack_types: Vec<String>,
     pub risk_level: String,
-    pub pattern_analysis: Option<PatternAnalysisResult>,
+    pub experiential_analysis: Option<ExperientialAnalysisResult>,
     pub threshold_assessment: Option<ThreatAssessment>,
     pub processing_time_ms: f32,
     pub memory_influence: f32,
+    pub learning_feedback: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -96,7 +98,7 @@ impl Default for ContextEvent {
 impl WebGuardSystem {
     pub fn new() -> Self {
         Self {
-            pattern_recognition: EnhancedPatternRecognition::new(),
+            experiential_kb: ExperientialKnowledgeBase::new(),
             adaptive_threshold: AdaptiveThreshold::new(),
             retrospective_learning: RetrospectiveLearningSystem::new(),
             eq_iq_regulator: ExperientialBehavioralRegulator::new(0.5, 0.5, 0.1),
@@ -141,8 +143,8 @@ impl WebGuardSystem {
         // Extract features for analysis
         let features = self.extract_features(request);
         
-        // Pattern recognition analysis
-        let pattern_result = if self.config.enable_pattern_recognition {
+        // Experiential knowledge base analysis
+        let experiential_result = if self.config.enable_experiential_learning {
             let pattern_context = PatternRequestContext {
                 method: context.method.clone(),
                 url: context.url.clone(),
@@ -150,7 +152,7 @@ impl WebGuardSystem {
                 user_agent: Some(context.user_agent.clone()),
                 headers: context.headers.clone(),
             };
-            Some(self.pattern_recognition.analyze_patterns(request, &pattern_context))
+            Some(self.experiential_kb.analyze_experiential(request, &pattern_context))
         } else {
             None
         };
@@ -170,16 +172,16 @@ impl WebGuardSystem {
         };
         
         // Calculate final threat score
-        let threat_score = self.calculate_final_threat_score(
-            &pattern_result,
+        let threat_score = self.calculate_final_threat_score_experiential(
+            &experiential_result,
             &threshold_result,
             memory_influence
         );
         
         // Determine confidence and risk level
-        let confidence = self.calculate_confidence(&pattern_result, &threshold_result);
+        let confidence = self.calculate_confidence_experiential(&experiential_result, &threshold_result);
         let risk_level = self.determine_risk_level(threat_score, confidence);
-        let detected_attack_types = self.extract_attack_types(&pattern_result);
+        let detected_attack_types = self.extract_attack_types_experiential(&experiential_result);
         
         let processing_time = start_time.elapsed().as_millis() as f32;
         
@@ -198,10 +200,11 @@ impl WebGuardSystem {
             confidence,
             detected_attack_types,
             risk_level,
-            pattern_analysis: pattern_result,
+            experiential_analysis: experiential_result,
             threshold_assessment: threshold_result,
             processing_time_ms: processing_time,
             memory_influence,
+            learning_feedback: None, // Will be populated by learning system
         }
     }
 
@@ -458,18 +461,18 @@ impl WebGuardSystem {
         similarity
     }
 
-    fn calculate_final_threat_score(
+    fn _calculate_final_threat_score_legacy(
         &self,
-        pattern_result: &Option<PatternAnalysisResult>,
+        _pattern_result: &Option<()>, // Placeholder for removed PatternAnalysisResult
         threshold_result: &Option<ThreatAssessment>,
         memory_influence: f32,
     ) -> f32 {
         let mut final_score: f32 = 0.0;
         
-        // Pattern recognition score
-        if let Some(pattern) = pattern_result {
-            final_score = final_score.max(pattern.overall_threat_score);
-        }
+        // Legacy pattern recognition score (removed)
+        // if let Some(pattern) = pattern_result {
+        //     final_score = final_score.max(pattern.overall_threat_score);
+        // }
         
         // Threshold assessment score
         if let Some(threshold) = threshold_result {
@@ -482,16 +485,17 @@ impl WebGuardSystem {
         final_score
     }
 
-    fn calculate_confidence(
+    fn _calculate_confidence_legacy(
         &self,
-        pattern_result: &Option<PatternAnalysisResult>,
+        _pattern_result: &Option<()>, // Placeholder for removed PatternAnalysisResult
         threshold_result: &Option<ThreatAssessment>,
     ) -> f32 {
         let mut confidence_factors = Vec::new();
         
-        if let Some(pattern) = pattern_result {
-            confidence_factors.push(pattern.confidence_level);
-        }
+        // Legacy pattern confidence (removed)
+        // if let Some(pattern) = pattern_result {
+        //     confidence_factors.push(pattern.confidence_level);
+        // }
         
         if let Some(threshold) = threshold_result {
             confidence_factors.push(threshold.confidence_score);
@@ -520,13 +524,103 @@ impl WebGuardSystem {
         }
     }
 
-    fn extract_attack_types(&self, pattern_result: &Option<PatternAnalysisResult>) -> Vec<String> {
-        if let Some(pattern) = pattern_result {
-            pattern.detected_patterns.iter()
-                .map(|p| format!("{:?}", p.category))
+    fn _extract_attack_types_legacy(&self, _pattern_result: &Option<()>) -> Vec<String> {
+        // Legacy pattern attack type extraction (removed)
+        Vec::new()
+    }
+
+    // New experiential methods
+    fn calculate_final_threat_score_experiential(
+        &self,
+        experiential_result: &Option<ExperientialAnalysisResult>,
+        threshold_result: &Option<ThreatAssessment>,
+        memory_influence: f32,
+    ) -> f32 {
+        let mut final_score: f32 = 0.0;
+        
+        // Experiential analysis score
+        if let Some(exp) = experiential_result {
+            final_score = final_score.max(exp.overall_threat_score);
+        }
+        
+        // Threshold assessment score
+        if let Some(threshold) = threshold_result {
+            final_score = final_score.max(threshold.base_similarity);
+        }
+        
+        // Apply memory influence
+        final_score = (final_score + memory_influence * 0.2).min(1.0);
+        
+        final_score
+    }
+
+    fn calculate_confidence_experiential(
+        &self,
+        experiential_result: &Option<ExperientialAnalysisResult>,
+        threshold_result: &Option<ThreatAssessment>,
+    ) -> f32 {
+        let mut confidence_factors = Vec::new();
+        
+        if let Some(exp) = experiential_result {
+            confidence_factors.push(exp.confidence_level);
+        }
+        
+        if let Some(threshold) = threshold_result {
+            confidence_factors.push(threshold.confidence_score);
+        }
+        
+        if confidence_factors.is_empty() {
+            0.5
+        } else {
+            confidence_factors.iter().sum::<f32>() / confidence_factors.len() as f32
+        }
+    }
+
+    fn extract_attack_types_experiential(&self, experiential_result: &Option<ExperientialAnalysisResult>) -> Vec<String> {
+        if let Some(exp) = experiential_result {
+            exp.matched_learned_patterns.iter()
+                .map(|p| p.pattern.pattern.clone())
                 .collect()
         } else {
             Vec::new()
+        }
+    }
+
+    /// Feed learning results into the experiential knowledge base
+    pub fn learn_from_validation(&mut self, request: &str, is_threat: bool, attack_type: Option<String>) {
+        if self.config.enable_experiential_learning {
+            let pattern = request.to_string();
+            let context = vec![attack_type.unwrap_or_else(|| "unknown".to_string())];
+            let discovery_method = if is_threat {
+                crate::enhanced_pattern_recognition::DiscoveryMethod::ThreatValidation
+            } else {
+                crate::enhanced_pattern_recognition::DiscoveryMethod::FalsePositiveCorrection
+            };
+            self.experiential_kb.learn_pattern(pattern, is_threat, context, discovery_method);
+        }
+    }
+
+    /// Export learned knowledge for sharing with other WebGuard instances
+    pub fn export_knowledge(&self) -> Option<String> {
+        if self.config.enable_knowledge_sharing {
+            match self.experiential_kb.export_knowledge() {
+                Ok(json) => Some(json),
+                Err(_) => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Import knowledge from another WebGuard instance
+    pub fn import_knowledge(&mut self, knowledge_json: &str) -> Result<(), String> {
+        if self.config.enable_knowledge_sharing {
+            match self.experiential_kb.import_knowledge(knowledge_json) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(format!("Failed to import knowledge: {}", e)),
+            }
+        } else {
+            Err("Knowledge sharing is disabled".to_string())
         }
     }
 
@@ -671,7 +765,8 @@ impl WebGuardSystem {
 impl WebGuardConfig {
     pub fn default() -> Self {
         Self {
-            enable_pattern_recognition: true,
+            enable_experiential_learning: true,
+            enable_knowledge_sharing: true,
             enable_adaptive_thresholds: true,
             enable_retrospective_learning: true,
             enable_eq_iq_regulation: true,
