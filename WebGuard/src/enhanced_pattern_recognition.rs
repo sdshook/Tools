@@ -120,6 +120,83 @@ pub struct BehavioralAnomaly {
 }
 
 impl EnhancedPatternRecognition {
+    /// URL decode a string, handling common URL encoding patterns
+    fn url_decode(input: &str) -> String {
+        let mut result = String::new();
+        let mut chars = input.chars().peekable();
+        
+        while let Some(ch) = chars.next() {
+            if ch == '%' {
+                // Try to decode the next two characters as hex
+                let hex1 = chars.next();
+                let hex2 = chars.next();
+                
+                if let (Some(h1), Some(h2)) = (hex1, hex2) {
+                    let hex_str = format!("{}{}", h1, h2);
+                    if let Ok(byte_val) = u8::from_str_radix(&hex_str, 16) {
+                        // Convert byte to char if it's valid ASCII
+                        if byte_val < 128 {
+                            result.push(byte_val as char);
+                        } else {
+                            // If not valid ASCII, keep the original percent encoding
+                            result.push('%');
+                            result.push(h1);
+                            result.push(h2);
+                        }
+                    } else {
+                        // If hex parsing failed, keep the original characters
+                        result.push('%');
+                        result.push(h1);
+                        result.push(h2);
+                    }
+                } else {
+                    // If we don't have two more characters, just keep the %
+                    result.push(ch);
+                }
+            } else if ch == '+' {
+                // Convert + to space (common in URL encoding)
+                result.push(' ');
+            } else {
+                result.push(ch);
+            }
+        }
+        
+        result
+    }
+    
+    /// Preprocess input by applying URL decoding and other normalizations
+    fn preprocess_input(input: &str) -> Vec<String> {
+        let mut variants = Vec::new();
+        
+        // Original input
+        variants.push(input.to_string());
+        
+        // URL decoded version
+        let decoded = Self::url_decode(input);
+        if decoded != input {
+            variants.push(decoded.clone());
+            
+            // Double URL decode (for double-encoded attacks)
+            let double_decoded = Self::url_decode(&decoded);
+            if double_decoded != decoded {
+                variants.push(double_decoded);
+            }
+        }
+        
+        // Lowercase versions for case-insensitive matching
+        let lower_original = input.to_lowercase();
+        if lower_original != input {
+            variants.push(lower_original);
+        }
+        
+        let lower_decoded = Self::url_decode(&input.to_lowercase());
+        if lower_decoded != input.to_lowercase() && !variants.contains(&lower_decoded) {
+            variants.push(lower_decoded);
+        }
+        
+        variants
+    }
+
     pub fn new() -> Self {
         let mut ngram_analyzers = HashMap::new();
         
@@ -145,11 +222,25 @@ impl EnhancedPatternRecognition {
         let mut detected_patterns = Vec::new();
         let mut behavioral_anomalies = Vec::new();
         
-        // N-gram analysis for each category
+        // Preprocess input to handle URL encoding and other normalizations
+        let input_variants = Self::preprocess_input(input);
+        
+        // N-gram analysis for each category, testing all input variants
         for (category, analyzer) in &self.ngram_analyzers {
-            let (score, patterns) = self.analyze_ngrams(input, analyzer, category);
-            category_scores.insert(category.clone(), score);
-            detected_patterns.extend(patterns);
+            let mut max_score = 0.0;
+            let mut best_patterns = Vec::new();
+            
+            // Test each preprocessed variant
+            for variant in &input_variants {
+                let (score, patterns) = self.analyze_ngrams(variant, analyzer, category);
+                if score > max_score {
+                    max_score = score;
+                    best_patterns = patterns;
+                }
+            }
+            
+            category_scores.insert(category.clone(), max_score);
+            detected_patterns.extend(best_patterns);
         }
         
         // Behavioral analysis
@@ -162,9 +253,11 @@ impl EnhancedPatternRecognition {
         // Context-aware adjustments
         let context_adjustments = self.calculate_context_adjustments(input, context);
         
-        // Signature matching
-        let signature_matches = self.match_signatures(input);
-        detected_patterns.extend(signature_matches);
+        // Signature matching on all input variants
+        for variant in &input_variants {
+            let signature_matches = self.match_signatures(variant);
+            detected_patterns.extend(signature_matches);
+        }
         
         // Calculate overall threat score using maximum-based scoring to avoid dilution
         let base_score = category_scores.values().cloned().fold(0.0f32, f32::max);
