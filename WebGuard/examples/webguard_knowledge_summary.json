@@ -1,0 +1,30 @@
+{
+  "export_info": {
+    "version": "1.0",
+    "export_timestamp": 1764000299,
+    "source_instance": "local",
+    "export_date": "2025-11-24 16:04:59"
+  },
+  "pattern_statistics": {
+    "total_patterns": 5,
+    "high_confidence_patterns": 5,
+    "threat_patterns": 5,
+    "average_confidence": 1.0,
+    "average_validation_count": 11.0
+  },
+  "learning_statistics": {
+    "total_patterns_learned": 8,
+    "threat_patterns_learned": 5,
+    "benign_patterns_learned": 3,
+    "imported_patterns": 0,
+    "exported_patterns": 0,
+    "average_confidence": 0.0,
+    "learning_start_time": 1764000299
+  },
+  "integration_readiness": {
+    "modsecurity_rules": 5,
+    "snort_rules": 5,
+    "yara_rules": 5,
+    "siem_indicators": 5
+  }
+}

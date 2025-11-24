@@ -1,0 +1,98 @@
+{
+  "features": [
+    {
+      "pattern_length": 19,
+      "has_sql_keywords": false,
+      "has_script_tags": false,
+      "has_special_chars": false,
+      "confidence": 1.0,
+      "validation_count": 11,
+      "success_rate": 1.0
+    },
+    {
+      "pattern_length": 25,
+      "has_sql_keywords": true,
+      "has_script_tags": false,
+      "has_special_chars": false,
+      "confidence": 1.0,
+      "validation_count": 11,
+      "success_rate": 1.0
+    },
+    {
+      "pattern_length": 11,
+      "has_sql_keywords": true,
+      "has_script_tags": false,
+      "has_special_chars": true,
+      "confidence": 1.0,
+      "validation_count": 11,
+      "success_rate": 1.0
+    },
+    {
+      "pattern_length": 29,
+      "has_sql_keywords": false,
+      "has_script_tags": true,
+      "has_special_chars": true,
+      "confidence": 1.0,
+      "validation_count": 11,
+      "success_rate": 1.0
+    },
+    {
+      "pattern_length": 19,
+      "has_sql_keywords": false,
+      "has_script_tags": false,
+      "has_special_chars": false,
+      "confidence": 1.0,
+      "validation_count": 11,
+      "success_rate": 1.0
+    }
+  ],
+  "labels": [
+    1,
+    1,
+    1,
+    1,
+    1
+  ],
+  "metadata": [
+    {
+      "pattern": "../../../etc/passwd",
+      "tags": [
+        "lfi",
+        "traversal"
+      ],
+      "discovery_method": "ThreatValidation"
+    },
+    {
+      "pattern": "UNION SELECT * FROM users",
+      "tags": [
+        "sql",
+        "union"
+      ],
+      "discovery_method": "ThreatValidation"
+    },
+    {
+      "pattern": "' OR 1=1 --",
+      "tags": [
+        "sql",
+        "injection"
+      ],
+      "discovery_method": "ThreatValidation"
+    },
+    {
+      "pattern": "<script>alert('xss')</script>",
+      "tags": [
+        "xss",
+        "javascript"
+      ],
+      "discovery_method": "ThreatValidation"
+    },
+    {
+      "pattern": "javascript:alert(1)",
+      "tags": [
+        "xss",
+        "javascript"
+      ],
+      "discovery_method": "ThreatValidation"
+    }
+  ]
+}

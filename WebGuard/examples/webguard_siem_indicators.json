@@ -1,0 +1,104 @@
+{
+  "metadata": {
+    "generated": "2025-11-24T16:06:06.356335",
+    "source": "WebGuard Experiential Learning",
+    "total_indicators": 5
+  },
+  "indicators": [
+    {
+      "type": "pattern",
+      "value": "../../../etc/passwd",
+      "threat_level": "HIGH",
+      "confidence": 1.0,
+      "source": "WebGuard Experiential Learning",
+      "tags": [
+        "lfi",
+        "traversal"
+      ],
+      "created": "2025-11-24T16:06:06.356229",
+      "valid_until": "2025-12-24T16:06:06.356235",
+      "metadata": {
+        "discovery_method": "ThreatValidation",
+        "validation_count": 11,
+        "success_rate": 1.0,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "type": "pattern",
+      "value": "UNION SELECT * FROM users",
+      "threat_level": "HIGH",
+      "confidence": 1.0,
+      "source": "WebGuard Experiential Learning",
+      "tags": [
+        "sql",
+        "union"
+      ],
+      "created": "2025-11-24T16:06:06.356247",
+      "valid_until": "2025-12-24T16:06:06.356249",
+      "metadata": {
+        "discovery_method": "ThreatValidation",
+        "validation_count": 11,
+        "success_rate": 1.0,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "type": "pattern",
+      "value": "' OR 1=1 --",
+      "threat_level": "HIGH",
+      "confidence": 1.0,
+      "source": "WebGuard Experiential Learning",
+      "tags": [
+        "sql",
+        "injection"
+      ],
+      "created": "2025-11-24T16:06:06.356259",
+      "valid_until": "2025-12-24T16:06:06.356261",
+      "metadata": {
+        "discovery_method": "ThreatValidation",
+        "validation_count": 11,
+        "success_rate": 1.0,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "type": "pattern",
+      "value": "<script>alert('xss')</script>",
+      "threat_level": "HIGH",
+      "confidence": 1.0,
+      "source": "WebGuard Experiential Learning",
+      "tags": [
+        "xss",
+        "javascript"
+      ],
+      "created": "2025-11-24T16:06:06.356269",
+      "valid_until": "2025-12-24T16:06:06.356271",
+      "metadata": {
+        "discovery_method": "ThreatValidation",
+        "validation_count": 11,
+        "success_rate": 1.0,
+        "false_positive_rate": 0.0
+      }
+    },
+    {
+      "type": "pattern",
+      "value": "javascript:alert(1)",
+      "threat_level": "HIGH",
+      "confidence": 1.0,
+      "source": "WebGuard Experiential Learning",
+      "tags": [
+        "xss",
+        "javascript"
+      ],
+      "created": "2025-11-24T16:06:06.356280",
+      "valid_until": "2025-12-24T16:06:06.356282",
+      "metadata": {
+        "discovery_method": "ThreatValidation",
+        "validation_count": 11,
+        "success_rate": 1.0,
+        "false_positive_rate": 0.0
+      }
+    }
+  ]
+}

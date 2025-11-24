@@ -1,0 +1,9 @@
+# WebGuard Snort Rules
+# Generated: 2025-11-24 16:06:06
+# Source: WebGuard Experiential Learning
+
+alert tcp any any -> any any (msg:"WebGuard Learned Pattern: ../../../etc/passwd"; content:"../../../etc/passwd"; nocase; priority:1; sid:1000000; rev:1; metadata:policy balanced-ips drop, policy security-ips alert, webguard_confidence 1.00;)
+alert tcp any any -> any any (msg:"WebGuard Learned Pattern: UNION SELECT * FROM users"; content:"UNION SELECT * FROM users"; nocase; priority:1; sid:1000001; rev:1; metadata:policy balanced-ips drop, policy security-ips alert, webguard_confidence 1.00;)
+alert tcp any any -> any any (msg:"WebGuard Learned Pattern: ' OR 1=1 --"; content:"' OR 1=1 --"; nocase; priority:1; sid:1000002; rev:1; metadata:policy balanced-ips drop, policy security-ips alert, webguard_confidence 1.00;)
+alert tcp any any -> any any (msg:"WebGuard Learned Pattern: <script>alert('xss')</script>"; content:"<script>alert('xss')</script>"; nocase; priority:1; sid:1000003; rev:1; metadata:policy balanced-ips drop, policy security-ips alert, webguard_confidence 1.00;)
+alert tcp any any -> any any (msg:"WebGuard Learned Pattern: javascript:alert(1)"; content:"javascript:alert(1)"; nocase; priority:1; sid:1000004; rev:1; metadata:policy balanced-ips drop, policy security-ips alert, webguard_confidence 1.00;)
