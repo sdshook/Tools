@@ -1,0 +1,41 @@
+id,type,payload,expected_score,description
+http_1,http_request,GET /api/users HTTP/1.1,0.15722743557180976,Normal HTTP request 1
+http_2,http_request,POST /api/login HTTP/1.1,0.16313244552644846,Normal HTTP request 2
+http_3,http_request,GET /dashboard HTTP/1.1,0.18190519697531202,Normal HTTP request 3
+http_4,http_request,POST /api/data HTTP/1.1,0.14601413701915078,Normal HTTP request 4
+http_5,http_request,GET /profile HTTP/1.1,0.16475050927455448,Normal HTTP request 5
+http_6,http_request,PUT /api/user/123 HTTP/1.1,0.1974408261568975,Normal HTTP request 6
+http_7,http_request,DELETE /api/session HTTP/1.1,0.07570753036539435,Normal HTTP request 7
+http_8,http_request,GET /api/health HTTP/1.1,0.1527418146293856,Normal HTTP request 8
+http_9,http_request,POST /api/upload HTTP/1.1,0.030843334516282118,Normal HTTP request 9
+http_10,http_request,GET /static/css/style.css HTTP/1.1,0.11943303406243636,Normal HTTP request 10
+sql_benign_1,sql_query,SELECT * FROM users WHERE id = 1,0.18070055530877227,Legitimate SQL query 1
+sql_benign_2,sql_query,"INSERT INTO logs (message, timestamp) VALUES ('Login', NOW())",0.04067960397448693,Legitimate SQL query 2
+sql_benign_3,sql_query,UPDATE users SET last_login = NOW() WHERE id = 1,0.15147594048930557,Legitimate SQL query 3
+sql_benign_4,sql_query,DELETE FROM sessions WHERE expires < NOW(),0.08227599268805053,Legitimate SQL query 4
+sql_benign_5,sql_query,SELECT COUNT(*) FROM products WHERE category = 'electronics',0.16959447897261376,Legitimate SQL query 5
+sql_benign_6,sql_query,"SELECT name, email FROM users ORDER BY name",0.102185625586209,Legitimate SQL query 6
+sql_benign_7,sql_query,"INSERT INTO orders (user_id, total) VALUES (1, 99.99)",0.2512517489387543,Legitimate SQL query 7
+sql_benign_8,sql_query,UPDATE products SET stock = stock - 1 WHERE id = 1,0.16498810986156473,Legitimate SQL query 8
+sql_benign_9,sql_query,SELECT * FROM categories ORDER BY name LIMIT 10,0.22618744190656745,Legitimate SQL query 9
+sql_benign_10,sql_query,"DELETE FROM temp_data WHERE created < DATE_SUB(NOW(), INTERVAL 1 DAY)",0.13076996174370223,Legitimate SQL query 10
+form_1,form_data,username=john&password=secret123,0.02033493474980155,Normal form data 1
+form_2,form_data,email=user@example.com&name=John Doe,0.08538510232791977,Normal form data 2
+form_3,form_data,search=laptop computers&category=electronics,0.06614908771881066,Normal form data 3
+form_4,form_data,comment=Great product! Highly recommended.,0.039480237759536574,Normal form data 4
+form_5,form_data,address=123 Main St&city=New York&zip=10001,0.03855532643921805,Normal form data 5
+form_6,form_data,phone=555-1234&country=USA,0.030019071722673676,Normal form data 6
+form_7,form_data,"message=Hello, I need help with my order",0.001779121930792038,Normal form data 7
+form_8,form_data,title=Product Review&rating=5,0.027030300159465018,Normal form data 8
+form_9,form_data,quantity=2&product_id=123,0.03185058035224826,Normal form data 9
+form_10,form_data,newsletter=true&preferences=email,0.010689147962446133,Normal form data 10
+json_1,json_payload,"{""name"": ""John"", ""age"": 30, ""city"": ""New York""}",0.14308122021310005,Normal JSON payload 1
+json_2,json_payload,"{""product"": ""laptop"", ""price"": 999.99, ""stock"": 10}",0.07503362984634292,Normal JSON payload 2
+json_3,json_payload,"{""user_id"": 123, ""action"": ""login"", ""timestamp"": ""2024-01-01T10:00:00Z""}",0.12441722786155668,Normal JSON payload 3
+json_4,json_payload,"{""query"": ""search term"", ""filters"": {""category"": ""books"", ""price_max"": 50}}",0.06965956790946244,Normal JSON payload 4
+json_5,json_payload,"{""order_id"": 456, ""items"": [{""id"": 1, ""qty"": 2}, {""id"": 2, ""qty"": 1}]}",0.11169131005497274,Normal JSON payload 5
+json_6,json_payload,"{""settings"": {""theme"": ""dark"", ""notifications"": true, ""language"": ""en""}}",0.06507853810509508,Normal JSON payload 6
+json_7,json_payload,"{""report"": {""type"": ""sales"", ""period"": ""monthly"", ""format"": ""pdf""}}",0.005172273100583174,Normal JSON payload 7
+json_8,json_payload,"{""user"": {""email"": ""test@example.com"", ""role"": ""user"", ""active"": true}}",0.11934377160605937,Normal JSON payload 8
+json_9,json_payload,"{""backup"": {""frequency"": ""daily"", ""retention"": 30, ""compress"": true}}",0.12200592470878123,Normal JSON payload 9
+json_10,json_payload,"{""config"": {""debug"": false, ""cache"": true, ""timeout"": 30}}",0.13074234368855206,Normal JSON payload 10

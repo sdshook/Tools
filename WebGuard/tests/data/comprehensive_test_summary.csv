@@ -1,0 +1,10 @@
+Metric,Value,Status
+Overall Success Rate,78.6%,FAIL
+Total Tests,14,
+Passed Tests,11,
+Failed Tests,3,
+Threat Detection Accuracy,0.000,
+Benign Classification Accuracy,1.000,
+Processing Speed Rps,877285.923,
+Overfitting Prevented,True,
+Learning Balance Score,0.833,

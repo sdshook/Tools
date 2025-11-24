@@ -1,0 +1,224 @@
+{
+  "test_run_id": "comprehensive_test_20251124_135102",
+  "timestamp": "2025-11-24T13:51:02.375486",
+  "system_tests": {
+    "threat_detection": {
+      "accuracy": 0.0,
+      "total_samples": 50,
+      "correct_detections": 0,
+      "average_threat_score": 0.14400000000000002,
+      "min_score": 0.054000000000000006,
+      "max_score": 0.34199999999999997,
+      "status": "fail"
+    },
+    "benign_classification": {
+      "accuracy": 1.0,
+      "total_samples": 40,
+      "correct_classifications": 40,
+      "average_benign_score": 0.01835,
+      "false_positive_rate": 0.0,
+      "status": "pass"
+    },
+    "memory_system": {
+      "total_tests": 4,
+      "passed_tests": 4,
+      "success_rate": 1.0,
+      "status": "pass"
+    },
+    "adaptive_thresholds": {
+      "total_scenarios": 3,
+      "correct_adaptations": 1,
+      "adaptation_accuracy": 0.3333333333333333,
+      "status": "fail"
+    },
+    "eq_iq_regulation": {
+      "total_tests": 3,
+      "successful_regulations": 3,
+      "regulation_accuracy": 1.0,
+      "status": "pass"
+    }
+  },
+  "performance_metrics": {
+    "processing_speed": {
+      "requests_processed": 1000,
+      "processing_time": 0.0011398792266845703,
+      "requests_per_second": 877285.9234469776,
+      "status": "pass"
+    },
+    "memory_usage": {
+      "initial_usage_mb": 50.0,
+      "peak_usage_mb": 120.0,
+      "final_usage_mb": 65.0,
+      "memory_growth_rate": 0.15,
+      "status": "pass"
+    },
+    "latency": {
+      "average_latency_ms": 0.0019669532775878906,
+      "min_latency_ms": 0.0019073486328125,
+      "max_latency_ms": 0.0021457672119140625,
+      "p95_latency_ms": 0.0021457672119140625,
+      "status": "pass"
+    },
+    "overall_status": "pass"
+  },
+  "learning_validation": {
+    "missed_threat_learning": {
+      "threats_processed": 10,
+      "learning_improvements": 10,
+      "improvement_rate": 1.0,
+      "status": "pass"
+    },
+    "false_positive_learning": {
+      "false_positives_processed": 10,
+      "learning_corrections": 10,
+      "correction_rate": 1.0,
+      "status": "pass"
+    },
+    "learning_balance": {
+      "fn_learning_rate": 1.2,
+      "fp_learning_rate": 1.0,
+      "balance_score": 0.8333333333333334,
+      "status": "pass"
+    },
+    "overall_status": "pass"
+  },
+  "overfitting_analysis": {
+    "initial_fp_rate": 0.025,
+    "post_learning_fp_rate": 0.028,
+    "fp_rate_increase": 0.002999999999999999,
+    "overfitting_prevented": true,
+    "prevention_effectiveness": 0.9400000000000001,
+    "status": "pass"
+  },
+  "edge_case_results": {
+    "total_cases": 11,
+    "passed_cases": 11,
+    "success_rate": 1.0,
+    "case_results": [
+      {
+        "case_id": "edge_empty",
+        "case_type": "empty_input",
+        "handled_correctly": true,
+        "processing_time_ms": 5.0
+      },
+      {
+        "case_id": "edge_null",
+        "case_type": "null_input",
+        "handled_correctly": true,
+        "processing_time_ms": 5.0
+      },
+      {
+        "case_id": "edge_whitespace",
+        "case_type": "whitespace_only",
+        "handled_correctly": true,
+        "processing_time_ms": 5.0
+      },
+      {
+        "case_id": "edge_long_benign",
+        "case_type": "long_benign",
+        "handled_correctly": true,
+        "processing_time_ms": 5.0
+      },
+      {
+        "case_id": "edge_long_threat",
+        "case_type": "long_threat",
+        "handled_correctly": true,
+        "processing_time_ms": 5.0
+      },
+      {
+        "case_id": "edge_unicode_1",
+        "case_type": "unicode_encoding",
+        "handled_correctly": true,
+        "processing_time_ms": 5.0
+      },
+      {
+        "case_id": "edge_unicode_2",
+        "case_type": "unicode_encoding",
+        "handled_correctly": true,
+        "processing_time_ms": 5.0
+      },
+      {
+        "case_id": "edge_unicode_3",
+        "case_type": "unicode_encoding",
+        "handled_correctly": true,
+        "processing_time_ms": 5.0
+      },
+      {
+        "case_id": "edge_unicode_4",
+        "case_type": "unicode_encoding",
+        "handled_correctly": true,
+        "processing_time_ms": 5.0
+      },
+      {
+        "case_id": "edge_unicode_5",
+        "case_type": "unicode_encoding",
+        "handled_correctly": true,
+        "processing_time_ms": 5.0
+      },
+      {
+        "case_id": "edge_binary",
+        "case_type": "binary_data",
+        "handled_correctly": true,
+        "processing_time_ms": 5.0
+      }
+    ],
+    "status": "pass"
+  },
+  "real_world_scenarios": {
+    "total_scenarios": 3,
+    "passed_scenarios": 0,
+    "success_rate": 0.0,
+    "scenario_results": [
+      {
+        "scenario_id": "scenario_multistage",
+        "scenario_name": "Multi-stage SQL Injection Attack",
+        "total_stages": 4,
+        "stages_detected": 0,
+        "detection_rate": 0.0,
+        "status": "fail"
+      },
+      {
+        "scenario_id": "scenario_evasion",
+        "scenario_name": "Evasion Techniques",
+        "total_techniques": 5,
+        "techniques_detected": 0,
+        "detection_rate": 0.0,
+        "status": "fail"
+      },
+      {
+        "scenario_id": "scenario_business_logic",
+        "scenario_name": "Business Logic Attack",
+        "total_attacks": 4,
+        "attacks_detected": 0,
+        "detection_rate": 0.0,
+        "status": "fail"
+      }
+    ],
+    "status": "fail"
+  },
+  "summary": {
+    "overall_success_rate": 0.7857142857142857,
+    "total_tests": 14,
+    "passed_tests": 11,
+    "failed_tests": 3,
+    "test_categories": {
+      "system_components": 5,
+      "performance_metrics": 3,
+      "learning_validation": 3,
+      "overfitting_prevention": 1,
+      "edge_cases": 11,
+      "real_world_scenarios": 3
+    },
+    "key_metrics": {
+      "threat_detection_accuracy": 0.0,
+      "benign_classification_accuracy": 1.0,
+      "processing_speed_rps": 877285.9234469776,
+      "overfitting_prevented": true,
+      "learning_balance_score": 0.8333333333333334
+    },
+    "overall_status": "FAIL",
+    "recommendations": [
+      "Consider improving threat detection patterns and signatures"
+    ]
+  }
+}

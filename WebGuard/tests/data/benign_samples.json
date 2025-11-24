@@ -1,0 +1,282 @@
+[
+  {
+    "id": "http_1",
+    "type": "http_request",
+    "payload": "GET /api/users HTTP/1.1",
+    "expected_score": 0.15722743557180976,
+    "description": "Normal HTTP request 1"
+  },
+  {
+    "id": "http_2",
+    "type": "http_request",
+    "payload": "POST /api/login HTTP/1.1",
+    "expected_score": 0.16313244552644846,
+    "description": "Normal HTTP request 2"
+  },
+  {
+    "id": "http_3",
+    "type": "http_request",
+    "payload": "GET /dashboard HTTP/1.1",
+    "expected_score": 0.18190519697531202,
+    "description": "Normal HTTP request 3"
+  },
+  {
+    "id": "http_4",
+    "type": "http_request",
+    "payload": "POST /api/data HTTP/1.1",
+    "expected_score": 0.14601413701915078,
+    "description": "Normal HTTP request 4"
+  },
+  {
+    "id": "http_5",
+    "type": "http_request",
+    "payload": "GET /profile HTTP/1.1",
+    "expected_score": 0.16475050927455448,
+    "description": "Normal HTTP request 5"
+  },
+  {
+    "id": "http_6",
+    "type": "http_request",
+    "payload": "PUT /api/user/123 HTTP/1.1",
+    "expected_score": 0.1974408261568975,
+    "description": "Normal HTTP request 6"
+  },
+  {
+    "id": "http_7",
+    "type": "http_request",
+    "payload": "DELETE /api/session HTTP/1.1",
+    "expected_score": 0.07570753036539435,
+    "description": "Normal HTTP request 7"
+  },
+  {
+    "id": "http_8",
+    "type": "http_request",
+    "payload": "GET /api/health HTTP/1.1",
+    "expected_score": 0.1527418146293856,
+    "description": "Normal HTTP request 8"
+  },
+  {
+    "id": "http_9",
+    "type": "http_request",
+    "payload": "POST /api/upload HTTP/1.1",
+    "expected_score": 0.030843334516282118,
+    "description": "Normal HTTP request 9"
+  },
+  {
+    "id": "http_10",
+    "type": "http_request",
+    "payload": "GET /static/css/style.css HTTP/1.1",
+    "expected_score": 0.11943303406243636,
+    "description": "Normal HTTP request 10"
+  },
+  {
+    "id": "sql_benign_1",
+    "type": "sql_query",
+    "payload": "SELECT * FROM users WHERE id = 1",
+    "expected_score": 0.18070055530877227,
+    "description": "Legitimate SQL query 1"
+  },
+  {
+    "id": "sql_benign_2",
+    "type": "sql_query",
+    "payload": "INSERT INTO logs (message, timestamp) VALUES ('Login', NOW())",
+    "expected_score": 0.04067960397448693,
+    "description": "Legitimate SQL query 2"
+  },
+  {
+    "id": "sql_benign_3",
+    "type": "sql_query",
+    "payload": "UPDATE users SET last_login = NOW() WHERE id = 1",
+    "expected_score": 0.15147594048930557,
+    "description": "Legitimate SQL query 3"
+  },
+  {
+    "id": "sql_benign_4",
+    "type": "sql_query",
+    "payload": "DELETE FROM sessions WHERE expires < NOW()",
+    "expected_score": 0.08227599268805053,
+    "description": "Legitimate SQL query 4"
+  },
+  {
+    "id": "sql_benign_5",
+    "type": "sql_query",
+    "payload": "SELECT COUNT(*) FROM products WHERE category = 'electronics'",
+    "expected_score": 0.16959447897261376,
+    "description": "Legitimate SQL query 5"
+  },
+  {
+    "id": "sql_benign_6",
+    "type": "sql_query",
+    "payload": "SELECT name, email FROM users ORDER BY name",
+    "expected_score": 0.102185625586209,
+    "description": "Legitimate SQL query 6"
+  },
+  {
+    "id": "sql_benign_7",
+    "type": "sql_query",
+    "payload": "INSERT INTO orders (user_id, total) VALUES (1, 99.99)",
+    "expected_score": 0.2512517489387543,
+    "description": "Legitimate SQL query 7"
+  },
+  {
+    "id": "sql_benign_8",
+    "type": "sql_query",
+    "payload": "UPDATE products SET stock = stock - 1 WHERE id = 1",
+    "expected_score": 0.16498810986156473,
+    "description": "Legitimate SQL query 8"
+  },
+  {
+    "id": "sql_benign_9",
+    "type": "sql_query",
+    "payload": "SELECT * FROM categories ORDER BY name LIMIT 10",
+    "expected_score": 0.22618744190656745,
+    "description": "Legitimate SQL query 9"
+  },
+  {
+    "id": "sql_benign_10",
+    "type": "sql_query",
+    "payload": "DELETE FROM temp_data WHERE created < DATE_SUB(NOW(), INTERVAL 1 DAY)",
+    "expected_score": 0.13076996174370223,
+    "description": "Legitimate SQL query 10"
+  },
+  {
+    "id": "form_1",
+    "type": "form_data",
+    "payload": "username=john&password=secret123",
+    "expected_score": 0.02033493474980155,
+    "description": "Normal form data 1"
+  },
+  {
+    "id": "form_2",
+    "type": "form_data",
+    "payload": "email=user@example.com&name=John Doe",
+    "expected_score": 0.08538510232791977,
+    "description": "Normal form data 2"
+  },
+  {
+    "id": "form_3",
+    "type": "form_data",
+    "payload": "search=laptop computers&category=electronics",
+    "expected_score": 0.06614908771881066,
+    "description": "Normal form data 3"
+  },
+  {
+    "id": "form_4",
+    "type": "form_data",
+    "payload": "comment=Great product! Highly recommended.",
+    "expected_score": 0.039480237759536574,
+    "description": "Normal form data 4"
+  },
+  {
+    "id": "form_5",
+    "type": "form_data",
+    "payload": "address=123 Main St&city=New York&zip=10001",
+    "expected_score": 0.03855532643921805,
+    "description": "Normal form data 5"
+  },
+  {
+    "id": "form_6",
+    "type": "form_data",
+    "payload": "phone=555-1234&country=USA",
+    "expected_score": 0.030019071722673676,
+    "description": "Normal form data 6"
+  },
+  {
+    "id": "form_7",
+    "type": "form_data",
+    "payload": "message=Hello, I need help with my order",
+    "expected_score": 0.001779121930792038,
+    "description": "Normal form data 7"
+  },
+  {
+    "id": "form_8",
+    "type": "form_data",
+    "payload": "title=Product Review&rating=5",
+    "expected_score": 0.027030300159465018,
+    "description": "Normal form data 8"
+  },
+  {
+    "id": "form_9",
+    "type": "form_data",
+    "payload": "quantity=2&product_id=123",
+    "expected_score": 0.03185058035224826,
+    "description": "Normal form data 9"
+  },
+  {
+    "id": "form_10",
+    "type": "form_data",
+    "payload": "newsletter=true&preferences=email",
+    "expected_score": 0.010689147962446133,
+    "description": "Normal form data 10"
+  },
+  {
+    "id": "json_1",
+    "type": "json_payload",
+    "payload": "{\"name\": \"John\", \"age\": 30, \"city\": \"New York\"}",
+    "expected_score": 0.14308122021310005,
+    "description": "Normal JSON payload 1"
+  },
+  {
+    "id": "json_2",
+    "type": "json_payload",
+    "payload": "{\"product\": \"laptop\", \"price\": 999.99, \"stock\": 10}",
+    "expected_score": 0.07503362984634292,
+    "description": "Normal JSON payload 2"
+  },
+  {
+    "id": "json_3",
+    "type": "json_payload",
+    "payload": "{\"user_id\": 123, \"action\": \"login\", \"timestamp\": \"2024-01-01T10:00:00Z\"}",
+    "expected_score": 0.12441722786155668,
+    "description": "Normal JSON payload 3"
+  },
+  {
+    "id": "json_4",
+    "type": "json_payload",
+    "payload": "{\"query\": \"search term\", \"filters\": {\"category\": \"books\", \"price_max\": 50}}",
+    "expected_score": 0.06965956790946244,
+    "description": "Normal JSON payload 4"
+  },
+  {
+    "id": "json_5",
+    "type": "json_payload",
+    "payload": "{\"order_id\": 456, \"items\": [{\"id\": 1, \"qty\": 2}, {\"id\": 2, \"qty\": 1}]}",
+    "expected_score": 0.11169131005497274,
+    "description": "Normal JSON payload 5"
+  },
+  {
+    "id": "json_6",
+    "type": "json_payload",
+    "payload": "{\"settings\": {\"theme\": \"dark\", \"notifications\": true, \"language\": \"en\"}}",
+    "expected_score": 0.06507853810509508,
+    "description": "Normal JSON payload 6"
+  },
+  {
+    "id": "json_7",
+    "type": "json_payload",
+    "payload": "{\"report\": {\"type\": \"sales\", \"period\": \"monthly\", \"format\": \"pdf\"}}",
+    "expected_score": 0.005172273100583174,
+    "description": "Normal JSON payload 7"
+  },
+  {
+    "id": "json_8",
+    "type": "json_payload",
+    "payload": "{\"user\": {\"email\": \"test@example.com\", \"role\": \"user\", \"active\": true}}",
+    "expected_score": 0.11934377160605937,
+    "description": "Normal JSON payload 8"
+  },
+  {
+    "id": "json_9",
+    "type": "json_payload",
+    "payload": "{\"backup\": {\"frequency\": \"daily\", \"retention\": 30, \"compress\": true}}",
+    "expected_score": 0.12200592470878123,
+    "description": "Normal JSON payload 9"
+  },
+  {
+    "id": "json_10",
+    "type": "json_payload",
+    "payload": "{\"config\": {\"debug\": false, \"cache\": true, \"timeout\": 30}}",
+    "expected_score": 0.13074234368855206,
+    "description": "Normal JSON payload 10"
+  }
+]

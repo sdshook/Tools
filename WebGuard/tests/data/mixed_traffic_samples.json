@@ -1,0 +1,7002 @@
+[
+  {
+    "id": "mixed_1",
+    "payload": "<script>alert9",
+    "is_threat": true,
+    "expected_score": 0.9935854564075539,
+    "timestamp": "2025-11-24T07:12:13.012969"
+  },
+  {
+    "id": "mixed_2",
+    "payload": "PUT /dashboard/35 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25562712620219663,
+    "timestamp": "2025-11-24T09:28:13.012991"
+  },
+  {
+    "id": "mixed_3",
+    "payload": "POST /api/users/12 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19178512673673626,
+    "timestamp": "2025-11-24T12:25:13.013000"
+  },
+  {
+    "id": "mixed_4",
+    "payload": "DELETE /settings/697 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28872474800181935,
+    "timestamp": "2025-11-23T22:46:13.013006"
+  },
+  {
+    "id": "mixed_5",
+    "payload": "'; DROP TABLE94",
+    "is_threat": true,
+    "expected_score": 0.951253569086339,
+    "timestamp": "2025-11-23T14:43:13.013012"
+  },
+  {
+    "id": "mixed_6",
+    "payload": "PUT /api/users/877 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16599925979098398,
+    "timestamp": "2025-11-24T04:37:13.013018"
+  },
+  {
+    "id": "mixed_7",
+    "payload": "PUT /data/494 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28199815408640144,
+    "timestamp": "2025-11-23T16:17:13.013023"
+  },
+  {
+    "id": "mixed_8",
+    "payload": "POST /data/309 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.05869707025402057,
+    "timestamp": "2025-11-24T07:24:13.013029"
+  },
+  {
+    "id": "mixed_9",
+    "payload": "PUT /api/users/427 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12646393090510963,
+    "timestamp": "2025-11-24T09:33:13.013034"
+  },
+  {
+    "id": "mixed_10",
+    "payload": "GET /dashboard/808 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22388342810772674,
+    "timestamp": "2025-11-24T05:57:13.013040"
+  },
+  {
+    "id": "mixed_11",
+    "payload": "PUT /data/168 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04882009017127293,
+    "timestamp": "2025-11-24T07:39:13.013045"
+  },
+  {
+    "id": "mixed_12",
+    "payload": "GET /profile/646 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25159641972853075,
+    "timestamp": "2025-11-24T12:51:13.013048"
+  },
+  {
+    "id": "mixed_13",
+    "payload": "PUT /dashboard/268 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.05800498442255797,
+    "timestamp": "2025-11-23T14:59:13.013051"
+  },
+  {
+    "id": "mixed_14",
+    "payload": "POST /profile/398 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.036026245443128886,
+    "timestamp": "2025-11-23T22:03:13.013055"
+  },
+  {
+    "id": "mixed_15",
+    "payload": "DELETE /data/316 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11738932129874233,
+    "timestamp": "2025-11-24T06:50:13.013058"
+  },
+  {
+    "id": "mixed_16",
+    "payload": "'; DROP TABLE13",
+    "is_threat": true,
+    "expected_score": 0.6111737019038507,
+    "timestamp": "2025-11-23T21:12:13.013061"
+  },
+  {
+    "id": "mixed_17",
+    "payload": "DELETE /data/705 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12781967771835656,
+    "timestamp": "2025-11-24T08:02:13.013064"
+  },
+  {
+    "id": "mixed_18",
+    "payload": "; rm -rf6",
+    "is_threat": true,
+    "expected_score": 0.8429598829811769,
+    "timestamp": "2025-11-23T16:55:13.013067"
+  },
+  {
+    "id": "mixed_19",
+    "payload": "../../../etc/91",
+    "is_threat": true,
+    "expected_score": 0.9856199930526334,
+    "timestamp": "2025-11-23T14:10:13.013070"
+  },
+  {
+    "id": "mixed_20",
+    "payload": "POST /settings/587 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2281298663018821,
+    "timestamp": "2025-11-23T21:27:13.013073"
+  },
+  {
+    "id": "mixed_21",
+    "payload": "<script>alert15",
+    "is_threat": true,
+    "expected_score": 0.927540790104286,
+    "timestamp": "2025-11-24T01:46:13.013076"
+  },
+  {
+    "id": "mixed_22",
+    "payload": "POST /data/825 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14922979761426317,
+    "timestamp": "2025-11-24T06:08:13.013079"
+  },
+  {
+    "id": "mixed_23",
+    "payload": "<script>alert71",
+    "is_threat": true,
+    "expected_score": 0.8762216834143359,
+    "timestamp": "2025-11-23T22:31:13.013081"
+  },
+  {
+    "id": "mixed_24",
+    "payload": "GET /settings/814 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28436094704573395,
+    "timestamp": "2025-11-24T13:13:13.013084"
+  },
+  {
+    "id": "mixed_25",
+    "payload": "'; DROP TABLE21",
+    "is_threat": true,
+    "expected_score": 0.9524050031046571,
+    "timestamp": "2025-11-24T13:09:13.013087"
+  },
+  {
+    "id": "mixed_26",
+    "payload": "POST /dashboard/502 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18924577947555396,
+    "timestamp": "2025-11-23T23:18:13.013090"
+  },
+  {
+    "id": "mixed_27",
+    "payload": "PUT /dashboard/102 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19602012941182553,
+    "timestamp": "2025-11-23T15:59:13.013093"
+  },
+  {
+    "id": "mixed_28",
+    "payload": "DELETE /profile/999 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2074647533298799,
+    "timestamp": "2025-11-23T19:24:13.013096"
+  },
+  {
+    "id": "mixed_29",
+    "payload": "PUT /data/933 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.049131867388571594,
+    "timestamp": "2025-11-24T02:35:13.013099"
+  },
+  {
+    "id": "mixed_30",
+    "payload": "POST /api/users/239 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17334732768448535,
+    "timestamp": "2025-11-23T15:04:13.013102"
+  },
+  {
+    "id": "mixed_31",
+    "payload": "<script>alert3",
+    "is_threat": true,
+    "expected_score": 0.8146511579664132,
+    "timestamp": "2025-11-24T06:42:13.013105"
+  },
+  {
+    "id": "mixed_32",
+    "payload": "POST /dashboard/244 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1994920985883084,
+    "timestamp": "2025-11-23T14:52:13.013108"
+  },
+  {
+    "id": "mixed_33",
+    "payload": "POST /settings/231 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08370775181736997,
+    "timestamp": "2025-11-23T20:18:13.013111"
+  },
+  {
+    "id": "mixed_34",
+    "payload": "PUT /settings/840 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25402058787949855,
+    "timestamp": "2025-11-24T04:58:13.013114"
+  },
+  {
+    "id": "mixed_35",
+    "payload": "'; DROP TABLE12",
+    "is_threat": true,
+    "expected_score": 0.9120725268563292,
+    "timestamp": "2025-11-24T02:04:13.013117"
+  },
+  {
+    "id": "mixed_36",
+    "payload": "POST /api/users/445 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10749182341264489,
+    "timestamp": "2025-11-23T19:34:13.013120"
+  },
+  {
+    "id": "mixed_37",
+    "payload": "PUT /settings/438 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0644202127660702,
+    "timestamp": "2025-11-24T01:56:13.013123"
+  },
+  {
+    "id": "mixed_38",
+    "payload": "PUT /api/users/440 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24094761956907818,
+    "timestamp": "2025-11-24T03:32:13.013126"
+  },
+  {
+    "id": "mixed_39",
+    "payload": "DELETE /data/262 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.27260552809543287,
+    "timestamp": "2025-11-23T17:33:13.013129"
+  },
+  {
+    "id": "mixed_40",
+    "payload": "POST /settings/525 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.29327640878603645,
+    "timestamp": "2025-11-24T10:53:13.013132"
+  },
+  {
+    "id": "mixed_41",
+    "payload": "<script>alert14",
+    "is_threat": true,
+    "expected_score": 0.9950625198499408,
+    "timestamp": "2025-11-24T08:17:13.013135"
+  },
+  {
+    "id": "mixed_42",
+    "payload": "PUT /api/users/507 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10525251431940474,
+    "timestamp": "2025-11-24T09:17:13.013138"
+  },
+  {
+    "id": "mixed_43",
+    "payload": "GET /data/93 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08284187163900687,
+    "timestamp": "2025-11-23T14:20:13.013141"
+  },
+  {
+    "id": "mixed_44",
+    "payload": "../../../etc/22",
+    "is_threat": true,
+    "expected_score": 0.7662362734299754,
+    "timestamp": "2025-11-23T18:57:13.013144"
+  },
+  {
+    "id": "mixed_45",
+    "payload": "DELETE /data/283 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09497342429506762,
+    "timestamp": "2025-11-24T08:46:13.013147"
+  },
+  {
+    "id": "mixed_46",
+    "payload": "DELETE /data/887 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2776440499717485,
+    "timestamp": "2025-11-23T21:29:13.013152"
+  },
+  {
+    "id": "mixed_47",
+    "payload": "PUT /data/640 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.194884600154833,
+    "timestamp": "2025-11-24T12:21:13.013155"
+  },
+  {
+    "id": "mixed_48",
+    "payload": "GET /api/users/833 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18380432345543732,
+    "timestamp": "2025-11-24T03:31:13.013158"
+  },
+  {
+    "id": "mixed_49",
+    "payload": "GET /dashboard/346 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15430229338480114,
+    "timestamp": "2025-11-24T13:32:13.013161"
+  },
+  {
+    "id": "mixed_50",
+    "payload": "PUT /dashboard/753 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10706406324228047,
+    "timestamp": "2025-11-24T11:34:13.013164"
+  },
+  {
+    "id": "mixed_51",
+    "payload": "GET /api/users/925 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1625520795868282,
+    "timestamp": "2025-11-23T14:42:13.013167"
+  },
+  {
+    "id": "mixed_52",
+    "payload": "; rm -rf1",
+    "is_threat": true,
+    "expected_score": 0.7396242942087996,
+    "timestamp": "2025-11-23T21:55:13.013170"
+  },
+  {
+    "id": "mixed_53",
+    "payload": "POST /dashboard/676 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06127310643649102,
+    "timestamp": "2025-11-23T23:25:13.013173"
+  },
+  {
+    "id": "mixed_54",
+    "payload": "PUT /dashboard/193 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1885258818128162,
+    "timestamp": "2025-11-24T03:55:13.013176"
+  },
+  {
+    "id": "mixed_55",
+    "payload": "PUT /dashboard/608 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09843402667580987,
+    "timestamp": "2025-11-24T03:57:13.013179"
+  },
+  {
+    "id": "mixed_56",
+    "payload": "GET /data/696 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24855506231658592,
+    "timestamp": "2025-11-23T16:38:13.013182"
+  },
+  {
+    "id": "mixed_57",
+    "payload": "PUT /api/users/974 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17960805650723172,
+    "timestamp": "2025-11-24T05:58:13.013185"
+  },
+  {
+    "id": "mixed_58",
+    "payload": "PUT /settings/179 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.276664680913058,
+    "timestamp": "2025-11-24T09:16:13.013188"
+  },
+  {
+    "id": "mixed_59",
+    "payload": "GET /api/users/348 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1110307995424139,
+    "timestamp": "2025-11-24T04:05:13.013191"
+  },
+  {
+    "id": "mixed_60",
+    "payload": "DELETE /profile/799 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2938324574691347,
+    "timestamp": "2025-11-24T10:07:13.013194"
+  },
+  {
+    "id": "mixed_61",
+    "payload": "POST /profile/348 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23261504246738784,
+    "timestamp": "2025-11-23T17:35:13.013197"
+  },
+  {
+    "id": "mixed_62",
+    "payload": "; rm -rf65",
+    "is_threat": true,
+    "expected_score": 0.6753779055817621,
+    "timestamp": "2025-11-24T03:56:13.013200"
+  },
+  {
+    "id": "mixed_63",
+    "payload": "PUT /settings/634 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15228943737528455,
+    "timestamp": "2025-11-24T03:52:13.013203"
+  },
+  {
+    "id": "mixed_64",
+    "payload": "PUT /dashboard/797 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12861148364109362,
+    "timestamp": "2025-11-23T15:53:13.013211"
+  },
+  {
+    "id": "mixed_65",
+    "payload": "GET /profile/712 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0014244588167178218,
+    "timestamp": "2025-11-24T10:27:13.013214"
+  },
+  {
+    "id": "mixed_66",
+    "payload": "PUT /dashboard/590 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14331910127261735,
+    "timestamp": "2025-11-23T23:10:13.013217"
+  },
+  {
+    "id": "mixed_67",
+    "payload": "GET /api/users/546 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.019017957669130846,
+    "timestamp": "2025-11-24T12:36:13.013220"
+  },
+  {
+    "id": "mixed_68",
+    "payload": "GET /data/134 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08831997063490744,
+    "timestamp": "2025-11-24T06:20:13.013223"
+  },
+  {
+    "id": "mixed_69",
+    "payload": "PUT /settings/757 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2550741835931488,
+    "timestamp": "2025-11-24T09:36:13.013227"
+  },
+  {
+    "id": "mixed_70",
+    "payload": "DELETE /api/users/383 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24121883509559816,
+    "timestamp": "2025-11-23T19:18:13.013230"
+  },
+  {
+    "id": "mixed_71",
+    "payload": "; rm -rf91",
+    "is_threat": true,
+    "expected_score": 0.7926750879986146,
+    "timestamp": "2025-11-24T13:23:13.013232"
+  },
+  {
+    "id": "mixed_72",
+    "payload": "DELETE /dashboard/13 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19582044269760196,
+    "timestamp": "2025-11-24T09:28:13.013235"
+  },
+  {
+    "id": "mixed_73",
+    "payload": "PUT /profile/578 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2729663361172959,
+    "timestamp": "2025-11-24T05:00:13.013249"
+  },
+  {
+    "id": "mixed_74",
+    "payload": "GET /profile/440 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2993031032948376,
+    "timestamp": "2025-11-23T14:27:13.013253"
+  },
+  {
+    "id": "mixed_75",
+    "payload": "GET /settings/970 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.02741251264578175,
+    "timestamp": "2025-11-24T00:10:13.013256"
+  },
+  {
+    "id": "mixed_76",
+    "payload": "DELETE /dashboard/284 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06732961101688546,
+    "timestamp": "2025-11-23T20:04:13.013259"
+  },
+  {
+    "id": "mixed_77",
+    "payload": "GET /api/users/417 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16486382881105044,
+    "timestamp": "2025-11-23T14:34:13.013264"
+  },
+  {
+    "id": "mixed_78",
+    "payload": "POST /dashboard/177 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17589489957143933,
+    "timestamp": "2025-11-23T16:32:13.013268"
+  },
+  {
+    "id": "mixed_79",
+    "payload": "; rm -rf33",
+    "is_threat": true,
+    "expected_score": 0.7177242645324551,
+    "timestamp": "2025-11-23T14:57:13.013270"
+  },
+  {
+    "id": "mixed_80",
+    "payload": "PUT /dashboard/797 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07407930343083398,
+    "timestamp": "2025-11-24T05:23:13.013273"
+  },
+  {
+    "id": "mixed_81",
+    "payload": "POST /settings/398 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20319396886369787,
+    "timestamp": "2025-11-23T17:22:13.013276"
+  },
+  {
+    "id": "mixed_82",
+    "payload": "DELETE /settings/16 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25336183666490775,
+    "timestamp": "2025-11-23T22:16:13.013279"
+  },
+  {
+    "id": "mixed_83",
+    "payload": "GET /dashboard/185 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1302610038322353,
+    "timestamp": "2025-11-23T20:48:13.013283"
+  },
+  {
+    "id": "mixed_84",
+    "payload": "PUT /data/616 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18991849498365268,
+    "timestamp": "2025-11-23T23:04:13.013286"
+  },
+  {
+    "id": "mixed_85",
+    "payload": "GET /settings/271 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23397174052648964,
+    "timestamp": "2025-11-24T04:04:13.013289"
+  },
+  {
+    "id": "mixed_86",
+    "payload": "GET /settings/594 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2766913890888314,
+    "timestamp": "2025-11-23T16:35:13.013292"
+  },
+  {
+    "id": "mixed_87",
+    "payload": "../../../etc/92",
+    "is_threat": true,
+    "expected_score": 0.9239373756030088,
+    "timestamp": "2025-11-24T10:10:13.013295"
+  },
+  {
+    "id": "mixed_88",
+    "payload": "PUT /profile/354 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1906193911429071,
+    "timestamp": "2025-11-23T17:11:13.013298"
+  },
+  {
+    "id": "mixed_89",
+    "payload": "POST /data/465 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2512633413109724,
+    "timestamp": "2025-11-23T19:38:13.013301"
+  },
+  {
+    "id": "mixed_90",
+    "payload": "DELETE /data/773 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2729662229182233,
+    "timestamp": "2025-11-24T03:45:13.013304"
+  },
+  {
+    "id": "mixed_91",
+    "payload": "'; DROP TABLE73",
+    "is_threat": true,
+    "expected_score": 0.9277491868255102,
+    "timestamp": "2025-11-23T22:28:13.013306"
+  },
+  {
+    "id": "mixed_92",
+    "payload": "GET /data/932 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2817744078503896,
+    "timestamp": "2025-11-23T15:57:13.013309"
+  },
+  {
+    "id": "mixed_93",
+    "payload": "../../../etc/90",
+    "is_threat": true,
+    "expected_score": 0.9800654665694337,
+    "timestamp": "2025-11-24T10:32:13.013312"
+  },
+  {
+    "id": "mixed_94",
+    "payload": "PUT /api/users/546 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2684194607160708,
+    "timestamp": "2025-11-23T22:21:13.013317"
+  },
+  {
+    "id": "mixed_95",
+    "payload": "POST /dashboard/766 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22735898291412854,
+    "timestamp": "2025-11-24T08:19:13.013320"
+  },
+  {
+    "id": "mixed_96",
+    "payload": "<script>alert100",
+    "is_threat": true,
+    "expected_score": 0.6972248972971886,
+    "timestamp": "2025-11-24T04:50:13.013323"
+  },
+  {
+    "id": "mixed_97",
+    "payload": "PUT /api/users/44 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.29903266131510065,
+    "timestamp": "2025-11-24T07:21:13.013326"
+  },
+  {
+    "id": "mixed_98",
+    "payload": "PUT /profile/942 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08621070221237068,
+    "timestamp": "2025-11-23T19:15:13.013329"
+  },
+  {
+    "id": "mixed_99",
+    "payload": "PUT /dashboard/496 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2084831000443485,
+    "timestamp": "2025-11-24T03:58:13.013332"
+  },
+  {
+    "id": "mixed_100",
+    "payload": "POST /api/users/259 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15895163395277923,
+    "timestamp": "2025-11-24T08:46:13.013335"
+  },
+  {
+    "id": "mixed_101",
+    "payload": "GET /dashboard/191 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09224362828711445,
+    "timestamp": "2025-11-24T01:55:13.013338"
+  },
+  {
+    "id": "mixed_102",
+    "payload": "GET /api/users/478 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15401262606996882,
+    "timestamp": "2025-11-23T20:25:13.013341"
+  },
+  {
+    "id": "mixed_103",
+    "payload": "GET /data/465 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08417877056467334,
+    "timestamp": "2025-11-23T23:45:13.013344"
+  },
+  {
+    "id": "mixed_104",
+    "payload": "POST /profile/221 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09569392424858866,
+    "timestamp": "2025-11-23T18:11:13.013347"
+  },
+  {
+    "id": "mixed_105",
+    "payload": "GET /api/users/168 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23732431788843555,
+    "timestamp": "2025-11-24T10:26:13.013350"
+  },
+  {
+    "id": "mixed_106",
+    "payload": "DELETE /api/users/778 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2617006923255277,
+    "timestamp": "2025-11-23T15:20:13.013353"
+  },
+  {
+    "id": "mixed_107",
+    "payload": "; rm -rf27",
+    "is_threat": true,
+    "expected_score": 0.6429917953349135,
+    "timestamp": "2025-11-23T19:25:13.013356"
+  },
+  {
+    "id": "mixed_108",
+    "payload": "GET /profile/923 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.028590032402328866,
+    "timestamp": "2025-11-24T07:32:13.013359"
+  },
+  {
+    "id": "mixed_109",
+    "payload": "GET /settings/775 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18245502888443316,
+    "timestamp": "2025-11-24T02:14:13.013365"
+  },
+  {
+    "id": "mixed_110",
+    "payload": "PUT /data/924 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04024505748107769,
+    "timestamp": "2025-11-24T07:46:13.013368"
+  },
+  {
+    "id": "mixed_111",
+    "payload": "DELETE /data/212 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1467741102268374,
+    "timestamp": "2025-11-24T01:53:13.013372"
+  },
+  {
+    "id": "mixed_112",
+    "payload": "PUT /data/408 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07081075305928605,
+    "timestamp": "2025-11-24T07:03:13.013375"
+  },
+  {
+    "id": "mixed_113",
+    "payload": "; rm -rf52",
+    "is_threat": true,
+    "expected_score": 0.9767573263999227,
+    "timestamp": "2025-11-24T04:30:13.013378"
+  },
+  {
+    "id": "mixed_114",
+    "payload": "<script>alert100",
+    "is_threat": true,
+    "expected_score": 0.684876668866383,
+    "timestamp": "2025-11-24T06:37:13.013380"
+  },
+  {
+    "id": "mixed_115",
+    "payload": "GET /profile/990 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15514395863357497,
+    "timestamp": "2025-11-24T05:13:13.013384"
+  },
+  {
+    "id": "mixed_116",
+    "payload": "DELETE /settings/143 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.00022071979354654214,
+    "timestamp": "2025-11-24T08:34:13.013387"
+  },
+  {
+    "id": "mixed_117",
+    "payload": "DELETE /data/227 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06816543523615723,
+    "timestamp": "2025-11-24T11:50:13.013389"
+  },
+  {
+    "id": "mixed_118",
+    "payload": "DELETE /api/users/221 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06167429607511655,
+    "timestamp": "2025-11-23T22:17:13.013393"
+  },
+  {
+    "id": "mixed_119",
+    "payload": "; rm -rf12",
+    "is_threat": true,
+    "expected_score": 0.7978677502578885,
+    "timestamp": "2025-11-23T14:57:13.013396"
+  },
+  {
+    "id": "mixed_120",
+    "payload": "PUT /profile/526 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.168489005668128,
+    "timestamp": "2025-11-24T10:57:13.013398"
+  },
+  {
+    "id": "mixed_121",
+    "payload": "PUT /data/443 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16624847981657934,
+    "timestamp": "2025-11-24T02:51:13.013402"
+  },
+  {
+    "id": "mixed_122",
+    "payload": "PUT /settings/654 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10303115123604463,
+    "timestamp": "2025-11-24T04:52:13.013405"
+  },
+  {
+    "id": "mixed_123",
+    "payload": "GET /settings/237 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15391243405119978,
+    "timestamp": "2025-11-24T13:04:13.013408"
+  },
+  {
+    "id": "mixed_124",
+    "payload": "GET /data/449 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26893420092837056,
+    "timestamp": "2025-11-23T15:12:13.013411"
+  },
+  {
+    "id": "mixed_125",
+    "payload": "GET /dashboard/969 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18352319208683818,
+    "timestamp": "2025-11-23T14:49:13.013414"
+  },
+  {
+    "id": "mixed_126",
+    "payload": "POST /settings/669 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2826420391910035,
+    "timestamp": "2025-11-23T21:28:13.013418"
+  },
+  {
+    "id": "mixed_127",
+    "payload": "PUT /profile/370 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2949866884378991,
+    "timestamp": "2025-11-23T15:19:13.013421"
+  },
+  {
+    "id": "mixed_128",
+    "payload": "PUT /data/106 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18147654657465387,
+    "timestamp": "2025-11-24T03:46:13.013424"
+  },
+  {
+    "id": "mixed_129",
+    "payload": "GET /profile/741 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25204683535564926,
+    "timestamp": "2025-11-24T07:19:13.013427"
+  },
+  {
+    "id": "mixed_130",
+    "payload": "DELETE /data/889 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28346795503383837,
+    "timestamp": "2025-11-23T23:42:13.013430"
+  },
+  {
+    "id": "mixed_131",
+    "payload": "../../../etc/47",
+    "is_threat": true,
+    "expected_score": 0.7980707536350493,
+    "timestamp": "2025-11-23T14:58:13.013433"
+  },
+  {
+    "id": "mixed_132",
+    "payload": "<script>alert27",
+    "is_threat": true,
+    "expected_score": 0.6400816983267047,
+    "timestamp": "2025-11-23T18:34:13.013435"
+  },
+  {
+    "id": "mixed_133",
+    "payload": "GET /data/293 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18114269515350398,
+    "timestamp": "2025-11-24T00:48:13.013438"
+  },
+  {
+    "id": "mixed_134",
+    "payload": "POST /profile/764 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2014063129826393,
+    "timestamp": "2025-11-23T19:37:13.013442"
+  },
+  {
+    "id": "mixed_135",
+    "payload": "DELETE /data/228 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19627488579754174,
+    "timestamp": "2025-11-23T21:26:13.013444"
+  },
+  {
+    "id": "mixed_136",
+    "payload": "../../../etc/57",
+    "is_threat": true,
+    "expected_score": 0.6078294721725731,
+    "timestamp": "2025-11-23T15:25:13.013447"
+  },
+  {
+    "id": "mixed_137",
+    "payload": "GET /settings/564 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.056404922512484544,
+    "timestamp": "2025-11-24T04:39:13.013450"
+  },
+  {
+    "id": "mixed_138",
+    "payload": "PUT /data/538 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17112087941982104,
+    "timestamp": "2025-11-23T19:51:13.013453"
+  },
+  {
+    "id": "mixed_139",
+    "payload": "PUT /dashboard/353 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10796846484943273,
+    "timestamp": "2025-11-24T08:52:13.013456"
+  },
+  {
+    "id": "mixed_140",
+    "payload": "POST /dashboard/523 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06213655686531095,
+    "timestamp": "2025-11-24T04:28:13.013459"
+  },
+  {
+    "id": "mixed_141",
+    "payload": "DELETE /data/671 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.016193408558593823,
+    "timestamp": "2025-11-24T12:24:13.013462"
+  },
+  {
+    "id": "mixed_142",
+    "payload": "DELETE /profile/833 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25858739661637486,
+    "timestamp": "2025-11-24T09:51:13.013465"
+  },
+  {
+    "id": "mixed_143",
+    "payload": "DELETE /api/users/566 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13893531525083472,
+    "timestamp": "2025-11-24T05:58:13.013468"
+  },
+  {
+    "id": "mixed_144",
+    "payload": "GET /dashboard/639 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2409928024351194,
+    "timestamp": "2025-11-24T13:08:13.013471"
+  },
+  {
+    "id": "mixed_145",
+    "payload": "../../../etc/7",
+    "is_threat": true,
+    "expected_score": 0.6473527406791562,
+    "timestamp": "2025-11-24T11:59:13.013474"
+  },
+  {
+    "id": "mixed_146",
+    "payload": "DELETE /dashboard/632 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2059396023335029,
+    "timestamp": "2025-11-24T08:18:13.013477"
+  },
+  {
+    "id": "mixed_147",
+    "payload": "POST /dashboard/262 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21295060654025144,
+    "timestamp": "2025-11-23T15:35:13.013480"
+  },
+  {
+    "id": "mixed_148",
+    "payload": "PUT /dashboard/89 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22039478112722827,
+    "timestamp": "2025-11-24T05:56:13.013483"
+  },
+  {
+    "id": "mixed_149",
+    "payload": "PUT /dashboard/448 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0036670321767485413,
+    "timestamp": "2025-11-24T09:08:13.013486"
+  },
+  {
+    "id": "mixed_150",
+    "payload": "GET /settings/643 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.030412185833662585,
+    "timestamp": "2025-11-23T19:22:13.013489"
+  },
+  {
+    "id": "mixed_151",
+    "payload": "DELETE /api/users/129 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.27353990483738905,
+    "timestamp": "2025-11-23T19:07:13.013492"
+  },
+  {
+    "id": "mixed_152",
+    "payload": "; rm -rf66",
+    "is_threat": true,
+    "expected_score": 0.7455011443910103,
+    "timestamp": "2025-11-23T17:13:13.013494"
+  },
+  {
+    "id": "mixed_153",
+    "payload": "PUT /profile/477 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13234409254719617,
+    "timestamp": "2025-11-23T16:48:13.013497"
+  },
+  {
+    "id": "mixed_154",
+    "payload": "PUT /settings/456 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08546293839590081,
+    "timestamp": "2025-11-24T00:49:13.013500"
+  },
+  {
+    "id": "mixed_155",
+    "payload": "DELETE /profile/112 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1562210264895336,
+    "timestamp": "2025-11-23T14:45:13.013504"
+  },
+  {
+    "id": "mixed_156",
+    "payload": "; rm -rf37",
+    "is_threat": true,
+    "expected_score": 0.7647396985991292,
+    "timestamp": "2025-11-23T17:15:13.013506"
+  },
+  {
+    "id": "mixed_157",
+    "payload": "GET /dashboard/610 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24995355857267224,
+    "timestamp": "2025-11-24T08:35:13.013509"
+  },
+  {
+    "id": "mixed_158",
+    "payload": "PUT /settings/501 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2674867975724582,
+    "timestamp": "2025-11-24T00:34:13.013512"
+  },
+  {
+    "id": "mixed_159",
+    "payload": "DELETE /profile/552 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10145885671307082,
+    "timestamp": "2025-11-23T14:09:13.013515"
+  },
+  {
+    "id": "mixed_160",
+    "payload": "PUT /settings/752 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23177822748402033,
+    "timestamp": "2025-11-24T12:09:13.013518"
+  },
+  {
+    "id": "mixed_161",
+    "payload": "GET /profile/884 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2636955594146218,
+    "timestamp": "2025-11-23T14:02:13.013521"
+  },
+  {
+    "id": "mixed_162",
+    "payload": "; rm -rf73",
+    "is_threat": true,
+    "expected_score": 0.7064393102947054,
+    "timestamp": "2025-11-23T15:20:13.013524"
+  },
+  {
+    "id": "mixed_163",
+    "payload": "DELETE /dashboard/619 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24217955868251856,
+    "timestamp": "2025-11-23T18:20:13.013527"
+  },
+  {
+    "id": "mixed_164",
+    "payload": "GET /dashboard/36 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24229968062171622,
+    "timestamp": "2025-11-24T03:49:13.013530"
+  },
+  {
+    "id": "mixed_165",
+    "payload": "GET /settings/356 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0668837658387836,
+    "timestamp": "2025-11-24T07:50:13.013533"
+  },
+  {
+    "id": "mixed_166",
+    "payload": "POST /profile/121 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28558831721982303,
+    "timestamp": "2025-11-23T22:39:13.013536"
+  },
+  {
+    "id": "mixed_167",
+    "payload": "PUT /settings/681 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.035663577753523114,
+    "timestamp": "2025-11-23T21:37:13.013539"
+  },
+  {
+    "id": "mixed_168",
+    "payload": "PUT /profile/346 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13307996943277237,
+    "timestamp": "2025-11-23T22:21:13.013542"
+  },
+  {
+    "id": "mixed_169",
+    "payload": "<script>alert44",
+    "is_threat": true,
+    "expected_score": 0.7459986348586463,
+    "timestamp": "2025-11-23T18:36:13.013547"
+  },
+  {
+    "id": "mixed_170",
+    "payload": "../../../etc/20",
+    "is_threat": true,
+    "expected_score": 0.6962241295337629,
+    "timestamp": "2025-11-23T23:10:13.013550"
+  },
+  {
+    "id": "mixed_171",
+    "payload": "'; DROP TABLE68",
+    "is_threat": true,
+    "expected_score": 0.8269152456208425,
+    "timestamp": "2025-11-24T13:28:13.013552"
+  },
+  {
+    "id": "mixed_172",
+    "payload": "GET /settings/794 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.032934083253080594,
+    "timestamp": "2025-11-23T23:48:13.013558"
+  },
+  {
+    "id": "mixed_173",
+    "payload": "POST /data/413 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0935991198086602,
+    "timestamp": "2025-11-23T23:02:13.013561"
+  },
+  {
+    "id": "mixed_174",
+    "payload": "GET /dashboard/427 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22830929446578596,
+    "timestamp": "2025-11-23T16:58:13.013564"
+  },
+  {
+    "id": "mixed_175",
+    "payload": "PUT /dashboard/718 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28422273891534633,
+    "timestamp": "2025-11-24T11:35:13.013566"
+  },
+  {
+    "id": "mixed_176",
+    "payload": "../../../etc/39",
+    "is_threat": true,
+    "expected_score": 0.9929999825914008,
+    "timestamp": "2025-11-23T23:39:13.013569"
+  },
+  {
+    "id": "mixed_177",
+    "payload": "DELETE /settings/890 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17282361615070996,
+    "timestamp": "2025-11-24T02:11:13.013573"
+  },
+  {
+    "id": "mixed_178",
+    "payload": "GET /data/615 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21044636156287844,
+    "timestamp": "2025-11-23T22:28:13.013575"
+  },
+  {
+    "id": "mixed_179",
+    "payload": "GET /api/users/821 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13230337378507512,
+    "timestamp": "2025-11-24T12:32:13.013578"
+  },
+  {
+    "id": "mixed_180",
+    "payload": "PUT /dashboard/424 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14337690424999144,
+    "timestamp": "2025-11-24T01:08:13.013581"
+  },
+  {
+    "id": "mixed_181",
+    "payload": "DELETE /data/377 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.055123518855981955,
+    "timestamp": "2025-11-24T02:09:13.013584"
+  },
+  {
+    "id": "mixed_182",
+    "payload": "GET /settings/152 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2936782514110378,
+    "timestamp": "2025-11-24T00:30:13.013587"
+  },
+  {
+    "id": "mixed_183",
+    "payload": "PUT /api/users/194 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.024338067937482045,
+    "timestamp": "2025-11-24T03:39:13.013590"
+  },
+  {
+    "id": "mixed_184",
+    "payload": "POST /data/230 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1441221232931341,
+    "timestamp": "2025-11-24T07:08:13.013593"
+  },
+  {
+    "id": "mixed_185",
+    "payload": "../../../etc/56",
+    "is_threat": true,
+    "expected_score": 0.7767076890139271,
+    "timestamp": "2025-11-23T21:25:13.013596"
+  },
+  {
+    "id": "mixed_186",
+    "payload": "POST /settings/456 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16565810736200523,
+    "timestamp": "2025-11-23T17:57:13.013599"
+  },
+  {
+    "id": "mixed_187",
+    "payload": "GET /api/users/687 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17723063906182548,
+    "timestamp": "2025-11-24T13:27:13.013602"
+  },
+  {
+    "id": "mixed_188",
+    "payload": "../../../etc/65",
+    "is_threat": true,
+    "expected_score": 0.9342845141334838,
+    "timestamp": "2025-11-24T02:32:13.013604"
+  },
+  {
+    "id": "mixed_189",
+    "payload": "'; DROP TABLE1",
+    "is_threat": true,
+    "expected_score": 0.6419570374971035,
+    "timestamp": "2025-11-23T14:36:13.013607"
+  },
+  {
+    "id": "mixed_190",
+    "payload": "DELETE /api/users/58 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2598632893635236,
+    "timestamp": "2025-11-23T15:07:13.013610"
+  },
+  {
+    "id": "mixed_191",
+    "payload": "DELETE /profile/72 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.05537309182468437,
+    "timestamp": "2025-11-24T07:28:13.013613"
+  },
+  {
+    "id": "mixed_192",
+    "payload": "<script>alert3",
+    "is_threat": true,
+    "expected_score": 0.9836756546229928,
+    "timestamp": "2025-11-23T14:45:13.013615"
+  },
+  {
+    "id": "mixed_193",
+    "payload": "<script>alert26",
+    "is_threat": true,
+    "expected_score": 0.7836315564585277,
+    "timestamp": "2025-11-24T12:23:13.013618"
+  },
+  {
+    "id": "mixed_194",
+    "payload": "GET /data/367 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20195971351785477,
+    "timestamp": "2025-11-23T23:07:13.013621"
+  },
+  {
+    "id": "mixed_195",
+    "payload": "<script>alert45",
+    "is_threat": true,
+    "expected_score": 0.6585450405772341,
+    "timestamp": "2025-11-24T02:18:13.013624"
+  },
+  {
+    "id": "mixed_196",
+    "payload": "POST /api/users/160 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04886899151615944,
+    "timestamp": "2025-11-24T09:00:13.013627"
+  },
+  {
+    "id": "mixed_197",
+    "payload": "PUT /api/users/224 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20893271858721868,
+    "timestamp": "2025-11-24T10:40:13.013630"
+  },
+  {
+    "id": "mixed_198",
+    "payload": "DELETE /dashboard/10 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18908594596678027,
+    "timestamp": "2025-11-24T10:18:13.013633"
+  },
+  {
+    "id": "mixed_199",
+    "payload": "POST /dashboard/731 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28339952536666974,
+    "timestamp": "2025-11-24T08:16:13.013636"
+  },
+  {
+    "id": "mixed_200",
+    "payload": "PUT /api/users/252 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08486353625455482,
+    "timestamp": "2025-11-24T01:14:13.013639"
+  },
+  {
+    "id": "mixed_201",
+    "payload": "PUT /profile/354 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22159607643157922,
+    "timestamp": "2025-11-24T12:52:13.013642"
+  },
+  {
+    "id": "mixed_202",
+    "payload": "; rm -rf40",
+    "is_threat": true,
+    "expected_score": 0.8771915325310202,
+    "timestamp": "2025-11-23T18:13:13.013645"
+  },
+  {
+    "id": "mixed_203",
+    "payload": "POST /settings/307 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16687014937347516,
+    "timestamp": "2025-11-23T23:28:13.013648"
+  },
+  {
+    "id": "mixed_204",
+    "payload": "DELETE /dashboard/265 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04808149423744035,
+    "timestamp": "2025-11-23T20:02:13.013653"
+  },
+  {
+    "id": "mixed_205",
+    "payload": "POST /data/438 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1206499745334329,
+    "timestamp": "2025-11-23T21:50:13.013656"
+  },
+  {
+    "id": "mixed_206",
+    "payload": "POST /settings/508 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0883852309773123,
+    "timestamp": "2025-11-24T07:07:13.013659"
+  },
+  {
+    "id": "mixed_207",
+    "payload": "GET /settings/661 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14816690276552258,
+    "timestamp": "2025-11-24T11:47:13.013662"
+  },
+  {
+    "id": "mixed_208",
+    "payload": "; rm -rf94",
+    "is_threat": true,
+    "expected_score": 0.7276940306915343,
+    "timestamp": "2025-11-23T22:31:13.013664"
+  },
+  {
+    "id": "mixed_209",
+    "payload": "GET /api/users/906 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.010572122250914173,
+    "timestamp": "2025-11-23T18:55:13.013667"
+  },
+  {
+    "id": "mixed_210",
+    "payload": "<script>alert68",
+    "is_threat": true,
+    "expected_score": 0.9431806621537364,
+    "timestamp": "2025-11-24T08:33:13.013670"
+  },
+  {
+    "id": "mixed_211",
+    "payload": "../../../etc/1",
+    "is_threat": true,
+    "expected_score": 0.883438831230648,
+    "timestamp": "2025-11-23T16:37:13.013673"
+  },
+  {
+    "id": "mixed_212",
+    "payload": "PUT /settings/635 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07341956222928636,
+    "timestamp": "2025-11-23T18:21:13.013676"
+  },
+  {
+    "id": "mixed_213",
+    "payload": "POST /profile/556 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20927371228659677,
+    "timestamp": "2025-11-24T02:43:13.013679"
+  },
+  {
+    "id": "mixed_214",
+    "payload": "DELETE /settings/726 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0017097057683179596,
+    "timestamp": "2025-11-24T01:03:13.013682"
+  },
+  {
+    "id": "mixed_215",
+    "payload": "DELETE /api/users/28 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04196382100824878,
+    "timestamp": "2025-11-24T09:46:13.013685"
+  },
+  {
+    "id": "mixed_216",
+    "payload": "PUT /api/users/565 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07755279072561745,
+    "timestamp": "2025-11-24T09:28:13.013690"
+  },
+  {
+    "id": "mixed_217",
+    "payload": "PUT /dashboard/590 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.132876113143907,
+    "timestamp": "2025-11-24T04:10:13.013693"
+  },
+  {
+    "id": "mixed_218",
+    "payload": "POST /profile/66 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21852899419463193,
+    "timestamp": "2025-11-24T04:37:13.013696"
+  },
+  {
+    "id": "mixed_219",
+    "payload": "POST /settings/511 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17795430645688712,
+    "timestamp": "2025-11-23T22:24:13.013699"
+  },
+  {
+    "id": "mixed_220",
+    "payload": "PUT /dashboard/533 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10173502493747989,
+    "timestamp": "2025-11-23T21:31:13.013702"
+  },
+  {
+    "id": "mixed_221",
+    "payload": "POST /dashboard/497 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.01614650132397529,
+    "timestamp": "2025-11-23T15:14:13.013705"
+  },
+  {
+    "id": "mixed_222",
+    "payload": "GET /profile/818 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04720031087289269,
+    "timestamp": "2025-11-24T13:26:13.013708"
+  },
+  {
+    "id": "mixed_223",
+    "payload": "POST /profile/893 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15401900446316472,
+    "timestamp": "2025-11-24T12:33:13.013711"
+  },
+  {
+    "id": "mixed_224",
+    "payload": "DELETE /dashboard/123 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1201572709463786,
+    "timestamp": "2025-11-23T20:33:13.013714"
+  },
+  {
+    "id": "mixed_225",
+    "payload": "../../../etc/62",
+    "is_threat": true,
+    "expected_score": 0.8142878772014727,
+    "timestamp": "2025-11-23T17:25:13.013717"
+  },
+  {
+    "id": "mixed_226",
+    "payload": "GET /settings/7 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0919321025017173,
+    "timestamp": "2025-11-23T16:09:13.013720"
+  },
+  {
+    "id": "mixed_227",
+    "payload": "; rm -rf96",
+    "is_threat": true,
+    "expected_score": 0.9145284402742033,
+    "timestamp": "2025-11-24T09:03:13.013723"
+  },
+  {
+    "id": "mixed_228",
+    "payload": "DELETE /profile/913 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0836689551582346,
+    "timestamp": "2025-11-23T17:03:13.013726"
+  },
+  {
+    "id": "mixed_229",
+    "payload": "GET /api/users/667 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16024377336097795,
+    "timestamp": "2025-11-23T15:27:13.013729"
+  },
+  {
+    "id": "mixed_230",
+    "payload": "GET /profile/438 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24390494177233618,
+    "timestamp": "2025-11-24T00:23:13.013731"
+  },
+  {
+    "id": "mixed_231",
+    "payload": "'; DROP TABLE83",
+    "is_threat": true,
+    "expected_score": 0.8269703743825626,
+    "timestamp": "2025-11-24T13:28:13.013734"
+  },
+  {
+    "id": "mixed_232",
+    "payload": "POST /profile/43 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14428121709849415,
+    "timestamp": "2025-11-24T03:30:13.013737"
+  },
+  {
+    "id": "mixed_233",
+    "payload": "GET /api/users/411 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2506517181602864,
+    "timestamp": "2025-11-24T01:17:13.013740"
+  },
+  {
+    "id": "mixed_234",
+    "payload": "DELETE /dashboard/722 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24787526650202155,
+    "timestamp": "2025-11-24T07:06:13.013743"
+  },
+  {
+    "id": "mixed_235",
+    "payload": "../../../etc/55",
+    "is_threat": true,
+    "expected_score": 0.861476421231639,
+    "timestamp": "2025-11-23T15:38:13.013746"
+  },
+  {
+    "id": "mixed_236",
+    "payload": "DELETE /profile/876 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22589823921035906,
+    "timestamp": "2025-11-24T12:14:13.013751"
+  },
+  {
+    "id": "mixed_237",
+    "payload": "; rm -rf37",
+    "is_threat": true,
+    "expected_score": 0.9533139109551154,
+    "timestamp": "2025-11-23T21:29:13.013755"
+  },
+  {
+    "id": "mixed_238",
+    "payload": "GET /dashboard/263 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.261635008563036,
+    "timestamp": "2025-11-24T12:16:13.013759"
+  },
+  {
+    "id": "mixed_239",
+    "payload": "GET /data/775 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2799801024391013,
+    "timestamp": "2025-11-23T17:47:13.013762"
+  },
+  {
+    "id": "mixed_240",
+    "payload": "; rm -rf3",
+    "is_threat": true,
+    "expected_score": 0.9586508878157555,
+    "timestamp": "2025-11-24T03:14:13.013764"
+  },
+  {
+    "id": "mixed_241",
+    "payload": "PUT /dashboard/82 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13566748782943513,
+    "timestamp": "2025-11-23T23:02:13.013767"
+  },
+  {
+    "id": "mixed_242",
+    "payload": "<script>alert29",
+    "is_threat": true,
+    "expected_score": 0.6844497556936135,
+    "timestamp": "2025-11-23T17:22:13.013770"
+  },
+  {
+    "id": "mixed_243",
+    "payload": "PUT /settings/768 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25886259459861727,
+    "timestamp": "2025-11-23T23:53:13.013773"
+  },
+  {
+    "id": "mixed_244",
+    "payload": "GET /profile/812 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11330060337806838,
+    "timestamp": "2025-11-23T19:32:13.013776"
+  },
+  {
+    "id": "mixed_245",
+    "payload": "DELETE /dashboard/309 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.01494296073694583,
+    "timestamp": "2025-11-23T17:02:13.013779"
+  },
+  {
+    "id": "mixed_246",
+    "payload": "POST /profile/721 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07561625208162527,
+    "timestamp": "2025-11-24T13:33:13.013784"
+  },
+  {
+    "id": "mixed_247",
+    "payload": "../../../etc/27",
+    "is_threat": true,
+    "expected_score": 0.9312544143508469,
+    "timestamp": "2025-11-23T21:11:13.013787"
+  },
+  {
+    "id": "mixed_248",
+    "payload": "../../../etc/75",
+    "is_threat": true,
+    "expected_score": 0.6149600914659069,
+    "timestamp": "2025-11-24T09:18:13.013790"
+  },
+  {
+    "id": "mixed_249",
+    "payload": "PUT /settings/810 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04107077379331157,
+    "timestamp": "2025-11-24T00:05:13.013794"
+  },
+  {
+    "id": "mixed_250",
+    "payload": "PUT /settings/63 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1320450932095137,
+    "timestamp": "2025-11-24T01:19:13.013797"
+  },
+  {
+    "id": "mixed_251",
+    "payload": "GET /settings/959 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.024430441821398374,
+    "timestamp": "2025-11-24T05:35:13.013800"
+  },
+  {
+    "id": "mixed_252",
+    "payload": "DELETE /settings/167 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09858366520070277,
+    "timestamp": "2025-11-24T10:12:13.013803"
+  },
+  {
+    "id": "mixed_253",
+    "payload": "GET /data/722 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.277555586363357,
+    "timestamp": "2025-11-23T20:16:13.013806"
+  },
+  {
+    "id": "mixed_254",
+    "payload": "DELETE /dashboard/596 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11311247125780305,
+    "timestamp": "2025-11-24T05:22:13.013809"
+  },
+  {
+    "id": "mixed_255",
+    "payload": "PUT /profile/997 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11842881279826642,
+    "timestamp": "2025-11-23T21:21:13.013812"
+  },
+  {
+    "id": "mixed_256",
+    "payload": "<script>alert31",
+    "is_threat": true,
+    "expected_score": 0.7188086377734726,
+    "timestamp": "2025-11-24T03:02:13.013814"
+  },
+  {
+    "id": "mixed_257",
+    "payload": "DELETE /dashboard/757 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07661314664258048,
+    "timestamp": "2025-11-24T06:48:13.013818"
+  },
+  {
+    "id": "mixed_258",
+    "payload": "DELETE /api/users/77 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.011772683378035675,
+    "timestamp": "2025-11-24T11:13:13.013821"
+  },
+  {
+    "id": "mixed_259",
+    "payload": "'; DROP TABLE97",
+    "is_threat": true,
+    "expected_score": 0.962531468362283,
+    "timestamp": "2025-11-24T03:08:13.013824"
+  },
+  {
+    "id": "mixed_260",
+    "payload": "PUT /api/users/879 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0960372452887576,
+    "timestamp": "2025-11-24T04:52:13.013827"
+  },
+  {
+    "id": "mixed_261",
+    "payload": "GET /data/635 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06999268845214875,
+    "timestamp": "2025-11-24T12:16:13.013830"
+  },
+  {
+    "id": "mixed_262",
+    "payload": "DELETE /dashboard/53 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.001376392980945207,
+    "timestamp": "2025-11-23T23:22:13.013833"
+  },
+  {
+    "id": "mixed_263",
+    "payload": "POST /profile/267 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17724611320453681,
+    "timestamp": "2025-11-23T23:10:13.013836"
+  },
+  {
+    "id": "mixed_264",
+    "payload": "<script>alert80",
+    "is_threat": true,
+    "expected_score": 0.6915455062342397,
+    "timestamp": "2025-11-24T01:02:13.013839"
+  },
+  {
+    "id": "mixed_265",
+    "payload": "POST /dashboard/700 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2606076033375859,
+    "timestamp": "2025-11-24T05:35:13.013842"
+  },
+  {
+    "id": "mixed_266",
+    "payload": "POST /dashboard/813 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18803583646005273,
+    "timestamp": "2025-11-23T16:34:13.013845"
+  },
+  {
+    "id": "mixed_267",
+    "payload": "POST /api/users/824 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1344865362242549,
+    "timestamp": "2025-11-24T06:49:13.013848"
+  },
+  {
+    "id": "mixed_268",
+    "payload": "; rm -rf100",
+    "is_threat": true,
+    "expected_score": 0.9207108269725558,
+    "timestamp": "2025-11-23T22:28:13.013855"
+  },
+  {
+    "id": "mixed_269",
+    "payload": "PUT /profile/867 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15259109511497304,
+    "timestamp": "2025-11-23T16:29:13.013858"
+  },
+  {
+    "id": "mixed_270",
+    "payload": "GET /data/636 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.005557987543664045,
+    "timestamp": "2025-11-24T11:26:13.013861"
+  },
+  {
+    "id": "mixed_271",
+    "payload": "POST /profile/693 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2828635082483243,
+    "timestamp": "2025-11-24T11:01:13.013864"
+  },
+  {
+    "id": "mixed_272",
+    "payload": "POST /dashboard/686 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.057099291765645876,
+    "timestamp": "2025-11-24T05:39:13.013867"
+  },
+  {
+    "id": "mixed_273",
+    "payload": "DELETE /settings/996 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12849097465351303,
+    "timestamp": "2025-11-24T11:16:13.013870"
+  },
+  {
+    "id": "mixed_274",
+    "payload": "PUT /dashboard/449 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10528252297382319,
+    "timestamp": "2025-11-23T14:12:13.013873"
+  },
+  {
+    "id": "mixed_275",
+    "payload": "../../../etc/7",
+    "is_threat": true,
+    "expected_score": 0.9334753450513456,
+    "timestamp": "2025-11-23T19:43:13.013876"
+  },
+  {
+    "id": "mixed_276",
+    "payload": "'; DROP TABLE50",
+    "is_threat": true,
+    "expected_score": 0.7647633036587058,
+    "timestamp": "2025-11-24T07:12:13.013881"
+  },
+  {
+    "id": "mixed_277",
+    "payload": "POST /api/users/439 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21721494939588465,
+    "timestamp": "2025-11-23T16:18:13.013886"
+  },
+  {
+    "id": "mixed_278",
+    "payload": "PUT /profile/68 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0015936634399334015,
+    "timestamp": "2025-11-24T10:16:13.013889"
+  },
+  {
+    "id": "mixed_279",
+    "payload": "../../../etc/94",
+    "is_threat": true,
+    "expected_score": 0.7120374224717527,
+    "timestamp": "2025-11-23T21:00:13.013892"
+  },
+  {
+    "id": "mixed_280",
+    "payload": "PUT /api/users/964 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04313311503946125,
+    "timestamp": "2025-11-24T07:31:13.013895"
+  },
+  {
+    "id": "mixed_281",
+    "payload": "GET /api/users/810 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12031646419696311,
+    "timestamp": "2025-11-23T16:46:13.013897"
+  },
+  {
+    "id": "mixed_282",
+    "payload": "POST /dashboard/740 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20665756342917815,
+    "timestamp": "2025-11-24T08:43:13.013905"
+  },
+  {
+    "id": "mixed_283",
+    "payload": "POST /api/users/75 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1648128724557633,
+    "timestamp": "2025-11-24T08:55:13.013908"
+  },
+  {
+    "id": "mixed_284",
+    "payload": "PUT /dashboard/572 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2828003771956485,
+    "timestamp": "2025-11-24T10:25:13.013911"
+  },
+  {
+    "id": "mixed_285",
+    "payload": "DELETE /settings/860 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09455515392782336,
+    "timestamp": "2025-11-23T18:21:13.013914"
+  },
+  {
+    "id": "mixed_286",
+    "payload": "POST /api/users/317 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2459130769695435,
+    "timestamp": "2025-11-24T04:15:13.013917"
+  },
+  {
+    "id": "mixed_287",
+    "payload": "GET /data/982 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10482692016804654,
+    "timestamp": "2025-11-24T10:43:13.013920"
+  },
+  {
+    "id": "mixed_288",
+    "payload": "PUT /data/808 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11516715230938498,
+    "timestamp": "2025-11-24T09:39:13.013923"
+  },
+  {
+    "id": "mixed_289",
+    "payload": "DELETE /dashboard/580 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19549411279874138,
+    "timestamp": "2025-11-23T16:48:13.013926"
+  },
+  {
+    "id": "mixed_290",
+    "payload": "PUT /api/users/816 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.057986308533462524,
+    "timestamp": "2025-11-24T06:58:13.013929"
+  },
+  {
+    "id": "mixed_291",
+    "payload": "DELETE /data/699 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2621089594323906,
+    "timestamp": "2025-11-24T02:27:13.013932"
+  },
+  {
+    "id": "mixed_292",
+    "payload": "GET /data/506 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08571557686390686,
+    "timestamp": "2025-11-23T17:58:13.013935"
+  },
+  {
+    "id": "mixed_293",
+    "payload": "GET /api/users/968 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1289878771047801,
+    "timestamp": "2025-11-24T12:05:13.013938"
+  },
+  {
+    "id": "mixed_294",
+    "payload": "GET /dashboard/664 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.27281738537500755,
+    "timestamp": "2025-11-23T16:37:13.013941"
+  },
+  {
+    "id": "mixed_295",
+    "payload": "GET /dashboard/927 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1470233205878288,
+    "timestamp": "2025-11-23T23:38:13.013944"
+  },
+  {
+    "id": "mixed_296",
+    "payload": "POST /settings/772 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1578094843754176,
+    "timestamp": "2025-11-24T08:01:13.013947"
+  },
+  {
+    "id": "mixed_297",
+    "payload": "POST /dashboard/581 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24396770811846327,
+    "timestamp": "2025-11-24T01:32:13.013950"
+  },
+  {
+    "id": "mixed_298",
+    "payload": "<script>alert5",
+    "is_threat": true,
+    "expected_score": 0.6937463095029031,
+    "timestamp": "2025-11-23T14:12:13.013952"
+  },
+  {
+    "id": "mixed_299",
+    "payload": "DELETE /settings/518 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14064190431769072,
+    "timestamp": "2025-11-23T19:01:13.013958"
+  },
+  {
+    "id": "mixed_300",
+    "payload": "POST /profile/906 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19085361330027037,
+    "timestamp": "2025-11-23T14:12:13.013961"
+  },
+  {
+    "id": "mixed_301",
+    "payload": "POST /dashboard/262 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1293317640572749,
+    "timestamp": "2025-11-24T11:27:13.013964"
+  },
+  {
+    "id": "mixed_302",
+    "payload": "../../../etc/15",
+    "is_threat": true,
+    "expected_score": 0.6777715898363819,
+    "timestamp": "2025-11-24T11:51:13.013967"
+  },
+  {
+    "id": "mixed_303",
+    "payload": "GET /data/479 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.05965576009170653,
+    "timestamp": "2025-11-24T02:11:13.013970"
+  },
+  {
+    "id": "mixed_304",
+    "payload": "<script>alert32",
+    "is_threat": true,
+    "expected_score": 0.823916155253852,
+    "timestamp": "2025-11-24T04:36:13.013973"
+  },
+  {
+    "id": "mixed_305",
+    "payload": "POST /api/users/505 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0973939806564918,
+    "timestamp": "2025-11-24T11:32:13.013979"
+  },
+  {
+    "id": "mixed_306",
+    "payload": "POST /api/users/602 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17061914691428762,
+    "timestamp": "2025-11-24T06:00:13.013984"
+  },
+  {
+    "id": "mixed_307",
+    "payload": "POST /settings/888 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.161801124038736,
+    "timestamp": "2025-11-23T15:53:13.013987"
+  },
+  {
+    "id": "mixed_308",
+    "payload": "<script>alert49",
+    "is_threat": true,
+    "expected_score": 0.6273040100051624,
+    "timestamp": "2025-11-24T11:46:13.013990"
+  },
+  {
+    "id": "mixed_309",
+    "payload": "POST /settings/471 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19646122329940024,
+    "timestamp": "2025-11-23T22:12:13.013993"
+  },
+  {
+    "id": "mixed_310",
+    "payload": "GET /settings/48 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.03905401240954115,
+    "timestamp": "2025-11-24T04:30:13.013996"
+  },
+  {
+    "id": "mixed_311",
+    "payload": "DELETE /settings/695 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.05349884174306314,
+    "timestamp": "2025-11-24T00:59:13.013999"
+  },
+  {
+    "id": "mixed_312",
+    "payload": "POST /dashboard/237 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13861416086703301,
+    "timestamp": "2025-11-23T20:03:13.014002"
+  },
+  {
+    "id": "mixed_313",
+    "payload": "PUT /data/220 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08563814227731804,
+    "timestamp": "2025-11-23T23:28:13.014005"
+  },
+  {
+    "id": "mixed_314",
+    "payload": "PUT /profile/739 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0021108185662903844,
+    "timestamp": "2025-11-24T13:04:13.014008"
+  },
+  {
+    "id": "mixed_315",
+    "payload": "GET /settings/418 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2693318084527567,
+    "timestamp": "2025-11-24T04:56:13.014011"
+  },
+  {
+    "id": "mixed_316",
+    "payload": "DELETE /settings/503 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1024878661870559,
+    "timestamp": "2025-11-24T00:48:13.014013"
+  },
+  {
+    "id": "mixed_317",
+    "payload": "PUT /profile/562 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15163400383325956,
+    "timestamp": "2025-11-24T04:34:13.014016"
+  },
+  {
+    "id": "mixed_318",
+    "payload": "DELETE /data/91 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15119131591896715,
+    "timestamp": "2025-11-24T01:26:13.014019"
+  },
+  {
+    "id": "mixed_319",
+    "payload": "DELETE /data/366 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.00021351490708010346,
+    "timestamp": "2025-11-23T14:27:13.014022"
+  },
+  {
+    "id": "mixed_320",
+    "payload": "DELETE /settings/741 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07288171960363841,
+    "timestamp": "2025-11-24T13:49:13.014025"
+  },
+  {
+    "id": "mixed_321",
+    "payload": "PUT /settings/326 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26748687230946566,
+    "timestamp": "2025-11-24T07:44:13.014028"
+  },
+  {
+    "id": "mixed_322",
+    "payload": "DELETE /data/941 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28203177789042955,
+    "timestamp": "2025-11-24T05:26:13.014031"
+  },
+  {
+    "id": "mixed_323",
+    "payload": "DELETE /profile/306 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16481228730888411,
+    "timestamp": "2025-11-24T05:12:13.014035"
+  },
+  {
+    "id": "mixed_324",
+    "payload": "GET /data/280 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.143074092124082,
+    "timestamp": "2025-11-24T09:22:13.014037"
+  },
+  {
+    "id": "mixed_325",
+    "payload": "DELETE /profile/457 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2804776584984352,
+    "timestamp": "2025-11-23T18:43:13.014040"
+  },
+  {
+    "id": "mixed_326",
+    "payload": "POST /data/643 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08347318582599754,
+    "timestamp": "2025-11-24T06:58:13.014043"
+  },
+  {
+    "id": "mixed_327",
+    "payload": "PUT /profile/52 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14450357451196003,
+    "timestamp": "2025-11-24T08:12:13.014046"
+  },
+  {
+    "id": "mixed_328",
+    "payload": "POST /settings/155 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2071001517051447,
+    "timestamp": "2025-11-24T01:39:13.014049"
+  },
+  {
+    "id": "mixed_329",
+    "payload": "DELETE /data/481 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13881267117969268,
+    "timestamp": "2025-11-23T20:18:13.014052"
+  },
+  {
+    "id": "mixed_330",
+    "payload": "POST /profile/320 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06787387146919698,
+    "timestamp": "2025-11-23T18:03:13.014055"
+  },
+  {
+    "id": "mixed_331",
+    "payload": "PUT /settings/224 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1533050274002317,
+    "timestamp": "2025-11-23T16:43:13.014060"
+  },
+  {
+    "id": "mixed_332",
+    "payload": "../../../etc/78",
+    "is_threat": true,
+    "expected_score": 0.7974596117490051,
+    "timestamp": "2025-11-23T15:30:13.014063"
+  },
+  {
+    "id": "mixed_333",
+    "payload": "../../../etc/28",
+    "is_threat": true,
+    "expected_score": 0.7385317989533221,
+    "timestamp": "2025-11-23T21:59:13.014065"
+  },
+  {
+    "id": "mixed_334",
+    "payload": "GET /dashboard/616 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14179130910563292,
+    "timestamp": "2025-11-24T12:45:13.014072"
+  },
+  {
+    "id": "mixed_335",
+    "payload": "DELETE /profile/527 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06517839070424998,
+    "timestamp": "2025-11-24T13:11:13.014075"
+  },
+  {
+    "id": "mixed_336",
+    "payload": "PUT /data/829 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2240735963145782,
+    "timestamp": "2025-11-23T22:43:13.014078"
+  },
+  {
+    "id": "mixed_337",
+    "payload": "PUT /api/users/665 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14935114602060534,
+    "timestamp": "2025-11-24T09:12:13.014081"
+  },
+  {
+    "id": "mixed_338",
+    "payload": "../../../etc/58",
+    "is_threat": true,
+    "expected_score": 0.9832423115250652,
+    "timestamp": "2025-11-24T03:16:13.014084"
+  },
+  {
+    "id": "mixed_339",
+    "payload": "../../../etc/11",
+    "is_threat": true,
+    "expected_score": 0.6240263062561779,
+    "timestamp": "2025-11-23T17:27:13.014087"
+  },
+  {
+    "id": "mixed_340",
+    "payload": "GET /api/users/808 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12767777154392865,
+    "timestamp": "2025-11-24T05:44:13.014090"
+  },
+  {
+    "id": "mixed_341",
+    "payload": "GET /data/784 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19607511553930893,
+    "timestamp": "2025-11-23T17:32:13.014093"
+  },
+  {
+    "id": "mixed_342",
+    "payload": "POST /api/users/275 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21534927827773956,
+    "timestamp": "2025-11-23T21:02:13.014096"
+  },
+  {
+    "id": "mixed_343",
+    "payload": "POST /api/users/991 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24137690902029996,
+    "timestamp": "2025-11-23T15:22:13.014099"
+  },
+  {
+    "id": "mixed_344",
+    "payload": "GET /data/782 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2502414077957465,
+    "timestamp": "2025-11-24T09:29:13.014102"
+  },
+  {
+    "id": "mixed_345",
+    "payload": "DELETE /data/751 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2747875537294234,
+    "timestamp": "2025-11-24T12:18:13.014104"
+  },
+  {
+    "id": "mixed_346",
+    "payload": "PUT /data/230 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19837255175118895,
+    "timestamp": "2025-11-24T04:05:13.014108"
+  },
+  {
+    "id": "mixed_347",
+    "payload": "PUT /data/900 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12021407964297885,
+    "timestamp": "2025-11-24T09:03:13.014111"
+  },
+  {
+    "id": "mixed_348",
+    "payload": "../../../etc/25",
+    "is_threat": true,
+    "expected_score": 0.9601261075064346,
+    "timestamp": "2025-11-24T09:56:13.014113"
+  },
+  {
+    "id": "mixed_349",
+    "payload": "POST /dashboard/526 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1391484049487112,
+    "timestamp": "2025-11-24T13:15:13.014116"
+  },
+  {
+    "id": "mixed_350",
+    "payload": "POST /profile/114 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15858843885807042,
+    "timestamp": "2025-11-24T13:37:13.014119"
+  },
+  {
+    "id": "mixed_351",
+    "payload": "GET /profile/86 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09950608845764601,
+    "timestamp": "2025-11-24T07:40:13.014122"
+  },
+  {
+    "id": "mixed_352",
+    "payload": "GET /settings/180 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28140037083399067,
+    "timestamp": "2025-11-24T05:58:13.014126"
+  },
+  {
+    "id": "mixed_353",
+    "payload": "PUT /profile/575 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.031072877070612757,
+    "timestamp": "2025-11-23T19:14:13.014129"
+  },
+  {
+    "id": "mixed_354",
+    "payload": "GET /api/users/689 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0669215244184435,
+    "timestamp": "2025-11-24T02:59:13.014132"
+  },
+  {
+    "id": "mixed_355",
+    "payload": "DELETE /data/550 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.27635053841549934,
+    "timestamp": "2025-11-24T12:33:13.014135"
+  },
+  {
+    "id": "mixed_356",
+    "payload": "../../../etc/58",
+    "is_threat": true,
+    "expected_score": 0.924456594233462,
+    "timestamp": "2025-11-24T01:38:13.014137"
+  },
+  {
+    "id": "mixed_357",
+    "payload": "POST /dashboard/334 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2007552037862999,
+    "timestamp": "2025-11-24T05:37:13.014140"
+  },
+  {
+    "id": "mixed_358",
+    "payload": "GET /settings/610 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25848759801070037,
+    "timestamp": "2025-11-23T14:53:13.014143"
+  },
+  {
+    "id": "mixed_359",
+    "payload": "PUT /settings/559 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11872388588904476,
+    "timestamp": "2025-11-23T19:43:13.014146"
+  },
+  {
+    "id": "mixed_360",
+    "payload": "GET /settings/695 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2136836674342845,
+    "timestamp": "2025-11-24T01:17:13.014150"
+  },
+  {
+    "id": "mixed_361",
+    "payload": "DELETE /data/654 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.258486429542357,
+    "timestamp": "2025-11-24T12:45:13.014156"
+  },
+  {
+    "id": "mixed_362",
+    "payload": "'; DROP TABLE35",
+    "is_threat": true,
+    "expected_score": 0.7930969994684931,
+    "timestamp": "2025-11-24T05:04:13.014158"
+  },
+  {
+    "id": "mixed_363",
+    "payload": "POST /data/948 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16721223646309918,
+    "timestamp": "2025-11-24T02:05:13.014163"
+  },
+  {
+    "id": "mixed_364",
+    "payload": "PUT /api/users/151 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.27981925831324206,
+    "timestamp": "2025-11-24T07:43:13.014168"
+  },
+  {
+    "id": "mixed_365",
+    "payload": "'; DROP TABLE72",
+    "is_threat": true,
+    "expected_score": 0.7458294361282309,
+    "timestamp": "2025-11-23T15:57:13.014171"
+  },
+  {
+    "id": "mixed_366",
+    "payload": "POST /data/932 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1357464828880137,
+    "timestamp": "2025-11-24T11:53:13.014175"
+  },
+  {
+    "id": "mixed_367",
+    "payload": "PUT /api/users/691 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09432064924976578,
+    "timestamp": "2025-11-24T04:26:13.014180"
+  },
+  {
+    "id": "mixed_368",
+    "payload": "GET /api/users/128 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1385060464850075,
+    "timestamp": "2025-11-23T18:46:13.014183"
+  },
+  {
+    "id": "mixed_369",
+    "payload": "GET /profile/749 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13171636772968676,
+    "timestamp": "2025-11-23T15:41:13.014186"
+  },
+  {
+    "id": "mixed_370",
+    "payload": "DELETE /profile/705 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26311800243202077,
+    "timestamp": "2025-11-24T01:15:13.014189"
+  },
+  {
+    "id": "mixed_371",
+    "payload": "'; DROP TABLE34",
+    "is_threat": true,
+    "expected_score": 0.7276389751674096,
+    "timestamp": "2025-11-23T16:09:13.014191"
+  },
+  {
+    "id": "mixed_372",
+    "payload": "PUT /dashboard/53 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.022694770309833644,
+    "timestamp": "2025-11-23T16:57:13.014194"
+  },
+  {
+    "id": "mixed_373",
+    "payload": "POST /dashboard/346 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04985827919473459,
+    "timestamp": "2025-11-24T05:36:13.014197"
+  },
+  {
+    "id": "mixed_374",
+    "payload": "POST /profile/326 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1709856968347008,
+    "timestamp": "2025-11-24T07:44:13.014200"
+  },
+  {
+    "id": "mixed_375",
+    "payload": "DELETE /dashboard/492 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17644764067008809,
+    "timestamp": "2025-11-23T20:23:13.014203"
+  },
+  {
+    "id": "mixed_376",
+    "payload": "POST /dashboard/560 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23663522387540747,
+    "timestamp": "2025-11-24T11:54:13.014206"
+  },
+  {
+    "id": "mixed_377",
+    "payload": "DELETE /data/845 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08375979134753436,
+    "timestamp": "2025-11-24T08:36:13.014209"
+  },
+  {
+    "id": "mixed_378",
+    "payload": "DELETE /settings/577 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23454349688721024,
+    "timestamp": "2025-11-23T14:12:13.014212"
+  },
+  {
+    "id": "mixed_379",
+    "payload": "PUT /data/664 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16591601233859232,
+    "timestamp": "2025-11-24T10:55:13.014215"
+  },
+  {
+    "id": "mixed_380",
+    "payload": "<script>alert98",
+    "is_threat": true,
+    "expected_score": 0.7877397559782546,
+    "timestamp": "2025-11-23T15:38:13.014218"
+  },
+  {
+    "id": "mixed_381",
+    "payload": "GET /data/218 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1811962210223622,
+    "timestamp": "2025-11-24T03:36:13.014221"
+  },
+  {
+    "id": "mixed_382",
+    "payload": "DELETE /profile/991 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10015124851248562,
+    "timestamp": "2025-11-23T20:26:13.014224"
+  },
+  {
+    "id": "mixed_383",
+    "payload": "POST /data/860 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.05107610781255146,
+    "timestamp": "2025-11-23T19:11:13.014227"
+  },
+  {
+    "id": "mixed_384",
+    "payload": "PUT /dashboard/323 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.002186796256286039,
+    "timestamp": "2025-11-23T18:51:13.014229"
+  },
+  {
+    "id": "mixed_385",
+    "payload": "PUT /data/821 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14986385904571828,
+    "timestamp": "2025-11-24T00:07:13.014233"
+  },
+  {
+    "id": "mixed_386",
+    "payload": "DELETE /api/users/479 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04352079724481223,
+    "timestamp": "2025-11-24T09:08:13.014236"
+  },
+  {
+    "id": "mixed_387",
+    "payload": "GET /settings/310 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24937770414528815,
+    "timestamp": "2025-11-23T21:03:13.014248"
+  },
+  {
+    "id": "mixed_388",
+    "payload": "PUT /api/users/336 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2927244685329522,
+    "timestamp": "2025-11-23T17:08:13.014253"
+  },
+  {
+    "id": "mixed_389",
+    "payload": "GET /profile/964 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06607215457664847,
+    "timestamp": "2025-11-24T10:34:13.014256"
+  },
+  {
+    "id": "mixed_390",
+    "payload": "POST /api/users/665 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14056041447669512,
+    "timestamp": "2025-11-23T14:23:13.014259"
+  },
+  {
+    "id": "mixed_391",
+    "payload": "POST /profile/934 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19568796568353522,
+    "timestamp": "2025-11-24T06:10:13.014262"
+  },
+  {
+    "id": "mixed_392",
+    "payload": "POST /api/users/977 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.020831226971457673,
+    "timestamp": "2025-11-23T18:07:13.014265"
+  },
+  {
+    "id": "mixed_393",
+    "payload": "'; DROP TABLE98",
+    "is_threat": true,
+    "expected_score": 0.6841591576255107,
+    "timestamp": "2025-11-24T03:04:13.014267"
+  },
+  {
+    "id": "mixed_394",
+    "payload": "PUT /data/306 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.01888009621234967,
+    "timestamp": "2025-11-24T12:23:13.014270"
+  },
+  {
+    "id": "mixed_395",
+    "payload": "'; DROP TABLE83",
+    "is_threat": true,
+    "expected_score": 0.7625553551557379,
+    "timestamp": "2025-11-23T18:29:13.014275"
+  },
+  {
+    "id": "mixed_396",
+    "payload": "<script>alert64",
+    "is_threat": true,
+    "expected_score": 0.9662518204718379,
+    "timestamp": "2025-11-24T11:15:13.014278"
+  },
+  {
+    "id": "mixed_397",
+    "payload": "PUT /api/users/101 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09997458337969246,
+    "timestamp": "2025-11-23T20:54:13.014284"
+  },
+  {
+    "id": "mixed_398",
+    "payload": "POST /settings/521 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1261715521219557,
+    "timestamp": "2025-11-24T00:43:13.014287"
+  },
+  {
+    "id": "mixed_399",
+    "payload": "DELETE /api/users/704 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04556082756957678,
+    "timestamp": "2025-11-24T10:29:13.014290"
+  },
+  {
+    "id": "mixed_400",
+    "payload": "POST /data/369 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12067393082353144,
+    "timestamp": "2025-11-24T06:10:13.014293"
+  },
+  {
+    "id": "mixed_401",
+    "payload": "POST /data/156 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2109865764977858,
+    "timestamp": "2025-11-24T00:49:13.014296"
+  },
+  {
+    "id": "mixed_402",
+    "payload": "POST /dashboard/659 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28942252131001217,
+    "timestamp": "2025-11-24T12:19:13.014299"
+  },
+  {
+    "id": "mixed_403",
+    "payload": "GET /api/users/941 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2801856703636443,
+    "timestamp": "2025-11-24T13:21:13.014302"
+  },
+  {
+    "id": "mixed_404",
+    "payload": "PUT /settings/157 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17620591613229455,
+    "timestamp": "2025-11-23T16:22:13.014305"
+  },
+  {
+    "id": "mixed_405",
+    "payload": "DELETE /profile/265 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.03589781820724521,
+    "timestamp": "2025-11-23T21:38:13.014308"
+  },
+  {
+    "id": "mixed_406",
+    "payload": "; rm -rf96",
+    "is_threat": true,
+    "expected_score": 0.730263792939112,
+    "timestamp": "2025-11-24T12:27:13.014310"
+  },
+  {
+    "id": "mixed_407",
+    "payload": "GET /api/users/599 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.035607681700992676,
+    "timestamp": "2025-11-23T23:55:13.014314"
+  },
+  {
+    "id": "mixed_408",
+    "payload": "POST /data/41 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07938156857992583,
+    "timestamp": "2025-11-24T00:26:13.014317"
+  },
+  {
+    "id": "mixed_409",
+    "payload": "POST /data/805 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26757546346767386,
+    "timestamp": "2025-11-23T19:06:13.014320"
+  },
+  {
+    "id": "mixed_410",
+    "payload": "GET /data/998 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12696363770003463,
+    "timestamp": "2025-11-23T23:48:13.014323"
+  },
+  {
+    "id": "mixed_411",
+    "payload": "GET /data/976 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0765617206477688,
+    "timestamp": "2025-11-24T11:22:13.014326"
+  },
+  {
+    "id": "mixed_412",
+    "payload": "GET /settings/966 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10028705973803351,
+    "timestamp": "2025-11-24T11:52:13.014329"
+  },
+  {
+    "id": "mixed_413",
+    "payload": "DELETE /api/users/460 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04343270306631176,
+    "timestamp": "2025-11-24T08:16:13.014332"
+  },
+  {
+    "id": "mixed_414",
+    "payload": "'; DROP TABLE59",
+    "is_threat": true,
+    "expected_score": 0.9239998794621507,
+    "timestamp": "2025-11-24T01:03:13.014336"
+  },
+  {
+    "id": "mixed_415",
+    "payload": "PUT /api/users/261 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23614947398657482,
+    "timestamp": "2025-11-24T08:48:13.014339"
+  },
+  {
+    "id": "mixed_416",
+    "payload": "PUT /api/users/917 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1626772055817868,
+    "timestamp": "2025-11-23T13:58:13.014342"
+  },
+  {
+    "id": "mixed_417",
+    "payload": "../../../etc/35",
+    "is_threat": true,
+    "expected_score": 0.6010378365627465,
+    "timestamp": "2025-11-24T03:14:13.014345"
+  },
+  {
+    "id": "mixed_418",
+    "payload": "DELETE /api/users/830 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.05909420797452325,
+    "timestamp": "2025-11-24T09:26:13.014348"
+  },
+  {
+    "id": "mixed_419",
+    "payload": "../../../etc/86",
+    "is_threat": true,
+    "expected_score": 0.854672375918252,
+    "timestamp": "2025-11-24T05:19:13.014351"
+  },
+  {
+    "id": "mixed_420",
+    "payload": "'; DROP TABLE96",
+    "is_threat": true,
+    "expected_score": 0.9163867095787325,
+    "timestamp": "2025-11-24T00:40:13.014353"
+  },
+  {
+    "id": "mixed_421",
+    "payload": "GET /api/users/652 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.264751946156338,
+    "timestamp": "2025-11-23T14:47:13.014356"
+  },
+  {
+    "id": "mixed_422",
+    "payload": "POST /data/410 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16133630371687382,
+    "timestamp": "2025-11-23T14:17:13.014359"
+  },
+  {
+    "id": "mixed_423",
+    "payload": "PUT /api/users/521 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04928325233780617,
+    "timestamp": "2025-11-24T04:36:13.014362"
+  },
+  {
+    "id": "mixed_424",
+    "payload": "PUT /api/users/424 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16289739030052303,
+    "timestamp": "2025-11-24T09:38:13.014365"
+  },
+  {
+    "id": "mixed_425",
+    "payload": "GET /settings/588 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1193204539860034,
+    "timestamp": "2025-11-24T12:04:13.014368"
+  },
+  {
+    "id": "mixed_426",
+    "payload": "DELETE /api/users/409 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1873766035113585,
+    "timestamp": "2025-11-23T14:35:13.014373"
+  },
+  {
+    "id": "mixed_427",
+    "payload": "PUT /data/486 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23485049206831687,
+    "timestamp": "2025-11-24T10:55:13.014376"
+  },
+  {
+    "id": "mixed_428",
+    "payload": "GET /api/users/38 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0067513237296618735,
+    "timestamp": "2025-11-23T17:41:13.014379"
+  },
+  {
+    "id": "mixed_429",
+    "payload": "DELETE /data/748 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.022041551507607858,
+    "timestamp": "2025-11-23T23:40:13.014384"
+  },
+  {
+    "id": "mixed_430",
+    "payload": "POST /profile/131 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.004900063204783633,
+    "timestamp": "2025-11-23T19:21:13.014387"
+  },
+  {
+    "id": "mixed_431",
+    "payload": "DELETE /dashboard/262 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.005703892016136946,
+    "timestamp": "2025-11-24T02:51:13.014390"
+  },
+  {
+    "id": "mixed_432",
+    "payload": "PUT /settings/138 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0820527796208209,
+    "timestamp": "2025-11-24T04:44:13.014393"
+  },
+  {
+    "id": "mixed_433",
+    "payload": "DELETE /api/users/339 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16257938483117637,
+    "timestamp": "2025-11-24T04:15:13.014396"
+  },
+  {
+    "id": "mixed_434",
+    "payload": "POST /api/users/431 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.27320932017551025,
+    "timestamp": "2025-11-23T14:14:13.014399"
+  },
+  {
+    "id": "mixed_435",
+    "payload": "GET /api/users/783 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.043149319014414156,
+    "timestamp": "2025-11-24T12:06:13.014402"
+  },
+  {
+    "id": "mixed_436",
+    "payload": "DELETE /settings/821 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2300695424647859,
+    "timestamp": "2025-11-24T02:45:13.014406"
+  },
+  {
+    "id": "mixed_437",
+    "payload": "../../../etc/34",
+    "is_threat": true,
+    "expected_score": 0.7315134796437992,
+    "timestamp": "2025-11-23T15:46:13.014408"
+  },
+  {
+    "id": "mixed_438",
+    "payload": "GET /profile/50 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.013852435500177673,
+    "timestamp": "2025-11-24T06:35:13.014411"
+  },
+  {
+    "id": "mixed_439",
+    "payload": "POST /settings/826 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11756240264545549,
+    "timestamp": "2025-11-23T15:34:13.014414"
+  },
+  {
+    "id": "mixed_440",
+    "payload": "PUT /profile/958 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.042174445702991954,
+    "timestamp": "2025-11-24T05:53:13.014417"
+  },
+  {
+    "id": "mixed_441",
+    "payload": "POST /dashboard/156 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.010347958307144944,
+    "timestamp": "2025-11-24T00:03:13.014420"
+  },
+  {
+    "id": "mixed_442",
+    "payload": "DELETE /api/users/164 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2557961624416848,
+    "timestamp": "2025-11-24T06:55:13.014423"
+  },
+  {
+    "id": "mixed_443",
+    "payload": "DELETE /api/users/549 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.27146686878868176,
+    "timestamp": "2025-11-23T16:52:13.014428"
+  },
+  {
+    "id": "mixed_444",
+    "payload": "PUT /settings/789 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20122960935476966,
+    "timestamp": "2025-11-24T10:12:13.014431"
+  },
+  {
+    "id": "mixed_445",
+    "payload": "GET /settings/718 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0002170658891368027,
+    "timestamp": "2025-11-23T20:41:13.014434"
+  },
+  {
+    "id": "mixed_446",
+    "payload": "DELETE /dashboard/905 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24749136174905942,
+    "timestamp": "2025-11-24T10:23:13.014437"
+  },
+  {
+    "id": "mixed_447",
+    "payload": "PUT /settings/432 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.05396753266795654,
+    "timestamp": "2025-11-23T16:51:13.014440"
+  },
+  {
+    "id": "mixed_448",
+    "payload": "PUT /profile/736 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21414600402707207,
+    "timestamp": "2025-11-24T10:36:13.014443"
+  },
+  {
+    "id": "mixed_449",
+    "payload": "; rm -rf61",
+    "is_threat": true,
+    "expected_score": 0.9704650003246462,
+    "timestamp": "2025-11-23T21:51:13.014446"
+  },
+  {
+    "id": "mixed_450",
+    "payload": "GET /dashboard/172 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14851665688571536,
+    "timestamp": "2025-11-24T11:48:13.014449"
+  },
+  {
+    "id": "mixed_451",
+    "payload": "POST /api/users/432 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.00803690453346878,
+    "timestamp": "2025-11-24T10:23:13.014452"
+  },
+  {
+    "id": "mixed_452",
+    "payload": "PUT /dashboard/343 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1192441457940606,
+    "timestamp": "2025-11-24T03:21:13.014455"
+  },
+  {
+    "id": "mixed_453",
+    "payload": "PUT /dashboard/302 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10030710980004415,
+    "timestamp": "2025-11-24T06:51:13.014458"
+  },
+  {
+    "id": "mixed_454",
+    "payload": "POST /settings/867 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08596370478663459,
+    "timestamp": "2025-11-24T07:45:13.014461"
+  },
+  {
+    "id": "mixed_455",
+    "payload": "GET /settings/616 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04438160741771108,
+    "timestamp": "2025-11-23T15:51:13.014465"
+  },
+  {
+    "id": "mixed_456",
+    "payload": "POST /profile/272 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.29023321782133377,
+    "timestamp": "2025-11-24T07:36:13.014469"
+  },
+  {
+    "id": "mixed_457",
+    "payload": "PUT /profile/218 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2597275536019218,
+    "timestamp": "2025-11-24T04:00:13.014472"
+  },
+  {
+    "id": "mixed_458",
+    "payload": "POST /data/418 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23105487791072132,
+    "timestamp": "2025-11-24T09:23:13.014477"
+  },
+  {
+    "id": "mixed_459",
+    "payload": "POST /data/524 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2850350202172928,
+    "timestamp": "2025-11-24T06:27:13.014480"
+  },
+  {
+    "id": "mixed_460",
+    "payload": "PUT /dashboard/239 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07259398530014761,
+    "timestamp": "2025-11-23T19:46:13.014483"
+  },
+  {
+    "id": "mixed_461",
+    "payload": "GET /data/341 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2470425869587649,
+    "timestamp": "2025-11-24T01:50:13.014486"
+  },
+  {
+    "id": "mixed_462",
+    "payload": "POST /api/users/77 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21433362631692635,
+    "timestamp": "2025-11-23T18:42:13.014489"
+  },
+  {
+    "id": "mixed_463",
+    "payload": "GET /settings/605 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08240832732560695,
+    "timestamp": "2025-11-24T03:59:13.014492"
+  },
+  {
+    "id": "mixed_464",
+    "payload": "DELETE /api/users/794 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26886867517610835,
+    "timestamp": "2025-11-24T05:25:13.014495"
+  },
+  {
+    "id": "mixed_465",
+    "payload": "PUT /data/201 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2791793178241617,
+    "timestamp": "2025-11-23T16:10:13.014498"
+  },
+  {
+    "id": "mixed_466",
+    "payload": "GET /dashboard/881 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16274608592057221,
+    "timestamp": "2025-11-23T21:51:13.014500"
+  },
+  {
+    "id": "mixed_467",
+    "payload": "PUT /data/125 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13083511036738252,
+    "timestamp": "2025-11-24T07:13:13.014503"
+  },
+  {
+    "id": "mixed_468",
+    "payload": "DELETE /api/users/17 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1905465477059446,
+    "timestamp": "2025-11-24T01:09:13.014506"
+  },
+  {
+    "id": "mixed_469",
+    "payload": "DELETE /dashboard/774 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2057114370118176,
+    "timestamp": "2025-11-24T10:15:13.014509"
+  },
+  {
+    "id": "mixed_470",
+    "payload": "PUT /data/392 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10328082417553087,
+    "timestamp": "2025-11-24T05:02:13.014512"
+  },
+  {
+    "id": "mixed_471",
+    "payload": "POST /dashboard/574 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2820405584661696,
+    "timestamp": "2025-11-24T13:08:13.014517"
+  },
+  {
+    "id": "mixed_472",
+    "payload": "GET /api/users/646 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.006858909265160728,
+    "timestamp": "2025-11-24T04:13:13.014520"
+  },
+  {
+    "id": "mixed_473",
+    "payload": "DELETE /settings/885 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1593358288878581,
+    "timestamp": "2025-11-24T02:29:13.014523"
+  },
+  {
+    "id": "mixed_474",
+    "payload": "DELETE /profile/183 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11460855936904926,
+    "timestamp": "2025-11-24T04:54:13.014526"
+  },
+  {
+    "id": "mixed_475",
+    "payload": "PUT /profile/976 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07295758124146685,
+    "timestamp": "2025-11-23T13:54:13.014529"
+  },
+  {
+    "id": "mixed_476",
+    "payload": "PUT /dashboard/750 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.017672408346493917,
+    "timestamp": "2025-11-23T19:50:13.014532"
+  },
+  {
+    "id": "mixed_477",
+    "payload": "GET /api/users/546 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.03912550604822734,
+    "timestamp": "2025-11-23T14:23:13.014535"
+  },
+  {
+    "id": "mixed_478",
+    "payload": "GET /api/users/601 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10633773720885895,
+    "timestamp": "2025-11-24T08:45:13.014538"
+  },
+  {
+    "id": "mixed_479",
+    "payload": "DELETE /api/users/308 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25863273886714927,
+    "timestamp": "2025-11-24T12:43:13.014540"
+  },
+  {
+    "id": "mixed_480",
+    "payload": "PUT /settings/546 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23691461184963014,
+    "timestamp": "2025-11-24T02:21:13.014543"
+  },
+  {
+    "id": "mixed_481",
+    "payload": "POST /profile/443 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08784056073437069,
+    "timestamp": "2025-11-23T14:14:13.014546"
+  },
+  {
+    "id": "mixed_482",
+    "payload": "DELETE /settings/715 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25134903842873113,
+    "timestamp": "2025-11-24T07:54:13.014549"
+  },
+  {
+    "id": "mixed_483",
+    "payload": "DELETE /settings/984 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14734514414584413,
+    "timestamp": "2025-11-23T16:48:13.014552"
+  },
+  {
+    "id": "mixed_484",
+    "payload": "POST /api/users/759 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.000636910527345591,
+    "timestamp": "2025-11-24T03:42:13.014558"
+  },
+  {
+    "id": "mixed_485",
+    "payload": "DELETE /profile/123 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16567787095404876,
+    "timestamp": "2025-11-24T13:00:13.014561"
+  },
+  {
+    "id": "mixed_486",
+    "payload": "GET /data/195 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.030628549305872232,
+    "timestamp": "2025-11-24T02:36:13.014564"
+  },
+  {
+    "id": "mixed_487",
+    "payload": "PUT /data/264 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11438237376340053,
+    "timestamp": "2025-11-24T07:48:13.014567"
+  },
+  {
+    "id": "mixed_488",
+    "payload": "PUT /profile/822 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14626929058204813,
+    "timestamp": "2025-11-24T10:51:13.014570"
+  },
+  {
+    "id": "mixed_489",
+    "payload": "DELETE /settings/993 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.03489443320353439,
+    "timestamp": "2025-11-23T23:42:13.014573"
+  },
+  {
+    "id": "mixed_490",
+    "payload": "'; DROP TABLE85",
+    "is_threat": true,
+    "expected_score": 0.6502221788733835,
+    "timestamp": "2025-11-23T23:44:13.014578"
+  },
+  {
+    "id": "mixed_491",
+    "payload": "DELETE /dashboard/678 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10933796016815421,
+    "timestamp": "2025-11-24T06:00:13.014581"
+  },
+  {
+    "id": "mixed_492",
+    "payload": "'; DROP TABLE8",
+    "is_threat": true,
+    "expected_score": 0.8695735366663487,
+    "timestamp": "2025-11-23T23:54:13.014587"
+  },
+  {
+    "id": "mixed_493",
+    "payload": "../../../etc/15",
+    "is_threat": true,
+    "expected_score": 0.8302491197119395,
+    "timestamp": "2025-11-24T04:40:13.014590"
+  },
+  {
+    "id": "mixed_494",
+    "payload": "GET /settings/960 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07530068369286495,
+    "timestamp": "2025-11-24T04:50:13.014594"
+  },
+  {
+    "id": "mixed_495",
+    "payload": "GET /api/users/501 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2111525317293862,
+    "timestamp": "2025-11-23T18:51:13.014598"
+  },
+  {
+    "id": "mixed_496",
+    "payload": "PUT /profile/410 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2515823078794712,
+    "timestamp": "2025-11-24T13:29:13.014601"
+  },
+  {
+    "id": "mixed_497",
+    "payload": "PUT /profile/773 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2235398624342524,
+    "timestamp": "2025-11-24T07:28:13.014604"
+  },
+  {
+    "id": "mixed_498",
+    "payload": "GET /settings/651 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11602728392246156,
+    "timestamp": "2025-11-23T18:44:13.014607"
+  },
+  {
+    "id": "mixed_499",
+    "payload": "PUT /data/182 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1873914957964274,
+    "timestamp": "2025-11-24T00:10:13.014610"
+  },
+  {
+    "id": "mixed_500",
+    "payload": "PUT /data/883 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08733146656670808,
+    "timestamp": "2025-11-23T20:58:13.014615"
+  },
+  {
+    "id": "mixed_501",
+    "payload": "<script>alert60",
+    "is_threat": true,
+    "expected_score": 0.8278844516595938,
+    "timestamp": "2025-11-24T10:51:13.014618"
+  },
+  {
+    "id": "mixed_502",
+    "payload": "DELETE /api/users/451 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11560236131334717,
+    "timestamp": "2025-11-23T17:07:13.014621"
+  },
+  {
+    "id": "mixed_503",
+    "payload": "PUT /api/users/8 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12957882434990195,
+    "timestamp": "2025-11-24T11:29:13.014624"
+  },
+  {
+    "id": "mixed_504",
+    "payload": "DELETE /profile/708 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0013632407992344886,
+    "timestamp": "2025-11-24T11:13:13.014627"
+  },
+  {
+    "id": "mixed_505",
+    "payload": "POST /settings/311 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0878724227830012,
+    "timestamp": "2025-11-24T12:04:13.014630"
+  },
+  {
+    "id": "mixed_506",
+    "payload": "../../../etc/82",
+    "is_threat": true,
+    "expected_score": 0.6502408520209566,
+    "timestamp": "2025-11-23T23:14:13.014633"
+  },
+  {
+    "id": "mixed_507",
+    "payload": "GET /settings/897 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24912160154465468,
+    "timestamp": "2025-11-23T17:45:13.014636"
+  },
+  {
+    "id": "mixed_508",
+    "payload": "; rm -rf38",
+    "is_threat": true,
+    "expected_score": 0.7191712598652658,
+    "timestamp": "2025-11-23T17:26:13.014639"
+  },
+  {
+    "id": "mixed_509",
+    "payload": "POST /profile/412 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26621337154828617,
+    "timestamp": "2025-11-23T21:09:13.014642"
+  },
+  {
+    "id": "mixed_510",
+    "payload": "GET /profile/857 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23385954528422853,
+    "timestamp": "2025-11-24T13:01:13.014645"
+  },
+  {
+    "id": "mixed_511",
+    "payload": "../../../etc/52",
+    "is_threat": true,
+    "expected_score": 0.6376710897105781,
+    "timestamp": "2025-11-23T17:01:13.014648"
+  },
+  {
+    "id": "mixed_512",
+    "payload": "GET /api/users/344 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20923051016402835,
+    "timestamp": "2025-11-24T04:32:13.014651"
+  },
+  {
+    "id": "mixed_513",
+    "payload": "GET /profile/715 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2564508560514121,
+    "timestamp": "2025-11-24T06:53:13.014654"
+  },
+  {
+    "id": "mixed_514",
+    "payload": "DELETE /settings/694 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04789641627526209,
+    "timestamp": "2025-11-24T07:12:13.014657"
+  },
+  {
+    "id": "mixed_515",
+    "payload": "PUT /api/users/88 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11617050217627808,
+    "timestamp": "2025-11-23T14:32:13.014662"
+  },
+  {
+    "id": "mixed_516",
+    "payload": "'; DROP TABLE67",
+    "is_threat": true,
+    "expected_score": 0.8132375945863138,
+    "timestamp": "2025-11-24T07:19:13.014665"
+  },
+  {
+    "id": "mixed_517",
+    "payload": "POST /dashboard/67 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2852170404925636,
+    "timestamp": "2025-11-24T13:47:13.014668"
+  },
+  {
+    "id": "mixed_518",
+    "payload": "POST /api/users/89 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.046826335700267195,
+    "timestamp": "2025-11-23T16:40:13.014671"
+  },
+  {
+    "id": "mixed_519",
+    "payload": "PUT /api/users/361 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10964801312196082,
+    "timestamp": "2025-11-24T06:23:13.014674"
+  },
+  {
+    "id": "mixed_520",
+    "payload": "POST /settings/473 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2068343323705172,
+    "timestamp": "2025-11-24T02:34:13.014677"
+  },
+  {
+    "id": "mixed_521",
+    "payload": "DELETE /dashboard/133 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12826128066530448,
+    "timestamp": "2025-11-24T08:52:13.014680"
+  },
+  {
+    "id": "mixed_522",
+    "payload": "DELETE /dashboard/100 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26427692498877275,
+    "timestamp": "2025-11-24T05:38:13.014685"
+  },
+  {
+    "id": "mixed_523",
+    "payload": "'; DROP TABLE7",
+    "is_threat": true,
+    "expected_score": 0.8708757023034426,
+    "timestamp": "2025-11-23T15:34:13.014688"
+  },
+  {
+    "id": "mixed_524",
+    "payload": "DELETE /dashboard/329 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1978143391463452,
+    "timestamp": "2025-11-23T17:13:13.014691"
+  },
+  {
+    "id": "mixed_525",
+    "payload": "'; DROP TABLE1",
+    "is_threat": true,
+    "expected_score": 0.7782075860652868,
+    "timestamp": "2025-11-24T04:04:13.014693"
+  },
+  {
+    "id": "mixed_526",
+    "payload": "PUT /api/users/520 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09903883137166218,
+    "timestamp": "2025-11-24T01:11:13.014696"
+  },
+  {
+    "id": "mixed_527",
+    "payload": "GET /data/132 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23182189315189544,
+    "timestamp": "2025-11-24T07:07:13.014699"
+  },
+  {
+    "id": "mixed_528",
+    "payload": "DELETE /data/50 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2487267349922084,
+    "timestamp": "2025-11-24T06:17:13.014704"
+  },
+  {
+    "id": "mixed_529",
+    "payload": "../../../etc/14",
+    "is_threat": true,
+    "expected_score": 0.8124852872660782,
+    "timestamp": "2025-11-24T07:42:13.014707"
+  },
+  {
+    "id": "mixed_530",
+    "payload": "PUT /dashboard/451 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17949798957714735,
+    "timestamp": "2025-11-24T12:25:13.014710"
+  },
+  {
+    "id": "mixed_531",
+    "payload": "DELETE /api/users/305 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.014641772401771268,
+    "timestamp": "2025-11-24T12:55:13.014713"
+  },
+  {
+    "id": "mixed_532",
+    "payload": "GET /api/users/538 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2983905933474392,
+    "timestamp": "2025-11-23T20:02:13.014716"
+  },
+  {
+    "id": "mixed_533",
+    "payload": "GET /dashboard/475 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10878901292643735,
+    "timestamp": "2025-11-23T13:50:13.014719"
+  },
+  {
+    "id": "mixed_534",
+    "payload": "PUT /data/398 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28064803298668617,
+    "timestamp": "2025-11-24T12:29:13.014722"
+  },
+  {
+    "id": "mixed_535",
+    "payload": "POST /api/users/864 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21972445543442778,
+    "timestamp": "2025-11-24T08:49:13.014725"
+  },
+  {
+    "id": "mixed_536",
+    "payload": "GET /profile/425 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06457897635627763,
+    "timestamp": "2025-11-24T03:18:13.014728"
+  },
+  {
+    "id": "mixed_537",
+    "payload": "GET /profile/102 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12330991710724054,
+    "timestamp": "2025-11-24T04:05:13.014731"
+  },
+  {
+    "id": "mixed_538",
+    "payload": "'; DROP TABLE66",
+    "is_threat": true,
+    "expected_score": 0.8011644917819747,
+    "timestamp": "2025-11-23T23:16:13.014734"
+  },
+  {
+    "id": "mixed_539",
+    "payload": "DELETE /profile/950 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20671427483481905,
+    "timestamp": "2025-11-23T19:47:13.014737"
+  },
+  {
+    "id": "mixed_540",
+    "payload": "DELETE /api/users/105 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2912481114134529,
+    "timestamp": "2025-11-24T12:36:13.014740"
+  },
+  {
+    "id": "mixed_541",
+    "payload": "DELETE /profile/829 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23248511978528297,
+    "timestamp": "2025-11-24T10:59:13.014743"
+  },
+  {
+    "id": "mixed_542",
+    "payload": "GET /api/users/613 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23605949144048674,
+    "timestamp": "2025-11-24T11:00:13.014746"
+  },
+  {
+    "id": "mixed_543",
+    "payload": "'; DROP TABLE35",
+    "is_threat": true,
+    "expected_score": 0.6166059873803356,
+    "timestamp": "2025-11-23T14:24:13.014748"
+  },
+  {
+    "id": "mixed_544",
+    "payload": "DELETE /dashboard/178 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2489877870257455,
+    "timestamp": "2025-11-24T02:36:13.014755"
+  },
+  {
+    "id": "mixed_545",
+    "payload": "PUT /api/users/510 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04690741598050991,
+    "timestamp": "2025-11-23T16:25:13.014759"
+  },
+  {
+    "id": "mixed_546",
+    "payload": "<script>alert97",
+    "is_threat": true,
+    "expected_score": 0.8471990503345528,
+    "timestamp": "2025-11-23T18:06:13.014762"
+  },
+  {
+    "id": "mixed_547",
+    "payload": "POST /dashboard/518 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18945570548636248,
+    "timestamp": "2025-11-23T14:29:13.014765"
+  },
+  {
+    "id": "mixed_548",
+    "payload": "../../../etc/63",
+    "is_threat": true,
+    "expected_score": 0.8828414540099663,
+    "timestamp": "2025-11-23T17:28:13.014767"
+  },
+  {
+    "id": "mixed_549",
+    "payload": "DELETE /api/users/707 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2059624375767573,
+    "timestamp": "2025-11-24T08:12:13.014770"
+  },
+  {
+    "id": "mixed_550",
+    "payload": "GET /data/25 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22515531341383155,
+    "timestamp": "2025-11-23T21:00:13.014773"
+  },
+  {
+    "id": "mixed_551",
+    "payload": "'; DROP TABLE58",
+    "is_threat": true,
+    "expected_score": 0.8506409898634029,
+    "timestamp": "2025-11-24T01:22:13.014776"
+  },
+  {
+    "id": "mixed_552",
+    "payload": "../../../etc/43",
+    "is_threat": true,
+    "expected_score": 0.9348619094860152,
+    "timestamp": "2025-11-24T12:13:13.014779"
+  },
+  {
+    "id": "mixed_553",
+    "payload": "GET /settings/731 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1279191577188448,
+    "timestamp": "2025-11-23T22:41:13.014784"
+  },
+  {
+    "id": "mixed_554",
+    "payload": "POST /profile/300 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1544373042373561,
+    "timestamp": "2025-11-23T19:51:13.014787"
+  },
+  {
+    "id": "mixed_555",
+    "payload": "<script>alert83",
+    "is_threat": true,
+    "expected_score": 0.7528300584233786,
+    "timestamp": "2025-11-23T15:40:13.014792"
+  },
+  {
+    "id": "mixed_556",
+    "payload": "../../../etc/93",
+    "is_threat": true,
+    "expected_score": 0.6263306922227908,
+    "timestamp": "2025-11-23T19:42:13.014795"
+  },
+  {
+    "id": "mixed_557",
+    "payload": "POST /data/743 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21855815847348103,
+    "timestamp": "2025-11-23T14:33:13.014797"
+  },
+  {
+    "id": "mixed_558",
+    "payload": "GET /data/534 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.253165924152936,
+    "timestamp": "2025-11-23T19:15:13.014800"
+  },
+  {
+    "id": "mixed_559",
+    "payload": "GET /dashboard/5 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25383534063334395,
+    "timestamp": "2025-11-24T09:54:13.014803"
+  },
+  {
+    "id": "mixed_560",
+    "payload": "GET /settings/908 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.02542519035173274,
+    "timestamp": "2025-11-23T19:00:13.014806"
+  },
+  {
+    "id": "mixed_561",
+    "payload": "PUT /settings/686 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2233443245502881,
+    "timestamp": "2025-11-24T05:37:13.014809"
+  },
+  {
+    "id": "mixed_562",
+    "payload": "POST /profile/447 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2038529771996002,
+    "timestamp": "2025-11-24T01:33:13.014812"
+  },
+  {
+    "id": "mixed_563",
+    "payload": "DELETE /profile/655 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.016397798872761982,
+    "timestamp": "2025-11-24T11:30:13.014815"
+  },
+  {
+    "id": "mixed_564",
+    "payload": "DELETE /api/users/138 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1483224406964468,
+    "timestamp": "2025-11-24T10:18:13.014818"
+  },
+  {
+    "id": "mixed_565",
+    "payload": "GET /dashboard/270 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23131662654224025,
+    "timestamp": "2025-11-24T05:27:13.014821"
+  },
+  {
+    "id": "mixed_566",
+    "payload": "DELETE /profile/330 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.128038280156027,
+    "timestamp": "2025-11-24T10:46:13.014824"
+  },
+  {
+    "id": "mixed_567",
+    "payload": "POST /data/107 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09373976094796836,
+    "timestamp": "2025-11-24T01:09:13.014827"
+  },
+  {
+    "id": "mixed_568",
+    "payload": "DELETE /data/630 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08685311884400711,
+    "timestamp": "2025-11-24T11:04:13.014831"
+  },
+  {
+    "id": "mixed_569",
+    "payload": "GET /api/users/262 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.05823682438748146,
+    "timestamp": "2025-11-24T00:28:13.014833"
+  },
+  {
+    "id": "mixed_570",
+    "payload": "GET /profile/491 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26137941707040646,
+    "timestamp": "2025-11-24T06:36:13.014836"
+  },
+  {
+    "id": "mixed_571",
+    "payload": "<script>alert55",
+    "is_threat": true,
+    "expected_score": 0.6458903117298832,
+    "timestamp": "2025-11-24T07:17:13.014839"
+  },
+  {
+    "id": "mixed_572",
+    "payload": "DELETE /settings/246 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17207514408770466,
+    "timestamp": "2025-11-23T23:32:13.014842"
+  },
+  {
+    "id": "mixed_573",
+    "payload": "GET /profile/43 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.03705216126316598,
+    "timestamp": "2025-11-24T00:58:13.014845"
+  },
+  {
+    "id": "mixed_574",
+    "payload": "DELETE /api/users/673 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07520473285900162,
+    "timestamp": "2025-11-23T21:06:13.014848"
+  },
+  {
+    "id": "mixed_575",
+    "payload": "DELETE /profile/177 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23410647305960008,
+    "timestamp": "2025-11-24T07:55:13.014853"
+  },
+  {
+    "id": "mixed_576",
+    "payload": "PUT /api/users/162 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2373542280219286,
+    "timestamp": "2025-11-24T06:45:13.014856"
+  },
+  {
+    "id": "mixed_577",
+    "payload": "DELETE /profile/716 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25215833987682856,
+    "timestamp": "2025-11-24T02:45:13.014859"
+  },
+  {
+    "id": "mixed_578",
+    "payload": "../../../etc/33",
+    "is_threat": true,
+    "expected_score": 0.6988196142446176,
+    "timestamp": "2025-11-24T12:43:13.014862"
+  },
+  {
+    "id": "mixed_579",
+    "payload": "POST /api/users/829 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26184856667620915,
+    "timestamp": "2025-11-24T12:15:13.014865"
+  },
+  {
+    "id": "mixed_580",
+    "payload": "<script>alert27",
+    "is_threat": true,
+    "expected_score": 0.9935213927089868,
+    "timestamp": "2025-11-23T18:21:13.014868"
+  },
+  {
+    "id": "mixed_581",
+    "payload": "DELETE /profile/369 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19167809555472148,
+    "timestamp": "2025-11-23T15:26:13.014871"
+  },
+  {
+    "id": "mixed_582",
+    "payload": "'; DROP TABLE89",
+    "is_threat": true,
+    "expected_score": 0.8625543263139382,
+    "timestamp": "2025-11-24T09:20:13.014875"
+  },
+  {
+    "id": "mixed_583",
+    "payload": "DELETE /dashboard/923 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12425889842602172,
+    "timestamp": "2025-11-24T04:51:13.014878"
+  },
+  {
+    "id": "mixed_584",
+    "payload": "GET /settings/645 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09457689970003919,
+    "timestamp": "2025-11-24T10:07:13.014881"
+  },
+  {
+    "id": "mixed_585",
+    "payload": "POST /settings/230 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21530621547601464,
+    "timestamp": "2025-11-24T12:48:13.014886"
+  },
+  {
+    "id": "mixed_586",
+    "payload": "<script>alert4",
+    "is_threat": true,
+    "expected_score": 0.8243322102827085,
+    "timestamp": "2025-11-23T23:43:13.014889"
+  },
+  {
+    "id": "mixed_587",
+    "payload": "; rm -rf44",
+    "is_threat": true,
+    "expected_score": 0.6089924183817327,
+    "timestamp": "2025-11-24T11:17:13.014892"
+  },
+  {
+    "id": "mixed_588",
+    "payload": "DELETE /dashboard/918 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2852487267274942,
+    "timestamp": "2025-11-24T06:40:13.014894"
+  },
+  {
+    "id": "mixed_589",
+    "payload": "GET /api/users/406 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15438241607720482,
+    "timestamp": "2025-11-24T09:35:13.014897"
+  },
+  {
+    "id": "mixed_590",
+    "payload": "; rm -rf25",
+    "is_threat": true,
+    "expected_score": 0.9268590367011617,
+    "timestamp": "2025-11-24T09:24:13.014909"
+  },
+  {
+    "id": "mixed_591",
+    "payload": "POST /api/users/408 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17121976139323442,
+    "timestamp": "2025-11-23T23:00:13.014911"
+  },
+  {
+    "id": "mixed_592",
+    "payload": "GET /dashboard/864 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12119474539657948,
+    "timestamp": "2025-11-24T06:44:13.014914"
+  },
+  {
+    "id": "mixed_593",
+    "payload": "DELETE /dashboard/467 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2554964358961842,
+    "timestamp": "2025-11-23T19:43:13.014917"
+  },
+  {
+    "id": "mixed_594",
+    "payload": "'; DROP TABLE18",
+    "is_threat": true,
+    "expected_score": 0.9848681583686502,
+    "timestamp": "2025-11-23T19:45:13.014920"
+  },
+  {
+    "id": "mixed_595",
+    "payload": "../../../etc/11",
+    "is_threat": true,
+    "expected_score": 0.9623150402060254,
+    "timestamp": "2025-11-24T11:55:13.014923"
+  },
+  {
+    "id": "mixed_596",
+    "payload": "../../../etc/50",
+    "is_threat": true,
+    "expected_score": 0.6948253128370439,
+    "timestamp": "2025-11-24T04:15:13.014925"
+  },
+  {
+    "id": "mixed_597",
+    "payload": "; rm -rf45",
+    "is_threat": true,
+    "expected_score": 0.7035590125517428,
+    "timestamp": "2025-11-23T21:40:13.014928"
+  },
+  {
+    "id": "mixed_598",
+    "payload": "POST /settings/701 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2953906468483192,
+    "timestamp": "2025-11-24T00:47:13.014931"
+  },
+  {
+    "id": "mixed_599",
+    "payload": "GET /profile/181 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2683848800591655,
+    "timestamp": "2025-11-23T19:51:13.014934"
+  },
+  {
+    "id": "mixed_600",
+    "payload": "PUT /profile/756 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09898516451930493,
+    "timestamp": "2025-11-23T17:16:13.014937"
+  },
+  {
+    "id": "mixed_601",
+    "payload": "DELETE /settings/130 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16400453885670246,
+    "timestamp": "2025-11-24T03:32:13.014940"
+  },
+  {
+    "id": "mixed_602",
+    "payload": "POST /data/270 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06634732002580382,
+    "timestamp": "2025-11-23T19:42:13.014942"
+  },
+  {
+    "id": "mixed_603",
+    "payload": "POST /profile/404 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2386784689004253,
+    "timestamp": "2025-11-24T13:14:13.014945"
+  },
+  {
+    "id": "mixed_604",
+    "payload": "POST /api/users/456 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1520782261170128,
+    "timestamp": "2025-11-23T18:49:13.014949"
+  },
+  {
+    "id": "mixed_605",
+    "payload": "DELETE /data/376 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28284276977497425,
+    "timestamp": "2025-11-24T07:24:13.014952"
+  },
+  {
+    "id": "mixed_606",
+    "payload": "DELETE /data/946 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.024624815290098013,
+    "timestamp": "2025-11-24T12:23:13.014955"
+  },
+  {
+    "id": "mixed_607",
+    "payload": "POST /api/users/440 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28163432542554084,
+    "timestamp": "2025-11-24T06:43:13.014961"
+  },
+  {
+    "id": "mixed_608",
+    "payload": "../../../etc/64",
+    "is_threat": true,
+    "expected_score": 0.7862554836739755,
+    "timestamp": "2025-11-23T20:10:13.014964"
+  },
+  {
+    "id": "mixed_609",
+    "payload": "<script>alert42",
+    "is_threat": true,
+    "expected_score": 0.8524643141691413,
+    "timestamp": "2025-11-24T05:12:13.014968"
+  },
+  {
+    "id": "mixed_610",
+    "payload": "POST /dashboard/872 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.250567688257187,
+    "timestamp": "2025-11-23T19:34:13.014971"
+  },
+  {
+    "id": "mixed_611",
+    "payload": "GET /api/users/541 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12859291450338092,
+    "timestamp": "2025-11-23T18:22:13.014974"
+  },
+  {
+    "id": "mixed_612",
+    "payload": "PUT /data/74 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1770672495621105,
+    "timestamp": "2025-11-24T03:39:13.014977"
+  },
+  {
+    "id": "mixed_613",
+    "payload": "GET /dashboard/285 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08912607797376133,
+    "timestamp": "2025-11-24T06:52:13.014980"
+  },
+  {
+    "id": "mixed_614",
+    "payload": "'; DROP TABLE72",
+    "is_threat": true,
+    "expected_score": 0.9480755164248895,
+    "timestamp": "2025-11-24T05:39:13.014983"
+  },
+  {
+    "id": "mixed_615",
+    "payload": "POST /settings/379 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1059023230783687,
+    "timestamp": "2025-11-23T23:20:13.014985"
+  },
+  {
+    "id": "mixed_616",
+    "payload": "DELETE /profile/226 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06212759319308528,
+    "timestamp": "2025-11-24T06:07:13.014988"
+  },
+  {
+    "id": "mixed_617",
+    "payload": "GET /profile/799 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07614069296649256,
+    "timestamp": "2025-11-24T05:42:13.014993"
+  },
+  {
+    "id": "mixed_618",
+    "payload": "GET /profile/198 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2683448207072882,
+    "timestamp": "2025-11-24T06:03:13.014998"
+  },
+  {
+    "id": "mixed_619",
+    "payload": "POST /data/945 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04060224784912363,
+    "timestamp": "2025-11-23T15:03:13.015001"
+  },
+  {
+    "id": "mixed_620",
+    "payload": "'; DROP TABLE53",
+    "is_threat": true,
+    "expected_score": 0.6660556566259309,
+    "timestamp": "2025-11-23T16:27:13.015004"
+  },
+  {
+    "id": "mixed_621",
+    "payload": "DELETE /dashboard/684 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.008210514856268213,
+    "timestamp": "2025-11-23T20:54:13.015007"
+  },
+  {
+    "id": "mixed_622",
+    "payload": "GET /dashboard/826 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12971569307354908,
+    "timestamp": "2025-11-23T23:18:13.015010"
+  },
+  {
+    "id": "mixed_623",
+    "payload": "DELETE /data/781 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19906703277344864,
+    "timestamp": "2025-11-24T03:07:13.015013"
+  },
+  {
+    "id": "mixed_624",
+    "payload": "; rm -rf39",
+    "is_threat": true,
+    "expected_score": 0.6929624430877414,
+    "timestamp": "2025-11-23T14:47:13.015016"
+  },
+  {
+    "id": "mixed_625",
+    "payload": "PUT /api/users/15 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.045800928441832596,
+    "timestamp": "2025-11-24T11:06:13.015019"
+  },
+  {
+    "id": "mixed_626",
+    "payload": "POST /dashboard/522 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23932116072364917,
+    "timestamp": "2025-11-24T11:48:13.015022"
+  },
+  {
+    "id": "mixed_627",
+    "payload": "DELETE /dashboard/257 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09806793524035819,
+    "timestamp": "2025-11-24T12:33:13.015025"
+  },
+  {
+    "id": "mixed_628",
+    "payload": "GET /settings/468 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17253138288971384,
+    "timestamp": "2025-11-24T01:54:13.015028"
+  },
+  {
+    "id": "mixed_629",
+    "payload": "POST /data/253 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2556221861368846,
+    "timestamp": "2025-11-23T18:23:13.015031"
+  },
+  {
+    "id": "mixed_630",
+    "payload": "POST /dashboard/156 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2529308083156411,
+    "timestamp": "2025-11-23T16:01:13.015034"
+  },
+  {
+    "id": "mixed_631",
+    "payload": "GET /dashboard/599 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2656672696783458,
+    "timestamp": "2025-11-24T09:07:13.015037"
+  },
+  {
+    "id": "mixed_632",
+    "payload": "GET /settings/698 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1551789679319882,
+    "timestamp": "2025-11-24T08:01:13.015040"
+  },
+  {
+    "id": "mixed_633",
+    "payload": "PUT /profile/129 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13097487730169374,
+    "timestamp": "2025-11-24T08:08:13.015043"
+  },
+  {
+    "id": "mixed_634",
+    "payload": "DELETE /data/751 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21754183692038231,
+    "timestamp": "2025-11-24T04:14:13.015046"
+  },
+  {
+    "id": "mixed_635",
+    "payload": "POST /data/793 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20007396630442953,
+    "timestamp": "2025-11-24T12:48:13.015049"
+  },
+  {
+    "id": "mixed_636",
+    "payload": "GET /data/739 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06286041984413272,
+    "timestamp": "2025-11-23T14:26:13.015052"
+  },
+  {
+    "id": "mixed_637",
+    "payload": "PUT /dashboard/752 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21470031202235765,
+    "timestamp": "2025-11-24T07:44:13.015059"
+  },
+  {
+    "id": "mixed_638",
+    "payload": "POST /data/600 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22957325046766192,
+    "timestamp": "2025-11-24T07:29:13.015062"
+  },
+  {
+    "id": "mixed_639",
+    "payload": "DELETE /profile/162 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1357348332308117,
+    "timestamp": "2025-11-24T06:04:13.015065"
+  },
+  {
+    "id": "mixed_640",
+    "payload": "PUT /profile/322 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0935757271819579,
+    "timestamp": "2025-11-23T15:25:13.015068"
+  },
+  {
+    "id": "mixed_641",
+    "payload": "PUT /dashboard/99 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.27237319202690763,
+    "timestamp": "2025-11-23T15:52:13.015071"
+  },
+  {
+    "id": "mixed_642",
+    "payload": "DELETE /settings/370 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07995090208036888,
+    "timestamp": "2025-11-24T04:19:13.015074"
+  },
+  {
+    "id": "mixed_643",
+    "payload": "GET /profile/588 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16276911419238332,
+    "timestamp": "2025-11-24T02:12:13.015077"
+  },
+  {
+    "id": "mixed_644",
+    "payload": "DELETE /settings/168 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26773820774074236,
+    "timestamp": "2025-11-24T03:18:13.015080"
+  },
+  {
+    "id": "mixed_645",
+    "payload": "; rm -rf19",
+    "is_threat": true,
+    "expected_score": 0.8831469727396539,
+    "timestamp": "2025-11-24T09:36:13.015083"
+  },
+  {
+    "id": "mixed_646",
+    "payload": "DELETE /profile/616 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13996665120970414,
+    "timestamp": "2025-11-23T20:41:13.015086"
+  },
+  {
+    "id": "mixed_647",
+    "payload": "POST /data/86 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09107360668967054,
+    "timestamp": "2025-11-24T03:58:13.015089"
+  },
+  {
+    "id": "mixed_648",
+    "payload": "GET /settings/103 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12162151061299792,
+    "timestamp": "2025-11-24T08:28:13.015092"
+  },
+  {
+    "id": "mixed_649",
+    "payload": "<script>alert64",
+    "is_threat": true,
+    "expected_score": 0.8058262807510213,
+    "timestamp": "2025-11-24T00:07:13.015097"
+  },
+  {
+    "id": "mixed_650",
+    "payload": "POST /api/users/188 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.02856894413607066,
+    "timestamp": "2025-11-24T00:33:13.015100"
+  },
+  {
+    "id": "mixed_651",
+    "payload": "GET /profile/983 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24163376292549535,
+    "timestamp": "2025-11-23T19:56:13.015103"
+  },
+  {
+    "id": "mixed_652",
+    "payload": "PUT /settings/611 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.017870919581003942,
+    "timestamp": "2025-11-24T05:58:13.015106"
+  },
+  {
+    "id": "mixed_653",
+    "payload": "DELETE /profile/400 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0860039431699619,
+    "timestamp": "2025-11-24T11:04:13.015109"
+  },
+  {
+    "id": "mixed_654",
+    "payload": "GET /profile/641 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08180718294486451,
+    "timestamp": "2025-11-23T21:48:13.015112"
+  },
+  {
+    "id": "mixed_655",
+    "payload": "DELETE /data/300 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.271648733524104,
+    "timestamp": "2025-11-24T01:32:13.015115"
+  },
+  {
+    "id": "mixed_656",
+    "payload": "PUT /settings/426 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19936877133993683,
+    "timestamp": "2025-11-23T22:45:13.015118"
+  },
+  {
+    "id": "mixed_657",
+    "payload": "POST /dashboard/286 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0719978924454704,
+    "timestamp": "2025-11-24T13:21:13.015121"
+  },
+  {
+    "id": "mixed_658",
+    "payload": "POST /data/652 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17885144236865713,
+    "timestamp": "2025-11-24T07:16:13.015124"
+  },
+  {
+    "id": "mixed_659",
+    "payload": "PUT /settings/478 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.011785742422128875,
+    "timestamp": "2025-11-23T21:09:13.015127"
+  },
+  {
+    "id": "mixed_660",
+    "payload": "POST /api/users/344 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2980493362453459,
+    "timestamp": "2025-11-24T11:42:13.015130"
+  },
+  {
+    "id": "mixed_661",
+    "payload": "'; DROP TABLE95",
+    "is_threat": true,
+    "expected_score": 0.8790694615341126,
+    "timestamp": "2025-11-24T08:50:13.015132"
+  },
+  {
+    "id": "mixed_662",
+    "payload": "PUT /settings/330 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.27802033500751305,
+    "timestamp": "2025-11-24T13:14:13.015135"
+  },
+  {
+    "id": "mixed_663",
+    "payload": "PUT /settings/819 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11570774259089506,
+    "timestamp": "2025-11-24T08:28:13.015138"
+  },
+  {
+    "id": "mixed_664",
+    "payload": "PUT /settings/30 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22471957851893096,
+    "timestamp": "2025-11-23T16:17:13.015141"
+  },
+  {
+    "id": "mixed_665",
+    "payload": "GET /settings/348 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08252568909918172,
+    "timestamp": "2025-11-24T08:53:13.015146"
+  },
+  {
+    "id": "mixed_666",
+    "payload": "DELETE /data/322 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0123882435640699,
+    "timestamp": "2025-11-23T22:13:13.015153"
+  },
+  {
+    "id": "mixed_667",
+    "payload": "DELETE /api/users/330 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2982205288667602,
+    "timestamp": "2025-11-24T04:06:13.015156"
+  },
+  {
+    "id": "mixed_668",
+    "payload": "PUT /data/279 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.013403196466982459,
+    "timestamp": "2025-11-23T19:02:13.015159"
+  },
+  {
+    "id": "mixed_669",
+    "payload": "<script>alert93",
+    "is_threat": true,
+    "expected_score": 0.7650067796103519,
+    "timestamp": "2025-11-23T16:51:13.015162"
+  },
+  {
+    "id": "mixed_670",
+    "payload": "PUT /data/876 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17427715648089478,
+    "timestamp": "2025-11-24T03:11:13.015165"
+  },
+  {
+    "id": "mixed_671",
+    "payload": "; rm -rf58",
+    "is_threat": true,
+    "expected_score": 0.8622119061873335,
+    "timestamp": "2025-11-24T10:23:13.015167"
+  },
+  {
+    "id": "mixed_672",
+    "payload": "DELETE /settings/89 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24994667134853066,
+    "timestamp": "2025-11-24T11:46:13.015170"
+  },
+  {
+    "id": "mixed_673",
+    "payload": "DELETE /settings/465 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10186012912176219,
+    "timestamp": "2025-11-24T00:45:13.015173"
+  },
+  {
+    "id": "mixed_674",
+    "payload": "PUT /dashboard/991 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08257033027666225,
+    "timestamp": "2025-11-24T13:12:13.015177"
+  },
+  {
+    "id": "mixed_675",
+    "payload": "DELETE /api/users/740 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08028713910207012,
+    "timestamp": "2025-11-23T22:34:13.015180"
+  },
+  {
+    "id": "mixed_676",
+    "payload": "PUT /profile/106 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.262296481277359,
+    "timestamp": "2025-11-24T05:47:13.015183"
+  },
+  {
+    "id": "mixed_677",
+    "payload": "; rm -rf88",
+    "is_threat": true,
+    "expected_score": 0.8064202932263219,
+    "timestamp": "2025-11-23T22:59:13.015185"
+  },
+  {
+    "id": "mixed_678",
+    "payload": "GET /dashboard/77 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.027695831129020586,
+    "timestamp": "2025-11-23T19:02:13.015189"
+  },
+  {
+    "id": "mixed_679",
+    "payload": "GET /profile/809 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09639951478639171,
+    "timestamp": "2025-11-23T20:55:13.015192"
+  },
+  {
+    "id": "mixed_680",
+    "payload": "'; DROP TABLE97",
+    "is_threat": true,
+    "expected_score": 0.838605177196612,
+    "timestamp": "2025-11-24T04:07:13.015198"
+  },
+  {
+    "id": "mixed_681",
+    "payload": "PUT /settings/580 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.29371881328648636,
+    "timestamp": "2025-11-24T05:51:13.015201"
+  },
+  {
+    "id": "mixed_682",
+    "payload": "PUT /dashboard/1 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20519152543607344,
+    "timestamp": "2025-11-24T07:42:13.015204"
+  },
+  {
+    "id": "mixed_683",
+    "payload": "PUT /profile/468 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20468115051801114,
+    "timestamp": "2025-11-24T12:54:13.015207"
+  },
+  {
+    "id": "mixed_684",
+    "payload": "POST /settings/254 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26730524531467414,
+    "timestamp": "2025-11-24T05:22:13.015210"
+  },
+  {
+    "id": "mixed_685",
+    "payload": "DELETE /settings/269 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2968357622288191,
+    "timestamp": "2025-11-23T18:07:13.015213"
+  },
+  {
+    "id": "mixed_686",
+    "payload": "PUT /data/961 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1904751052532819,
+    "timestamp": "2025-11-23T20:19:13.015216"
+  },
+  {
+    "id": "mixed_687",
+    "payload": "GET /profile/46 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1102593911309526,
+    "timestamp": "2025-11-24T06:16:13.015219"
+  },
+  {
+    "id": "mixed_688",
+    "payload": "PUT /data/479 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1340872130559889,
+    "timestamp": "2025-11-23T22:45:13.015222"
+  },
+  {
+    "id": "mixed_689",
+    "payload": "PUT /dashboard/715 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21780319286287722,
+    "timestamp": "2025-11-24T13:45:13.015224"
+  },
+  {
+    "id": "mixed_690",
+    "payload": "<script>alert17",
+    "is_threat": true,
+    "expected_score": 0.8998972771369695,
+    "timestamp": "2025-11-24T13:24:13.015227"
+  },
+  {
+    "id": "mixed_691",
+    "payload": "POST /settings/726 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23397633213266025,
+    "timestamp": "2025-11-24T09:47:13.015230"
+  },
+  {
+    "id": "mixed_692",
+    "payload": "../../../etc/9",
+    "is_threat": true,
+    "expected_score": 0.7059661937475045,
+    "timestamp": "2025-11-23T18:22:13.015233"
+  },
+  {
+    "id": "mixed_693",
+    "payload": "PUT /data/581 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06573086424611609,
+    "timestamp": "2025-11-24T07:52:13.015248"
+  },
+  {
+    "id": "mixed_694",
+    "payload": "POST /profile/305 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20558692519411706,
+    "timestamp": "2025-11-24T11:09:13.015253"
+  },
+  {
+    "id": "mixed_695",
+    "payload": "DELETE /api/users/151 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14676579638190682,
+    "timestamp": "2025-11-23T18:40:13.015258"
+  },
+  {
+    "id": "mixed_696",
+    "payload": "PUT /data/298 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.012624715709083967,
+    "timestamp": "2025-11-24T13:23:13.015263"
+  },
+  {
+    "id": "mixed_697",
+    "payload": "../../../etc/65",
+    "is_threat": true,
+    "expected_score": 0.9586823406917262,
+    "timestamp": "2025-11-24T12:18:13.015270"
+  },
+  {
+    "id": "mixed_698",
+    "payload": "PUT /dashboard/967 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.025781783535604664,
+    "timestamp": "2025-11-23T18:50:13.015280"
+  },
+  {
+    "id": "mixed_699",
+    "payload": "POST /data/940 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11384999590641467,
+    "timestamp": "2025-11-24T07:36:13.015285"
+  },
+  {
+    "id": "mixed_700",
+    "payload": "PUT /dashboard/323 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2197071004711823,
+    "timestamp": "2025-11-24T06:58:13.015290"
+  },
+  {
+    "id": "mixed_701",
+    "payload": "../../../etc/38",
+    "is_threat": true,
+    "expected_score": 0.6362682082104437,
+    "timestamp": "2025-11-23T20:39:13.015294"
+  },
+  {
+    "id": "mixed_702",
+    "payload": "GET /settings/712 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.258585023846322,
+    "timestamp": "2025-11-23T20:15:13.015297"
+  },
+  {
+    "id": "mixed_703",
+    "payload": "DELETE /dashboard/798 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.019749750377351404,
+    "timestamp": "2025-11-24T11:55:13.015300"
+  },
+  {
+    "id": "mixed_704",
+    "payload": "POST /settings/206 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18875065340539604,
+    "timestamp": "2025-11-24T10:06:13.015303"
+  },
+  {
+    "id": "mixed_705",
+    "payload": "'; DROP TABLE79",
+    "is_threat": true,
+    "expected_score": 0.7586142657734607,
+    "timestamp": "2025-11-23T16:07:13.015306"
+  },
+  {
+    "id": "mixed_706",
+    "payload": "<script>alert1",
+    "is_threat": true,
+    "expected_score": 0.6155181840693814,
+    "timestamp": "2025-11-23T14:16:13.015309"
+  },
+  {
+    "id": "mixed_707",
+    "payload": "PUT /api/users/495 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18626986047167346,
+    "timestamp": "2025-11-24T09:59:13.015312"
+  },
+  {
+    "id": "mixed_708",
+    "payload": "DELETE /profile/362 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.05944061857071303,
+    "timestamp": "2025-11-23T23:35:13.015318"
+  },
+  {
+    "id": "mixed_709",
+    "payload": "; rm -rf2",
+    "is_threat": true,
+    "expected_score": 0.8002460746852266,
+    "timestamp": "2025-11-24T05:44:13.015320"
+  },
+  {
+    "id": "mixed_710",
+    "payload": "PUT /profile/95 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2320601484412872,
+    "timestamp": "2025-11-23T23:32:13.015323"
+  },
+  {
+    "id": "mixed_711",
+    "payload": "PUT /api/users/127 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25938734233217897,
+    "timestamp": "2025-11-24T04:19:13.015327"
+  },
+  {
+    "id": "mixed_712",
+    "payload": "GET /dashboard/497 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25728277534032795,
+    "timestamp": "2025-11-23T16:31:13.015332"
+  },
+  {
+    "id": "mixed_713",
+    "payload": "GET /dashboard/946 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26007978654899766,
+    "timestamp": "2025-11-24T12:12:13.015335"
+  },
+  {
+    "id": "mixed_714",
+    "payload": "GET /profile/748 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21714257280123594,
+    "timestamp": "2025-11-24T02:03:13.015338"
+  },
+  {
+    "id": "mixed_715",
+    "payload": "PUT /data/844 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04092776872380731,
+    "timestamp": "2025-11-24T11:02:13.015341"
+  },
+  {
+    "id": "mixed_716",
+    "payload": "POST /api/users/813 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17015692460810383,
+    "timestamp": "2025-11-24T13:30:13.015344"
+  },
+  {
+    "id": "mixed_717",
+    "payload": "PUT /profile/353 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1568956404937524,
+    "timestamp": "2025-11-24T06:20:13.015347"
+  },
+  {
+    "id": "mixed_718",
+    "payload": "DELETE /profile/156 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24225915151458371,
+    "timestamp": "2025-11-24T04:25:13.015350"
+  },
+  {
+    "id": "mixed_719",
+    "payload": "PUT /dashboard/930 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10564091359584384,
+    "timestamp": "2025-11-24T12:43:13.015353"
+  },
+  {
+    "id": "mixed_720",
+    "payload": "PUT /profile/603 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09155791525766364,
+    "timestamp": "2025-11-24T02:30:13.015358"
+  },
+  {
+    "id": "mixed_721",
+    "payload": "POST /data/384 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1975026879322222,
+    "timestamp": "2025-11-23T18:01:13.015361"
+  },
+  {
+    "id": "mixed_722",
+    "payload": "PUT /settings/414 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23544488194617805,
+    "timestamp": "2025-11-23T15:56:13.015364"
+  },
+  {
+    "id": "mixed_723",
+    "payload": "DELETE /api/users/890 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.026217144061658957,
+    "timestamp": "2025-11-24T06:29:13.015367"
+  },
+  {
+    "id": "mixed_724",
+    "payload": "PUT /profile/281 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2619552103952109,
+    "timestamp": "2025-11-24T01:33:13.015370"
+  },
+  {
+    "id": "mixed_725",
+    "payload": "GET /api/users/599 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.018607112160123482,
+    "timestamp": "2025-11-23T14:00:13.015373"
+  },
+  {
+    "id": "mixed_726",
+    "payload": "PUT /profile/610 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.010148205785109055,
+    "timestamp": "2025-11-23T17:36:13.015376"
+  },
+  {
+    "id": "mixed_727",
+    "payload": "PUT /api/users/752 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26223167762415506,
+    "timestamp": "2025-11-24T09:03:13.015382"
+  },
+  {
+    "id": "mixed_728",
+    "payload": "GET /profile/561 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2870307848199005,
+    "timestamp": "2025-11-24T08:59:13.015385"
+  },
+  {
+    "id": "mixed_729",
+    "payload": "POST /settings/725 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2477715278560524,
+    "timestamp": "2025-11-23T20:42:13.015388"
+  },
+  {
+    "id": "mixed_730",
+    "payload": "GET /dashboard/502 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2848518899828482,
+    "timestamp": "2025-11-24T04:13:13.015391"
+  },
+  {
+    "id": "mixed_731",
+    "payload": "POST /api/users/97 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06723752683765813,
+    "timestamp": "2025-11-24T08:18:13.015403"
+  },
+  {
+    "id": "mixed_732",
+    "payload": "DELETE /settings/906 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2697627097771068,
+    "timestamp": "2025-11-24T08:18:13.015406"
+  },
+  {
+    "id": "mixed_733",
+    "payload": "POST /settings/266 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.03803662093869321,
+    "timestamp": "2025-11-24T02:25:13.015409"
+  },
+  {
+    "id": "mixed_734",
+    "payload": "GET /api/users/208 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.283566767289546,
+    "timestamp": "2025-11-24T13:33:13.015412"
+  },
+  {
+    "id": "mixed_735",
+    "payload": "GET /api/users/594 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17100835947861664,
+    "timestamp": "2025-11-23T21:03:13.015414"
+  },
+  {
+    "id": "mixed_736",
+    "payload": "POST /profile/398 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15708667770583798,
+    "timestamp": "2025-11-24T04:34:13.015417"
+  },
+  {
+    "id": "mixed_737",
+    "payload": "GET /dashboard/971 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18781486259159594,
+    "timestamp": "2025-11-24T03:27:13.015420"
+  },
+  {
+    "id": "mixed_738",
+    "payload": "POST /dashboard/821 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0024829190647291943,
+    "timestamp": "2025-11-24T06:21:13.015423"
+  },
+  {
+    "id": "mixed_739",
+    "payload": "PUT /api/users/848 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25531626746967184,
+    "timestamp": "2025-11-23T17:49:13.015426"
+  },
+  {
+    "id": "mixed_740",
+    "payload": "PUT /api/users/244 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10566396023870042,
+    "timestamp": "2025-11-24T00:49:13.015429"
+  },
+  {
+    "id": "mixed_741",
+    "payload": "PUT /data/689 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18982201687790554,
+    "timestamp": "2025-11-23T17:23:13.015432"
+  },
+  {
+    "id": "mixed_742",
+    "payload": "'; DROP TABLE75",
+    "is_threat": true,
+    "expected_score": 0.660182406000742,
+    "timestamp": "2025-11-24T12:56:13.015435"
+  },
+  {
+    "id": "mixed_743",
+    "payload": "; rm -rf90",
+    "is_threat": true,
+    "expected_score": 0.8206242839581965,
+    "timestamp": "2025-11-23T19:27:13.015438"
+  },
+  {
+    "id": "mixed_744",
+    "payload": "DELETE /api/users/521 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.019910074798254563,
+    "timestamp": "2025-11-24T01:57:13.015443"
+  },
+  {
+    "id": "mixed_745",
+    "payload": "PUT /profile/423 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2299120016555447,
+    "timestamp": "2025-11-23T16:30:13.015446"
+  },
+  {
+    "id": "mixed_746",
+    "payload": "POST /profile/887 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07729044538530878,
+    "timestamp": "2025-11-23T16:36:13.015449"
+  },
+  {
+    "id": "mixed_747",
+    "payload": "DELETE /data/674 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15653257883901794,
+    "timestamp": "2025-11-24T10:15:13.015454"
+  },
+  {
+    "id": "mixed_748",
+    "payload": "PUT /profile/130 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18378685622319582,
+    "timestamp": "2025-11-23T21:43:13.015457"
+  },
+  {
+    "id": "mixed_749",
+    "payload": "PUT /settings/266 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19213625976732637,
+    "timestamp": "2025-11-23T23:01:13.015460"
+  },
+  {
+    "id": "mixed_750",
+    "payload": "PUT /settings/754 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1490411084254357,
+    "timestamp": "2025-11-24T12:34:13.015463"
+  },
+  {
+    "id": "mixed_751",
+    "payload": "PUT /profile/39 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2522355971899787,
+    "timestamp": "2025-11-24T09:14:13.015467"
+  },
+  {
+    "id": "mixed_752",
+    "payload": "PUT /data/749 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.01805909860327268,
+    "timestamp": "2025-11-24T05:52:13.015470"
+  },
+  {
+    "id": "mixed_753",
+    "payload": "PUT /api/users/247 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14734204206367277,
+    "timestamp": "2025-11-23T19:53:13.015473"
+  },
+  {
+    "id": "mixed_754",
+    "payload": "POST /settings/173 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.27397665065753685,
+    "timestamp": "2025-11-23T23:00:13.015478"
+  },
+  {
+    "id": "mixed_755",
+    "payload": "POST /settings/405 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09081002746986737,
+    "timestamp": "2025-11-23T16:47:13.015481"
+  },
+  {
+    "id": "mixed_756",
+    "payload": "DELETE /dashboard/973 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10518707443803028,
+    "timestamp": "2025-11-23T21:13:13.015484"
+  },
+  {
+    "id": "mixed_757",
+    "payload": "DELETE /dashboard/909 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.03969995340628963,
+    "timestamp": "2025-11-24T11:53:13.015487"
+  },
+  {
+    "id": "mixed_758",
+    "payload": "DELETE /dashboard/416 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15352218778302132,
+    "timestamp": "2025-11-24T05:51:13.015490"
+  },
+  {
+    "id": "mixed_759",
+    "payload": "PUT /profile/222 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1711853151347275,
+    "timestamp": "2025-11-24T11:23:13.015493"
+  },
+  {
+    "id": "mixed_760",
+    "payload": "GET /api/users/989 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0402801109894401,
+    "timestamp": "2025-11-24T03:14:13.015495"
+  },
+  {
+    "id": "mixed_761",
+    "payload": "DELETE /data/916 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18730675541989214,
+    "timestamp": "2025-11-23T22:43:13.015498"
+  },
+  {
+    "id": "mixed_762",
+    "payload": "POST /dashboard/756 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1892408760843795,
+    "timestamp": "2025-11-23T19:06:13.015502"
+  },
+  {
+    "id": "mixed_763",
+    "payload": "../../../etc/24",
+    "is_threat": true,
+    "expected_score": 0.9171481921182093,
+    "timestamp": "2025-11-23T23:12:13.015504"
+  },
+  {
+    "id": "mixed_764",
+    "payload": "GET /api/users/965 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13401606712883832,
+    "timestamp": "2025-11-23T23:49:13.015507"
+  },
+  {
+    "id": "mixed_765",
+    "payload": "DELETE /api/users/166 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16444400980609056,
+    "timestamp": "2025-11-24T06:49:13.015510"
+  },
+  {
+    "id": "mixed_766",
+    "payload": "POST /api/users/388 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14885212204005352,
+    "timestamp": "2025-11-23T15:04:13.015513"
+  },
+  {
+    "id": "mixed_767",
+    "payload": "'; DROP TABLE9",
+    "is_threat": true,
+    "expected_score": 0.8815361964018833,
+    "timestamp": "2025-11-23T15:35:13.015516"
+  },
+  {
+    "id": "mixed_768",
+    "payload": "DELETE /api/users/681 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21304524122203997,
+    "timestamp": "2025-11-24T07:19:13.015519"
+  },
+  {
+    "id": "mixed_769",
+    "payload": "POST /settings/119 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24254989770924706,
+    "timestamp": "2025-11-24T09:29:13.015522"
+  },
+  {
+    "id": "mixed_770",
+    "payload": "POST /settings/678 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.291325675722083,
+    "timestamp": "2025-11-24T01:43:13.015525"
+  },
+  {
+    "id": "mixed_771",
+    "payload": "GET /data/522 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10403651013991218,
+    "timestamp": "2025-11-23T14:23:13.015528"
+  },
+  {
+    "id": "mixed_772",
+    "payload": "POST /settings/395 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08434574946745789,
+    "timestamp": "2025-11-24T07:43:13.015531"
+  },
+  {
+    "id": "mixed_773",
+    "payload": "DELETE /dashboard/771 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.02297640065690063,
+    "timestamp": "2025-11-23T21:54:13.015534"
+  },
+  {
+    "id": "mixed_774",
+    "payload": "../../../etc/73",
+    "is_threat": true,
+    "expected_score": 0.690548590149784,
+    "timestamp": "2025-11-24T10:53:13.015536"
+  },
+  {
+    "id": "mixed_775",
+    "payload": "../../../etc/48",
+    "is_threat": true,
+    "expected_score": 0.7848305633421349,
+    "timestamp": "2025-11-23T17:48:13.015539"
+  },
+  {
+    "id": "mixed_776",
+    "payload": "DELETE /data/70 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2814983996466207,
+    "timestamp": "2025-11-24T07:47:13.015544"
+  },
+  {
+    "id": "mixed_777",
+    "payload": "PUT /data/23 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17762717729981095,
+    "timestamp": "2025-11-23T19:05:13.015547"
+  },
+  {
+    "id": "mixed_778",
+    "payload": "GET /data/294 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07552072876846345,
+    "timestamp": "2025-11-24T00:59:13.015552"
+  },
+  {
+    "id": "mixed_779",
+    "payload": "DELETE /profile/649 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0077210019882430255,
+    "timestamp": "2025-11-24T10:05:13.015555"
+  },
+  {
+    "id": "mixed_780",
+    "payload": "../../../etc/11",
+    "is_threat": true,
+    "expected_score": 0.8898986364313094,
+    "timestamp": "2025-11-24T05:23:13.015558"
+  },
+  {
+    "id": "mixed_781",
+    "payload": "; rm -rf79",
+    "is_threat": true,
+    "expected_score": 0.6917919534888752,
+    "timestamp": "2025-11-24T13:07:13.015560"
+  },
+  {
+    "id": "mixed_782",
+    "payload": "'; DROP TABLE51",
+    "is_threat": true,
+    "expected_score": 0.7657067042744281,
+    "timestamp": "2025-11-24T02:52:13.015563"
+  },
+  {
+    "id": "mixed_783",
+    "payload": "DELETE /profile/680 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20184878172382173,
+    "timestamp": "2025-11-23T21:23:13.015566"
+  },
+  {
+    "id": "mixed_784",
+    "payload": "DELETE /api/users/129 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2073625073454372,
+    "timestamp": "2025-11-24T03:05:13.015571"
+  },
+  {
+    "id": "mixed_785",
+    "payload": "DELETE /settings/773 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04620139039310959,
+    "timestamp": "2025-11-23T19:25:13.015574"
+  },
+  {
+    "id": "mixed_786",
+    "payload": "POST /api/users/379 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0321799383949399,
+    "timestamp": "2025-11-23T20:09:13.015577"
+  },
+  {
+    "id": "mixed_787",
+    "payload": "POST /settings/901 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19110655283336395,
+    "timestamp": "2025-11-24T01:59:13.015580"
+  },
+  {
+    "id": "mixed_788",
+    "payload": "DELETE /data/646 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.029153002247949766,
+    "timestamp": "2025-11-23T13:58:13.015583"
+  },
+  {
+    "id": "mixed_789",
+    "payload": "GET /api/users/364 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24382273517881592,
+    "timestamp": "2025-11-24T04:45:13.015586"
+  },
+  {
+    "id": "mixed_790",
+    "payload": "POST /data/534 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14437807060512256,
+    "timestamp": "2025-11-23T23:59:13.015589"
+  },
+  {
+    "id": "mixed_791",
+    "payload": "POST /api/users/471 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13243449416919031,
+    "timestamp": "2025-11-24T05:16:13.015592"
+  },
+  {
+    "id": "mixed_792",
+    "payload": "GET /settings/359 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.05587835997765005,
+    "timestamp": "2025-11-23T17:29:13.015595"
+  },
+  {
+    "id": "mixed_793",
+    "payload": "<script>alert85",
+    "is_threat": true,
+    "expected_score": 0.9036568836852951,
+    "timestamp": "2025-11-23T18:53:13.015597"
+  },
+  {
+    "id": "mixed_794",
+    "payload": "DELETE /profile/875 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.016184371628146132,
+    "timestamp": "2025-11-24T12:38:13.015600"
+  },
+  {
+    "id": "mixed_795",
+    "payload": "'; DROP TABLE47",
+    "is_threat": true,
+    "expected_score": 0.8190928313355699,
+    "timestamp": "2025-11-24T06:09:13.015603"
+  },
+  {
+    "id": "mixed_796",
+    "payload": "PUT /api/users/525 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10226760030350877,
+    "timestamp": "2025-11-24T07:57:13.015606"
+  },
+  {
+    "id": "mixed_797",
+    "payload": "../../../etc/43",
+    "is_threat": true,
+    "expected_score": 0.9175949279462353,
+    "timestamp": "2025-11-24T04:43:13.015609"
+  },
+  {
+    "id": "mixed_798",
+    "payload": "GET /api/users/391 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14041546029294877,
+    "timestamp": "2025-11-24T02:19:13.015611"
+  },
+  {
+    "id": "mixed_799",
+    "payload": "POST /data/633 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07204428092434104,
+    "timestamp": "2025-11-23T21:41:13.015614"
+  },
+  {
+    "id": "mixed_800",
+    "payload": "GET /dashboard/816 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.02826717779917478,
+    "timestamp": "2025-11-24T10:42:13.015617"
+  },
+  {
+    "id": "mixed_801",
+    "payload": "PUT /data/29 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12406692946956864,
+    "timestamp": "2025-11-23T18:00:13.015620"
+  },
+  {
+    "id": "mixed_802",
+    "payload": "PUT /api/users/984 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10847232043584655,
+    "timestamp": "2025-11-23T14:33:13.015623"
+  },
+  {
+    "id": "mixed_803",
+    "payload": "POST /settings/960 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23611956538066875,
+    "timestamp": "2025-11-23T14:22:13.015626"
+  },
+  {
+    "id": "mixed_804",
+    "payload": "POST /settings/566 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1438812100318101,
+    "timestamp": "2025-11-23T15:54:13.015629"
+  },
+  {
+    "id": "mixed_805",
+    "payload": "DELETE /dashboard/803 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21803385799398467,
+    "timestamp": "2025-11-24T06:57:13.015632"
+  },
+  {
+    "id": "mixed_806",
+    "payload": "PUT /api/users/218 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22135814921458188,
+    "timestamp": "2025-11-24T02:30:13.015637"
+  },
+  {
+    "id": "mixed_807",
+    "payload": "<script>alert5",
+    "is_threat": true,
+    "expected_score": 0.6374817406306752,
+    "timestamp": "2025-11-24T03:14:13.015642"
+  },
+  {
+    "id": "mixed_808",
+    "payload": "'; DROP TABLE45",
+    "is_threat": true,
+    "expected_score": 0.8423943628276661,
+    "timestamp": "2025-11-24T02:28:13.015645"
+  },
+  {
+    "id": "mixed_809",
+    "payload": "DELETE /settings/402 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0323810946549683,
+    "timestamp": "2025-11-24T07:04:13.015648"
+  },
+  {
+    "id": "mixed_810",
+    "payload": "GET /dashboard/98 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17715068351983657,
+    "timestamp": "2025-11-24T09:13:13.015651"
+  },
+  {
+    "id": "mixed_811",
+    "payload": "DELETE /profile/533 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.012864334945788846,
+    "timestamp": "2025-11-23T22:36:13.015654"
+  },
+  {
+    "id": "mixed_812",
+    "payload": "POST /dashboard/159 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17915111535927783,
+    "timestamp": "2025-11-24T06:12:13.015657"
+  },
+  {
+    "id": "mixed_813",
+    "payload": "; rm -rf96",
+    "is_threat": true,
+    "expected_score": 0.7203028381555392,
+    "timestamp": "2025-11-23T14:01:13.015660"
+  },
+  {
+    "id": "mixed_814",
+    "payload": "'; DROP TABLE29",
+    "is_threat": true,
+    "expected_score": 0.8572042084079038,
+    "timestamp": "2025-11-23T23:05:13.015662"
+  },
+  {
+    "id": "mixed_815",
+    "payload": "DELETE /api/users/945 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12866827865872807,
+    "timestamp": "2025-11-24T06:18:13.015669"
+  },
+  {
+    "id": "mixed_816",
+    "payload": "DELETE /settings/613 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18166583440054931,
+    "timestamp": "2025-11-23T16:41:13.015672"
+  },
+  {
+    "id": "mixed_817",
+    "payload": "PUT /data/854 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21364261508184887,
+    "timestamp": "2025-11-23T17:48:13.015675"
+  },
+  {
+    "id": "mixed_818",
+    "payload": "; rm -rf21",
+    "is_threat": true,
+    "expected_score": 0.9652561866920712,
+    "timestamp": "2025-11-23T14:41:13.015678"
+  },
+  {
+    "id": "mixed_819",
+    "payload": "GET /settings/899 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.01332078593110586,
+    "timestamp": "2025-11-23T19:52:13.015681"
+  },
+  {
+    "id": "mixed_820",
+    "payload": "PUT /api/users/955 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2543931033036563,
+    "timestamp": "2025-11-23T17:36:13.015684"
+  },
+  {
+    "id": "mixed_821",
+    "payload": "PUT /api/users/108 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06944402385716844,
+    "timestamp": "2025-11-24T02:08:13.015687"
+  },
+  {
+    "id": "mixed_822",
+    "payload": "GET /dashboard/668 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24869098589416205,
+    "timestamp": "2025-11-24T07:48:13.015690"
+  },
+  {
+    "id": "mixed_823",
+    "payload": "POST /data/256 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15373170019642413,
+    "timestamp": "2025-11-23T23:42:13.015693"
+  },
+  {
+    "id": "mixed_824",
+    "payload": "DELETE /profile/631 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.006527385408690356,
+    "timestamp": "2025-11-23T15:14:13.015696"
+  },
+  {
+    "id": "mixed_825",
+    "payload": "GET /profile/134 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1858625151701094,
+    "timestamp": "2025-11-23T23:32:13.015699"
+  },
+  {
+    "id": "mixed_826",
+    "payload": "GET /profile/842 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23134977533658088,
+    "timestamp": "2025-11-24T01:26:13.015702"
+  },
+  {
+    "id": "mixed_827",
+    "payload": "DELETE /dashboard/344 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15932063196244395,
+    "timestamp": "2025-11-24T07:09:13.015705"
+  },
+  {
+    "id": "mixed_828",
+    "payload": "PUT /api/users/198 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21871185532638784,
+    "timestamp": "2025-11-24T04:20:13.015708"
+  },
+  {
+    "id": "mixed_829",
+    "payload": "<script>alert95",
+    "is_threat": true,
+    "expected_score": 0.6187094595079472,
+    "timestamp": "2025-11-24T00:03:13.015710"
+  },
+  {
+    "id": "mixed_830",
+    "payload": "DELETE /data/246 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.01726518261806753,
+    "timestamp": "2025-11-24T00:05:13.015713"
+  },
+  {
+    "id": "mixed_831",
+    "payload": "GET /profile/21 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.024941406135958986,
+    "timestamp": "2025-11-24T13:04:13.015716"
+  },
+  {
+    "id": "mixed_832",
+    "payload": "'; DROP TABLE19",
+    "is_threat": true,
+    "expected_score": 0.6613008498895655,
+    "timestamp": "2025-11-23T21:13:13.015719"
+  },
+  {
+    "id": "mixed_833",
+    "payload": "; rm -rf82",
+    "is_threat": true,
+    "expected_score": 0.8480242450512491,
+    "timestamp": "2025-11-23T20:24:13.015724"
+  },
+  {
+    "id": "mixed_834",
+    "payload": "<script>alert87",
+    "is_threat": true,
+    "expected_score": 0.7798565479371434,
+    "timestamp": "2025-11-24T08:20:13.015726"
+  },
+  {
+    "id": "mixed_835",
+    "payload": "<script>alert99",
+    "is_threat": true,
+    "expected_score": 0.6499182789981388,
+    "timestamp": "2025-11-23T22:29:13.015729"
+  },
+  {
+    "id": "mixed_836",
+    "payload": "PUT /profile/688 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06670221676271637,
+    "timestamp": "2025-11-23T15:58:13.015732"
+  },
+  {
+    "id": "mixed_837",
+    "payload": "GET /dashboard/416 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17749897247137975,
+    "timestamp": "2025-11-23T13:51:13.015736"
+  },
+  {
+    "id": "mixed_838",
+    "payload": "POST /data/913 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26197998840237957,
+    "timestamp": "2025-11-23T14:29:13.015739"
+  },
+  {
+    "id": "mixed_839",
+    "payload": "POST /data/863 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1327110761289694,
+    "timestamp": "2025-11-23T23:01:13.015744"
+  },
+  {
+    "id": "mixed_840",
+    "payload": "<script>alert10",
+    "is_threat": true,
+    "expected_score": 0.9406913477345054,
+    "timestamp": "2025-11-23T20:22:13.015746"
+  },
+  {
+    "id": "mixed_841",
+    "payload": "<script>alert72",
+    "is_threat": true,
+    "expected_score": 0.935350825736606,
+    "timestamp": "2025-11-24T13:13:13.015749"
+  },
+  {
+    "id": "mixed_842",
+    "payload": "PUT /settings/506 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18306057782551452,
+    "timestamp": "2025-11-23T22:45:13.015752"
+  },
+  {
+    "id": "mixed_843",
+    "payload": "POST /profile/532 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15966986037089512,
+    "timestamp": "2025-11-23T21:44:13.015755"
+  },
+  {
+    "id": "mixed_844",
+    "payload": "DELETE /dashboard/691 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24157960112848875,
+    "timestamp": "2025-11-23T18:07:13.015758"
+  },
+  {
+    "id": "mixed_845",
+    "payload": "'; DROP TABLE82",
+    "is_threat": true,
+    "expected_score": 0.6785446995712674,
+    "timestamp": "2025-11-23T19:16:13.015761"
+  },
+  {
+    "id": "mixed_846",
+    "payload": "POST /dashboard/418 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0642394786315165,
+    "timestamp": "2025-11-24T08:34:13.015764"
+  },
+  {
+    "id": "mixed_847",
+    "payload": "DELETE /settings/657 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2580951052205149,
+    "timestamp": "2025-11-24T05:21:13.015769"
+  },
+  {
+    "id": "mixed_848",
+    "payload": "GET /data/789 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18153885880061482,
+    "timestamp": "2025-11-24T04:53:13.015772"
+  },
+  {
+    "id": "mixed_849",
+    "payload": "GET /settings/472 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15101648625138758,
+    "timestamp": "2025-11-24T09:37:13.015775"
+  },
+  {
+    "id": "mixed_850",
+    "payload": "POST /settings/523 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19594620423058615,
+    "timestamp": "2025-11-23T22:11:13.015778"
+  },
+  {
+    "id": "mixed_851",
+    "payload": "GET /api/users/553 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2441713017713012,
+    "timestamp": "2025-11-23T15:52:13.015781"
+  },
+  {
+    "id": "mixed_852",
+    "payload": "PUT /settings/348 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2555709215836195,
+    "timestamp": "2025-11-23T19:19:13.015784"
+  },
+  {
+    "id": "mixed_853",
+    "payload": "; rm -rf25",
+    "is_threat": true,
+    "expected_score": 0.9357196608368716,
+    "timestamp": "2025-11-23T15:39:13.015787"
+  },
+  {
+    "id": "mixed_854",
+    "payload": "GET /dashboard/378 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12697674045209864,
+    "timestamp": "2025-11-24T07:25:13.015790"
+  },
+  {
+    "id": "mixed_855",
+    "payload": "GET /data/311 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0710210163155369,
+    "timestamp": "2025-11-24T05:21:13.015793"
+  },
+  {
+    "id": "mixed_856",
+    "payload": "POST /settings/983 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1544739818826409,
+    "timestamp": "2025-11-23T18:37:13.015796"
+  },
+  {
+    "id": "mixed_857",
+    "payload": "GET /api/users/404 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2788809592350816,
+    "timestamp": "2025-11-23T18:14:13.015799"
+  },
+  {
+    "id": "mixed_858",
+    "payload": "POST /data/819 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0719232473233737,
+    "timestamp": "2025-11-23T14:16:13.015802"
+  },
+  {
+    "id": "mixed_859",
+    "payload": "../../../etc/17",
+    "is_threat": true,
+    "expected_score": 0.9530553478826783,
+    "timestamp": "2025-11-24T02:03:13.015807"
+  },
+  {
+    "id": "mixed_860",
+    "payload": "PUT /profile/88 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19173747520283466,
+    "timestamp": "2025-11-23T18:13:13.015810"
+  },
+  {
+    "id": "mixed_861",
+    "payload": "POST /settings/655 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22069214100600457,
+    "timestamp": "2025-11-24T08:20:13.015813"
+  },
+  {
+    "id": "mixed_862",
+    "payload": "POST /dashboard/673 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28829999755034025,
+    "timestamp": "2025-11-24T11:45:13.015816"
+  },
+  {
+    "id": "mixed_863",
+    "payload": "DELETE /dashboard/314 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09986540684709667,
+    "timestamp": "2025-11-24T09:28:13.015819"
+  },
+  {
+    "id": "mixed_864",
+    "payload": "PUT /profile/822 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11307318342239546,
+    "timestamp": "2025-11-23T15:06:13.015822"
+  },
+  {
+    "id": "mixed_865",
+    "payload": "PUT /settings/639 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.015948656911273174,
+    "timestamp": "2025-11-24T04:17:13.015825"
+  },
+  {
+    "id": "mixed_866",
+    "payload": "'; DROP TABLE77",
+    "is_threat": true,
+    "expected_score": 0.6970603030608576,
+    "timestamp": "2025-11-24T07:21:13.015828"
+  },
+  {
+    "id": "mixed_867",
+    "payload": "GET /dashboard/489 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1651068877527149,
+    "timestamp": "2025-11-24T00:44:13.015831"
+  },
+  {
+    "id": "mixed_868",
+    "payload": "PUT /profile/30 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14332514388835413,
+    "timestamp": "2025-11-24T10:29:13.015833"
+  },
+  {
+    "id": "mixed_869",
+    "payload": "DELETE /data/45 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16560353059742053,
+    "timestamp": "2025-11-23T16:04:13.015836"
+  },
+  {
+    "id": "mixed_870",
+    "payload": "PUT /data/924 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09371771218722368,
+    "timestamp": "2025-11-23T16:25:13.015839"
+  },
+  {
+    "id": "mixed_871",
+    "payload": "; rm -rf35",
+    "is_threat": true,
+    "expected_score": 0.6757753355944356,
+    "timestamp": "2025-11-24T06:14:13.015844"
+  },
+  {
+    "id": "mixed_872",
+    "payload": "GET /profile/337 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20484319710242152,
+    "timestamp": "2025-11-23T23:41:13.015847"
+  },
+  {
+    "id": "mixed_873",
+    "payload": "; rm -rf31",
+    "is_threat": true,
+    "expected_score": 0.6223712248891051,
+    "timestamp": "2025-11-23T23:06:13.015850"
+  },
+  {
+    "id": "mixed_874",
+    "payload": "PUT /dashboard/100 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.208252966065989,
+    "timestamp": "2025-11-23T19:55:13.015853"
+  },
+  {
+    "id": "mixed_875",
+    "payload": "<script>alert5",
+    "is_threat": true,
+    "expected_score": 0.9125702957045099,
+    "timestamp": "2025-11-24T09:21:13.015857"
+  },
+  {
+    "id": "mixed_876",
+    "payload": "<script>alert35",
+    "is_threat": true,
+    "expected_score": 0.994238582707069,
+    "timestamp": "2025-11-23T19:23:13.015860"
+  },
+  {
+    "id": "mixed_877",
+    "payload": "<script>alert70",
+    "is_threat": true,
+    "expected_score": 0.9355945943356111,
+    "timestamp": "2025-11-24T07:43:13.015863"
+  },
+  {
+    "id": "mixed_878",
+    "payload": "PUT /profile/382 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10102369590766858,
+    "timestamp": "2025-11-24T06:14:13.015867"
+  },
+  {
+    "id": "mixed_879",
+    "payload": "PUT /dashboard/653 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24268568983571154,
+    "timestamp": "2025-11-24T02:30:13.015871"
+  },
+  {
+    "id": "mixed_880",
+    "payload": "GET /profile/930 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.13283267827687553,
+    "timestamp": "2025-11-24T02:38:13.015874"
+  },
+  {
+    "id": "mixed_881",
+    "payload": "DELETE /profile/346 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12244096931556064,
+    "timestamp": "2025-11-24T11:07:13.015876"
+  },
+  {
+    "id": "mixed_882",
+    "payload": "DELETE /profile/75 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1470936221347295,
+    "timestamp": "2025-11-23T15:19:13.015879"
+  },
+  {
+    "id": "mixed_883",
+    "payload": "'; DROP TABLE71",
+    "is_threat": true,
+    "expected_score": 0.6571797003166885,
+    "timestamp": "2025-11-24T03:32:13.015882"
+  },
+  {
+    "id": "mixed_884",
+    "payload": "<script>alert47",
+    "is_threat": true,
+    "expected_score": 0.7507537210719354,
+    "timestamp": "2025-11-23T17:24:13.015886"
+  },
+  {
+    "id": "mixed_885",
+    "payload": "PUT /settings/358 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23195663089361768,
+    "timestamp": "2025-11-23T16:18:13.015889"
+  },
+  {
+    "id": "mixed_886",
+    "payload": "DELETE /dashboard/192 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.027040858761134854,
+    "timestamp": "2025-11-23T22:59:13.015894"
+  },
+  {
+    "id": "mixed_887",
+    "payload": "POST /data/68 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.03732613207593135,
+    "timestamp": "2025-11-24T11:57:13.015897"
+  },
+  {
+    "id": "mixed_888",
+    "payload": "GET /dashboard/875 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.054084735634611227,
+    "timestamp": "2025-11-23T14:19:13.015905"
+  },
+  {
+    "id": "mixed_889",
+    "payload": "PUT /data/938 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2910654027803318,
+    "timestamp": "2025-11-24T11:33:13.015908"
+  },
+  {
+    "id": "mixed_890",
+    "payload": "GET /settings/954 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2315764198330065,
+    "timestamp": "2025-11-24T12:46:13.015911"
+  },
+  {
+    "id": "mixed_891",
+    "payload": "; rm -rf21",
+    "is_threat": true,
+    "expected_score": 0.8856725486868066,
+    "timestamp": "2025-11-23T15:07:13.015914"
+  },
+  {
+    "id": "mixed_892",
+    "payload": "PUT /data/757 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2824992703678226,
+    "timestamp": "2025-11-24T01:47:13.015917"
+  },
+  {
+    "id": "mixed_893",
+    "payload": "GET /settings/307 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08822000018102423,
+    "timestamp": "2025-11-24T08:50:13.015920"
+  },
+  {
+    "id": "mixed_894",
+    "payload": "POST /settings/848 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2512528094487639,
+    "timestamp": "2025-11-24T00:29:13.015923"
+  },
+  {
+    "id": "mixed_895",
+    "payload": "PUT /profile/13 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.02427992046631745,
+    "timestamp": "2025-11-24T08:03:13.015926"
+  },
+  {
+    "id": "mixed_896",
+    "payload": "GET /data/817 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.29844747285040435,
+    "timestamp": "2025-11-24T07:46:13.015928"
+  },
+  {
+    "id": "mixed_897",
+    "payload": "<script>alert40",
+    "is_threat": true,
+    "expected_score": 0.7124947580166715,
+    "timestamp": "2025-11-24T02:42:13.015931"
+  },
+  {
+    "id": "mixed_898",
+    "payload": "GET /data/227 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1357476316674134,
+    "timestamp": "2025-11-23T18:17:13.015934"
+  },
+  {
+    "id": "mixed_899",
+    "payload": "PUT /settings/908 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1290644992412326,
+    "timestamp": "2025-11-23T23:29:13.015938"
+  },
+  {
+    "id": "mixed_900",
+    "payload": "DELETE /settings/777 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1706271728328224,
+    "timestamp": "2025-11-24T03:41:13.015941"
+  },
+  {
+    "id": "mixed_901",
+    "payload": "DELETE /dashboard/711 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21899382408854187,
+    "timestamp": "2025-11-24T06:30:13.015944"
+  },
+  {
+    "id": "mixed_902",
+    "payload": "GET /dashboard/677 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1358879306353633,
+    "timestamp": "2025-11-24T11:16:13.015947"
+  },
+  {
+    "id": "mixed_903",
+    "payload": "; rm -rf44",
+    "is_threat": true,
+    "expected_score": 0.7860427365653535,
+    "timestamp": "2025-11-23T22:40:13.015952"
+  },
+  {
+    "id": "mixed_904",
+    "payload": "DELETE /settings/911 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16217040585875828,
+    "timestamp": "2025-11-23T19:44:13.015955"
+  },
+  {
+    "id": "mixed_905",
+    "payload": "'; DROP TABLE21",
+    "is_threat": true,
+    "expected_score": 0.9486700294115143,
+    "timestamp": "2025-11-24T05:32:13.015957"
+  },
+  {
+    "id": "mixed_906",
+    "payload": "DELETE /settings/529 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09926869607215545,
+    "timestamp": "2025-11-24T01:59:13.015960"
+  },
+  {
+    "id": "mixed_907",
+    "payload": "PUT /api/users/285 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20652966040756843,
+    "timestamp": "2025-11-24T05:53:13.015963"
+  },
+  {
+    "id": "mixed_908",
+    "payload": "GET /settings/858 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2842339104212633,
+    "timestamp": "2025-11-24T04:45:13.015966"
+  },
+  {
+    "id": "mixed_909",
+    "payload": "GET /dashboard/428 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22967149501979403,
+    "timestamp": "2025-11-23T19:25:13.015971"
+  },
+  {
+    "id": "mixed_910",
+    "payload": "POST /api/users/712 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12647078680607737,
+    "timestamp": "2025-11-23T20:11:13.015974"
+  },
+  {
+    "id": "mixed_911",
+    "payload": "../../../etc/13",
+    "is_threat": true,
+    "expected_score": 0.7459033272865125,
+    "timestamp": "2025-11-24T09:56:13.015977"
+  },
+  {
+    "id": "mixed_912",
+    "payload": "PUT /profile/844 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18056649684392886,
+    "timestamp": "2025-11-24T01:41:13.015980"
+  },
+  {
+    "id": "mixed_913",
+    "payload": "; rm -rf71",
+    "is_threat": true,
+    "expected_score": 0.8061687241622302,
+    "timestamp": "2025-11-24T09:27:13.015985"
+  },
+  {
+    "id": "mixed_914",
+    "payload": "GET /dashboard/606 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.058672049315160534,
+    "timestamp": "2025-11-23T18:12:13.015988"
+  },
+  {
+    "id": "mixed_915",
+    "payload": "GET /data/225 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1668150452905243,
+    "timestamp": "2025-11-24T02:14:13.015991"
+  },
+  {
+    "id": "mixed_916",
+    "payload": "../../../etc/11",
+    "is_threat": true,
+    "expected_score": 0.8452135413914099,
+    "timestamp": "2025-11-24T09:52:13.015994"
+  },
+  {
+    "id": "mixed_917",
+    "payload": "DELETE /profile/251 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.28321157116946577,
+    "timestamp": "2025-11-24T13:45:13.015997"
+  },
+  {
+    "id": "mixed_918",
+    "payload": "GET /profile/780 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15232956628820501,
+    "timestamp": "2025-11-24T02:11:13.016000"
+  },
+  {
+    "id": "mixed_919",
+    "payload": "PUT /dashboard/703 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11635157058942262,
+    "timestamp": "2025-11-23T23:52:13.016003"
+  },
+  {
+    "id": "mixed_920",
+    "payload": "PUT /data/187 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.26000114505712346,
+    "timestamp": "2025-11-23T20:20:13.016006"
+  },
+  {
+    "id": "mixed_921",
+    "payload": "; rm -rf41",
+    "is_threat": true,
+    "expected_score": 0.6422565438550055,
+    "timestamp": "2025-11-24T11:23:13.016009"
+  },
+  {
+    "id": "mixed_922",
+    "payload": "DELETE /data/229 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2988767807695692,
+    "timestamp": "2025-11-23T14:04:13.016012"
+  },
+  {
+    "id": "mixed_923",
+    "payload": "POST /profile/106 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.29756561461726666,
+    "timestamp": "2025-11-24T06:03:13.016015"
+  },
+  {
+    "id": "mixed_924",
+    "payload": "'; DROP TABLE68",
+    "is_threat": true,
+    "expected_score": 0.7117001388549357,
+    "timestamp": "2025-11-24T05:09:13.016017"
+  },
+  {
+    "id": "mixed_925",
+    "payload": "'; DROP TABLE37",
+    "is_threat": true,
+    "expected_score": 0.9825186998121397,
+    "timestamp": "2025-11-24T10:17:13.016020"
+  },
+  {
+    "id": "mixed_926",
+    "payload": "POST /settings/63 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04857067002020336,
+    "timestamp": "2025-11-24T01:03:13.016023"
+  },
+  {
+    "id": "mixed_927",
+    "payload": "PUT /profile/519 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.06834690216561282,
+    "timestamp": "2025-11-23T21:49:13.016026"
+  },
+  {
+    "id": "mixed_928",
+    "payload": "PUT /profile/183 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.027311303452459124,
+    "timestamp": "2025-11-24T05:05:13.016029"
+  },
+  {
+    "id": "mixed_929",
+    "payload": "GET /profile/216 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.25501536512298306,
+    "timestamp": "2025-11-24T04:12:13.016032"
+  },
+  {
+    "id": "mixed_930",
+    "payload": "DELETE /profile/275 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.19516339678250413,
+    "timestamp": "2025-11-24T13:06:13.016035"
+  },
+  {
+    "id": "mixed_931",
+    "payload": "'; DROP TABLE47",
+    "is_threat": true,
+    "expected_score": 0.7540060596279922,
+    "timestamp": "2025-11-23T20:17:13.016037"
+  },
+  {
+    "id": "mixed_932",
+    "payload": "PUT /profile/797 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15023755263997154,
+    "timestamp": "2025-11-24T12:59:13.016040"
+  },
+  {
+    "id": "mixed_933",
+    "payload": "POST /data/475 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1389649506448267,
+    "timestamp": "2025-11-23T18:27:13.016043"
+  },
+  {
+    "id": "mixed_934",
+    "payload": "DELETE /dashboard/547 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14862585045732635,
+    "timestamp": "2025-11-23T22:05:13.016048"
+  },
+  {
+    "id": "mixed_935",
+    "payload": "POST /data/593 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.021235029103879165,
+    "timestamp": "2025-11-24T01:04:13.016051"
+  },
+  {
+    "id": "mixed_936",
+    "payload": "../../../etc/2",
+    "is_threat": true,
+    "expected_score": 0.9649439786905699,
+    "timestamp": "2025-11-24T11:41:13.016054"
+  },
+  {
+    "id": "mixed_937",
+    "payload": "POST /api/users/721 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2831992350484758,
+    "timestamp": "2025-11-24T06:37:13.016057"
+  },
+  {
+    "id": "mixed_938",
+    "payload": "DELETE /profile/400 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04792480027919059,
+    "timestamp": "2025-11-23T23:23:13.016060"
+  },
+  {
+    "id": "mixed_939",
+    "payload": "POST /data/413 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.22632224418369348,
+    "timestamp": "2025-11-23T18:40:13.016065"
+  },
+  {
+    "id": "mixed_940",
+    "payload": "PUT /data/944 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2667952885492593,
+    "timestamp": "2025-11-23T18:19:13.016068"
+  },
+  {
+    "id": "mixed_941",
+    "payload": "POST /dashboard/564 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.01301422374147937,
+    "timestamp": "2025-11-23T18:31:13.016070"
+  },
+  {
+    "id": "mixed_942",
+    "payload": "GET /api/users/3 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.20917030538577183,
+    "timestamp": "2025-11-24T09:52:13.016076"
+  },
+  {
+    "id": "mixed_943",
+    "payload": "GET /api/users/907 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.02977057414402194,
+    "timestamp": "2025-11-24T06:44:13.016079"
+  },
+  {
+    "id": "mixed_944",
+    "payload": "POST /settings/559 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.11192031676686214,
+    "timestamp": "2025-11-23T22:34:13.016082"
+  },
+  {
+    "id": "mixed_945",
+    "payload": "DELETE /data/895 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16288659832173377,
+    "timestamp": "2025-11-23T21:03:13.016085"
+  },
+  {
+    "id": "mixed_946",
+    "payload": "POST /dashboard/13 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07875209112704391,
+    "timestamp": "2025-11-24T13:31:13.016088"
+  },
+  {
+    "id": "mixed_947",
+    "payload": "DELETE /dashboard/507 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.08243417034069825,
+    "timestamp": "2025-11-24T07:15:13.016090"
+  },
+  {
+    "id": "mixed_948",
+    "payload": "GET /profile/572 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.21455794504165432,
+    "timestamp": "2025-11-23T21:00:13.016093"
+  },
+  {
+    "id": "mixed_949",
+    "payload": "PUT /data/125 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12214136126063578,
+    "timestamp": "2025-11-23T16:32:13.016096"
+  },
+  {
+    "id": "mixed_950",
+    "payload": "<script>alert19",
+    "is_threat": true,
+    "expected_score": 0.8319210655268603,
+    "timestamp": "2025-11-24T03:47:13.016099"
+  },
+  {
+    "id": "mixed_951",
+    "payload": "POST /data/646 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2785510184721701,
+    "timestamp": "2025-11-24T11:16:13.016102"
+  },
+  {
+    "id": "mixed_952",
+    "payload": "../../../etc/67",
+    "is_threat": true,
+    "expected_score": 0.8006883305376067,
+    "timestamp": "2025-11-24T03:04:13.016105"
+  },
+  {
+    "id": "mixed_953",
+    "payload": "DELETE /settings/588 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2124460017692362,
+    "timestamp": "2025-11-24T04:10:13.016108"
+  },
+  {
+    "id": "mixed_954",
+    "payload": "PUT /data/899 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.23131888695147287,
+    "timestamp": "2025-11-24T12:22:13.016110"
+  },
+  {
+    "id": "mixed_955",
+    "payload": "POST /data/856 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.09464583253730226,
+    "timestamp": "2025-11-24T03:59:13.016113"
+  },
+  {
+    "id": "mixed_956",
+    "payload": "GET /settings/885 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24568475632614328,
+    "timestamp": "2025-11-23T19:20:13.016116"
+  },
+  {
+    "id": "mixed_957",
+    "payload": "GET /profile/983 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.14986975763121665,
+    "timestamp": "2025-11-23T17:05:13.016119"
+  },
+  {
+    "id": "mixed_958",
+    "payload": "POST /profile/12 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.29820014502175807,
+    "timestamp": "2025-11-24T01:21:13.016122"
+  },
+  {
+    "id": "mixed_959",
+    "payload": "PUT /profile/96 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1869222588961135,
+    "timestamp": "2025-11-24T05:44:13.016125"
+  },
+  {
+    "id": "mixed_960",
+    "payload": "POST /settings/837 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.29912146180321286,
+    "timestamp": "2025-11-24T01:34:13.016129"
+  },
+  {
+    "id": "mixed_961",
+    "payload": "GET /api/users/376 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.148079831942012,
+    "timestamp": "2025-11-23T23:15:13.016131"
+  },
+  {
+    "id": "mixed_962",
+    "payload": "../../../etc/91",
+    "is_threat": true,
+    "expected_score": 0.7324594008528202,
+    "timestamp": "2025-11-24T02:03:13.016134"
+  },
+  {
+    "id": "mixed_963",
+    "payload": "DELETE /profile/355 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.029133012924479926,
+    "timestamp": "2025-11-24T13:12:13.016137"
+  },
+  {
+    "id": "mixed_964",
+    "payload": "POST /settings/698 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0027984704110159187,
+    "timestamp": "2025-11-23T14:47:13.016140"
+  },
+  {
+    "id": "mixed_965",
+    "payload": "PUT /dashboard/688 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.10946160773225595,
+    "timestamp": "2025-11-23T22:42:13.016143"
+  },
+  {
+    "id": "mixed_966",
+    "payload": "GET /settings/669 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.022263556673066776,
+    "timestamp": "2025-11-23T23:59:13.016149"
+  },
+  {
+    "id": "mixed_967",
+    "payload": "../../../etc/69",
+    "is_threat": true,
+    "expected_score": 0.7992787854651483,
+    "timestamp": "2025-11-23T19:10:13.016154"
+  },
+  {
+    "id": "mixed_968",
+    "payload": "; rm -rf17",
+    "is_threat": true,
+    "expected_score": 0.6193171120198085,
+    "timestamp": "2025-11-24T10:24:13.016157"
+  },
+  {
+    "id": "mixed_969",
+    "payload": "POST /api/users/704 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2198967172272243,
+    "timestamp": "2025-11-24T05:44:13.016160"
+  },
+  {
+    "id": "mixed_970",
+    "payload": "GET /settings/26 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.07800696778384093,
+    "timestamp": "2025-11-23T23:19:13.016163"
+  },
+  {
+    "id": "mixed_971",
+    "payload": "'; DROP TABLE15",
+    "is_threat": true,
+    "expected_score": 0.6335135194471987,
+    "timestamp": "2025-11-24T04:08:13.016165"
+  },
+  {
+    "id": "mixed_972",
+    "payload": "POST /dashboard/977 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 1.505671473290837e-05,
+    "timestamp": "2025-11-23T23:26:13.016168"
+  },
+  {
+    "id": "mixed_973",
+    "payload": "POST /api/users/344 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0355691545032533,
+    "timestamp": "2025-11-24T01:16:13.016174"
+  },
+  {
+    "id": "mixed_974",
+    "payload": "../../../etc/1",
+    "is_threat": true,
+    "expected_score": 0.8830213246730538,
+    "timestamp": "2025-11-23T17:54:13.016176"
+  },
+  {
+    "id": "mixed_975",
+    "payload": "'; DROP TABLE29",
+    "is_threat": true,
+    "expected_score": 0.8099548532203481,
+    "timestamp": "2025-11-24T02:09:13.016179"
+  },
+  {
+    "id": "mixed_976",
+    "payload": "POST /dashboard/956 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2813998386249083,
+    "timestamp": "2025-11-23T18:59:13.016182"
+  },
+  {
+    "id": "mixed_977",
+    "payload": "; rm -rf22",
+    "is_threat": true,
+    "expected_score": 0.7123944726519469,
+    "timestamp": "2025-11-24T05:32:13.016185"
+  },
+  {
+    "id": "mixed_978",
+    "payload": "PUT /data/115 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15492417260132424,
+    "timestamp": "2025-11-24T13:48:13.016188"
+  },
+  {
+    "id": "mixed_979",
+    "payload": "../../../etc/61",
+    "is_threat": true,
+    "expected_score": 0.804349688467292,
+    "timestamp": "2025-11-24T05:18:13.016190"
+  },
+  {
+    "id": "mixed_980",
+    "payload": "DELETE /profile/179 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2675307520341625,
+    "timestamp": "2025-11-24T05:25:13.016193"
+  },
+  {
+    "id": "mixed_981",
+    "payload": "PUT /settings/263 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.12943099010677206,
+    "timestamp": "2025-11-24T08:54:13.016196"
+  },
+  {
+    "id": "mixed_982",
+    "payload": "GET /settings/879 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2715143857102724,
+    "timestamp": "2025-11-24T08:17:13.016199"
+  },
+  {
+    "id": "mixed_983",
+    "payload": "PUT /settings/684 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.009675133683169435,
+    "timestamp": "2025-11-23T21:53:13.016202"
+  },
+  {
+    "id": "mixed_984",
+    "payload": "POST /settings/356 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17761008960066735,
+    "timestamp": "2025-11-24T09:06:13.016205"
+  },
+  {
+    "id": "mixed_985",
+    "payload": "DELETE /dashboard/108 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.1364385223458685,
+    "timestamp": "2025-11-24T10:28:13.016208"
+  },
+  {
+    "id": "mixed_986",
+    "payload": "POST /profile/467 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0520067094354802,
+    "timestamp": "2025-11-24T03:52:13.016211"
+  },
+  {
+    "id": "mixed_987",
+    "payload": "'; DROP TABLE70",
+    "is_threat": true,
+    "expected_score": 0.9032378172613441,
+    "timestamp": "2025-11-23T21:11:13.016214"
+  },
+  {
+    "id": "mixed_988",
+    "payload": "PUT /settings/943 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15415424538085684,
+    "timestamp": "2025-11-24T02:38:13.016217"
+  },
+  {
+    "id": "mixed_989",
+    "payload": "PUT /profile/213 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.18953288730875398,
+    "timestamp": "2025-11-24T12:23:13.016220"
+  },
+  {
+    "id": "mixed_990",
+    "payload": "DELETE /dashboard/616 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.17292025951808793,
+    "timestamp": "2025-11-23T22:57:13.016223"
+  },
+  {
+    "id": "mixed_991",
+    "payload": "GET /dashboard/684 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24100663576870784,
+    "timestamp": "2025-11-24T01:43:13.016226"
+  },
+  {
+    "id": "mixed_992",
+    "payload": "POST /api/users/800 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16425575772009446,
+    "timestamp": "2025-11-23T20:56:13.016229"
+  },
+  {
+    "id": "mixed_993",
+    "payload": "PUT /settings/877 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.0699565192487822,
+    "timestamp": "2025-11-24T00:44:13.016232"
+  },
+  {
+    "id": "mixed_994",
+    "payload": "GET /data/838 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.24638607252175057,
+    "timestamp": "2025-11-24T01:22:13.016237"
+  },
+  {
+    "id": "mixed_995",
+    "payload": "PUT /settings/869 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2781779981338827,
+    "timestamp": "2025-11-23T16:41:13.016266"
+  },
+  {
+    "id": "mixed_996",
+    "payload": "DELETE /settings/694 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.15045010954091018,
+    "timestamp": "2025-11-24T01:11:13.016270"
+  },
+  {
+    "id": "mixed_997",
+    "payload": "POST /profile/948 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.019371220302782953,
+    "timestamp": "2025-11-24T03:35:13.016273"
+  },
+  {
+    "id": "mixed_998",
+    "payload": "GET /profile/896 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.2826751837708392,
+    "timestamp": "2025-11-24T04:10:13.016278"
+  },
+  {
+    "id": "mixed_999",
+    "payload": "PUT /dashboard/56 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.16914951576277823,
+    "timestamp": "2025-11-23T23:18:13.016281"
+  },
+  {
+    "id": "mixed_1000",
+    "payload": "POST /profile/636 HTTP/1.1",
+    "is_threat": false,
+    "expected_score": 0.04892704300921961,
+    "timestamp": "2025-11-23T15:17:13.016284"
+  }
+]
