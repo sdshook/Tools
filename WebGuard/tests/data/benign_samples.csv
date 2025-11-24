@@ -1,41 +1,101 @@
-id,type,payload,expected_score,description
-http_1,http_request,GET /api/users HTTP/1.1,0.15722743557180976,Normal HTTP request 1
-http_2,http_request,POST /api/login HTTP/1.1,0.16313244552644846,Normal HTTP request 2
-http_3,http_request,GET /dashboard HTTP/1.1,0.18190519697531202,Normal HTTP request 3
-http_4,http_request,POST /api/data HTTP/1.1,0.14601413701915078,Normal HTTP request 4
-http_5,http_request,GET /profile HTTP/1.1,0.16475050927455448,Normal HTTP request 5
-http_6,http_request,PUT /api/user/123 HTTP/1.1,0.1974408261568975,Normal HTTP request 6
-http_7,http_request,DELETE /api/session HTTP/1.1,0.07570753036539435,Normal HTTP request 7
-http_8,http_request,GET /api/health HTTP/1.1,0.1527418146293856,Normal HTTP request 8
-http_9,http_request,POST /api/upload HTTP/1.1,0.030843334516282118,Normal HTTP request 9
-http_10,http_request,GET /static/css/style.css HTTP/1.1,0.11943303406243636,Normal HTTP request 10
-sql_benign_1,sql_query,SELECT * FROM users WHERE id = 1,0.18070055530877227,Legitimate SQL query 1
-sql_benign_2,sql_query,"INSERT INTO logs (message, timestamp) VALUES ('Login', NOW())",0.04067960397448693,Legitimate SQL query 2
-sql_benign_3,sql_query,UPDATE users SET last_login = NOW() WHERE id = 1,0.15147594048930557,Legitimate SQL query 3
-sql_benign_4,sql_query,DELETE FROM sessions WHERE expires < NOW(),0.08227599268805053,Legitimate SQL query 4
-sql_benign_5,sql_query,SELECT COUNT(*) FROM products WHERE category = 'electronics',0.16959447897261376,Legitimate SQL query 5
-sql_benign_6,sql_query,"SELECT name, email FROM users ORDER BY name",0.102185625586209,Legitimate SQL query 6
-sql_benign_7,sql_query,"INSERT INTO orders (user_id, total) VALUES (1, 99.99)",0.2512517489387543,Legitimate SQL query 7
-sql_benign_8,sql_query,UPDATE products SET stock = stock - 1 WHERE id = 1,0.16498810986156473,Legitimate SQL query 8
-sql_benign_9,sql_query,SELECT * FROM categories ORDER BY name LIMIT 10,0.22618744190656745,Legitimate SQL query 9
-sql_benign_10,sql_query,"DELETE FROM temp_data WHERE created < DATE_SUB(NOW(), INTERVAL 1 DAY)",0.13076996174370223,Legitimate SQL query 10
-form_1,form_data,username=john&password=secret123,0.02033493474980155,Normal form data 1
-form_2,form_data,email=user@example.com&name=John Doe,0.08538510232791977,Normal form data 2
-form_3,form_data,search=laptop computers&category=electronics,0.06614908771881066,Normal form data 3
-form_4,form_data,comment=Great product! Highly recommended.,0.039480237759536574,Normal form data 4
-form_5,form_data,address=123 Main St&city=New York&zip=10001,0.03855532643921805,Normal form data 5
-form_6,form_data,phone=555-1234&country=USA,0.030019071722673676,Normal form data 6
-form_7,form_data,"message=Hello, I need help with my order",0.001779121930792038,Normal form data 7
-form_8,form_data,title=Product Review&rating=5,0.027030300159465018,Normal form data 8
-form_9,form_data,quantity=2&product_id=123,0.03185058035224826,Normal form data 9
-form_10,form_data,newsletter=true&preferences=email,0.010689147962446133,Normal form data 10
-json_1,json_payload,"{""name"": ""John"", ""age"": 30, ""city"": ""New York""}",0.14308122021310005,Normal JSON payload 1
-json_2,json_payload,"{""product"": ""laptop"", ""price"": 999.99, ""stock"": 10}",0.07503362984634292,Normal JSON payload 2
-json_3,json_payload,"{""user_id"": 123, ""action"": ""login"", ""timestamp"": ""2024-01-01T10:00:00Z""}",0.12441722786155668,Normal JSON payload 3
-json_4,json_payload,"{""query"": ""search term"", ""filters"": {""category"": ""books"", ""price_max"": 50}}",0.06965956790946244,Normal JSON payload 4
-json_5,json_payload,"{""order_id"": 456, ""items"": [{""id"": 1, ""qty"": 2}, {""id"": 2, ""qty"": 1}]}",0.11169131005497274,Normal JSON payload 5
-json_6,json_payload,"{""settings"": {""theme"": ""dark"", ""notifications"": true, ""language"": ""en""}}",0.06507853810509508,Normal JSON payload 6
-json_7,json_payload,"{""report"": {""type"": ""sales"", ""period"": ""monthly"", ""format"": ""pdf""}}",0.005172273100583174,Normal JSON payload 7
-json_8,json_payload,"{""user"": {""email"": ""test@example.com"", ""role"": ""user"", ""active"": true}}",0.11934377160605937,Normal JSON payload 8
-json_9,json_payload,"{""backup"": {""frequency"": ""daily"", ""retention"": 30, ""compress"": true}}",0.12200592470878123,Normal JSON payload 9
-json_10,json_payload,"{""config"": {""debug"": false, ""cache"": true, ""timeout"": 30}}",0.13074234368855206,Normal JSON payload 10
+id,type,payload,expected_detection,confidence
+http_request_1,HTTP Request,GET /index.html HTTP/1.1,False,0.15225834520351625
+http_request_2,HTTP Request,POST /login HTTP/1.1,False,0.24788751943907056
+http_request_3,HTTP Request,GET /api/users/123 HTTP/1.1,False,0.1678315960577726
+http_request_4,HTTP Request,PUT /api/profile HTTP/1.1,False,0.12892117184946583
+http_request_5,HTTP Request,DELETE /api/posts/456 HTTP/1.1,False,0.19496624229019166
+http_request_6,HTTP Request,GET /search?q=python+programming HTTP/1.1,False,0.21441282488025745
+http_request_7,HTTP Request,POST /contact HTTP/1.1,False,0.12253224025360342
+http_request_8,HTTP Request,GET /products?category=electronics HTTP/1.1,False,0.16635843579350648
+http_request_9,HTTP Request,GET /images/logo.png HTTP/1.1,False,0.15343925933463745
+http_request_10,HTTP Request,GET /css/styles.css HTTP/1.1,False,0.2427576652923399
+form_data_1,Form Data,username=john&password=secret123,False,0.18876181239651674
+form_data_2,Form Data,email=user@example.com&message=Hello world,False,0.27687705496812776
+form_data_3,Form Data,name=Alice Smith&phone=555-1234,False,0.18902718643420946
+form_data_4,Form Data,search=web development tutorials,False,0.14839255478068775
+form_data_5,Form Data,"comment=Great article, thanks for sharing!",False,0.16889246228412713
+form_data_6,Form Data,title=My Blog Post&content=This is a normal blog post,False,0.11315011494256622
+form_data_7,Form Data,product=laptop&quantity=2&price=999.99,False,0.11377970410444205
+form_data_8,Form Data,feedback=The service was excellent,False,0.2328298974559095
+form_data_9,Form Data,newsletter=subscribe&email=test@domain.com,False,0.21528164044484494
+form_data_10,Form Data,"category=technology&tags=programming,web",False,0.26457723696642566
+json_payload_1,JSON Payload,"{""user"": ""alice"", ""action"": ""login""}",False,0.21675918999244156
+json_payload_2,JSON Payload,"{""query"": ""search term"", ""limit"": 10}",False,0.20967404773300968
+json_payload_3,JSON Payload,"{""name"": ""John Doe"", ""age"": 30, ""city"": ""New York""}",False,0.26608192990408647
+json_payload_4,JSON Payload,"{""product_id"": 123, ""quantity"": 2, ""shipping"": ""express""}",False,0.23787408353853506
+json_payload_5,JSON Payload,"{""message"": ""Hello world"", ""timestamp"": ""2024-01-01T12:00:00Z""}",False,0.2190332013321642
+json_payload_6,JSON Payload,"{""settings"": {""theme"": ""dark"", ""notifications"": true}}",False,0.2458094078735439
+json_payload_7,JSON Payload,"{""order"": {""items"": [{""id"": 1, ""name"": ""Book""}], ""total"": 29.99}}",False,0.12459920948103172
+json_payload_8,JSON Payload,"{""profile"": {""bio"": ""Software developer"", ""skills"": [""Python"", ""JavaScript""]}}",False,0.23244196112638038
+json_payload_9,JSON Payload,"{""event"": ""page_view"", ""url"": ""/products"", ""user_id"": 456}",False,0.14922628456268738
+json_payload_10,JSON Payload,"{""config"": {""debug"": false, ""version"": ""1.2.3""}}",False,0.21527453801421134
+random_benign_1,Random Traffic,normal_parameter_0=value_545,False,0.19166519131263104
+random_benign_2,Random Traffic,normal_parameter_1=value_754,False,0.16352560220812049
+random_benign_3,Random Traffic,normal_parameter_2=value_365,False,0.09411752237963736
+random_benign_4,Random Traffic,normal_parameter_3=value_189,False,0.10364617735914805
+random_benign_5,Random Traffic,normal_parameter_4=value_184,False,0.099809821226054
+random_benign_6,Random Traffic,normal_parameter_5=value_595,False,0.032018797510315514
+random_benign_7,Random Traffic,normal_parameter_6=value_783,False,0.11963538485301456
+random_benign_8,Random Traffic,normal_parameter_7=value_602,False,0.02803039168522732
+random_benign_9,Random Traffic,normal_parameter_8=value_880,False,0.08726895503649253
+random_benign_10,Random Traffic,normal_parameter_9=value_658,False,0.018926868046369807
+random_benign_11,Random Traffic,normal_parameter_10=value_424,False,0.09182094557477577
+random_benign_12,Random Traffic,normal_parameter_11=value_480,False,0.02087517570908211
+random_benign_13,Random Traffic,normal_parameter_12=value_906,False,0.01385460079502483
+random_benign_14,Random Traffic,normal_parameter_13=value_753,False,0.02468308204272354
+random_benign_15,Random Traffic,normal_parameter_14=value_556,False,0.08263700435708297
+random_benign_16,Random Traffic,normal_parameter_15=value_818,False,0.03470518610337288
+random_benign_17,Random Traffic,normal_parameter_16=value_818,False,0.0771814223603476
+random_benign_18,Random Traffic,normal_parameter_17=value_578,False,0.14475929679554922
+random_benign_19,Random Traffic,normal_parameter_18=value_285,False,0.14822301498317614
+random_benign_20,Random Traffic,normal_parameter_19=value_560,False,0.09685079110656042
+random_benign_21,Random Traffic,normal_parameter_20=value_808,False,0.17854016881938053
+random_benign_22,Random Traffic,normal_parameter_21=value_308,False,0.1601612191265054
+random_benign_23,Random Traffic,normal_parameter_22=value_217,False,0.057906556897586885
+random_benign_24,Random Traffic,normal_parameter_23=value_986,False,0.006595310454535253
+random_benign_25,Random Traffic,normal_parameter_24=value_400,False,0.18398851938596236
+random_benign_26,Random Traffic,normal_parameter_25=value_420,False,0.14015778440052218
+random_benign_27,Random Traffic,normal_parameter_26=value_28,False,0.15135801786314684
+random_benign_28,Random Traffic,normal_parameter_27=value_661,False,0.06297772398913004
+random_benign_29,Random Traffic,normal_parameter_28=value_708,False,0.03222709429019797
+random_benign_30,Random Traffic,normal_parameter_29=value_596,False,0.0447292475221895
+random_benign_31,Random Traffic,normal_parameter_30=value_952,False,0.056348894763779134
+random_benign_32,Random Traffic,normal_parameter_31=value_248,False,0.19700253893242747
+random_benign_33,Random Traffic,normal_parameter_32=value_951,False,0.05255897849477018
+random_benign_34,Random Traffic,normal_parameter_33=value_279,False,0.029808757525761044
+random_benign_35,Random Traffic,normal_parameter_34=value_862,False,0.11630579778524211
+random_benign_36,Random Traffic,normal_parameter_35=value_417,False,0.09953887632531092
+random_benign_37,Random Traffic,normal_parameter_36=value_606,False,0.18587428258700275
+random_benign_38,Random Traffic,normal_parameter_37=value_819,False,0.0051855946469490325
+random_benign_39,Random Traffic,normal_parameter_38=value_141,False,0.16822238229670425
+random_benign_40,Random Traffic,normal_parameter_39=value_165,False,0.09155927858020377
+random_benign_41,Random Traffic,normal_parameter_40=value_142,False,0.10931248356253274
+random_benign_42,Random Traffic,normal_parameter_41=value_779,False,0.020190657810181437
+random_benign_43,Random Traffic,normal_parameter_42=value_677,False,0.09464038090082388
+random_benign_44,Random Traffic,normal_parameter_43=value_118,False,0.1760705598239525
+random_benign_45,Random Traffic,normal_parameter_44=value_232,False,0.16870484354013
+random_benign_46,Random Traffic,normal_parameter_45=value_365,False,0.11881715768648747
+random_benign_47,Random Traffic,normal_parameter_46=value_68,False,0.008275016957368542
+random_benign_48,Random Traffic,normal_parameter_47=value_838,False,0.0906730733696912
+random_benign_49,Random Traffic,normal_parameter_48=value_172,False,0.03426785568978232
+random_benign_50,Random Traffic,normal_parameter_49=value_485,False,0.10781874505026628
+random_benign_51,Random Traffic,normal_parameter_50=value_248,False,0.06023403011739277
+random_benign_52,Random Traffic,normal_parameter_51=value_135,False,0.16865706047030218
+random_benign_53,Random Traffic,normal_parameter_52=value_214,False,0.1833216741719761
+random_benign_54,Random Traffic,normal_parameter_53=value_170,False,0.010557602048564442
+random_benign_55,Random Traffic,normal_parameter_54=value_926,False,0.16421114989851526
+random_benign_56,Random Traffic,normal_parameter_55=value_392,False,0.14210917165270867
+random_benign_57,Random Traffic,normal_parameter_56=value_598,False,0.03885240529568601
+random_benign_58,Random Traffic,normal_parameter_57=value_370,False,0.026476133845242014
+random_benign_59,Random Traffic,normal_parameter_58=value_359,False,0.18200199054230892
+random_benign_60,Random Traffic,normal_parameter_59=value_196,False,0.06076612522749563
+random_benign_61,Random Traffic,normal_parameter_60=value_780,False,0.1560044092678468
+random_benign_62,Random Traffic,normal_parameter_61=value_658,False,0.0015445791479052453
+random_benign_63,Random Traffic,normal_parameter_62=value_32,False,0.1411142359977729
+random_benign_64,Random Traffic,normal_parameter_63=value_442,False,0.12956754467214887
+random_benign_65,Random Traffic,normal_parameter_64=value_540,False,0.07764377494852731
+random_benign_66,Random Traffic,normal_parameter_65=value_521,False,0.08792012943898973
+random_benign_67,Random Traffic,normal_parameter_66=value_905,False,0.0378209346525201
+random_benign_68,Random Traffic,normal_parameter_67=value_621,False,0.12303968262014973
+random_benign_69,Random Traffic,normal_parameter_68=value_594,False,0.125402853065946
+random_benign_70,Random Traffic,normal_parameter_69=value_587,False,0.1744794594945772

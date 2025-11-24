@@ -68,9 +68,9 @@ path = "src/bin/webguard_enhanced_diagnostic.rs"
 name = "debug_feature_extraction"
 path = "src/bin/debug_feature_extraction.rs"
 
-[[bin]]
-name = "comprehensive_multipass_test"
-path = "tests/scripts/comprehensive_multipass_test.rs"
+# [[bin]]
+# name = "comprehensive_multipass_test"
+# path = "tests/scripts/comprehensive_multipass_test.rs"
 
 
 

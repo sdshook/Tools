@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use crate::enhanced_pattern_recognition::{EnhancedPatternRecognition, PatternAnalysisResult, AttackCategory};
-use crate::adaptive_threshold::{AdaptiveThreshold, ThreatAssessment, ThreatType};
-use crate::retrospective_learning::{RetrospectiveLearning, MissedThreatEvent, FalsePositiveEvent, RetrospectiveLearningStats};
-use crate::eq_iq_regulator::{EQIQRegulator, EQIQBalance};
-use crate::memory_engine::memory::{BidirectionalDynamicHebbian, MemoryEvent};
+use crate::enhanced_pattern_recognition::{EnhancedPatternRecognition, PatternAnalysisResult};
+use crate::adaptive_threshold::{AdaptiveThreshold, ThreatAssessment};
+use crate::retrospective_learning::{RetrospectiveLearningStats};
+use crate::eq_iq_regulator::{ExperientialBehavioralRegulator, ContextEvent, FeedbackEvent};
+use crate::memory_engine::bdh_memory::{BidirectionalDynamicHebbian, MemoryEvent};
 
 /// Complete WebGuard System Implementation
 /// Integrates all components for comprehensive threat detection

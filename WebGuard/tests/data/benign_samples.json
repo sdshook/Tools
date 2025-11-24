@@ -1,282 +1,702 @@
 [
   {
-    "id": "http_1",
-    "type": "http_request",
-    "payload": "GET /api/users HTTP/1.1",
-    "expected_score": 0.15722743557180976,
-    "description": "Normal HTTP request 1"
+    "id": "http_request_1",
+    "type": "HTTP Request",
+    "payload": "GET /index.html HTTP/1.1",
+    "expected_detection": false,
+    "confidence": 0.15225834520351625
   },
   {
-    "id": "http_2",
-    "type": "http_request",
-    "payload": "POST /api/login HTTP/1.1",
-    "expected_score": 0.16313244552644846,
-    "description": "Normal HTTP request 2"
+    "id": "http_request_2",
+    "type": "HTTP Request",
+    "payload": "POST /login HTTP/1.1",
+    "expected_detection": false,
+    "confidence": 0.24788751943907056
   },
   {
-    "id": "http_3",
-    "type": "http_request",
-    "payload": "GET /dashboard HTTP/1.1",
-    "expected_score": 0.18190519697531202,
-    "description": "Normal HTTP request 3"
+    "id": "http_request_3",
+    "type": "HTTP Request",
+    "payload": "GET /api/users/123 HTTP/1.1",
+    "expected_detection": false,
+    "confidence": 0.1678315960577726
   },
   {
-    "id": "http_4",
-    "type": "http_request",
-    "payload": "POST /api/data HTTP/1.1",
-    "expected_score": 0.14601413701915078,
-    "description": "Normal HTTP request 4"
+    "id": "http_request_4",
+    "type": "HTTP Request",
+    "payload": "PUT /api/profile HTTP/1.1",
+    "expected_detection": false,
+    "confidence": 0.12892117184946583
   },
   {
-    "id": "http_5",
-    "type": "http_request",
-    "payload": "GET /profile HTTP/1.1",
-    "expected_score": 0.16475050927455448,
-    "description": "Normal HTTP request 5"
+    "id": "http_request_5",
+    "type": "HTTP Request",
+    "payload": "DELETE /api/posts/456 HTTP/1.1",
+    "expected_detection": false,
+    "confidence": 0.19496624229019166
   },
   {
-    "id": "http_6",
-    "type": "http_request",
-    "payload": "PUT /api/user/123 HTTP/1.1",
-    "expected_score": 0.1974408261568975,
-    "description": "Normal HTTP request 6"
+    "id": "http_request_6",
+    "type": "HTTP Request",
+    "payload": "GET /search?q=python+programming HTTP/1.1",
+    "expected_detection": false,
+    "confidence": 0.21441282488025745
   },
   {
-    "id": "http_7",
-    "type": "http_request",
-    "payload": "DELETE /api/session HTTP/1.1",
-    "expected_score": 0.07570753036539435,
-    "description": "Normal HTTP request 7"
+    "id": "http_request_7",
+    "type": "HTTP Request",
+    "payload": "POST /contact HTTP/1.1",
+    "expected_detection": false,
+    "confidence": 0.12253224025360342
   },
   {
-    "id": "http_8",
-    "type": "http_request",
-    "payload": "GET /api/health HTTP/1.1",
-    "expected_score": 0.1527418146293856,
-    "description": "Normal HTTP request 8"
+    "id": "http_request_8",
+    "type": "HTTP Request",
+    "payload": "GET /products?category=electronics HTTP/1.1",
+    "expected_detection": false,
+    "confidence": 0.16635843579350648
   },
   {
-    "id": "http_9",
-    "type": "http_request",
-    "payload": "POST /api/upload HTTP/1.1",
-    "expected_score": 0.030843334516282118,
-    "description": "Normal HTTP request 9"
+    "id": "http_request_9",
+    "type": "HTTP Request",
+    "payload": "GET /images/logo.png HTTP/1.1",
+    "expected_detection": false,
+    "confidence": 0.15343925933463745
   },
   {
-    "id": "http_10",
-    "type": "http_request",
-    "payload": "GET /static/css/style.css HTTP/1.1",
-    "expected_score": 0.11943303406243636,
-    "description": "Normal HTTP request 10"
+    "id": "http_request_10",
+    "type": "HTTP Request",
+    "payload": "GET /css/styles.css HTTP/1.1",
+    "expected_detection": false,
+    "confidence": 0.2427576652923399
   },
   {
-    "id": "sql_benign_1",
-    "type": "sql_query",
-    "payload": "SELECT * FROM users WHERE id = 1",
-    "expected_score": 0.18070055530877227,
-    "description": "Legitimate SQL query 1"
-  },
-  {
-    "id": "sql_benign_2",
-    "type": "sql_query",
-    "payload": "INSERT INTO logs (message, timestamp) VALUES ('Login', NOW())",
-    "expected_score": 0.04067960397448693,
-    "description": "Legitimate SQL query 2"
-  },
-  {
-    "id": "sql_benign_3",
-    "type": "sql_query",
-    "payload": "UPDATE users SET last_login = NOW() WHERE id = 1",
-    "expected_score": 0.15147594048930557,
-    "description": "Legitimate SQL query 3"
-  },
-  {
-    "id": "sql_benign_4",
-    "type": "sql_query",
-    "payload": "DELETE FROM sessions WHERE expires < NOW()",
-    "expected_score": 0.08227599268805053,
-    "description": "Legitimate SQL query 4"
-  },
-  {
-    "id": "sql_benign_5",
-    "type": "sql_query",
-    "payload": "SELECT COUNT(*) FROM products WHERE category = 'electronics'",
-    "expected_score": 0.16959447897261376,
-    "description": "Legitimate SQL query 5"
-  },
-  {
-    "id": "sql_benign_6",
-    "type": "sql_query",
-    "payload": "SELECT name, email FROM users ORDER BY name",
-    "expected_score": 0.102185625586209,
-    "description": "Legitimate SQL query 6"
-  },
-  {
-    "id": "sql_benign_7",
-    "type": "sql_query",
-    "payload": "INSERT INTO orders (user_id, total) VALUES (1, 99.99)",
-    "expected_score": 0.2512517489387543,
-    "description": "Legitimate SQL query 7"
-  },
-  {
-    "id": "sql_benign_8",
-    "type": "sql_query",
-    "payload": "UPDATE products SET stock = stock - 1 WHERE id = 1",
-    "expected_score": 0.16498810986156473,
-    "description": "Legitimate SQL query 8"
-  },
-  {
-    "id": "sql_benign_9",
-    "type": "sql_query",
-    "payload": "SELECT * FROM categories ORDER BY name LIMIT 10",
-    "expected_score": 0.22618744190656745,
-    "description": "Legitimate SQL query 9"
-  },
-  {
-    "id": "sql_benign_10",
-    "type": "sql_query",
-    "payload": "DELETE FROM temp_data WHERE created < DATE_SUB(NOW(), INTERVAL 1 DAY)",
-    "expected_score": 0.13076996174370223,
-    "description": "Legitimate SQL query 10"
-  },
-  {
-    "id": "form_1",
-    "type": "form_data",
+    "id": "form_data_1",
+    "type": "Form Data",
     "payload": "username=john&password=secret123",
-    "expected_score": 0.02033493474980155,
-    "description": "Normal form data 1"
+    "expected_detection": false,
+    "confidence": 0.18876181239651674
   },
   {
-    "id": "form_2",
-    "type": "form_data",
-    "payload": "email=user@example.com&name=John Doe",
-    "expected_score": 0.08538510232791977,
-    "description": "Normal form data 2"
+    "id": "form_data_2",
+    "type": "Form Data",
+    "payload": "email=user@example.com&message=Hello world",
+    "expected_detection": false,
+    "confidence": 0.27687705496812776
   },
   {
-    "id": "form_3",
-    "type": "form_data",
-    "payload": "search=laptop computers&category=electronics",
-    "expected_score": 0.06614908771881066,
-    "description": "Normal form data 3"
+    "id": "form_data_3",
+    "type": "Form Data",
+    "payload": "name=Alice Smith&phone=555-1234",
+    "expected_detection": false,
+    "confidence": 0.18902718643420946
   },
   {
-    "id": "form_4",
-    "type": "form_data",
-    "payload": "comment=Great product! Highly recommended.",
-    "expected_score": 0.039480237759536574,
-    "description": "Normal form data 4"
+    "id": "form_data_4",
+    "type": "Form Data",
+    "payload": "search=web development tutorials",
+    "expected_detection": false,
+    "confidence": 0.14839255478068775
   },
   {
-    "id": "form_5",
-    "type": "form_data",
-    "payload": "address=123 Main St&city=New York&zip=10001",
-    "expected_score": 0.03855532643921805,
-    "description": "Normal form data 5"
+    "id": "form_data_5",
+    "type": "Form Data",
+    "payload": "comment=Great article, thanks for sharing!",
+    "expected_detection": false,
+    "confidence": 0.16889246228412713
   },
   {
-    "id": "form_6",
-    "type": "form_data",
-    "payload": "phone=555-1234&country=USA",
-    "expected_score": 0.030019071722673676,
-    "description": "Normal form data 6"
+    "id": "form_data_6",
+    "type": "Form Data",
+    "payload": "title=My Blog Post&content=This is a normal blog post",
+    "expected_detection": false,
+    "confidence": 0.11315011494256622
   },
   {
-    "id": "form_7",
-    "type": "form_data",
-    "payload": "message=Hello, I need help with my order",
-    "expected_score": 0.001779121930792038,
-    "description": "Normal form data 7"
+    "id": "form_data_7",
+    "type": "Form Data",
+    "payload": "product=laptop&quantity=2&price=999.99",
+    "expected_detection": false,
+    "confidence": 0.11377970410444205
   },
   {
-    "id": "form_8",
-    "type": "form_data",
-    "payload": "title=Product Review&rating=5",
-    "expected_score": 0.027030300159465018,
-    "description": "Normal form data 8"
+    "id": "form_data_8",
+    "type": "Form Data",
+    "payload": "feedback=The service was excellent",
+    "expected_detection": false,
+    "confidence": 0.2328298974559095
   },
   {
-    "id": "form_9",
-    "type": "form_data",
-    "payload": "quantity=2&product_id=123",
-    "expected_score": 0.03185058035224826,
-    "description": "Normal form data 9"
+    "id": "form_data_9",
+    "type": "Form Data",
+    "payload": "newsletter=subscribe&email=test@domain.com",
+    "expected_detection": false,
+    "confidence": 0.21528164044484494
   },
   {
-    "id": "form_10",
-    "type": "form_data",
-    "payload": "newsletter=true&preferences=email",
-    "expected_score": 0.010689147962446133,
-    "description": "Normal form data 10"
+    "id": "form_data_10",
+    "type": "Form Data",
+    "payload": "category=technology&tags=programming,web",
+    "expected_detection": false,
+    "confidence": 0.26457723696642566
   },
   {
-    "id": "json_1",
-    "type": "json_payload",
-    "payload": "{\"name\": \"John\", \"age\": 30, \"city\": \"New York\"}",
-    "expected_score": 0.14308122021310005,
-    "description": "Normal JSON payload 1"
+    "id": "json_payload_1",
+    "type": "JSON Payload",
+    "payload": "{\"user\": \"alice\", \"action\": \"login\"}",
+    "expected_detection": false,
+    "confidence": 0.21675918999244156
   },
   {
-    "id": "json_2",
-    "type": "json_payload",
-    "payload": "{\"product\": \"laptop\", \"price\": 999.99, \"stock\": 10}",
-    "expected_score": 0.07503362984634292,
-    "description": "Normal JSON payload 2"
+    "id": "json_payload_2",
+    "type": "JSON Payload",
+    "payload": "{\"query\": \"search term\", \"limit\": 10}",
+    "expected_detection": false,
+    "confidence": 0.20967404773300968
   },
   {
-    "id": "json_3",
-    "type": "json_payload",
-    "payload": "{\"user_id\": 123, \"action\": \"login\", \"timestamp\": \"2024-01-01T10:00:00Z\"}",
-    "expected_score": 0.12441722786155668,
-    "description": "Normal JSON payload 3"
+    "id": "json_payload_3",
+    "type": "JSON Payload",
+    "payload": "{\"name\": \"John Doe\", \"age\": 30, \"city\": \"New York\"}",
+    "expected_detection": false,
+    "confidence": 0.26608192990408647
   },
   {
-    "id": "json_4",
-    "type": "json_payload",
-    "payload": "{\"query\": \"search term\", \"filters\": {\"category\": \"books\", \"price_max\": 50}}",
-    "expected_score": 0.06965956790946244,
-    "description": "Normal JSON payload 4"
+    "id": "json_payload_4",
+    "type": "JSON Payload",
+    "payload": "{\"product_id\": 123, \"quantity\": 2, \"shipping\": \"express\"}",
+    "expected_detection": false,
+    "confidence": 0.23787408353853506
   },
   {
-    "id": "json_5",
-    "type": "json_payload",
-    "payload": "{\"order_id\": 456, \"items\": [{\"id\": 1, \"qty\": 2}, {\"id\": 2, \"qty\": 1}]}",
-    "expected_score": 0.11169131005497274,
-    "description": "Normal JSON payload 5"
+    "id": "json_payload_5",
+    "type": "JSON Payload",
+    "payload": "{\"message\": \"Hello world\", \"timestamp\": \"2024-01-01T12:00:00Z\"}",
+    "expected_detection": false,
+    "confidence": 0.2190332013321642
   },
   {
-    "id": "json_6",
-    "type": "json_payload",
-    "payload": "{\"settings\": {\"theme\": \"dark\", \"notifications\": true, \"language\": \"en\"}}",
-    "expected_score": 0.06507853810509508,
-    "description": "Normal JSON payload 6"
+    "id": "json_payload_6",
+    "type": "JSON Payload",
+    "payload": "{\"settings\": {\"theme\": \"dark\", \"notifications\": true}}",
+    "expected_detection": false,
+    "confidence": 0.2458094078735439
   },
   {
-    "id": "json_7",
-    "type": "json_payload",
-    "payload": "{\"report\": {\"type\": \"sales\", \"period\": \"monthly\", \"format\": \"pdf\"}}",
-    "expected_score": 0.005172273100583174,
-    "description": "Normal JSON payload 7"
+    "id": "json_payload_7",
+    "type": "JSON Payload",
+    "payload": "{\"order\": {\"items\": [{\"id\": 1, \"name\": \"Book\"}], \"total\": 29.99}}",
+    "expected_detection": false,
+    "confidence": 0.12459920948103172
   },
   {
-    "id": "json_8",
-    "type": "json_payload",
-    "payload": "{\"user\": {\"email\": \"test@example.com\", \"role\": \"user\", \"active\": true}}",
-    "expected_score": 0.11934377160605937,
-    "description": "Normal JSON payload 8"
+    "id": "json_payload_8",
+    "type": "JSON Payload",
+    "payload": "{\"profile\": {\"bio\": \"Software developer\", \"skills\": [\"Python\", \"JavaScript\"]}}",
+    "expected_detection": false,
+    "confidence": 0.23244196112638038
   },
   {
-    "id": "json_9",
-    "type": "json_payload",
-    "payload": "{\"backup\": {\"frequency\": \"daily\", \"retention\": 30, \"compress\": true}}",
-    "expected_score": 0.12200592470878123,
-    "description": "Normal JSON payload 9"
+    "id": "json_payload_9",
+    "type": "JSON Payload",
+    "payload": "{\"event\": \"page_view\", \"url\": \"/products\", \"user_id\": 456}",
+    "expected_detection": false,
+    "confidence": 0.14922628456268738
   },
   {
-    "id": "json_10",
-    "type": "json_payload",
-    "payload": "{\"config\": {\"debug\": false, \"cache\": true, \"timeout\": 30}}",
-    "expected_score": 0.13074234368855206,
-    "description": "Normal JSON payload 10"
+    "id": "json_payload_10",
+    "type": "JSON Payload",
+    "payload": "{\"config\": {\"debug\": false, \"version\": \"1.2.3\"}}",
+    "expected_detection": false,
+    "confidence": 0.21527453801421134
+  },
+  {
+    "id": "random_benign_1",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_0=value_545",
+    "expected_detection": false,
+    "confidence": 0.19166519131263104
+  },
+  {
+    "id": "random_benign_2",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_1=value_754",
+    "expected_detection": false,
+    "confidence": 0.16352560220812049
+  },
+  {
+    "id": "random_benign_3",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_2=value_365",
+    "expected_detection": false,
+    "confidence": 0.09411752237963736
+  },
+  {
+    "id": "random_benign_4",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_3=value_189",
+    "expected_detection": false,
+    "confidence": 0.10364617735914805
+  },
+  {
+    "id": "random_benign_5",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_4=value_184",
+    "expected_detection": false,
+    "confidence": 0.099809821226054
+  },
+  {
+    "id": "random_benign_6",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_5=value_595",
+    "expected_detection": false,
+    "confidence": 0.032018797510315514
+  },
+  {
+    "id": "random_benign_7",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_6=value_783",
+    "expected_detection": false,
+    "confidence": 0.11963538485301456
+  },
+  {
+    "id": "random_benign_8",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_7=value_602",
+    "expected_detection": false,
+    "confidence": 0.02803039168522732
+  },
+  {
+    "id": "random_benign_9",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_8=value_880",
+    "expected_detection": false,
+    "confidence": 0.08726895503649253
+  },
+  {
+    "id": "random_benign_10",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_9=value_658",
+    "expected_detection": false,
+    "confidence": 0.018926868046369807
+  },
+  {
+    "id": "random_benign_11",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_10=value_424",
+    "expected_detection": false,
+    "confidence": 0.09182094557477577
+  },
+  {
+    "id": "random_benign_12",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_11=value_480",
+    "expected_detection": false,
+    "confidence": 0.02087517570908211
+  },
+  {
+    "id": "random_benign_13",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_12=value_906",
+    "expected_detection": false,
+    "confidence": 0.01385460079502483
+  },
+  {
+    "id": "random_benign_14",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_13=value_753",
+    "expected_detection": false,
+    "confidence": 0.02468308204272354
+  },
+  {
+    "id": "random_benign_15",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_14=value_556",
+    "expected_detection": false,
+    "confidence": 0.08263700435708297
+  },
+  {
+    "id": "random_benign_16",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_15=value_818",
+    "expected_detection": false,
+    "confidence": 0.03470518610337288
+  },
+  {
+    "id": "random_benign_17",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_16=value_818",
+    "expected_detection": false,
+    "confidence": 0.0771814223603476
+  },
+  {
+    "id": "random_benign_18",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_17=value_578",
+    "expected_detection": false,
+    "confidence": 0.14475929679554922
+  },
+  {
+    "id": "random_benign_19",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_18=value_285",
+    "expected_detection": false,
+    "confidence": 0.14822301498317614
+  },
+  {
+    "id": "random_benign_20",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_19=value_560",
+    "expected_detection": false,
+    "confidence": 0.09685079110656042
+  },
+  {
+    "id": "random_benign_21",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_20=value_808",
+    "expected_detection": false,
+    "confidence": 0.17854016881938053
+  },
+  {
+    "id": "random_benign_22",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_21=value_308",
+    "expected_detection": false,
+    "confidence": 0.1601612191265054
+  },
+  {
+    "id": "random_benign_23",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_22=value_217",
+    "expected_detection": false,
+    "confidence": 0.057906556897586885
+  },
+  {
+    "id": "random_benign_24",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_23=value_986",
+    "expected_detection": false,
+    "confidence": 0.006595310454535253
+  },
+  {
+    "id": "random_benign_25",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_24=value_400",
+    "expected_detection": false,
+    "confidence": 0.18398851938596236
+  },
+  {
+    "id": "random_benign_26",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_25=value_420",
+    "expected_detection": false,
+    "confidence": 0.14015778440052218
+  },
+  {
+    "id": "random_benign_27",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_26=value_28",
+    "expected_detection": false,
+    "confidence": 0.15135801786314684
+  },
+  {
+    "id": "random_benign_28",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_27=value_661",
+    "expected_detection": false,
+    "confidence": 0.06297772398913004
+  },
+  {
+    "id": "random_benign_29",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_28=value_708",
+    "expected_detection": false,
+    "confidence": 0.03222709429019797
+  },
+  {
+    "id": "random_benign_30",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_29=value_596",
+    "expected_detection": false,
+    "confidence": 0.0447292475221895
+  },
+  {
+    "id": "random_benign_31",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_30=value_952",
+    "expected_detection": false,
+    "confidence": 0.056348894763779134
+  },
+  {
+    "id": "random_benign_32",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_31=value_248",
+    "expected_detection": false,
+    "confidence": 0.19700253893242747
+  },
+  {
+    "id": "random_benign_33",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_32=value_951",
+    "expected_detection": false,
+    "confidence": 0.05255897849477018
+  },
+  {
+    "id": "random_benign_34",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_33=value_279",
+    "expected_detection": false,
+    "confidence": 0.029808757525761044
+  },
+  {
+    "id": "random_benign_35",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_34=value_862",
+    "expected_detection": false,
+    "confidence": 0.11630579778524211
+  },
+  {
+    "id": "random_benign_36",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_35=value_417",
+    "expected_detection": false,
+    "confidence": 0.09953887632531092
+  },
+  {
+    "id": "random_benign_37",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_36=value_606",
+    "expected_detection": false,
+    "confidence": 0.18587428258700275
+  },
+  {
+    "id": "random_benign_38",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_37=value_819",
+    "expected_detection": false,
+    "confidence": 0.0051855946469490325
+  },
+  {
+    "id": "random_benign_39",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_38=value_141",
+    "expected_detection": false,
+    "confidence": 0.16822238229670425
+  },
+  {
+    "id": "random_benign_40",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_39=value_165",
+    "expected_detection": false,
+    "confidence": 0.09155927858020377
+  },
+  {
+    "id": "random_benign_41",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_40=value_142",
+    "expected_detection": false,
+    "confidence": 0.10931248356253274
+  },
+  {
+    "id": "random_benign_42",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_41=value_779",
+    "expected_detection": false,
+    "confidence": 0.020190657810181437
+  },
+  {
+    "id": "random_benign_43",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_42=value_677",
+    "expected_detection": false,
+    "confidence": 0.09464038090082388
+  },
+  {
+    "id": "random_benign_44",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_43=value_118",
+    "expected_detection": false,
+    "confidence": 0.1760705598239525
+  },
+  {
+    "id": "random_benign_45",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_44=value_232",
+    "expected_detection": false,
+    "confidence": 0.16870484354013
+  },
+  {
+    "id": "random_benign_46",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_45=value_365",
+    "expected_detection": false,
+    "confidence": 0.11881715768648747
+  },
+  {
+    "id": "random_benign_47",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_46=value_68",
+    "expected_detection": false,
+    "confidence": 0.008275016957368542
+  },
+  {
+    "id": "random_benign_48",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_47=value_838",
+    "expected_detection": false,
+    "confidence": 0.0906730733696912
+  },
+  {
+    "id": "random_benign_49",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_48=value_172",
+    "expected_detection": false,
+    "confidence": 0.03426785568978232
+  },
+  {
+    "id": "random_benign_50",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_49=value_485",
+    "expected_detection": false,
+    "confidence": 0.10781874505026628
+  },
+  {
+    "id": "random_benign_51",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_50=value_248",
+    "expected_detection": false,
+    "confidence": 0.06023403011739277
+  },
+  {
+    "id": "random_benign_52",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_51=value_135",
+    "expected_detection": false,
+    "confidence": 0.16865706047030218
+  },
+  {
+    "id": "random_benign_53",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_52=value_214",
+    "expected_detection": false,
+    "confidence": 0.1833216741719761
+  },
+  {
+    "id": "random_benign_54",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_53=value_170",
+    "expected_detection": false,
+    "confidence": 0.010557602048564442
+  },
+  {
+    "id": "random_benign_55",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_54=value_926",
+    "expected_detection": false,
+    "confidence": 0.16421114989851526
+  },
+  {
+    "id": "random_benign_56",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_55=value_392",
+    "expected_detection": false,
+    "confidence": 0.14210917165270867
+  },
+  {
+    "id": "random_benign_57",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_56=value_598",
+    "expected_detection": false,
+    "confidence": 0.03885240529568601
+  },
+  {
+    "id": "random_benign_58",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_57=value_370",
+    "expected_detection": false,
+    "confidence": 0.026476133845242014
+  },
+  {
+    "id": "random_benign_59",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_58=value_359",
+    "expected_detection": false,
+    "confidence": 0.18200199054230892
+  },
+  {
+    "id": "random_benign_60",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_59=value_196",
+    "expected_detection": false,
+    "confidence": 0.06076612522749563
+  },
+  {
+    "id": "random_benign_61",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_60=value_780",
+    "expected_detection": false,
+    "confidence": 0.1560044092678468
+  },
+  {
+    "id": "random_benign_62",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_61=value_658",
+    "expected_detection": false,
+    "confidence": 0.0015445791479052453
+  },
+  {
+    "id": "random_benign_63",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_62=value_32",
+    "expected_detection": false,
+    "confidence": 0.1411142359977729
+  },
+  {
+    "id": "random_benign_64",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_63=value_442",
+    "expected_detection": false,
+    "confidence": 0.12956754467214887
+  },
+  {
+    "id": "random_benign_65",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_64=value_540",
+    "expected_detection": false,
+    "confidence": 0.07764377494852731
+  },
+  {
+    "id": "random_benign_66",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_65=value_521",
+    "expected_detection": false,
+    "confidence": 0.08792012943898973
+  },
+  {
+    "id": "random_benign_67",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_66=value_905",
+    "expected_detection": false,
+    "confidence": 0.0378209346525201
+  },
+  {
+    "id": "random_benign_68",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_67=value_621",
+    "expected_detection": false,
+    "confidence": 0.12303968262014973
+  },
+  {
+    "id": "random_benign_69",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_68=value_594",
+    "expected_detection": false,
+    "confidence": 0.125402853065946
+  },
+  {
+    "id": "random_benign_70",
+    "type": "Random Traffic",
+    "payload": "normal_parameter_69=value_587",
+    "expected_detection": false,
+    "confidence": 0.1744794594945772
   }
 ]

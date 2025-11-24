@@ -289,7 +289,7 @@ impl EnhancedPatternRecognition {
         benign_ngrams.insert("/assets/".to_string(), 0.9);
         
         NgramAnalyzer {
-            n: 2,
+            n: 3, // Changed from 2 to 3 to catch "../" patterns
             malicious_ngrams,
             benign_ngrams,
             min_frequency: 1,
@@ -438,13 +438,21 @@ impl EnhancedPatternRecognition {
             ngram_count += 1;
         }
         
-        let average_score = if ngram_count > 0 {
-            total_score / ngram_count as f32
+        // Use maximum score instead of average to avoid dilution
+        let max_pattern_score = detected_patterns.iter()
+            .map(|p| p.score)
+            .fold(0.0f32, f32::max);
+        
+        // If we have multiple malicious patterns, boost the score
+        let pattern_count_multiplier = if detected_patterns.len() > 1 {
+            1.0 + (detected_patterns.len() as f32 * 0.1).min(0.5)
         } else {
-            0.0
+            1.0
         };
         
-        (average_score.min(1.0), detected_patterns)
+        let final_score = (max_pattern_score * pattern_count_multiplier).min(1.0);
+        
+        (final_score, detected_patterns)
     }
 
     fn extract_ngrams(&self, input: &str, n: usize) -> HashMap<String, Vec<usize>> {
