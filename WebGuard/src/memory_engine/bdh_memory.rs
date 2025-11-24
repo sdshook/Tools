@@ -188,11 +188,15 @@ impl BdhMemory {
             let eq_iq_balance = self.eq_iq_regulator.calculate_eq_iq_balance(&context, &feedback);
             let balanced_reward = reward * eq_iq_balance.balance;
             
-            // Traditional reward update with EQ/IQ balance
+            // FIXED: Traditional reward update with EQ/IQ balance and valence stabilization
             {
                 let trace = &mut self.traces[trace_idx];
                 trace.cum_reward += balanced_reward;
-                trace.valence = trace.valence + eta * (balanced_reward - trace.valence);
+                
+                // FIXED: More conservative valence update to prevent extreme swings
+                let valence_learning_rate = eta * 0.5; // Reduce valence learning rate
+                let valence_delta = valence_learning_rate * (balanced_reward - trace.valence);
+                trace.valence = (trace.valence + valence_delta).max(-1.0).min(1.0); // Clamp valence
                 trace.uses += 1;
                 
                 // Update activation history for temporal Hebbian learning
@@ -209,8 +213,10 @@ impl BdhMemory {
     
     /// EQ/IQ Balanced Bidirectional Hebbian Learning: "Neurons that fire together, wire together" with emotional and intellectual balance
     fn hebbian_update_with_eq_iq_reinforcement(&mut self, trace_id: &str, reward: f32, activation: f32, eq_iq_balance: &crate::eq_iq_regulator::EQIQBalance) {
-        // Use EQ/IQ balance to modulate learning rate
-        let learning_rate = self.hebbian_learning_rate * (1.0 + reward.abs()) * eq_iq_balance.balance;
+        // FIXED: Reduce learning rate to prevent over-learning and add reward sign consideration
+        let base_learning_rate = self.hebbian_learning_rate * 0.3; // Reduce by 70% to prevent over-learning
+        let reward_modulation = if reward > 0.0 { 1.0 + reward * 0.5 } else { 1.0 - reward.abs() * 0.3 };
+        let learning_rate = base_learning_rate * reward_modulation * eq_iq_balance.balance;
         
         // Find all connections involving this trace
         let mut connections_to_update = Vec::new();
@@ -235,7 +241,7 @@ impl BdhMemory {
             // Now update the connection
             let conn = &mut self.hebbian_connections[conn_idx];
             
-            // EQ/IQ Balanced Hebbian rule: Δw = η * (xi * yj) * (α * EQ + β * IQ)
+            // EQ/IQ Balanced Hebbian rule: Δw = η * (xi * yj) * (α * EQ + β * IQ) * reward_sign
             let hebbian_delta = self.eq_iq_regulator.bidirectional_hebbian_update(
                 source_activation, 
                 target_activation, 
@@ -243,14 +249,15 @@ impl BdhMemory {
                 eq_iq_balance.iq
             );
             
-            // Bidirectional update: strengthen connection if both are active and reward is positive
-            conn.weight += hebbian_delta;
+            // FIXED: Apply reward sign to Hebbian learning - positive rewards strengthen, negative weaken
+            let signed_delta = hebbian_delta * reward.signum() * learning_rate;
+            conn.weight += signed_delta;
             
             // Apply weight decay to prevent unbounded growth
             conn.weight *= 1.0 - self.decay_rate;
             
-            // Clamp weights to reasonable bounds
-            conn.weight = conn.weight.max(-2.0).min(2.0);
+            // FIXED: Tighter weight bounds to prevent extreme values
+            conn.weight = conn.weight.max(-1.0).min(1.0);
             
             conn.last_update = reward;
         }
@@ -258,7 +265,7 @@ impl BdhMemory {
         // Update the trace's own Hebbian weights based on its vector and reward
         if let Some(trace) = self.traces.iter_mut().find(|t| t.id == trace_id) {
             for i in 0..EMBED_DIM {
-                // EQ/IQ Balanced Self-reinforcement: strengthen weights for active dimensions
+                // FIXED: EQ/IQ Balanced Self-reinforcement with reward sign consideration
                 let dimension_activity = trace.vec[i].abs();
                 let hebbian_delta = self.eq_iq_regulator.bidirectional_hebbian_update(
                     dimension_activity, 
@@ -266,10 +273,14 @@ impl BdhMemory {
                     eq_iq_balance.eq, 
                     eq_iq_balance.iq
                 );
-                trace.hebbian_weights[i] += hebbian_delta;
+                
+                // FIXED: Apply reward sign and reduced learning rate to self-weights
+                let signed_delta = hebbian_delta * reward.signum() * learning_rate;
+                trace.hebbian_weights[i] += signed_delta;
                 
                 // Apply decay
                 trace.hebbian_weights[i] *= 1.0 - self.decay_rate;
+                // FIXED: Consistent bounds with connection weights
                 trace.hebbian_weights[i] = trace.hebbian_weights[i].max(-1.0).min(1.0);
             }
         }
@@ -373,6 +384,91 @@ impl BdhMemory {
         };
         
         (connection_count, avg_weight, avg_self_weight)
+    }
+
+
+
+    pub fn get_learning_event_count(&self) -> u64 {
+        // Approximate learning events from trace usage
+        self.traces.iter().map(|t| t.uses as u64).sum()
+    }
+
+    pub fn get_accuracy_score(&self) -> f32 {
+        // Calculate accuracy based on valence consistency
+        if self.traces.is_empty() {
+            return 0.5;
+        }
+        
+        let positive_valence_count = self.traces.iter().filter(|t| t.valence > 0.0).count();
+        let total_traces = self.traces.len();
+        
+        // Simple accuracy approximation based on valence distribution
+        let balance = (positive_valence_count as f32) / (total_traces as f32);
+        1.0 - (balance - 0.5).abs() * 2.0 // Higher score for balanced valence
+    }
+
+    /// Export synaptic connections for knowledge sharing
+    pub fn export_synaptic_connections(&self, min_weight_threshold: f32) -> Vec<crate::mesh_cognition::HebbianConnectionExport> {
+        let mut exports = Vec::new();
+        
+        for connection in &self.hebbian_connections {
+            if connection.weight.abs() > min_weight_threshold {
+                // Find source and target traces
+                if let (Some(source_trace), Some(target_trace)) = (
+                    self.traces.iter().find(|t| t.id == connection.source_id),
+                    self.traces.iter().find(|t| t.id == connection.target_id)
+                ) {
+                    exports.push(crate::mesh_cognition::HebbianConnectionExport {
+                        source_pattern: source_trace.vec,
+                        target_pattern: target_trace.vec,
+                        synaptic_weight: connection.weight,
+                        activation_frequency: source_trace.uses + target_trace.uses,
+                        valence_association: (source_trace.valence + target_trace.valence) / 2.0,
+                    });
+                }
+            }
+        }
+        
+        exports
+    }
+
+    /// Import synaptic connection from another WebGuard instance
+    pub fn import_synaptic_connection(
+        &mut self, 
+        source_pattern: &[f32; EMBED_DIM], 
+        target_pattern: &[f32; EMBED_DIM], 
+        synaptic_weight: f32,
+        valence_association: f32
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Create or find traces for the patterns
+        let source_id = self.find_or_create_trace(source_pattern, valence_association * 0.5)?;
+        let target_id = self.find_or_create_trace(target_pattern, valence_association * 0.5)?;
+        
+        // Create the Hebbian connection
+        let connection = HebbianConnection {
+            source_id: source_id.clone(),
+            target_id: target_id.clone(),
+            weight: synaptic_weight * 0.7, // Reduce imported weight to prevent overwhelming local learning
+            last_update: valence_association,
+        };
+        
+        self.hebbian_connections.push(connection);
+        Ok(())
+    }
+
+    /// Helper method to find existing trace or create new one
+    fn find_or_create_trace(&mut self, pattern: &[f32; EMBED_DIM], valence: f32) -> Result<String, Box<dyn std::error::Error>> {
+        // Check if similar trace already exists
+        let similar_traces = self.retrieve_similar(pattern, 1);
+        if let Some((existing_trace, similarity)) = similar_traces.first() {
+            if *similarity > 0.8 {
+                return Ok(existing_trace.id.clone());
+            }
+        }
+        
+        // Create new trace
+        let trace_id = self.add_trace(*pattern, valence);
+        Ok(trace_id)
     }
     
     pub fn get_strongest_connections(&self, limit: usize) -> Vec<&HebbianConnection> {

@@ -712,6 +712,38 @@ impl ExperientialBehavioralRegulator {
         (avg_accuracy * (1.0 - false_positive_rate)).min(1.0).max(0.0)
     }
 
+    pub fn get_analytical_precision(&self) -> f32 {
+        if self.feedback_history.is_empty() {
+            return 0.5;
+        }
+
+        // Calculate analytical precision based on prediction accuracy
+        let precision: f32 = self.feedback_history.iter()
+            .map(|f| 1.0 - (f.predicted_threat - f.actual_threat).abs())
+            .sum::<f32>() / self.feedback_history.len() as f32;
+
+        precision.min(1.0).max(0.0)
+    }
+
+    pub fn adapt_from_external_profile(
+        &mut self, 
+        external_eq_weight: f32, 
+        external_iq_weight: f32, 
+        external_empathic_accuracy: f32
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Adapt our EQ/IQ balance based on external profile
+        let current_empathic_accuracy = self.get_empathic_accuracy();
+        
+        // If external profile has better empathic accuracy, adapt towards it
+        if external_empathic_accuracy > current_empathic_accuracy {
+            let adaptation_rate = 0.1; // Conservative adaptation
+            self.base_alpha = self.base_alpha * (1.0 - adaptation_rate) + external_eq_weight * adaptation_rate;
+            self.base_beta = self.base_beta * (1.0 - adaptation_rate) + external_iq_weight * adaptation_rate;
+        }
+        
+        Ok(())
+    }
+
     /// Calculate context stability from context event
     fn calculate_context_stability(&self, context_event: &ContextEvent) -> f32 {
         if self.context_history.len() < 2 {

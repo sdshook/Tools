@@ -64,6 +64,14 @@ impl PsiIndex {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+
+    /// Export high-quality patterns for knowledge sharing
+    pub fn export_high_quality_patterns(&self, min_valence_threshold: f32) -> Vec<PsiEntry> {
+        self.entries.iter()
+            .filter(|entry| entry.valence.abs() > min_valence_threshold && entry.uses > 1)
+            .cloned()
+            .collect()
+    }
     
     /// PSI consolidation: merge similar entries and remove low-quality ones
     fn consolidate_entries(&mut self) {
