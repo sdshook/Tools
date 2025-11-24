@@ -1,4 +1,5 @@
 
+#[derive(Debug)]
 pub struct ValenceController {
     pub recent_rewards: Vec<f32>,
     pub aggression: f32, // 0.0 conservative -> 1.0 aggressive

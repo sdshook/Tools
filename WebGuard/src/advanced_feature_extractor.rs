@@ -1,6 +1,7 @@
 use regex::Regex;
 
 /// Advanced feature extraction for sophisticated threat detection
+#[derive(Debug)]
 pub struct AdvancedFeatureExtractor {
     sql_patterns: Vec<Regex>,
     xss_patterns: Vec<Regex>,

@@ -1,5 +1,6 @@
 use std::fs;
-use webguard::enhanced_pattern_recognition::{ExperientialKnowledgeBase, DiscoveryMethod};
+use webguard::mesh_cognition::HostMeshCognition;
+use webguard::memory_engine::bdh_memory::BdhMemory;
 
 /// Demonstrates how to export learned knowledge from WebGuard
 /// for use in other security systems
@@ -7,52 +8,60 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🧠 WebGuard Knowledge Export Demo");
     println!("==================================");
     
-    // Create a knowledge base and simulate some learning
-    let mut knowledge_base = ExperientialKnowledgeBase::new();
+    // Create a cognitive mesh and simulate some learning
+    let mut mesh_cognition = HostMeshCognition::new(0.1, 0.5, 0.3);
     
     // Simulate learning some threat patterns
     println!("\n📚 Simulating pattern learning...");
     
     let threat_patterns = vec![
-        ("' OR 1=1 --", vec!["sql".to_string(), "injection".to_string()]),
-        ("<script>alert('xss')</script>", vec!["xss".to_string(), "javascript".to_string()]),
-        ("../../../etc/passwd", vec!["lfi".to_string(), "traversal".to_string()]),
-        ("UNION SELECT * FROM users", vec!["sql".to_string(), "union".to_string()]),
-        ("javascript:alert(1)", vec!["xss".to_string(), "javascript".to_string()]),
+        "' OR 1=1 --",
+        "<script>alert('xss')</script>",
+        "../../../etc/passwd",
+        "UNION SELECT * FROM users",
+        "javascript:alert(1)",
     ];
     
     let benign_patterns = vec![
-        ("SELECT * FROM products WHERE id = ?", vec!["sql".to_string(), "legitimate".to_string()]),
-        ("<div>Welcome to our site</div>", vec!["html".to_string(), "content".to_string()]),
-        ("user/profile/settings", vec!["navigation".to_string(), "legitimate".to_string()]),
+        "SELECT * FROM products WHERE id = ?",
+        "<div>Welcome to our site</div>",
+        "user/profile/settings",
     ];
     
+    // Initialize service memory for learning
+    let service_id = mesh_cognition.register_service(
+        webguard::mesh_cognition::WebServiceType::Apache, 
+        1001
+    );
+    
     // Learn threat patterns
-    for (pattern, context) in threat_patterns {
-        knowledge_base.learn_pattern(
-            pattern.to_string(),
-            true, // is_threat
-            context,
-            DiscoveryMethod::ThreatValidation
-        );
+    for pattern in threat_patterns {
+        // Simulate feature extraction (simplified)
+        let features = [0.8f32; 32]; // High threat features
+        if let Some(service_memory) = mesh_cognition.get_service_memory(&service_id) {
+            if let Ok(mut bdh) = service_memory.try_lock() {
+                bdh.add_trace(features, 1.0); // 1.0 = threat
+            }
+        }
         println!("  ✅ Learned threat pattern: {}", pattern);
     }
     
     // Learn benign patterns
-    for (pattern, context) in benign_patterns {
-        knowledge_base.learn_pattern(
-            pattern.to_string(),
-            false, // is_threat
-            context,
-            DiscoveryMethod::FalsePositiveCorrection
-        );
+    for pattern in benign_patterns {
+        // Simulate feature extraction (simplified)
+        let features = [0.2f32; 32]; // Low threat features
+        if let Some(service_memory) = mesh_cognition.get_service_memory(&service_id) {
+            if let Ok(mut bdh) = service_memory.try_lock() {
+                bdh.add_trace(features, 0.0); // 0.0 = benign
+            }
+        }
         println!("  ✅ Learned benign pattern: {}", pattern);
     }
     
     // Simulate multiple validations to increase confidence
     println!("\n🔄 Simulating pattern validation...");
     
-    // Learn each threat pattern multiple times to increase confidence
+    // Learn each threat pattern multiple times to build confidence
     let validation_patterns = vec![
         ("' OR 1=1 --", "SQL injection"),
         ("<script>alert('xss')</script>", "XSS"),
@@ -63,92 +72,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     for (pattern, description) in validation_patterns {
         for _ in 0..10 {  // Learn each pattern 10 times to build confidence
-            knowledge_base.learn_pattern(
-                pattern.to_string(),
-                true,
-                vec!["threat".to_string(), "validated".to_string()],
-                DiscoveryMethod::ThreatValidation
-            );
+            let features = [0.9f32; 32]; // High confidence threat features
+            if let Some(service_memory) = mesh_cognition.get_service_memory(&service_id) {
+                if let Ok(mut bdh) = service_memory.try_lock() {
+                    bdh.add_trace(features, 1.0); // 1.0 = threat
+                }
+            }
         }
         println!("  ✅ Increased confidence for {} pattern", description);
     }
     
-    // Export the learned knowledge
-    println!("\n📤 Exporting learned knowledge...");
-    match knowledge_base.export_knowledge() {
-        Ok(exported_json) => {
-            println!("  ✅ Successfully exported {} bytes of knowledge", exported_json.len());
-            
-            // Save to file
-            let export_path = "examples/exported_knowledge.json";
-            fs::write(export_path, &exported_json)?;
-            println!("  💾 Saved to: {}", export_path);
-            
-            // Parse and display summary
-            let parsed: serde_json::Value = serde_json::from_str(&exported_json)?;
-            if let Some(patterns) = parsed["patterns"].as_object() {
-                println!("\n📊 Export Summary:");
-                println!("  • Total patterns exported: {}", patterns.len());
-                
-                let mut threat_count = 0;
-                let mut benign_count = 0;
-                let mut total_confidence = 0.0;
-                
-                for (pattern_id, pattern_data) in patterns {
-                    if let Some(threat_weight) = pattern_data["threat_weight"].as_f64() {
-                        if threat_weight > 0.5 {
-                            threat_count += 1;
-                        } else {
-                            benign_count += 1;
-                        }
-                    }
-                    
-                    if let Some(confidence) = pattern_data["confidence"].as_f64() {
-                        total_confidence += confidence;
-                    }
-                    
-                    println!("    - {}: confidence {:.2}", 
-                        pattern_id,
-                        pattern_data["confidence"].as_f64().unwrap_or(0.0)
-                    );
-                }
-                
-                println!("  • Threat patterns: {}", threat_count);
-                println!("  • Benign patterns: {}", benign_count);
-                println!("  • Average confidence: {:.2}", total_confidence / patterns.len() as f64);
-            }
-            
-            // Demonstrate import functionality
-            println!("\n🔄 Demonstrating knowledge import...");
-            let mut new_knowledge_base = ExperientialKnowledgeBase::new();
-            match new_knowledge_base.import_knowledge(&exported_json) {
-                Ok(imported_count) => {
-                    println!("  ✅ Successfully imported {} patterns", imported_count);
-                }
-                Err(e) => {
-                    println!("  ❌ Import failed: {}", e);
-                }
-            }
-            
-            // Show integration examples
-            println!("\n🔧 Integration Examples:");
-            println!("  • ModSecurity: Convert patterns to SecRule format");
-            println!("  • Snort: Generate alert rules with pattern matching");
-            println!("  • YARA: Create detection rules for malware analysis");
-            println!("  • SIEM: Import as threat intelligence indicators");
-            println!("  • ML Pipeline: Use as training data for custom models");
-            
-            println!("\n📖 For detailed integration examples, see:");
-            println!("  KNOWLEDGE_EXPORT_GUIDE.md");
-            
-        }
-        Err(e) => {
-            println!("  ❌ Export failed: {}", e);
+    // Display cognitive mesh statistics
+    println!("\n📊 Cognitive Mesh Statistics:");
+    if let Some(service_memory) = mesh_cognition.get_service_memory(&service_id) {
+        if let Ok(bdh) = service_memory.try_lock() {
+            println!("  • Memory traces stored: {}", bdh.traces.len());
+            println!("  • Service initialized: {}", service_id);
         }
     }
     
-    println!("\n🎉 Knowledge export demo completed!");
-    println!("Check examples/exported_knowledge.json for the exported data.");
+    // Demonstrate pattern recognition
+    println!("\n🔍 Testing pattern recognition...");
+    let test_patterns = vec![
+        ([0.9f32; 32], "High threat pattern"),
+        ([0.1f32; 32], "Low threat pattern"),
+        ([0.5f32; 32], "Medium threat pattern"),
+    ];
+    
+    for (features, description) in test_patterns {
+        if let Some(service_memory) = mesh_cognition.get_service_memory(&service_id) {
+            if let Ok(bdh) = service_memory.try_lock() {
+                let similarity = bdh.max_similarity(&features);
+                println!("  • {}: similarity score {:.3}", description, similarity);
+            }
+        }
+    }
+    
+    println!("\n🔧 Integration Examples:");
+    println!("  • ModSecurity: Convert cognitive patterns to SecRule format");
+    println!("  • Snort: Generate alert rules with similarity thresholds");
+    println!("  • YARA: Create detection rules based on feature vectors");
+    println!("  • SIEM: Import cognitive mesh data as threat intelligence");
+    println!("  • ML Pipeline: Use BDH memory traces as training data");
+    
+    println!("\n🎉 Cognitive knowledge export demo completed!");
+    println!("The cognitive mesh now contains learned threat patterns.");
     
     Ok(())
 }

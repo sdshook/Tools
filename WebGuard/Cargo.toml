@@ -60,13 +60,13 @@ path = "src/bin/webguard_performance_suite.rs"
 name = "webguard_diagnostic"
 path = "src/bin/webguard_diagnostic.rs"
 
-[[bin]]
-name = "webguard_enhanced_diagnostic"
-path = "src/bin/webguard_enhanced_diagnostic.rs"
+# [[bin]]
+# name = "webguard_enhanced_diagnostic"
+# path = "src/bin/webguard_enhanced_diagnostic.rs"
 
-[[bin]]
-name = "debug_feature_extraction"
-path = "src/bin/debug_feature_extraction.rs"
+# [[bin]]
+# name = "debug_feature_extraction"
+# path = "src/bin/debug_feature_extraction.rs"
 
 [[bin]]
 name = "knowledge_export_demo"

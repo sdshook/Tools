@@ -68,6 +68,7 @@ impl WebServiceType {
 }
 
 #[derive(Clone)]
+#[derive(Debug)]
 pub struct ServiceMemory {
     pub service_type: WebServiceType,
     pub pid: i32,
@@ -75,6 +76,7 @@ pub struct ServiceMemory {
     pub active: bool,
 }
 
+#[derive(Debug)]
 pub struct HostMeshCognition {
     services: HashMap<String, ServiceMemory>,
     shared_psi: Arc<Mutex<PsiIndex>>,
