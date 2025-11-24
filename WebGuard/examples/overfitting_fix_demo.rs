@@ -77,10 +77,10 @@ fn main() {
     // Show learning statistics
     let stats = system.get_learning_stats();
     println!("\n📈 Learning Statistics:");
-    println!("   - Missed threats processed: {}", stats.total_missed_threats);
-    println!("   - False positives processed: {}", stats.total_false_positives);
-    println!("   - Average missed threat severity: {:.3}", stats.average_missed_threat_severity);
-    println!("   - Average false positive impact: {:.3}", stats.average_false_positive_impact);
+    println!("   - Missed threats processed: {}", stats.total_missed_threats_processed);
+    println!("   - False positives processed: {}", stats.total_false_positives_processed);
+    println!("   - Average consequence severity: {:.3}", stats.avg_consequence_severity);
+    println!("   - Average false positive impact: {:.3}", stats.avg_false_positive_impact);
     
     println!("\n🎯 Overfitting Fix Summary:");
     println!("   The balanced learning system successfully:");
