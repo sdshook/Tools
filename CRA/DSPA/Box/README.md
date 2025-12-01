@@ -3,6 +3,8 @@
 
 This Python tool retrieves Box audit log activities and generates comprehensive security posture reports, including analysis of suspicious activities.
 
+**Author:** Shane D. Shook, PhD
+
 ## Features
 
 - **Comprehensive Audit Log Retrieval**: Pulls Box activity logs using the Box Events API

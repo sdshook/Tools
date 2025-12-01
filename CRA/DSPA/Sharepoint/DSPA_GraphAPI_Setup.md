@@ -4,6 +4,8 @@
 
 This guide provides step-by-step instructions for setting up Microsoft Graph API authentication for the DSPA script.
 
+**Author:** Shane D. Shook, PhD
+
 ## Prerequisites
 
 - Azure AD Global Administrator or Application Administrator role

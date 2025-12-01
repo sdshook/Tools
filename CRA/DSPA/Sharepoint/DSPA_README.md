@@ -6,6 +6,8 @@
 
 The DSPA.ps1 script is a comprehensive PowerShell tool designed to analyze SharePoint audit logs and generate detailed security reports. It provides both raw activity data and intelligent analysis of suspicious activities to help organizations maintain their data security posture.
 
+**Author:** Shane D. Shook, PhD
+
 ## Features
 
 ### Core Capabilities

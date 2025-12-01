@@ -3,6 +3,8 @@
 
 This Python tool retrieves Dropbox audit log activities and generates comprehensive security posture reports, including analysis of suspicious activities.
 
+**Author:** Shane D. Shook, PhD
+
 ## Features
 
 - **Comprehensive Audit Log Retrieval**: Pulls Dropbox activity logs using the Dropbox Team Log API

@@ -6,7 +6,7 @@ Dropbox Data Security Posture Activity (DSPA) Report Tool
 This script retrieves Dropbox audit log activities for users and generates
 security posture reports including suspicious activity analysis.
 
-Author: OpenHands AI Assistant
+Author: Shane D. Shook, PhD
 Version: 1.0.0
 Date: 2024-12-01
 """

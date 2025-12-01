@@ -3,6 +3,8 @@
 
 This Python tool retrieves Google Drive audit log activities and generates comprehensive security posture reports, including analysis of suspicious activities.
 
+**Author:** Shane D. Shook, PhD
+
 ## Features
 
 - **Comprehensive Audit Log Retrieval**: Pulls Google Drive activity logs using the Google Admin SDK Reports API

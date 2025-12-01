@@ -1,5 +1,6 @@
 {
     "_comment": "DSPA (c) Shane D. Shook, 2025 All Rights Reserved",
+    "_author": "Shane D. Shook, PhD",
     "DefaultSettings": {
         "OutputPath": "C:\\SecurityReports\\DSPA",
         "DefaultDaysBack": 30,

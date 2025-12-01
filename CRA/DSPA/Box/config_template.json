@@ -1,5 +1,6 @@
 {
   "_copyright": "DSPA (c) Shane D. Shook, 2025 All Rights Reserved",
+  "_author": "Shane D. Shook, PhD",
   "box_api": {
     "client_id": "your_client_id",
     "client_secret": "your_client_secret",

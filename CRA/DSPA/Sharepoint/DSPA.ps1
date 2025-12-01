@@ -7,6 +7,9 @@
 .DESCRIPTION
     This script retrieves SharePoint audit log activities and generates comprehensive security reports.
     It produces both raw activity logs and suspicious activity summaries with IP geolocation data.
+
+.AUTHOR
+    Shane D. Shook, PhD
     
 .PARAMETER Users
     Comma-separated list of user UPNs to analyze. Use "ALL" for all users.
