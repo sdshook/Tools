@@ -1,0 +1,18 @@
+# Dropbox DSPA Tool Requirements
+
+# Dropbox SDK
+dropbox>=11.36.0
+
+# HTTP Requests for IP geolocation
+requests>=2.31.0
+
+# Standard libraries (included with Python)
+# - argparse
+# - json
+# - csv
+# - os
+# - sys
+# - datetime
+# - typing
+# - ipaddress
+# - collections

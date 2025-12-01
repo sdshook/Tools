@@ -1,0 +1,52 @@
+{
+  "dropbox_api": {
+    "access_token": "your_access_token",
+    "app_key": "your_app_key",
+    "app_secret": "your_app_secret",
+    "oauth2_refresh_url": "https://api.dropboxapi.com/oauth2/token"
+  },
+  "analysis_settings": {
+    "default_days_back": 30,
+    "unusual_location_threshold": 0.1,
+    "unusual_hours": {
+      "start": 22,
+      "end": 6
+    },
+    "high_risk_events": [
+      "file_delete",
+      "file_download",
+      "file_share",
+      "file_unshare",
+      "shared_folder_create",
+      "shared_folder_invite",
+      "shared_folder_leave",
+      "file_copy",
+      "file_move",
+      "file_rename",
+      "paper_doc_delete",
+      "paper_doc_download",
+      "paper_doc_share"
+    ]
+  },
+  "ip_geolocation": {
+    "service": "ip-api.com",
+    "timeout": 5,
+    "cache_results": true
+  },
+  "output": {
+    "directory": "./reports",
+    "raw_filename_format": "dropbox_dspa_raw_{timestamp}.csv",
+    "suspicious_filename_format": "dropbox_dspa_suspicious_{timestamp}.json",
+    "timestamp_format": "%Y%m%d_%H%M%S"
+  },
+  "api_limits": {
+    "retry_attempts": 3,
+    "retry_delay": 1,
+    "events_limit": 1000,
+    "rate_limit_delay": 1
+  },
+  "team_log": {
+    "event_retention_days": 180,
+    "max_events_per_request": 1000
+  }
+}

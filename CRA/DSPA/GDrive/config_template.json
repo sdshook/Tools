@@ -1,0 +1,41 @@
+{
+  "google_workspace": {
+    "domain": "example.com",
+    "service_account_file": "/path/to/service_account.json",
+    "scopes": [
+      "https://www.googleapis.com/auth/admin.reports.audit.readonly",
+      "https://www.googleapis.com/auth/admin.directory.user.readonly"
+    ]
+  },
+  "analysis_settings": {
+    "default_days_back": 30,
+    "unusual_location_threshold": 0.1,
+    "unusual_hours": {
+      "start": 22,
+      "end": 6
+    },
+    "high_risk_events": [
+      "delete",
+      "download", 
+      "share",
+      "change_visibility"
+    ]
+  },
+  "ip_geolocation": {
+    "service": "ip-api.com",
+    "timeout": 5,
+    "cache_results": true
+  },
+  "output": {
+    "directory": "./reports",
+    "raw_filename_format": "gdrive_dspa_raw_{timestamp}.csv",
+    "suspicious_filename_format": "gdrive_dspa_suspicious_{timestamp}.json",
+    "timestamp_format": "%Y%m%d_%H%M%S"
+  },
+  "api_limits": {
+    "requests_per_100_seconds": 1500,
+    "requests_per_100_seconds_per_user": 100,
+    "retry_attempts": 3,
+    "retry_delay": 1
+  }
+}

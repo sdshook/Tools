@@ -1,0 +1,48 @@
+{
+  "box_api": {
+    "client_id": "your_client_id",
+    "client_secret": "your_client_secret",
+    "access_token": "your_access_token",
+    "refresh_token": "your_refresh_token",
+    "token_refresh_url": "https://api.box.com/oauth2/token"
+  },
+  "analysis_settings": {
+    "default_days_back": 30,
+    "unusual_location_threshold": 0.1,
+    "unusual_hours": {
+      "start": 22,
+      "end": 6
+    },
+    "high_risk_events": [
+      "DELETE",
+      "DOWNLOAD",
+      "SHARE",
+      "UNSHARE",
+      "COLLABORATION_INVITE",
+      "COLLABORATION_ROLE_CHANGE",
+      "ITEM_SHARED_UPDATE",
+      "ITEM_SYNC",
+      "ITEM_UNSYNC",
+      "COPY",
+      "MOVE",
+      "RENAME"
+    ]
+  },
+  "ip_geolocation": {
+    "service": "ip-api.com",
+    "timeout": 5,
+    "cache_results": true
+  },
+  "output": {
+    "directory": "./reports",
+    "raw_filename_format": "box_dspa_raw_{timestamp}.csv",
+    "suspicious_filename_format": "box_dspa_suspicious_{timestamp}.json",
+    "timestamp_format": "%Y%m%d_%H%M%S"
+  },
+  "api_limits": {
+    "requests_per_minute": 1000,
+    "retry_attempts": 3,
+    "retry_delay": 1,
+    "events_limit": 500
+  }
+}

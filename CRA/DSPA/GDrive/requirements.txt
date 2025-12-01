@@ -1,0 +1,21 @@
+# Google Drive DSPA Tool Requirements
+
+# Google API Client Libraries
+google-api-python-client>=2.100.0
+google-auth>=2.22.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0
+
+# HTTP Requests for IP geolocation
+requests>=2.31.0
+
+# Standard libraries (included with Python)
+# - argparse
+# - json
+# - csv
+# - os
+# - sys
+# - datetime
+# - typing
+# - ipaddress
+# - collections
