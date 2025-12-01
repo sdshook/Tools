@@ -1,3 +1,4 @@
+<!-- DSPA (c) Shane D. Shook, 2025 All Rights Reserved -->
 # Google Drive Data Security Posture Activity (DSPA) Tool
 
 This Python tool retrieves Google Drive audit log activities and generates comprehensive security posture reports, including analysis of suspicious activities.

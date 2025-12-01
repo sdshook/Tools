@@ -1,3 +1,4 @@
+<!-- DSPA (c) Shane D. Shook, 2025 All Rights Reserved -->
 # Data Security Posture Activity (DSPA) Tools Suite
 
 This suite provides comprehensive Data Security Posture Activity reporting tools for major cloud storage platforms. Each tool retrieves audit logs, analyzes user activities, and generates security reports including suspicious activity detection.

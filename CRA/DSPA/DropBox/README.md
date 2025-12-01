@@ -1,3 +1,4 @@
+<!-- DSPA (c) Shane D. Shook, 2025 All Rights Reserved -->
 # Dropbox Data Security Posture Activity (DSPA) Tool
 
 This Python tool retrieves Dropbox audit log activities and generates comprehensive security posture reports, including analysis of suspicious activities.

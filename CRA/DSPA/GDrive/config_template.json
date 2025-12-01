@@ -1,4 +1,5 @@
 {
+  "_copyright": "DSPA (c) Shane D. Shook, 2025 All Rights Reserved",
   "google_workspace": {
     "domain": "example.com",
     "service_account_file": "/path/to/service_account.json",

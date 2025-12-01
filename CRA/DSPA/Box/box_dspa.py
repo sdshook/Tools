@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# DSPA (c) Shane D. Shook, 2025 All Rights Reserved
 """
 Box Data Security Posture Activity (DSPA) Report Tool
 
