@@ -1,0 +1,36 @@
+{
+    "DefaultSettings": {
+        "OutputPath": "C:\\SecurityReports\\DSPA",
+        "DefaultDaysBack": 30,
+        "MaxRecordsPerChunk": 5000
+    },
+    "Authentication": {
+        "TenantId": "your-tenant-id-here",
+        "ClientId": "your-app-registration-id-here",
+        "CertificateThumbprint": "your-certificate-thumbprint-here",
+        "SharePointAdminUrl": "https://yourtenant-admin.sharepoint.com"
+    },
+    "SuspiciousActivityThresholds": {
+        "UnusualCountryThreshold": 0.05,
+        "UnusualTimeThreshold": 0.02,
+        "HighRiskActivities": [
+            "FileDownloaded",
+            "FileDeleted", 
+            "SharingSet",
+            "AnonymousLinkCreated",
+            "SecureLinkCreated"
+        ]
+    },
+    "GeolocationSettings": {
+        "ApiProvider": "ip-api.com",
+        "RateLimitMs": 100,
+        "TimeoutSeconds": 10,
+        "CacheResults": true
+    },
+    "ReportSettings": {
+        "IncludeRawData": true,
+        "GenerateSummary": true,
+        "ExportFormat": "CSV",
+        "TimestampFormat": "yyyyMMdd_HHmmss"
+    }
+}
