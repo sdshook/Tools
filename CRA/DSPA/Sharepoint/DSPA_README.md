@@ -16,9 +16,12 @@ The DSPA.ps1 script is a comprehensive PowerShell tool designed to analyze Share
 - **Baseline Analysis**: Builds user behavior baselines to identify anomalous activities
 - **Suspicious Activity Detection**: Identifies unusual access patterns, locations, and times
 - **Dual Report Generation**: Produces both raw activity logs and executive summary reports
+- **Dual Authentication Methods**: Support for both Exchange Online PowerShell and Microsoft Graph API
 
 ### Security Features
+- **Modern Graph API Support**: Use Microsoft Graph API for enhanced security and performance
 - **Certificate-based Authentication**: Supports secure, non-interactive authentication
+- **Client Secret Authentication**: Alternative authentication method for Graph API
 - **Credential Protection**: No hardcoded credentials or sensitive data exposure
 - **Rate Limiting**: Implements API rate limiting to prevent service disruption
 - **Error Handling**: Comprehensive error handling and logging
@@ -27,14 +30,31 @@ The DSPA.ps1 script is a comprehensive PowerShell tool designed to analyze Share
 
 ### Required PowerShell Modules
 The script will automatically install these modules if not present:
+
+**For Exchange Online Method (Default):**
 - `ExchangeOnlineManagement`
 - `PnP.PowerShell`
 - `Microsoft.Graph.Authentication`
 
+**For Microsoft Graph API Method (-UseGraphAPI):**
+- `Microsoft.Graph.Authentication`
+- `Microsoft.Graph.Security`
+- `Microsoft.Graph.Reports`
+
 ### Permissions Required
+
+**Exchange Online Method:**
 - **Exchange Online**: Audit Log Reader or higher
 - **SharePoint Online**: SharePoint Administrator or Global Administrator
 - **Azure AD**: Application permissions if using certificate authentication
+
+**Microsoft Graph API Method:**
+- **Required Graph API Scopes:**
+  - `AuditLog.Read.All`
+  - `Directory.Read.All`
+  - `Reports.Read.All`
+  - `SecurityEvents.Read.All`
+- **Azure AD App Registration**: Required for service principal authentication
 
 ## Installation
 
@@ -56,9 +76,24 @@ The script will automatically install these modules if not present:
 .\DSPA.ps1 -Users "ALL" -StartDate "01012024" -EndDate "01312024" -OutputPath "C:\Reports"
 ```
 
-### Certificate-based Authentication
+### Certificate-based Authentication (Exchange Online)
 ```powershell
 .\DSPA.ps1 -Users "ALL" -DaysBack 7 -TenantId "your-tenant-id" -ClientId "your-app-id" -CertificateThumbprint "your-cert-thumbprint"
+```
+
+### Microsoft Graph API with Client Secret
+```powershell
+.\DSPA.ps1 -Users "ALL" -DaysBack 7 -UseGraphAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -ClientSecret "your-client-secret"
+```
+
+### Microsoft Graph API with Certificate
+```powershell
+.\DSPA.ps1 -Users "user@domain.com" -DaysBack 30 -UseGraphAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -CertificateThumbprint "your-cert-thumbprint"
+```
+
+### Interactive Graph API Authentication
+```powershell
+.\DSPA.ps1 -Users "ALL" -StartDate "11012024" -EndDate "11302024" -UseGraphAPI
 ```
 
 ### Single User Analysis with Custom Output
@@ -75,9 +110,11 @@ The script will automatically install these modules if not present:
 | `EndDate` | String | No | End date in MMDDYYYY format |
 | `DaysBack` | Integer | No | Number of days back from current date |
 | `OutputPath` | String | No | Directory for output files (default: current directory) |
-| `TenantId` | String | No | Azure AD Tenant ID for certificate auth |
+| `TenantId` | String | No | Azure AD Tenant ID for authentication |
 | `ClientId` | String | No | Azure AD Application Client ID |
-| `CertificateThumbprint` | String | No | Certificate thumbprint for auth |
+| `CertificateThumbprint` | String | No | Certificate thumbprint for certificate auth |
+| `UseGraphAPI` | Switch | No | Use Microsoft Graph API instead of Exchange Online |
+| `ClientSecret` | String | No | Azure AD Application Client Secret for Graph API |
 
 ## Output Files
 
@@ -129,6 +166,52 @@ The script identifies suspicious activities based on:
 - **Medium**: 2 suspicious indicators  
 - **Low**: 1 suspicious indicator
 
+## Authentication Methods
+
+### Exchange Online PowerShell (Default)
+**Pros:**
+- Mature and stable API
+- Comprehensive audit log coverage
+- Well-documented and widely used
+
+**Cons:**
+- Legacy authentication methods
+- Limited to Exchange Online scope
+- May have performance limitations
+
+**Usage:**
+```powershell
+# Interactive authentication
+.\DSPA.ps1 -Users "ALL" -DaysBack 7
+
+# Certificate-based authentication
+.\DSPA.ps1 -Users "ALL" -DaysBack 7 -TenantId "tenant-id" -ClientId "app-id" -CertificateThumbprint "thumbprint"
+```
+
+### Microsoft Graph API (-UseGraphAPI)
+**Pros:**
+- Modern, unified API across Microsoft 365
+- Better performance and rate limiting
+- Enhanced security with granular permissions
+- Future-proof approach
+
+**Cons:**
+- Requires Azure AD app registration
+- More complex initial setup
+- May have different data format
+
+**Usage:**
+```powershell
+# Interactive authentication
+.\DSPA.ps1 -Users "ALL" -DaysBack 7 -UseGraphAPI
+
+# Client secret authentication
+.\DSPA.ps1 -Users "ALL" -DaysBack 7 -UseGraphAPI -TenantId "tenant-id" -ClientId "app-id" -ClientSecret "secret"
+
+# Certificate authentication
+.\DSPA.ps1 -Users "ALL" -DaysBack 7 -UseGraphAPI -TenantId "tenant-id" -ClientId "app-id" -CertificateThumbprint "thumbprint"
+```
+
 ## Security Considerations
 
 ### Data Protection
@@ -140,11 +223,13 @@ The script identifies suspicious activities based on:
 - Supports certificate-based authentication for automated scenarios
 - Interactive authentication for manual execution
 - No credential storage in script or logs
+- Graph API provides enhanced security with granular permissions
 
 ### API Rate Limiting
 - Implements delays between geolocation API calls
 - Processes audit logs in manageable chunks
 - Handles API timeouts gracefully
+- Graph API includes built-in rate limiting and retry logic
 
 ## Troubleshooting
 
@@ -161,10 +246,17 @@ Install-Module -Name ExchangeOnlineManagement -Force -AllowClobber -Scope AllUse
 - Check certificate installation for cert-based auth
 - Ensure tenant ID and client ID are correct
 
+**Graph API Authentication Issues**
+- Verify Azure AD app registration has required API permissions
+- Ensure admin consent has been granted for application permissions
+- Check that the correct tenant ID is being used
+- Verify client secret hasn't expired (if using client secret auth)
+
 **No Audit Data Found**
 - Verify audit logging is enabled in Microsoft 365
 - Check date ranges (audit logs have retention limits)
 - Confirm users exist and have activity in the specified period
+- For Graph API: Ensure the app has access to audit logs in the tenant
 
 **Geolocation API Errors**
 - Script continues with "Unknown" values if API fails

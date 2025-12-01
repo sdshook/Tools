@@ -32,16 +32,38 @@
 .PARAMETER CertificateThumbprint
     Certificate thumbprint for certificate-based authentication.
     
+.PARAMETER UseGraphAPI
+    Switch to use Microsoft Graph API instead of Exchange Online PowerShell for audit log retrieval.
+    
+.PARAMETER ClientSecret
+    Azure AD Application Client Secret for Graph API authentication (alternative to certificate).
+    
 .EXAMPLE
     .\DSPA.ps1 -Users "user1@domain.com,user2@domain.com" -DaysBack 30
     
 .EXAMPLE
     .\DSPA.ps1 -Users "ALL" -StartDate "01012024" -EndDate "01312024"
     
+.EXAMPLE
+    .\DSPA.ps1 -Users "ALL" -DaysBack 7 -UseGraphAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -ClientSecret "your-secret"
+    
+.EXAMPLE
+    .\DSPA.ps1 -Users "user@domain.com" -DaysBack 30 -UseGraphAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -CertificateThumbprint "your-cert-thumbprint"
+    
 .NOTES
     Author: OpenHands AI Assistant
-    Version: 1.0
-    Requires: Exchange Online PowerShell Module, PnP PowerShell Module
+    Version: 2.0
+    Requires: Exchange Online PowerShell Module, PnP PowerShell Module, Microsoft Graph PowerShell Modules
+    
+    Authentication Methods:
+    1. Exchange Online PowerShell (Default): Uses Connect-ExchangeOnline and Search-UnifiedAuditLog
+    2. Microsoft Graph API (-UseGraphAPI): Uses Connect-MgGraph and Graph API endpoints
+    
+    Graph API Benefits:
+    - Modern authentication with service principals
+    - Better rate limiting and performance
+    - Unified API across Microsoft 365 services
+    - Enhanced security with granular permissions
 #>
 
 [CmdletBinding()]
@@ -68,7 +90,13 @@ param(
     [string]$ClientId,
     
     [Parameter(Mandatory = $false)]
-    [string]$CertificateThumbprint
+    [string]$CertificateThumbprint,
+    
+    [Parameter(Mandatory = $false)]
+    [switch]$UseGraphAPI,
+    
+    [Parameter(Mandatory = $false)]
+    [string]$ClientSecret
 )
 
 # Global variables
@@ -84,7 +112,9 @@ function Import-RequiredModules {
     $RequiredModules = @(
         'ExchangeOnlineManagement',
         'PnP.PowerShell',
-        'Microsoft.Graph.Authentication'
+        'Microsoft.Graph.Authentication',
+        'Microsoft.Graph.Security',
+        'Microsoft.Graph.Reports'
     )
     
     foreach ($Module in $RequiredModules) {
@@ -103,7 +133,7 @@ function Import-RequiredModules {
     }
 }
 
-# Authentication function
+# Authentication function for Exchange Online/PnP (Legacy method)
 function Connect-Services {
     param(
         [string]$TenantId,
@@ -111,7 +141,7 @@ function Connect-Services {
         [string]$CertificateThumbprint
     )
     
-    Write-Host "Connecting to Microsoft 365 services..." -ForegroundColor Yellow
+    Write-Host "Connecting to Microsoft 365 services (Exchange Online method)..." -ForegroundColor Yellow
     
     try {
         # Connect to Exchange Online for audit logs
@@ -135,6 +165,66 @@ function Connect-Services {
     }
     catch {
         Write-Error "Failed to connect to services: $_"
+        exit 1
+    }
+}
+
+# Authentication function for Microsoft Graph API (Modern method)
+function Connect-GraphAPI {
+    param(
+        [string]$TenantId,
+        [string]$ClientId,
+        [string]$CertificateThumbprint,
+        [string]$ClientSecret
+    )
+    
+    Write-Host "Connecting to Microsoft Graph API..." -ForegroundColor Yellow
+    
+    try {
+        # Define required scopes for audit log access
+        $Scopes = @(
+            "AuditLog.Read.All",
+            "Directory.Read.All",
+            "Reports.Read.All",
+            "SecurityEvents.Read.All"
+        )
+        
+        if ($ClientId -and $TenantId) {
+            if ($CertificateThumbprint) {
+                # Certificate-based authentication
+                Connect-MgGraph -ClientId $ClientId -TenantId $TenantId -CertificateThumbprint $CertificateThumbprint
+                Write-Host "✓ Connected to Microsoft Graph using certificate authentication" -ForegroundColor Green
+            }
+            elseif ($ClientSecret) {
+                # Client secret authentication
+                $SecureSecret = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
+                $Credential = New-Object System.Management.Automation.PSCredential($ClientId, $SecureSecret)
+                Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $Credential
+                Write-Host "✓ Connected to Microsoft Graph using client secret authentication" -ForegroundColor Green
+            }
+            else {
+                # Interactive authentication with specific scopes
+                Connect-MgGraph -TenantId $TenantId -ClientId $ClientId -Scopes $Scopes
+                Write-Host "✓ Connected to Microsoft Graph using interactive authentication" -ForegroundColor Green
+            }
+        }
+        else {
+            # Interactive authentication with default app
+            Connect-MgGraph -Scopes $Scopes
+            Write-Host "✓ Connected to Microsoft Graph using interactive authentication" -ForegroundColor Green
+        }
+        
+        # Verify connection
+        $Context = Get-MgContext
+        if ($Context) {
+            Write-Host "✓ Graph API connection verified - Tenant: $($Context.TenantId)" -ForegroundColor Green
+        }
+        else {
+            throw "Failed to establish Graph API context"
+        }
+    }
+    catch {
+        Write-Error "Failed to connect to Microsoft Graph API: $_"
         exit 1
     }
 }
@@ -268,6 +358,126 @@ function Get-SharePointAuditLogs {
     }
     
     Write-Host "Total audit records retrieved: $($AllAuditData.Count)" -ForegroundColor Green
+    return $AllAuditData
+}
+
+# Retrieve SharePoint audit logs using Microsoft Graph API
+function Get-SharePointAuditLogsGraph {
+    param(
+        [string[]]$UserList,
+        [DateTime]$StartDate,
+        [DateTime]$EndDate
+    )
+    
+    Write-Host "Retrieving SharePoint audit logs using Microsoft Graph API..." -ForegroundColor Yellow
+    
+    $SharePointActivities = @(
+        'FileAccessed', 'FileDownloaded', 'FileUploaded', 'FileModified', 'FileDeleted',
+        'FileMoved', 'FileCopied', 'FileRenamed', 'FolderCreated', 'FolderDeleted',
+        'SiteAccessed', 'PageViewed', 'SearchQueryPerformed', 'SharingSet',
+        'SharingRevoked', 'SharingInvitationCreated', 'AnonymousLinkCreated',
+        'SecureLinkCreated', 'AddedToSecureLink', 'RemovedFromSecureLink'
+    )
+    
+    $AllAuditData = @()
+    $CurrentDate = $StartDate
+    
+    # Process in 24-hour chunks to manage API rate limits
+    while ($CurrentDate -lt $EndDate) {
+        $ChunkEndDate = $CurrentDate.AddDays(1)
+        if ($ChunkEndDate -gt $EndDate) { $ChunkEndDate = $EndDate }
+        
+        Write-Host "Processing chunk: $($CurrentDate.ToString('yyyy-MM-dd')) to $($ChunkEndDate.ToString('yyyy-MM-dd'))" -ForegroundColor Cyan
+        
+        try {
+            # Build filter for Graph API
+            $StartDateISO = $CurrentDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+            $EndDateISO = $ChunkEndDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+            
+            # Use Graph API to get audit logs
+            $Filter = "createdDateTime ge $StartDateISO and createdDateTime le $EndDateISO"
+            
+            if ($UserList -notcontains "ALL" -and $UserList.Count -gt 0) {
+                $UserFilter = ($UserList | ForEach-Object { "userPrincipalName eq '$_'" }) -join " or "
+                $Filter += " and ($UserFilter)"
+            }
+            
+            # Get audit logs using Graph API
+            $GraphAuditLogs = @()
+            $NextLink = $null
+            
+            do {
+                try {
+                    if ($NextLink) {
+                        $Response = Invoke-MgGraphRequest -Uri $NextLink -Method GET
+                    }
+                    else {
+                        $Uri = "https://graph.microsoft.com/v1.0/auditLogs/directoryAudits?`$filter=$Filter&`$top=1000"
+                        $Response = Invoke-MgGraphRequest -Uri $Uri -Method GET
+                    }
+                    
+                    if ($Response.value) {
+                        $GraphAuditLogs += $Response.value
+                        Write-Host "Retrieved $($Response.value.Count) records from Graph API" -ForegroundColor Cyan
+                    }
+                    
+                    $NextLink = $Response.'@odata.nextLink'
+                    
+                    # Rate limiting - pause between requests
+                    Start-Sleep -Milliseconds 100
+                }
+                catch {
+                    Write-Warning "Error in Graph API request: $_"
+                    break
+                }
+            } while ($NextLink)
+            
+            # Also try to get SharePoint-specific audit logs from Security API
+            try {
+                $SecurityFilter = "createdDateTime ge $StartDateISO and createdDateTime le $EndDateISO"
+                $SecurityUri = "https://graph.microsoft.com/v1.0/security/alerts?`$filter=$SecurityFilter&`$top=1000"
+                $SecurityResponse = Invoke-MgGraphRequest -Uri $SecurityUri -Method GET -ErrorAction SilentlyContinue
+                
+                if ($SecurityResponse.value) {
+                    Write-Host "Retrieved $($SecurityResponse.value.Count) security events from Graph API" -ForegroundColor Cyan
+                    $GraphAuditLogs += $SecurityResponse.value
+                }
+            }
+            catch {
+                Write-Verbose "Security API not accessible or no data: $_"
+            }
+            
+            # Convert Graph API format to unified audit log format for compatibility
+            foreach ($GraphRecord in $GraphAuditLogs) {
+                try {
+                    $ConvertedRecord = [PSCustomObject]@{
+                        CreationDate = $GraphRecord.activityDateTime ?? $GraphRecord.createdDateTime
+                        UserIds = $GraphRecord.initiatedBy.user.userPrincipalName ?? $GraphRecord.userPrincipalName
+                        Operations = $GraphRecord.activityDisplayName ?? $GraphRecord.category
+                        AuditData = ($GraphRecord | ConvertTo-Json -Depth 10)
+                        ResultIndex = $AllAuditData.Count
+                        ResultCount = 1
+                        Identity = $GraphRecord.id
+                        IsValid = $true
+                        ObjectId = $GraphRecord.targetResources[0].id ?? $GraphRecord.id
+                    }
+                    $AllAuditData += $ConvertedRecord
+                }
+                catch {
+                    Write-Verbose "Error converting Graph record: $_"
+                }
+            }
+            
+            Write-Host "Found $($GraphAuditLogs.Count) records for this chunk" -ForegroundColor Green
+        }
+        catch {
+            Write-Warning "Error retrieving audit logs from Graph API for chunk $($CurrentDate.ToString('yyyy-MM-dd')): $_"
+        }
+        
+        $CurrentDate = $ChunkEndDate
+    }
+    
+    Write-Host "Total audit records retrieved from Graph API: $($AllAuditData.Count)" -ForegroundColor Green
     return $AllAuditData
 }
 
@@ -598,14 +808,28 @@ function Main {
         
         # Import modules and connect
         Import-RequiredModules
-        Connect-Services -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint
+        
+        # Choose authentication method based on UseGraphAPI parameter
+        if ($UseGraphAPI) {
+            Write-Host "Using Microsoft Graph API for audit log retrieval..." -ForegroundColor Cyan
+            Connect-GraphAPI -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint -ClientSecret $ClientSecret
+        }
+        else {
+            Write-Host "Using Exchange Online PowerShell for audit log retrieval..." -ForegroundColor Cyan
+            Connect-Services -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint
+        }
         
         # Parse parameters
         $UserList = if ($Users -eq "ALL") { @("ALL") } else { $Users.Split(',').Trim() }
         $DateRange = Parse-DateRange -StartDate $StartDate -EndDate $EndDate -DaysBack $DaysBack
         
-        # Retrieve and process audit data
-        $RawAuditData = Get-SharePointAuditLogs -UserList $UserList -StartDate $DateRange.StartDate -EndDate $DateRange.EndDate
+        # Retrieve and process audit data using appropriate method
+        if ($UseGraphAPI) {
+            $RawAuditData = Get-SharePointAuditLogsGraph -UserList $UserList -StartDate $DateRange.StartDate -EndDate $DateRange.EndDate
+        }
+        else {
+            $RawAuditData = Get-SharePointAuditLogs -UserList $UserList -StartDate $DateRange.StartDate -EndDate $DateRange.EndDate
+        }
         
         if ($RawAuditData.Count -eq 0) {
             Write-Warning "No audit data found for the specified criteria."
@@ -635,8 +859,15 @@ function Main {
     finally {
         # Cleanup connections
         try {
-            Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
-            Disconnect-PnPOnline -ErrorAction SilentlyContinue
+            if ($UseGraphAPI) {
+                Disconnect-MgGraph -ErrorAction SilentlyContinue
+                Write-Host "✓ Disconnected from Microsoft Graph API" -ForegroundColor Green
+            }
+            else {
+                Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
+                Disconnect-PnPOnline -ErrorAction SilentlyContinue
+                Write-Host "✓ Disconnected from Exchange Online and SharePoint" -ForegroundColor Green
+            }
         }
         catch {
             # Ignore cleanup errors
