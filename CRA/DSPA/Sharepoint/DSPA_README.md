@@ -16,7 +16,7 @@ The DSPA.ps1 script is a comprehensive PowerShell tool designed to analyze Share
 - **Baseline Analysis**: Builds user behavior baselines to identify anomalous activities
 - **Suspicious Activity Detection**: Identifies unusual access patterns, locations, and times
 - **Dual Report Generation**: Produces both raw activity logs and executive summary reports
-- **Dual Authentication Methods**: Support for both Exchange Online PowerShell and Microsoft Graph API
+- **Microsoft Graph API**: Uses modern Graph API for secure and efficient data access
 
 ### Security Features
 - **Modern Graph API Support**: Use Microsoft Graph API for enhanced security and performance
@@ -31,24 +31,14 @@ The DSPA.ps1 script is a comprehensive PowerShell tool designed to analyze Share
 ### Required PowerShell Modules
 The script will automatically install these modules if not present:
 
-**For Exchange Online Method (Default):**
-- `ExchangeOnlineManagement`
 - `PnP.PowerShell`
-- `Microsoft.Graph.Authentication`
-
-**For Microsoft Graph API Method (-UseGraphAPI):**
 - `Microsoft.Graph.Authentication`
 - `Microsoft.Graph.Security`
 - `Microsoft.Graph.Reports`
 
 ### Permissions Required
 
-**Exchange Online Method:**
-- **Exchange Online**: Audit Log Reader or higher
-- **SharePoint Online**: SharePoint Administrator or Global Administrator
-- **Azure AD**: Application permissions if using certificate authentication
-
-**Microsoft Graph API Method:**
+**Microsoft Graph API:**
 - **Required Graph API Scopes:**
   - `AuditLog.Read.All`
   - `Directory.Read.All`
@@ -76,24 +66,19 @@ The script will automatically install these modules if not present:
 .\DSPA.ps1 -Users "ALL" -StartDate "01012024" -EndDate "01312024" -OutputPath "C:\Reports"
 ```
 
-### Certificate-based Authentication (Exchange Online)
-```powershell
-.\DSPA.ps1 -Users "ALL" -DaysBack 7 -TenantId "your-tenant-id" -ClientId "your-app-id" -CertificateThumbprint "your-cert-thumbprint"
-```
-
 ### Microsoft Graph API with Client Secret
 ```powershell
-.\DSPA.ps1 -Users "ALL" -DaysBack 7 -UseGraphAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -ClientSecret "your-client-secret"
+.\DSPA.ps1 -Users "ALL" -DaysBack 7 -TenantId "your-tenant-id" -ClientId "your-app-id" -ClientSecret "your-client-secret"
 ```
 
 ### Microsoft Graph API with Certificate
 ```powershell
-.\DSPA.ps1 -Users "user@domain.com" -DaysBack 30 -UseGraphAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -CertificateThumbprint "your-cert-thumbprint"
+.\DSPA.ps1 -Users "user@domain.com" -DaysBack 30 -TenantId "your-tenant-id" -ClientId "your-app-id" -CertificateThumbprint "your-cert-thumbprint"
 ```
 
 ### Interactive Graph API Authentication
 ```powershell
-.\DSPA.ps1 -Users "ALL" -StartDate "11012024" -EndDate "11302024" -UseGraphAPI
+.\DSPA.ps1 -Users "ALL" -StartDate "11012024" -EndDate "11302024"
 ```
 
 ### Single User Analysis with Custom Output
@@ -113,7 +98,6 @@ The script will automatically install these modules if not present:
 | `TenantId` | String | No | Azure AD Tenant ID for authentication |
 | `ClientId` | String | No | Azure AD Application Client ID |
 | `CertificateThumbprint` | String | No | Certificate thumbprint for certificate auth |
-| `UseGraphAPI` | Switch | No | Use Microsoft Graph API instead of Exchange Online |
 | `ClientSecret` | String | No | Azure AD Application Client Secret for Graph API |
 
 ## Output Files

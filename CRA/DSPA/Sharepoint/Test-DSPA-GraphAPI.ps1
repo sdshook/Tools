@@ -13,7 +13,6 @@ try {
     $TestParams = @{
         Users = "test@domain.com"
         DaysBack = 7
-        UseGraphAPI = $true
         TenantId = "test-tenant-id"
         ClientId = "test-client-id"
         ClientSecret = "test-secret"
@@ -34,9 +33,7 @@ if (Test-Path $ScriptPath) {
     
     $RequiredFunctions = @(
         "Connect-GraphAPI",
-        "Get-SharePointAuditLogsGraph",
-        "Connect-Services",
-        "Get-SharePointAuditLogs"
+        "Get-SharePointAuditLogsGraph"
     )
     
     foreach ($Function in $RequiredFunctions) {
@@ -59,7 +56,6 @@ if ($ScriptContent -match '\$RequiredModules.*=.*@\(') {
     $ModulesSection = ($ScriptContent -split '\$RequiredModules.*=.*@\(')[1].Split(')')[0]
     
     $ExpectedModules = @(
-        "ExchangeOnlineManagement",
         "PnP.PowerShell", 
         "Microsoft.Graph.Authentication",
         "Microsoft.Graph.Security",
@@ -83,7 +79,6 @@ else {
 Write-Host "`nTest 4: Parameter Definitions" -ForegroundColor Yellow
 
 $ExpectedParameters = @(
-    "UseGraphAPI",
     "ClientSecret",
     "TenantId",
     "ClientId",
@@ -102,11 +97,11 @@ foreach ($Parameter in $ExpectedParameters) {
 # Test 5: Authentication logic
 Write-Host "`nTest 5: Authentication Logic" -ForegroundColor Yellow
 
-if ($ScriptContent -match 'if.*\$UseGraphAPI.*\{') {
-    Write-Host "✓ UseGraphAPI conditional logic found" -ForegroundColor Green
+if ($ScriptContent -match 'Connect-GraphAPI') {
+    Write-Host "✓ Graph API authentication found" -ForegroundColor Green
 }
 else {
-    Write-Host "✗ UseGraphAPI conditional logic missing" -ForegroundColor Red
+    Write-Host "✗ Graph API authentication missing" -ForegroundColor Red
 }
 
 if ($ScriptContent -match 'Connect-GraphAPI.*-TenantId.*-ClientId') {
@@ -151,7 +146,7 @@ foreach ($DocFile in $DocumentationFiles) {
         
         # Check for Graph API content
         $DocContent = Get-Content $DocPath -Raw
-        if ($DocContent -match "Graph API|UseGraphAPI") {
+        if ($DocContent -match "Graph API") {
             Write-Host "  ✓ Contains Graph API documentation" -ForegroundColor Green
         }
         else {
@@ -166,11 +161,11 @@ foreach ($DocFile in $DocumentationFiles) {
 # Test 9: Help documentation
 Write-Host "`nTest 9: Help Documentation" -ForegroundColor Yellow
 
-if ($ScriptContent -match '\.PARAMETER UseGraphAPI') {
-    Write-Host "✓ UseGraphAPI parameter help found" -ForegroundColor Green
+if ($ScriptContent -match '\.PARAMETER TenantId') {
+    Write-Host "✓ TenantId parameter help found" -ForegroundColor Green
 }
 else {
-    Write-Host "✗ UseGraphAPI parameter help missing" -ForegroundColor Red
+    Write-Host "✗ TenantId parameter help missing" -ForegroundColor Red
 }
 
 if ($ScriptContent -match '\.PARAMETER ClientSecret') {
@@ -194,7 +189,7 @@ Write-Host "`n=== Test Summary ===" -ForegroundColor Magenta
 Write-Host "Basic functionality tests completed." -ForegroundColor Cyan
 Write-Host "For full testing, run the script with actual Microsoft 365 credentials." -ForegroundColor Cyan
 Write-Host "`nExample test commands:" -ForegroundColor Yellow
-Write-Host "# Test Exchange Online method:" -ForegroundColor Gray
-Write-Host ".\DSPA.ps1 -Users 'test@domain.com' -DaysBack 1" -ForegroundColor Gray
-Write-Host "`n# Test Graph API method:" -ForegroundColor Gray  
-Write-Host ".\DSPA.ps1 -Users 'test@domain.com' -DaysBack 1 -UseGraphAPI" -ForegroundColor Gray
+Write-Host "# Test with client secret:" -ForegroundColor Gray
+Write-Host ".\DSPA.ps1 -Users 'test@domain.com' -DaysBack 1 -TenantId 'your-tenant-id' -ClientId 'your-client-id' -ClientSecret 'your-secret'" -ForegroundColor Gray
+Write-Host "`n# Test with certificate:" -ForegroundColor Gray  
+Write-Host ".\DSPA.ps1 -Users 'test@domain.com' -DaysBack 1 -TenantId 'your-tenant-id' -ClientId 'your-client-id' -CertificateThumbprint 'your-cert-thumbprint'" -ForegroundColor Gray

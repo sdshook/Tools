@@ -8,7 +8,7 @@
     RootModule = 'DSPA.psm1'
     
     # Version number of this module.
-    ModuleVersion = '1.0.0'
+    ModuleVersion = '3.0.0'
     
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')
@@ -26,16 +26,17 @@
     Copyright = '(c) 2024. All rights reserved.'
     
     # Description of the functionality provided by this module
-    Description = 'Data Security Posture Activity (DSPA) Report Generator for SharePoint audit log analysis and security monitoring.'
+    Description = 'Data Security Posture Activity (DSPA) Report Generator for SharePoint audit log analysis using Microsoft Graph API. Exchange Online PowerShell support removed due to Search-UnifiedAuditLog deprecation.'
     
     # Minimum version of the PowerShell engine required by this module
     PowerShellVersion = '5.1'
     
     # Modules that must be imported into the global environment prior to importing this module
     RequiredModules = @(
-        'ExchangeOnlineManagement',
         'PnP.PowerShell',
-        'Microsoft.Graph.Authentication'
+        'Microsoft.Graph.Authentication',
+        'Microsoft.Graph.Security',
+        'Microsoft.Graph.Reports'
     )
     
     # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
@@ -72,7 +73,7 @@
             IconUri = ''
             
             # ReleaseNotes of this module
-            ReleaseNotes = 'Initial release of DSPA module for SharePoint security analysis.'
+            ReleaseNotes = 'Version 3.0: Removed Exchange Online PowerShell support due to Search-UnifiedAuditLog deprecation. Now uses Microsoft Graph API exclusively.'
             
             # Prerelease string of this module
             Prerelease = ''
