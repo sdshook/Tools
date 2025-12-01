@@ -60,7 +60,7 @@
     .\DSPA.ps1 -Users "ALL" -DaysBack 7 -UsePurviewAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -ClientSecret "your-secret"
     
 .NOTES
-    Author: OpenHands AI Assistant
+    Author: Shane D. Shook, PhD
     Version: 4.0
     Requires: ExchangeOnlineManagement, PnP PowerShell Module, Microsoft Graph PowerShell Modules
     
