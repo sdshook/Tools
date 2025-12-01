@@ -10,21 +10,36 @@ echo.
 
 :MENU
 echo Please select an option:
+echo.
+echo === Exchange Online PowerShell (Default) ===
 echo 1. Analyze specific user for last 30 days
 echo 2. Analyze all users for last 7 days  
 echo 3. Analyze multiple users for custom date range
 echo 4. Quick security check (all users, last 3 days)
 echo 5. Full monthly report (all users, last 30 days)
-echo 6. Exit
 echo.
-set /p choice="Enter your choice (1-6): "
+echo === Microsoft Graph API ===
+echo 6. Graph API - Analyze all users for last 7 days
+echo 7. Graph API - Quick security check (last 3 days)
+echo.
+echo === Purview Audit Search Graph API ===
+echo 8. Purview API - Analyze all users for last 7 days
+echo 9. Purview API - Quick security check (last 3 days)
+echo.
+echo 0. Exit
+echo.
+set /p choice="Enter your choice (0-9): "
 
 if "%choice%"=="1" goto SINGLE_USER
 if "%choice%"=="2" goto ALL_USERS_WEEK
 if "%choice%"=="3" goto MULTI_USER_CUSTOM
 if "%choice%"=="4" goto QUICK_CHECK
 if "%choice%"=="5" goto MONTHLY_REPORT
-if "%choice%"=="6" goto EXIT
+if "%choice%"=="6" goto GRAPH_ALL_USERS
+if "%choice%"=="7" goto GRAPH_QUICK_CHECK
+if "%choice%"=="8" goto PURVIEW_ALL_USERS
+if "%choice%"=="9" goto PURVIEW_QUICK_CHECK
+if "%choice%"=="0" goto EXIT
 goto MENU
 
 :SINGLE_USER
@@ -64,6 +79,62 @@ echo.
 echo Running full monthly report - ALL users, last 30 days...
 echo This may take several minutes to complete...
 powershell.exe -ExecutionPolicy Bypass -File "DSPA.ps1" -Users "ALL" -DaysBack 30
+pause
+goto MENU
+
+:GRAPH_ALL_USERS
+echo.
+echo Running Graph API analysis for ALL users - last 7 days...
+echo Note: Requires Azure AD app registration and appropriate permissions
+set /p tenantid="Enter Tenant ID (or press Enter to use interactive auth): "
+if "%tenantid%"=="" (
+    powershell.exe -ExecutionPolicy Bypass -File "DSPA.ps1" -Users "ALL" -DaysBack 7 -UseGraphAPI
+) else (
+    set /p clientid="Enter Client ID: "
+    powershell.exe -ExecutionPolicy Bypass -File "DSPA.ps1" -Users "ALL" -DaysBack 7 -UseGraphAPI -TenantId "%tenantid%" -ClientId "%clientid%"
+)
+pause
+goto MENU
+
+:GRAPH_QUICK_CHECK
+echo.
+echo Running Graph API quick security check - ALL users, last 3 days...
+echo Note: Requires Azure AD app registration and appropriate permissions
+set /p tenantid="Enter Tenant ID (or press Enter to use interactive auth): "
+if "%tenantid%"=="" (
+    powershell.exe -ExecutionPolicy Bypass -File "DSPA.ps1" -Users "ALL" -DaysBack 3 -UseGraphAPI
+) else (
+    set /p clientid="Enter Client ID: "
+    powershell.exe -ExecutionPolicy Bypass -File "DSPA.ps1" -Users "ALL" -DaysBack 3 -UseGraphAPI -TenantId "%tenantid%" -ClientId "%clientid%"
+)
+pause
+goto MENU
+
+:PURVIEW_ALL_USERS
+echo.
+echo Running Purview API analysis for ALL users - last 7 days...
+echo Note: Requires Azure AD app registration and Purview permissions
+set /p tenantid="Enter Tenant ID (or press Enter to use interactive auth): "
+if "%tenantid%"=="" (
+    powershell.exe -ExecutionPolicy Bypass -File "DSPA.ps1" -Users "ALL" -DaysBack 7 -UsePurviewAPI
+) else (
+    set /p clientid="Enter Client ID: "
+    powershell.exe -ExecutionPolicy Bypass -File "DSPA.ps1" -Users "ALL" -DaysBack 7 -UsePurviewAPI -TenantId "%tenantid%" -ClientId "%clientid%"
+)
+pause
+goto MENU
+
+:PURVIEW_QUICK_CHECK
+echo.
+echo Running Purview API quick security check - ALL users, last 3 days...
+echo Note: Requires Azure AD app registration and Purview permissions
+set /p tenantid="Enter Tenant ID (or press Enter to use interactive auth): "
+if "%tenantid%"=="" (
+    powershell.exe -ExecutionPolicy Bypass -File "DSPA.ps1" -Users "ALL" -DaysBack 3 -UsePurviewAPI
+) else (
+    set /p clientid="Enter Client ID: "
+    powershell.exe -ExecutionPolicy Bypass -File "DSPA.ps1" -Users "ALL" -DaysBack 3 -UsePurviewAPI -TenantId "%tenantid%" -ClientId "%clientid%"
+)
 pause
 goto MENU
 

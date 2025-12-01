@@ -16,12 +16,15 @@ The DSPA.ps1 script is a comprehensive PowerShell tool designed to analyze Share
 - **Baseline Analysis**: Builds user behavior baselines to identify anomalous activities
 - **Suspicious Activity Detection**: Identifies unusual access patterns, locations, and times
 - **Dual Report Generation**: Produces both raw activity logs and executive summary reports
-- **Microsoft Graph API**: Uses modern Graph API for secure and efficient data access
+- **Multiple Authentication Methods**: Supports three different authentication methods for maximum flexibility
 
 ### Security Features
-- **Modern Graph API Support**: Use Microsoft Graph API for enhanced security and performance
+- **Exchange Online PowerShell (Default)**: Uses Search-UnifiedAuditLog cmdlet for traditional audit log access
+- **Microsoft Graph API**: Modern Graph API for enhanced security and performance
+- **Purview Audit Search Graph API**: Advanced Purview audit capabilities for comprehensive analysis
 - **Certificate-based Authentication**: Supports secure, non-interactive authentication
 - **Client Secret Authentication**: Alternative authentication method for Graph API
+- **Interactive Authentication**: User-friendly authentication for all methods
 - **Credential Protection**: No hardcoded credentials or sensitive data exposure
 - **Rate Limiting**: Implements API rate limiting to prevent service disruption
 - **Error Handling**: Comprehensive error handling and logging
@@ -29,14 +32,26 @@ The DSPA.ps1 script is a comprehensive PowerShell tool designed to analyze Share
 ## Prerequisites
 
 ### Required PowerShell Modules
-The script will automatically install these modules if not present:
+The script will automatically install these modules based on the authentication method chosen:
 
+**All Methods:**
 - `PnP.PowerShell`
+
+**Exchange Online PowerShell (Default):**
+- `ExchangeOnlineManagement`
+
+**Microsoft Graph API (-UseGraphAPI) and Purview API (-UsePurviewAPI):**
 - `Microsoft.Graph.Authentication`
 - `Microsoft.Graph.Security`
 - `Microsoft.Graph.Reports`
 
 ### Permissions Required
+
+**Exchange Online PowerShell:**
+- **Required Roles:**
+  - `View-Only Audit Logs` or `Audit Logs` role
+  - `Exchange Administrator` or `Global Administrator`
+- **Permissions:** Access to Search-UnifiedAuditLog cmdlet
 
 **Microsoft Graph API:**
 - **Required Graph API Scopes:**
@@ -45,6 +60,14 @@ The script will automatically install these modules if not present:
   - `Reports.Read.All`
   - `SecurityEvents.Read.All`
 - **Azure AD App Registration**: Required for service principal authentication
+
+**Purview Audit Search Graph API:**
+- **Required Graph API Scopes:**
+  - `AuditLog.Read.All`
+  - `SecurityEvents.Read.All`
+  - `Directory.Read.All`
+- **Azure AD App Registration**: Required for service principal authentication
+- **Purview Permissions**: Access to Purview audit search capabilities
 
 ## Installation
 
@@ -56,29 +79,55 @@ The script will automatically install these modules if not present:
 
 ## Usage Examples
 
-### Basic Usage - Last 30 Days for Specific Users
+### Exchange Online PowerShell (Default Method)
+
+#### Basic Usage - Last 30 Days for Specific Users
 ```powershell
 .\DSPA.ps1 -Users "user1@domain.com,user2@domain.com" -DaysBack 30
 ```
 
-### Analyze All Users for Custom Date Range
+#### Analyze All Users for Custom Date Range
 ```powershell
 .\DSPA.ps1 -Users "ALL" -StartDate "01012024" -EndDate "01312024" -OutputPath "C:\Reports"
 ```
 
-### Microsoft Graph API with Client Secret
+#### Exchange Online with Certificate Authentication
 ```powershell
-.\DSPA.ps1 -Users "ALL" -DaysBack 7 -TenantId "your-tenant-id" -ClientId "your-app-id" -ClientSecret "your-client-secret"
+.\DSPA.ps1 -Users "ALL" -DaysBack 7 -TenantId "your-tenant-id" -ClientId "your-app-id" -CertificateThumbprint "your-cert-thumbprint"
 ```
 
-### Microsoft Graph API with Certificate
+### Microsoft Graph API Method
+
+#### Graph API with Client Secret
 ```powershell
-.\DSPA.ps1 -Users "user@domain.com" -DaysBack 30 -TenantId "your-tenant-id" -ClientId "your-app-id" -CertificateThumbprint "your-cert-thumbprint"
+.\DSPA.ps1 -Users "ALL" -DaysBack 7 -UseGraphAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -ClientSecret "your-client-secret"
 ```
 
-### Interactive Graph API Authentication
+#### Graph API with Certificate
 ```powershell
-.\DSPA.ps1 -Users "ALL" -StartDate "11012024" -EndDate "11302024"
+.\DSPA.ps1 -Users "user@domain.com" -DaysBack 30 -UseGraphAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -CertificateThumbprint "your-cert-thumbprint"
+```
+
+#### Interactive Graph API Authentication
+```powershell
+.\DSPA.ps1 -Users "ALL" -StartDate "11012024" -EndDate "11302024" -UseGraphAPI
+```
+
+### Purview Audit Search Graph API Method
+
+#### Purview API with Client Secret
+```powershell
+.\DSPA.ps1 -Users "ALL" -DaysBack 7 -UsePurviewAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -ClientSecret "your-client-secret"
+```
+
+#### Purview API with Certificate
+```powershell
+.\DSPA.ps1 -Users "user@domain.com" -DaysBack 30 -UsePurviewAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -CertificateThumbprint "your-cert-thumbprint"
+```
+
+#### Interactive Purview API Authentication
+```powershell
+.\DSPA.ps1 -Users "ALL" -StartDate "11012024" -EndDate "11302024" -UsePurviewAPI
 ```
 
 ### Single User Analysis with Custom Output
@@ -98,7 +147,27 @@ The script will automatically install these modules if not present:
 | `TenantId` | String | No | Azure AD Tenant ID for authentication |
 | `ClientId` | String | No | Azure AD Application Client ID |
 | `CertificateThumbprint` | String | No | Certificate thumbprint for certificate auth |
-| `ClientSecret` | String | No | Azure AD Application Client Secret for Graph API |
+| `ClientSecret` | String | No | Azure AD Application Client Secret |
+| `UseGraphAPI` | Switch | No | Use Microsoft Graph API instead of Exchange Online PowerShell |
+| `UsePurviewAPI` | Switch | No | Use Purview Audit Search Graph API for enhanced capabilities |
+
+## Authentication Methods
+
+### Method Selection Priority
+1. **Purview API**: If `-UsePurviewAPI` is specified
+2. **Graph API**: If `-UseGraphAPI` is specified  
+3. **Exchange Online PowerShell**: Default method (Search-UnifiedAuditLog)
+
+### Method Comparison
+
+| Feature | Exchange Online | Graph API | Purview API |
+|---------|----------------|-----------|-------------|
+| **Authentication** | Interactive/Certificate | Interactive/Certificate/Secret | Interactive/Certificate/Secret |
+| **Data Retention** | 90 days | 90 days | Extended retention |
+| **Rate Limits** | Moderate | High | High |
+| **Advanced Features** | Basic | Enhanced | Most Advanced |
+| **Setup Complexity** | Low | Medium | Medium |
+| **Recommended For** | Quick analysis | Production environments | Advanced security analysis |
 
 ## Output Files
 

@@ -35,6 +35,12 @@
 .PARAMETER ClientSecret
     Azure AD Application Client Secret for Graph API authentication (alternative to certificate).
     
+.PARAMETER UseGraphAPI
+    Use Microsoft Graph API instead of Exchange Online PowerShell (Search-UnifiedAuditLog).
+    
+.PARAMETER UsePurviewAPI
+    Use Purview Audit Search Graph API for enhanced audit capabilities.
+    
 .EXAMPLE
     .\DSPA.ps1 -Users "user1@domain.com,user2@domain.com" -DaysBack 30
     
@@ -42,26 +48,28 @@
     .\DSPA.ps1 -Users "ALL" -StartDate "01012024" -EndDate "01312024"
     
 .EXAMPLE
-    .\DSPA.ps1 -Users "ALL" -DaysBack 7 -TenantId "your-tenant-id" -ClientId "your-app-id" -ClientSecret "your-secret"
+    .\DSPA.ps1 -Users "ALL" -DaysBack 7 -UseGraphAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -ClientSecret "your-secret"
     
 .EXAMPLE
-    .\DSPA.ps1 -Users "user@domain.com" -DaysBack 30 -TenantId "your-tenant-id" -ClientId "your-app-id" -CertificateThumbprint "your-cert-thumbprint"
+    .\DSPA.ps1 -Users "user@domain.com" -DaysBack 30 -UseGraphAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -CertificateThumbprint "your-cert-thumbprint"
+    
+.EXAMPLE
+    .\DSPA.ps1 -Users "ALL" -DaysBack 7 -UsePurviewAPI -TenantId "your-tenant-id" -ClientId "your-app-id" -ClientSecret "your-secret"
     
 .NOTES
     Author: OpenHands AI Assistant
-    Version: 3.0
-    Requires: PnP PowerShell Module, Microsoft Graph PowerShell Modules
+    Version: 4.0
+    Requires: ExchangeOnlineManagement, PnP PowerShell Module, Microsoft Graph PowerShell Modules
     
-    Authentication Method:
-    Microsoft Graph API: Uses Connect-MgGraph and Graph API endpoints
+    Authentication Methods:
+    1. Exchange Online PowerShell (Default): Uses Search-UnifiedAuditLog cmdlet
+    2. Microsoft Graph API (-UseGraphAPI): Uses Connect-MgGraph and Graph API endpoints
+    3. Purview Audit Search API (-UsePurviewAPI): Uses enhanced Purview audit capabilities
     
-    Note: Exchange Online PowerShell method removed due to Search-UnifiedAuditLog deprecation (April 2025)
-    
-    Graph API Benefits:
-    - Modern authentication with service principals
-    - Better rate limiting and performance
-    - Unified API across Microsoft 365 services
-    - Enhanced security with granular permissions
+    Method Selection:
+    - Default: Exchange Online PowerShell (Search-UnifiedAuditLog)
+    - -UseGraphAPI: Microsoft Graph API with modern authentication
+    - -UsePurviewAPI: Purview Audit Search Graph API for advanced features
 #>
 
 [CmdletBinding()]
@@ -91,7 +99,13 @@ param(
     [string]$CertificateThumbprint,
     
     [Parameter(Mandatory = $false)]
-    [string]$ClientSecret
+    [string]$ClientSecret,
+    
+    [Parameter(Mandatory = $false)]
+    [switch]$UseGraphAPI,
+    
+    [Parameter(Mandatory = $false)]
+    [switch]$UsePurviewAPI
 )
 
 # Global variables
@@ -102,14 +116,27 @@ $Script:SuspiciousActivities = @()
 
 # Import required modules
 function Import-RequiredModules {
+    param(
+        [bool]$UseGraphAPI = $false,
+        [bool]$UsePurviewAPI = $false
+    )
+    
     Write-Host "Checking and importing required modules..." -ForegroundColor Yellow
     
-    $RequiredModules = @(
-        'PnP.PowerShell',
-        'Microsoft.Graph.Authentication',
-        'Microsoft.Graph.Security',
-        'Microsoft.Graph.Reports'
-    )
+    # Base modules always required
+    $RequiredModules = @('PnP.PowerShell')
+    
+    # Add modules based on authentication method
+    if ($UseGraphAPI -or $UsePurviewAPI) {
+        $RequiredModules += @(
+            'Microsoft.Graph.Authentication',
+            'Microsoft.Graph.Security',
+            'Microsoft.Graph.Reports'
+        )
+    } else {
+        # Default Exchange Online method
+        $RequiredModules += @('ExchangeOnlineManagement')
+    }
     
     foreach ($Module in $RequiredModules) {
         try {
@@ -183,6 +210,47 @@ function Connect-GraphAPI {
     }
     catch {
         Write-Error "Failed to connect to Microsoft Graph API: $_"
+        exit 1
+    }
+}
+
+# Authentication function for Exchange Online PowerShell
+function Connect-Services {
+    param(
+        [string]$TenantId,
+        [string]$ClientId,
+        [string]$CertificateThumbprint
+    )
+    
+    Write-Host "Connecting to Exchange Online and SharePoint Online..." -ForegroundColor Yellow
+    
+    try {
+        # Connect to Exchange Online
+        if ($ClientId -and $TenantId -and $CertificateThumbprint) {
+            # Certificate-based authentication
+            Connect-ExchangeOnline -CertificateThumbprint $CertificateThumbprint -AppId $ClientId -Organization "$TenantId.onmicrosoft.com" -ShowBanner:$false
+            Write-Host "✓ Connected to Exchange Online using certificate authentication" -ForegroundColor Green
+        }
+        else {
+            # Interactive authentication
+            Connect-ExchangeOnline -ShowBanner:$false
+            Write-Host "✓ Connected to Exchange Online using interactive authentication" -ForegroundColor Green
+        }
+        
+        # Connect to SharePoint Online (for additional context if needed)
+        if ($TenantId) {
+            $SharePointUrl = "https://$TenantId-admin.sharepoint.com"
+            try {
+                Connect-PnPOnline -Url $SharePointUrl -Interactive
+                Write-Host "✓ Connected to SharePoint Online" -ForegroundColor Green
+            }
+            catch {
+                Write-Warning "Could not connect to SharePoint Online: $_"
+            }
+        }
+    }
+    catch {
+        Write-Error "Failed to connect to services: $_"
         exit 1
     }
 }
@@ -264,6 +332,83 @@ function Get-IPGeolocation {
         }
         $Script:IPLocationCache[$IPAddress] = $DefaultInfo
         return $DefaultInfo
+    }
+}
+
+# Retrieve SharePoint audit logs using Exchange Online PowerShell
+function Get-SharePointAuditLogs {
+    param(
+        [string[]]$UserList,
+        [DateTime]$StartDate,
+        [DateTime]$EndDate
+    )
+    
+    Write-Host "Retrieving SharePoint audit logs using Search-UnifiedAuditLog..." -ForegroundColor Yellow
+    
+    $AllAuditData = @()
+    $SharePointOperations = @(
+        'FileAccessed', 'FileDownloaded', 'FileModified', 'FileUploaded', 'FileDeleted',
+        'FileMoved', 'FileCopied', 'FileRenamed', 'FolderCreated', 'FolderDeleted',
+        'SiteCollectionCreated', 'SiteCollectionDeleted', 'SiteCreated', 'SiteDeleted',
+        'UserAddedToSecureLink', 'AnonymousLinkCreated', 'SecureLinkCreated',
+        'SharingSet', 'SharingRevoked', 'SharingInvitationCreated'
+    )
+    
+    try {
+        $TotalDays = ($EndDate - $StartDate).Days
+        Write-Host "Searching audit logs for $TotalDays days..." -ForegroundColor Cyan
+        
+        # Process in chunks to handle large date ranges
+        $ChunkSize = 7 # Process 7 days at a time
+        $CurrentStart = $StartDate
+        
+        while ($CurrentStart -lt $EndDate) {
+            $CurrentEnd = $CurrentStart.AddDays($ChunkSize)
+            if ($CurrentEnd -gt $EndDate) { $CurrentEnd = $EndDate }
+            
+            Write-Host "Processing chunk: $($CurrentStart.ToString('yyyy-MM-dd')) to $($CurrentEnd.ToString('yyyy-MM-dd'))" -ForegroundColor Gray
+            
+            foreach ($Operation in $SharePointOperations) {
+                Write-Progress -Activity "Retrieving Audit Logs" -Status "Operation: $Operation" -PercentComplete (($SharePointOperations.IndexOf($Operation) / $SharePointOperations.Count) * 100)
+                
+                $SessionId = [Guid]::NewGuid().ToString()
+                $ResultSize = 5000
+                $ResultIndex = 1
+                
+                do {
+                    try {
+                        if ($UserList -contains "ALL") {
+                            $SearchResults = Search-UnifiedAuditLog -StartDate $CurrentStart -EndDate $CurrentEnd -Operations $Operation -SessionId $SessionId -SessionCommand ReturnLargeSet -ResultSize $ResultSize
+                        }
+                        else {
+                            $SearchResults = Search-UnifiedAuditLog -StartDate $CurrentStart -EndDate $CurrentEnd -Operations $Operation -UserIds $UserList -SessionId $SessionId -SessionCommand ReturnLargeSet -ResultSize $ResultSize
+                        }
+                        
+                        if ($SearchResults) {
+                            $AllAuditData += $SearchResults
+                            Write-Host "  Found $($SearchResults.Count) records for $Operation" -ForegroundColor Gray
+                        }
+                        
+                        $ResultIndex += $ResultSize
+                    }
+                    catch {
+                        Write-Warning "Error retrieving logs for operation $Operation`: $_"
+                        break
+                    }
+                } while ($SearchResults -and $SearchResults.Count -eq $ResultSize)
+            }
+            
+            $CurrentStart = $CurrentEnd
+        }
+        
+        Write-Progress -Activity "Retrieving Audit Logs" -Completed
+        Write-Host "✓ Retrieved $($AllAuditData.Count) total audit records" -ForegroundColor Green
+        
+        return $AllAuditData
+    }
+    catch {
+        Write-Error "Failed to retrieve audit logs: $_"
+        return @()
     }
 }
 
@@ -458,6 +603,144 @@ function Process-AuditData {
     
     Write-Host "Successfully processed $($ProcessedData.Count) records" -ForegroundColor Green
     return $ProcessedData
+}
+
+# Retrieve SharePoint audit logs using Purview Audit Search Graph API
+function Get-SharePointAuditLogsPurview {
+    param(
+        [string[]]$UserList,
+        [DateTime]$StartDate,
+        [DateTime]$EndDate
+    )
+    
+    Write-Host "Retrieving SharePoint audit logs using Purview Audit Search Graph API..." -ForegroundColor Yellow
+    
+    $AllAuditData = @()
+    
+    try {
+        # Purview Audit Search API endpoint
+        $BaseUri = "https://graph.microsoft.com/v1.0/security/auditLog/queries"
+        
+        # Define SharePoint workloads and operations for Purview
+        $SharePointOperations = @(
+            'FileAccessed', 'FileDownloaded', 'FileModified', 'FileUploaded', 'FileDeleted',
+            'FileMoved', 'FileCopied', 'FileRenamed', 'FolderCreated', 'FolderDeleted',
+            'SiteCollectionCreated', 'SiteCollectionDeleted', 'SiteCreated', 'SiteDeleted',
+            'UserAddedToSecureLink', 'AnonymousLinkCreated', 'SecureLinkCreated',
+            'SharingSet', 'SharingRevoked', 'SharingInvitationCreated'
+        )
+        
+        # Create audit query
+        $QueryBody = @{
+            displayName = "DSPA SharePoint Audit Query - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+            filterStartDateTime = $StartDate.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+            filterEndDateTime = $EndDate.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+            recordTypeFilters = @('SharePointFileOperation', 'SharePointSharingOperation', 'SharePointListOperation')
+            operationFilters = $SharePointOperations
+        }
+        
+        # Add user filter if not ALL
+        if ($UserList -notcontains "ALL") {
+            $QueryBody.userPrincipalNameFilters = $UserList
+        }
+        
+        # Submit audit query
+        Write-Host "Submitting Purview audit query..." -ForegroundColor Cyan
+        $QueryResponse = Invoke-MgGraphRequest -Method POST -Uri $BaseUri -Body ($QueryBody | ConvertTo-Json -Depth 10) -ContentType "application/json"
+        
+        if ($QueryResponse -and $QueryResponse.id) {
+            $QueryId = $QueryResponse.id
+            Write-Host "✓ Query submitted with ID: $QueryId" -ForegroundColor Green
+            
+            # Poll for query completion
+            $QueryStatusUri = "$BaseUri/$QueryId"
+            $MaxWaitTime = 300 # 5 minutes
+            $WaitTime = 0
+            $PollInterval = 10 # 10 seconds
+            
+            do {
+                Start-Sleep -Seconds $PollInterval
+                $WaitTime += $PollInterval
+                
+                $StatusResponse = Invoke-MgGraphRequest -Method GET -Uri $QueryStatusUri
+                $Status = $StatusResponse.status
+                
+                Write-Host "Query status: $Status (waited $WaitTime seconds)" -ForegroundColor Gray
+                
+                if ($Status -eq "succeeded") {
+                    break
+                }
+                elseif ($Status -eq "failed") {
+                    throw "Purview audit query failed"
+                }
+            } while ($WaitTime -lt $MaxWaitTime)
+            
+            if ($Status -ne "succeeded") {
+                throw "Purview audit query timed out after $MaxWaitTime seconds"
+            }
+            
+            # Retrieve query results
+            Write-Host "Retrieving query results..." -ForegroundColor Cyan
+            $ResultsUri = "$BaseUri/$QueryId/records"
+            
+            do {
+                $ResultsResponse = Invoke-MgGraphRequest -Method GET -Uri $ResultsUri
+                
+                if ($ResultsResponse.value) {
+                    $AllAuditData += $ResultsResponse.value
+                    Write-Host "  Retrieved $($ResultsResponse.value.Count) records" -ForegroundColor Gray
+                }
+                
+                $ResultsUri = $ResultsResponse.'@odata.nextLink'
+            } while ($ResultsUri)
+            
+            Write-Host "✓ Retrieved $($AllAuditData.Count) total audit records from Purview" -ForegroundColor Green
+        }
+        else {
+            throw "Failed to submit Purview audit query"
+        }
+        
+        # Process and normalize Purview data to match expected format
+        $ProcessedData = @()
+        foreach ($Record in $AllAuditData) {
+            try {
+                $AuditDetails = $Record.auditData | ConvertFrom-Json -ErrorAction SilentlyContinue
+                
+                if ($AuditDetails) {
+                    $ProcessedRecord = [PSCustomObject]@{
+                        CreationTime = $Record.createdDateTime
+                        UserIds = $AuditDetails.UserId
+                        Operations = $AuditDetails.Operation
+                        AuditData = $Record.auditData
+                        ResultIndex = $ProcessedData.Count + 1
+                        ResultCount = 1
+                        Identity = $Record.id
+                        IsValid = $true
+                        ObjectId = $AuditDetails.ObjectId
+                        UserId = $AuditDetails.UserId
+                        RecordType = $AuditDetails.RecordType
+                        Operation = $AuditDetails.Operation
+                        OrganizationId = $AuditDetails.OrganizationId
+                        UserType = $AuditDetails.UserType
+                        UserKey = $AuditDetails.UserKey
+                        Workload = $AuditDetails.Workload
+                        ResultStatus = "Success"
+                        UserServicePlan = $AuditDetails.UserServicePlan
+                    }
+                    $ProcessedData += $ProcessedRecord
+                }
+            }
+            catch {
+                Write-Warning "Error processing Purview record: $_"
+            }
+        }
+        
+        return $ProcessedData
+    }
+    catch {
+        Write-Error "Failed to retrieve Purview audit logs: $_"
+        return @()
+    }
 }
 
 # Build user baseline profiles
@@ -712,19 +995,52 @@ function Main {
         Write-Host "=== Data Security Posture Activity (DSPA) Report Generator ===" -ForegroundColor Magenta
         Write-Host "Starting analysis..." -ForegroundColor Yellow
         
-        # Import modules and connect
-        Import-RequiredModules
+        # Determine authentication method
+        if ($UsePurviewAPI) {
+            Write-Host "Using Purview Audit Search Graph API for audit log retrieval..." -ForegroundColor Cyan
+            $AuthMethod = "Purview"
+        }
+        elseif ($UseGraphAPI) {
+            Write-Host "Using Microsoft Graph API for audit log retrieval..." -ForegroundColor Cyan
+            $AuthMethod = "GraphAPI"
+        }
+        else {
+            Write-Host "Using Exchange Online PowerShell (Search-UnifiedAuditLog) for audit log retrieval..." -ForegroundColor Cyan
+            $AuthMethod = "ExchangeOnline"
+        }
         
-        # Connect using Microsoft Graph API
-        Write-Host "Using Microsoft Graph API for audit log retrieval..." -ForegroundColor Cyan
-        Connect-GraphAPI -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint -ClientSecret $ClientSecret
+        # Import modules and connect based on method
+        Import-RequiredModules -UseGraphAPI:($UseGraphAPI -or $UsePurviewAPI) -UsePurviewAPI:$UsePurviewAPI
+        
+        # Connect using appropriate method
+        switch ($AuthMethod) {
+            "Purview" {
+                Connect-GraphAPI -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint -ClientSecret $ClientSecret
+            }
+            "GraphAPI" {
+                Connect-GraphAPI -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint -ClientSecret $ClientSecret
+            }
+            "ExchangeOnline" {
+                Connect-Services -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $CertificateThumbprint
+            }
+        }
         
         # Parse parameters
         $UserList = if ($Users -eq "ALL") { @("ALL") } else { $Users.Split(',').Trim() }
         $DateRange = Parse-DateRange -StartDate $StartDate -EndDate $EndDate -DaysBack $DaysBack
         
-        # Retrieve and process audit data using Microsoft Graph API
-        $RawAuditData = Get-SharePointAuditLogsGraph -UserList $UserList -StartDate $DateRange.StartDate -EndDate $DateRange.EndDate
+        # Retrieve audit data using appropriate method
+        switch ($AuthMethod) {
+            "Purview" {
+                $RawAuditData = Get-SharePointAuditLogsPurview -UserList $UserList -StartDate $DateRange.StartDate -EndDate $DateRange.EndDate
+            }
+            "GraphAPI" {
+                $RawAuditData = Get-SharePointAuditLogsGraph -UserList $UserList -StartDate $DateRange.StartDate -EndDate $DateRange.EndDate
+            }
+            "ExchangeOnline" {
+                $RawAuditData = Get-SharePointAuditLogs -UserList $UserList -StartDate $DateRange.StartDate -EndDate $DateRange.EndDate
+            }
+        }
         
         if ($RawAuditData.Count -eq 0) {
             Write-Warning "No audit data found for the specified criteria."
