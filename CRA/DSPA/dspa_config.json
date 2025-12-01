@@ -1,0 +1,74 @@
+{
+  "_copyright": "DSPA (c) Shane D. Shook, 2025 All Rights Reserved",
+  "_author": "Shane D. Shook, PhD",
+  "_description": "Unified DSPA configuration file for all supported cloud services",
+  
+  "general": {
+    "default_days_back": 30,
+    "max_activities_per_request": 1000,
+    "ip_geolocation_timeout": 5,
+    "suspicious_activity_thresholds": {
+      "min_activities_for_profile": 10,
+      "unusual_ip_threshold": 0.1,
+      "unusual_time_threshold": 0.05,
+      "unusual_location_threshold": 0.1
+    }
+  },
+  
+  "sharepoint_api": {
+    "_note": "Microsoft Graph API configuration for SharePoint audit logs",
+    "tenant_id": "your-tenant-id-here",
+    "client_id": "your-application-client-id",
+    "client_secret": "your-application-client-secret",
+    "_required_permissions": [
+      "AuditLog.Read.All",
+      "SecurityEvents.Read.All",
+      "Directory.Read.All"
+    ],
+    "_setup_url": "https://docs.microsoft.com/en-us/graph/auth-register-app-v2"
+  },
+  
+  "googledrive_api": {
+    "_note": "Google Admin SDK Reports API configuration",
+    "service_account_file": "path/to/service-account-key.json",
+    "domain": "your-domain.com",
+    "_required_scopes": [
+      "https://www.googleapis.com/auth/admin.reports.audit.readonly"
+    ],
+    "_setup_url": "https://developers.google.com/admin-sdk/reports/v1/guides/authorizing"
+  },
+  
+  "box_api": {
+    "_note": "Box Events API configuration",
+    "client_id": "your-box-client-id",
+    "client_secret": "your-box-client-secret",
+    "access_token": "your-box-access-token",
+    "_alternative_auth": {
+      "jwt_config_file": "path/to/box-config.json",
+      "_note": "Use JWT authentication for enterprise applications"
+    },
+    "_required_scopes": [
+      "manage_enterprise_properties"
+    ],
+    "_setup_url": "https://developer.box.com/guides/authentication/"
+  },
+  
+  "dropbox_api": {
+    "_note": "Dropbox Team Log API configuration",
+    "access_token": "your-dropbox-team-access-token",
+    "app_key": "your-dropbox-app-key",
+    "app_secret": "your-dropbox-app-secret",
+    "_required_permissions": [
+      "team_data.governance.read",
+      "team_info.read"
+    ],
+    "_setup_url": "https://www.dropbox.com/developers/apps"
+  },
+  
+  "output_settings": {
+    "include_geolocation": true,
+    "csv_encoding": "utf-8",
+    "timestamp_format": "ISO8601",
+    "suspicious_activity_analysis": true
+  }
+}
