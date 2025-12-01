@@ -1,3 +1,5 @@
+# DSPA (c) Shane D. Shook, 2025 All Rights Reserved
+
 <#
 .SYNOPSIS
     Data Security Posture Activity (DSPA) Report Generator for SharePoint Audit Logs

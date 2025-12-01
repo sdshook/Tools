@@ -1,3 +1,5 @@
+# DSPA (c) Shane D. Shook, 2025 All Rights Reserved
+
 <#
 .SYNOPSIS
     Syntax validation and basic testing for DSPA.ps1 script

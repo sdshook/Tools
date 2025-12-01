@@ -1,4 +1,5 @@
 @echo off
+REM DSPA (c) Shane D. Shook, 2025 All Rights Reserved
 REM Data Security Posture Activity (DSPA) Report Generator - Example Executions
 REM This batch file provides common usage examples for the DSPA.ps1 script
 
