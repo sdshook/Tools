@@ -5,7 +5,7 @@ EVMS - Enterprise Vulnerability Management Scanner
 
 A streamlined, single-script vulnerability management solution with:
 - Automated discovery and scanning (masscan, nuclei, httpx, subfinder, zeek)
-- GraphDB with GraphRL for vulnerability correlation
+- GraphDB with Ensemble ML for intelligent vulnerability prioritization
 - LLM/RAG deterministic analysis
 - Simple web interface for control and reporting
 - CVE/TIP feed integration
@@ -43,11 +43,12 @@ import aiofiles
 # Graph database and ML
 import neo4j
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+import xgboost as xgb
+import lightgbm as lgb
+from sklearn.metrics import accuracy_score, classification_report
 
 # Simple event system for internal coordination
 from collections import defaultdict
@@ -451,43 +452,99 @@ class CVEDatabase:
         
         return False, 'none'
 
-class GraphRLEngine:
-    """Graph-based Reinforcement Learning for vulnerability correlation"""
+class GraphEnsembleEngine:
+    """Graph-based Ensemble Classifier for vulnerability prioritization"""
     
     def __init__(self, neo4j_uri: str, neo4j_user: str, neo4j_password: str):
         self.driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
-        self.model = None
         self.scaler = StandardScaler()
+        self.ensemble_models = {}
+        self.feature_cache = {}
         self.init_graph_schema()
+        self.init_ensemble_models()
         
     def init_graph_schema(self):
-        """Initialize Neo4j graph schema"""
+        """Initialize Neo4j graph schema with enhanced indexes for ensemble features"""
         with self.driver.session() as session:
             # Create constraints and indexes
             session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (a:Asset) REQUIRE a.ip IS UNIQUE")
             session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (v:Vulnerability) REQUIRE v.cve_id IS UNIQUE")
             session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (s:Service) REQUIRE s.id IS UNIQUE")
+            
+            # Enhanced indexes for ensemble feature extraction
             session.run("CREATE INDEX IF NOT EXISTS FOR (a:Asset) ON (a.risk_score)")
             session.run("CREATE INDEX IF NOT EXISTS FOR (v:Vulnerability) ON (v.cvss_score)")
+            session.run("CREATE INDEX IF NOT EXISTS FOR (a:Asset) ON (a.subnet)")
+            session.run("CREATE INDEX IF NOT EXISTS FOR (s:Service) ON (s.port)")
+            session.run("CREATE INDEX IF NOT EXISTS FOR (v:Vulnerability) ON (v.severity)")
+    
+    def init_ensemble_models(self):
+        """Initialize ensemble models optimized for different aspects"""
+        # Model 1: CVSS and exploit-focused (XGBoost)
+        self.ensemble_models['cvss_exploit'] = xgb.XGBClassifier(
+            objective='multi:softprob',
+            num_class=4,  # Critical, High, Medium, Low
+            max_depth=6,
+            learning_rate=0.1,
+            n_estimators=100,
+            random_state=42
+        )
+        
+        # Model 2: Network topology-focused (LightGBM)
+        self.ensemble_models['network_topology'] = lgb.LGBMClassifier(
+            objective='multiclass',
+            num_class=4,
+            max_depth=8,
+            learning_rate=0.05,
+            n_estimators=150,
+            random_state=42
+        )
+        
+        # Model 3: Service and port-focused (Random Forest)
+        self.ensemble_models['service_context'] = RandomForestClassifier(
+            n_estimators=200,
+            max_depth=10,
+            min_samples_split=5,
+            random_state=42
+        )
+        
+        logger.info("Initialized ensemble models: CVSS/Exploit, Network Topology, Service Context")
     
     def store_scan_results(self, scan_result: ScanResult):
-        """Store scan results in graph database"""
+        """Store scan results in graph database with enhanced metadata for ensemble features"""
         with self.driver.session() as session:
-            # Create asset node
+            # Extract subnet for network topology features
+            try:
+                network = ipaddress.ip_network(f"{scan_result.target}/24", strict=False)
+                subnet = str(network.network_address)
+            except:
+                subnet = scan_result.target.rsplit('.', 1)[0] + '.0'
+            
+            # Create asset node with enhanced properties
             session.run("""
                 MERGE (a:Asset {ip: $ip})
                 SET a.last_scanned = datetime(),
                     a.risk_score = $risk_score,
                     a.priority = $priority,
-                    a.lateral_movement_potential = $lateral_movement
+                    a.lateral_movement_potential = $lateral_movement,
+                    a.subnet = $subnet,
+                    a.service_count = $service_count,
+                    a.vulnerability_count = $vuln_count,
+                    a.critical_vuln_count = $critical_count,
+                    a.high_vuln_count = $high_count
             """, {
                 'ip': scan_result.target,
                 'risk_score': scan_result.risk_assessment.get('total_score', 0.0),
                 'priority': scan_result.priority,
-                'lateral_movement': scan_result.lateral_movement_potential
+                'lateral_movement': scan_result.lateral_movement_potential,
+                'subnet': subnet,
+                'service_count': len(scan_result.services),
+                'vuln_count': len(scan_result.vulnerabilities),
+                'critical_count': len([v for v in scan_result.vulnerabilities if v.severity == 'Critical']),
+                'high_count': len([v for v in scan_result.vulnerabilities if v.severity == 'High'])
             })
             
-            # Create service nodes and relationships
+            # Create service nodes with enhanced properties
             for service in scan_result.services:
                 session.run("""
                     MATCH (a:Asset {ip: $ip})
@@ -495,7 +552,10 @@ class GraphRLEngine:
                     SET s.name = $service_name,
                         s.version = $version,
                         s.port = $port,
-                        s.protocol = $protocol
+                        s.protocol = $protocol,
+                        s.is_web_service = $is_web,
+                        s.is_database = $is_db,
+                        s.is_remote_access = $is_remote
                     MERGE (a)-[:RUNS]->(s)
                 """, {
                     'ip': scan_result.target,
@@ -503,10 +563,13 @@ class GraphRLEngine:
                     'service_name': service.get('service', 'unknown'),
                     'version': service.get('version', ''),
                     'port': service.get('port', 0),
-                    'protocol': service.get('protocol', 'tcp')
+                    'protocol': service.get('protocol', 'tcp'),
+                    'is_web': service.get('port', 0) in [80, 443, 8080, 8443],
+                    'is_db': service.get('service', '').lower() in ['mysql', 'postgresql', 'mongodb', 'redis'],
+                    'is_remote': service.get('port', 0) in [22, 3389, 5900, 23]
                 })
             
-            # Create vulnerability nodes and relationships
+            # Create vulnerability nodes with enhanced relationships
             for vuln in scan_result.vulnerabilities:
                 session.run("""
                     MERGE (v:Vulnerability {cve_id: $cve_id})
@@ -514,13 +577,16 @@ class GraphRLEngine:
                         v.severity = $severity,
                         v.description = $description,
                         v.exploit_available = $exploit_available,
-                        v.exploit_maturity = $exploit_maturity
+                        v.exploit_maturity = $exploit_maturity,
+                        v.affects_web_service = $affects_web,
+                        v.affects_database = $affects_db,
+                        v.affects_remote_access = $affects_remote
                     
                     MATCH (a:Asset {ip: $target})
-                    MERGE (a)-[:HAS_VULNERABILITY]->(v)
+                    MERGE (a)-[:HAS_VULNERABILITY {discovered: datetime()}]->(v)
                     
                     MATCH (s:Service {id: $service_id})
-                    MERGE (s)-[:AFFECTED_BY]->(v)
+                    MERGE (s)-[:AFFECTED_BY {impact_level: $impact}]->(v)
                 """, {
                     'cve_id': vuln.cve_id,
                     'cvss_score': vuln.cvss_score,
@@ -529,62 +595,317 @@ class GraphRLEngine:
                     'exploit_available': vuln.exploit_available,
                     'exploit_maturity': vuln.exploit_maturity,
                     'target': vuln.target,
-                    'service_id': f"{vuln.target}:{vuln.port}"
+                    'service_id': f"{vuln.target}:{vuln.port}",
+                    'affects_web': vuln.port in [80, 443, 8080, 8443],
+                    'affects_db': any(db in vuln.description.lower() for db in ['mysql', 'postgresql', 'mongodb']),
+                    'affects_remote': vuln.port in [22, 3389, 5900],
+                    'impact': 'high' if vuln.severity in ['Critical', 'High'] else 'medium'
                 })
     
-    def get_network_context(self, target_ip: str) -> Dict:
-        """Get network context for lateral movement assessment"""
+    def extract_graph_features(self, vulnerability: Vulnerability, target_ip: str) -> Dict:
+        """Extract comprehensive features from GraphDB for ensemble models"""
+        features = {}
+        
         with self.driver.session() as session:
-            # Find assets in same subnet
+            # 1. CVSS and Exploit Features
+            cvss_features = self._extract_cvss_features(session, vulnerability)
+            features.update(cvss_features)
+            
+            # 2. Network Topology Features
+            network_features = self._extract_network_features(session, target_ip)
+            features.update(network_features)
+            
+            # 3. Service Context Features
+            service_features = self._extract_service_features(session, vulnerability, target_ip)
+            features.update(service_features)
+            
+            # 4. Historical Pattern Features
+            historical_features = self._extract_historical_features(session, vulnerability.cve_id)
+            features.update(historical_features)
+            
+        return features
+    
+    def _extract_cvss_features(self, session, vulnerability: Vulnerability) -> Dict:
+        """Extract CVSS and exploit-related features"""
+        return {
+            'cvss_score': vulnerability.cvss_score,
+            'severity_critical': 1 if vulnerability.severity == 'Critical' else 0,
+            'severity_high': 1 if vulnerability.severity == 'High' else 0,
+            'severity_medium': 1 if vulnerability.severity == 'Medium' else 0,
+            'exploit_available': 1 if vulnerability.exploit_available else 0,
+            'exploit_maturity_functional': 1 if vulnerability.exploit_maturity == 'functional' else 0,
+            'exploit_maturity_high': 1 if vulnerability.exploit_maturity == 'high' else 0,
+            'exploit_maturity_proof': 1 if vulnerability.exploit_maturity == 'proof-of-concept' else 0
+        }
+    
+    def _extract_network_features(self, session, target_ip: str) -> Dict:
+        """Extract network topology and lateral movement features"""
+        try:
             network = ipaddress.ip_network(f"{target_ip}/24", strict=False)
-            
-            result = session.run("""
-                MATCH (a:Asset)
-                WHERE a.ip STARTS WITH $subnet_prefix
-                RETURN count(a) as asset_count,
-                       collect(a.ip) as assets,
-                       avg(a.risk_score) as avg_risk_score
-            """, {'subnet_prefix': str(network).split('/')[0][:7]})  # Rough subnet matching
-            
-            record = result.single()
+            subnet = str(network.network_address)
+        except:
+            subnet = target_ip.rsplit('.', 1)[0] + '.0'
+        
+        # Get subnet-level statistics
+        result = session.run("""
+            MATCH (a:Asset {subnet: $subnet})
+            OPTIONAL MATCH (a)-[:HAS_VULNERABILITY]->(v:Vulnerability)
+            RETURN 
+                count(DISTINCT a) as subnet_asset_count,
+                avg(a.risk_score) as avg_subnet_risk,
+                count(DISTINCT v) as subnet_vuln_count,
+                sum(CASE WHEN v.severity = 'Critical' THEN 1 ELSE 0 END) as subnet_critical_count,
+                sum(CASE WHEN a.lateral_movement_potential = true THEN 1 ELSE 0 END) as lateral_movement_assets
+        """, {'subnet': subnet})
+        
+        record = result.single()
+        if record:
             return {
-                'asset_count': record['asset_count'],
-                'assets': record['assets'],
-                'avg_risk_score': record['avg_risk_score'] or 0.0
+                'subnet_asset_count': record['subnet_asset_count'] or 0,
+                'avg_subnet_risk': record['avg_subnet_risk'] or 0.0,
+                'subnet_vuln_density': (record['subnet_vuln_count'] or 0) / max(record['subnet_asset_count'] or 1, 1),
+                'subnet_critical_density': (record['subnet_critical_count'] or 0) / max(record['subnet_asset_count'] or 1, 1),
+                'lateral_movement_ratio': (record['lateral_movement_assets'] or 0) / max(record['subnet_asset_count'] or 1, 1)
+            }
+        else:
+            return {
+                'subnet_asset_count': 0,
+                'avg_subnet_risk': 0.0,
+                'subnet_vuln_density': 0.0,
+                'subnet_critical_density': 0.0,
+                'lateral_movement_ratio': 0.0
             }
     
-    def train_risk_model(self):
-        """Train GraphRL model for risk assessment"""
-        # This is a simplified version - in practice, you'd implement a full GNN
-        logger.info("Training GraphRL risk assessment model...")
+    def _extract_service_features(self, session, vulnerability: Vulnerability, target_ip: str) -> Dict:
+        """Extract service and port-related features"""
+        result = session.run("""
+            MATCH (a:Asset {ip: $target_ip})-[:RUNS]->(s:Service)-[:AFFECTED_BY]->(v:Vulnerability {cve_id: $cve_id})
+            RETURN 
+                s.port as port,
+                s.is_web_service as is_web,
+                s.is_database as is_db,
+                s.is_remote_access as is_remote,
+                count(*) as service_vuln_count
+        """, {'target_ip': target_ip, 'cve_id': vulnerability.cve_id})
         
-        # For now, use a simple neural network
-        # In a full implementation, this would be a Graph Neural Network
-        class RiskAssessmentModel(nn.Module):
-            def __init__(self, input_dim=10, hidden_dim=64, output_dim=1):
-                super().__init__()
-                self.layers = nn.Sequential(
-                    nn.Linear(input_dim, hidden_dim),
-                    nn.ReLU(),
-                    nn.Dropout(0.2),
-                    nn.Linear(hidden_dim, hidden_dim),
-                    nn.ReLU(),
-                    nn.Dropout(0.2),
-                    nn.Linear(hidden_dim, output_dim),
-                    nn.Sigmoid()
-                )
+        record = result.single()
+        if record:
+            return {
+                'port_number': record['port'] or 0,
+                'affects_web_service': 1 if record['is_web'] else 0,
+                'affects_database': 1 if record['is_db'] else 0,
+                'affects_remote_access': 1 if record['is_remote'] else 0,
+                'service_vuln_count': record['service_vuln_count'] or 0,
+                'is_common_port': 1 if (record['port'] or 0) in [22, 23, 53, 80, 135, 139, 443, 445, 993, 995, 1723, 3389, 5900] else 0
+            }
+        else:
+            return {
+                'port_number': vulnerability.port,
+                'affects_web_service': 1 if vulnerability.port in [80, 443, 8080, 8443] else 0,
+                'affects_database': 0,
+                'affects_remote_access': 1 if vulnerability.port in [22, 3389, 5900] else 0,
+                'service_vuln_count': 1,
+                'is_common_port': 1 if vulnerability.port in [22, 23, 53, 80, 135, 139, 443, 445, 993, 995, 1723, 3389, 5900] else 0
+            }
+    
+    def _extract_historical_features(self, session, cve_id: str) -> Dict:
+        """Extract historical patterns for this CVE across the network"""
+        result = session.run("""
+            MATCH (v:Vulnerability {cve_id: $cve_id})<-[:HAS_VULNERABILITY]-(a:Asset)
+            RETURN 
+                count(DISTINCT a) as total_affected_assets,
+                avg(a.risk_score) as avg_affected_asset_risk,
+                count(CASE WHEN a.lateral_movement_potential = true THEN 1 END) as lateral_movement_affected
+        """, {'cve_id': cve_id})
+        
+        record = result.single()
+        if record:
+            return {
+                'cve_prevalence': record['total_affected_assets'] or 0,
+                'avg_cve_asset_risk': record['avg_affected_asset_risk'] or 0.0,
+                'cve_lateral_movement_count': record['lateral_movement_affected'] or 0
+            }
+        else:
+            return {
+                'cve_prevalence': 0,
+                'avg_cve_asset_risk': 0.0,
+                'cve_lateral_movement_count': 0
+            }
+    
+    def get_network_context(self, target_ip: str) -> Dict:
+        """Enhanced network context for lateral movement assessment"""
+        return self._extract_network_features(None, target_ip)
+    
+    def train_ensemble_models(self):
+        """Train ensemble classifier models using historical graph data"""
+        logger.info("Training ensemble classifier models...")
+        
+        # Extract training data from graph
+        training_data = self._extract_training_data()
+        
+        if len(training_data) < 10:
+            logger.warning("Insufficient training data, using default model weights")
+            return
+        
+        # Prepare features and labels
+        X, y = self._prepare_training_data(training_data)
+        
+        # Train each ensemble model
+        for model_name, model in self.ensemble_models.items():
+            logger.info(f"Training {model_name} model...")
+            try:
+                model.fit(X, y)
+                logger.info(f"{model_name} model training completed")
+            except Exception as e:
+                logger.error(f"Error training {model_name}: {e}")
+        
+        logger.info("Ensemble model training completed")
+    
+    def _extract_training_data(self) -> List[Dict]:
+        """Extract historical vulnerability data for training"""
+        with self.driver.session() as session:
+            result = session.run("""
+                MATCH (a:Asset)-[:HAS_VULNERABILITY]->(v:Vulnerability)
+                RETURN 
+                    v.cve_id as cve_id,
+                    v.cvss_score as cvss_score,
+                    v.severity as severity,
+                    v.exploit_available as exploit_available,
+                    v.exploit_maturity as exploit_maturity,
+                    a.ip as target_ip,
+                    a.priority as priority
+                LIMIT 1000
+            """)
             
-            def forward(self, x):
-                return self.layers(x)
+            training_data = []
+            for record in result:
+                if record['priority']:  # Only use records with known priorities
+                    training_data.append({
+                        'cve_id': record['cve_id'],
+                        'cvss_score': record['cvss_score'],
+                        'severity': record['severity'],
+                        'exploit_available': record['exploit_available'],
+                        'exploit_maturity': record['exploit_maturity'],
+                        'target_ip': record['target_ip'],
+                        'priority': record['priority']
+                    })
+            
+            return training_data
+    
+    def _prepare_training_data(self, training_data: List[Dict]) -> tuple:
+        """Prepare training data for ensemble models"""
+        features = []
+        labels = []
         
-        self.model = RiskAssessmentModel()
-        # Training would happen here with actual data
-        logger.info("GraphRL model training completed")
+        priority_map = {'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3}
+        
+        for data in training_data:
+            # Create mock vulnerability object for feature extraction
+            vuln = type('Vulnerability', (), {
+                'cve_id': data['cve_id'],
+                'cvss_score': data['cvss_score'],
+                'severity': data['severity'],
+                'exploit_available': data['exploit_available'],
+                'exploit_maturity': data['exploit_maturity'],
+                'port': 80  # Default port for training
+            })()
+            
+            # Extract features
+            feature_dict = self.extract_graph_features(vuln, data['target_ip'])
+            feature_vector = list(feature_dict.values())
+            
+            features.append(feature_vector)
+            labels.append(priority_map.get(data['priority'], 3))
+        
+        return np.array(features), np.array(labels)
+    
+    def predict_priority(self, vulnerability: Vulnerability, target_ip: str) -> str:
+        """Predict vulnerability priority using ensemble models"""
+        # Extract features
+        features = self.extract_graph_features(vulnerability, target_ip)
+        feature_vector = np.array(list(features.values())).reshape(1, -1)
+        
+        # Get predictions from each model
+        predictions = {}
+        for model_name, model in self.ensemble_models.items():
+            try:
+                if hasattr(model, 'predict_proba'):
+                    pred_proba = model.predict_proba(feature_vector)[0]
+                    predictions[model_name] = pred_proba
+                else:
+                    pred = model.predict(feature_vector)[0]
+                    predictions[model_name] = pred
+            except Exception as e:
+                logger.warning(f"Error in {model_name} prediction: {e}")
+                # Fallback to CVSS-based prediction
+                predictions[model_name] = self._fallback_prediction(vulnerability)
+        
+        # Ensemble voting
+        final_priority = self._ensemble_vote(predictions, features)
+        return final_priority
+    
+    def _ensemble_vote(self, predictions: Dict, features: Dict) -> str:
+        """Combine predictions from ensemble models with weighted voting"""
+        priority_labels = ['Critical', 'High', 'Medium', 'Low']
+        
+        # Weights based on model strengths for different scenarios
+        weights = {
+            'cvss_exploit': 0.4,      # Strong for CVSS and exploit data
+            'network_topology': 0.35,  # Strong for lateral movement
+            'service_context': 0.25    # Strong for service-specific risks
+        }
+        
+        # Adjust weights based on feature characteristics
+        if features.get('lateral_movement_ratio', 0) > 0.3:
+            weights['network_topology'] += 0.1
+            weights['cvss_exploit'] -= 0.05
+            weights['service_context'] -= 0.05
+        
+        if features.get('affects_remote_access', 0) == 1:
+            weights['service_context'] += 0.1
+            weights['cvss_exploit'] -= 0.05
+            weights['network_topology'] -= 0.05
+        
+        # Calculate weighted average
+        final_scores = np.zeros(4)
+        total_weight = 0
+        
+        for model_name, pred in predictions.items():
+            if model_name in weights:
+                weight = weights[model_name]
+                if isinstance(pred, np.ndarray):
+                    final_scores += weight * pred
+                else:
+                    # Convert single prediction to probability distribution
+                    prob_dist = np.zeros(4)
+                    prob_dist[int(pred)] = 1.0
+                    final_scores += weight * prob_dist
+                total_weight += weight
+        
+        if total_weight > 0:
+            final_scores /= total_weight
+            predicted_class = np.argmax(final_scores)
+            return priority_labels[predicted_class]
+        else:
+            return self._fallback_prediction(vulnerability)
+    
+    def _fallback_prediction(self, vulnerability: Vulnerability) -> str:
+        """Fallback prediction based on CVSS score and exploit availability"""
+        if vulnerability.cvss_score >= 9.0 and vulnerability.exploit_available:
+            return 'Critical'
+        elif vulnerability.cvss_score >= 7.0 and vulnerability.exploit_available:
+            return 'High'
+        elif vulnerability.cvss_score >= 7.0 or vulnerability.exploit_available:
+            return 'High'
+        elif vulnerability.cvss_score >= 4.0:
+            return 'Medium'
+        else:
+            return 'Low'
 
 class LLMAnalyzer:
     """LLM/RAG system for deterministic vulnerability analysis"""
     
-    def __init__(self, openai_api_key: str, graph_engine: GraphRLEngine):
+    def __init__(self, openai_api_key: str, graph_engine: GraphEnsembleEngine):
         self.client = openai.OpenAI(api_key=openai_api_key)
         self.graph_engine = graph_engine
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -665,30 +986,60 @@ class LLMAnalyzer:
         return context
 
 class VulnerabilityPrioritizer:
-    """Implements the specific prioritization logic"""
+    """Enhanced vulnerability prioritization using ensemble classifier and rule-based logic"""
     
-    def __init__(self, cve_db: CVEDatabase, graph_engine: GraphRLEngine):
+    def __init__(self, cve_db: CVEDatabase, graph_engine: GraphEnsembleEngine):
         self.cve_db = cve_db
         self.graph_engine = graph_engine
+        self.use_ensemble = True  # Flag to enable/disable ensemble prediction
     
     def prioritize_vulnerability(self, vuln: Vulnerability, target_ip: str) -> str:
         """
-        Prioritize vulnerability based on:
-        - Critical: High/Critical exploit + lateral movement potential
+        Enhanced prioritization using ensemble classifier with fallback to rule-based logic
+        
+        Priority levels:
+        - Critical: High/Critical exploit + lateral movement potential (ensemble-enhanced)
         - High: Medium exploit + lateral movement potential, or High/Critical exploit limited to host
-        - Medium: Low/Info exploit + lateral movement potential, or Medium exploit limited to host
+        - Medium: Low/Info exploit + lateral movement potential, or Medium exploit limited to host  
         - Low: Weak configuration, or Low/Info exploit limited to host
         """
         
-        # Check exploit availability and maturity
+        # Enrich vulnerability with CVE database information
         exploit_available, exploit_maturity = self.cve_db.check_exploit_availability(vuln.cve_id)
+        vuln.exploit_available = exploit_available
+        vuln.exploit_maturity = exploit_maturity
         
+        # Try ensemble prediction first
+        if self.use_ensemble:
+            try:
+                ensemble_priority = self.graph_engine.predict_priority(vuln, target_ip)
+                logger.debug(f"Ensemble prediction for {vuln.cve_id}: {ensemble_priority}")
+                
+                # Validate ensemble prediction with rule-based check
+                rule_priority = self._rule_based_prioritization(vuln, target_ip)
+                
+                # Use ensemble if it's reasonable, otherwise fall back to rules
+                if self._validate_ensemble_prediction(ensemble_priority, rule_priority, vuln):
+                    return ensemble_priority
+                else:
+                    logger.debug(f"Ensemble prediction {ensemble_priority} overridden by rules: {rule_priority}")
+                    return rule_priority
+                    
+            except Exception as e:
+                logger.warning(f"Ensemble prediction failed for {vuln.cve_id}: {e}")
+                # Fall back to rule-based prioritization
+                return self._rule_based_prioritization(vuln, target_ip)
+        else:
+            return self._rule_based_prioritization(vuln, target_ip)
+    
+    def _rule_based_prioritization(self, vuln: Vulnerability, target_ip: str) -> str:
+        """Original rule-based prioritization logic as fallback"""
         # Get network context for lateral movement assessment
         network_context = self.graph_engine.get_network_context(target_ip)
-        lateral_movement_potential = network_context['asset_count'] > 1
+        lateral_movement_potential = network_context.get('subnet_asset_count', 0) > 1
         
         # Apply prioritization logic
-        if exploit_available and exploit_maturity in ['functional', 'proof-of-concept']:
+        if vuln.exploit_available and vuln.exploit_maturity in ['functional', 'proof-of-concept']:
             if vuln.severity.upper() in ['CRITICAL', 'HIGH'] and lateral_movement_potential:
                 return 'Critical'
             elif vuln.severity.upper() == 'MEDIUM' and lateral_movement_potential:
@@ -704,7 +1055,7 @@ class VulnerabilityPrioritizer:
         
         # Check for weak configurations
         weak_services = ['rdp', 'vnc', 'telnet', 'ftp', 'ssh']
-        if any(service in vuln.affected_service.lower() for service in weak_services):
+        if hasattr(vuln, 'affected_service') and any(service in vuln.affected_service.lower() for service in weak_services):
             return 'Low'
         
         # Default based on CVSS score
@@ -716,6 +1067,28 @@ class VulnerabilityPrioritizer:
             return 'Medium'
         else:
             return 'Low'
+    
+    def _validate_ensemble_prediction(self, ensemble_priority: str, rule_priority: str, vuln: Vulnerability) -> bool:
+        """Validate ensemble prediction against rule-based logic"""
+        priority_levels = {'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3}
+        
+        ensemble_level = priority_levels.get(ensemble_priority, 3)
+        rule_level = priority_levels.get(rule_priority, 3)
+        
+        # Allow ensemble to be more conservative (higher priority) but not too lenient
+        # Accept ensemble if it's within 1 level of rule-based prediction
+        if abs(ensemble_level - rule_level) <= 1:
+            return True
+        
+        # Always accept ensemble for Critical vulnerabilities with high CVSS
+        if ensemble_priority == 'Critical' and vuln.cvss_score >= 8.0:
+            return True
+        
+        # Reject ensemble if it's too lenient for high CVSS scores
+        if vuln.cvss_score >= 9.0 and ensemble_level > 1:  # Not Critical or High
+            return False
+        
+        return False
 
 class EVMSScanner:
     """Main EVMS scanning engine"""
@@ -724,7 +1097,7 @@ class EVMSScanner:
         self.config = config
         self.tools = ToolManager(config['tools_dir'])
         self.cve_db = CVEDatabase(config['data_dir'])
-        self.graph_engine = GraphRLEngine(
+        self.graph_engine = GraphEnsembleEngine(
             config['neo4j_uri'],
             config['neo4j_user'], 
             config['neo4j_password']
@@ -748,8 +1121,8 @@ class EVMSScanner:
         # Update CVE database
         await self.cve_db.update_cve_feeds()
         
-        # Train GraphRL model
-        self.graph_engine.train_risk_model()
+        # Train ensemble models
+        self.graph_engine.train_ensemble_models()
         
         logger.info("EVMS initialization completed")
         return True
@@ -1449,7 +1822,7 @@ WEB_TEMPLATE = """
     <div class="container">
         <div class="header">
             <h1>🛡️ EVMS - Enterprise Vulnerability Management Scanner</h1>
-            <p>Streamlined vulnerability scanning with GraphRL and LLM analysis</p>
+            <p>Streamlined vulnerability scanning with Ensemble ML and LLM analysis</p>
         </div>
         
         <div class="grid">
