@@ -1,438 +1,383 @@
-<!-- EVMS (c) Shane D. Shook, PhD, 2025 All Rights Reserved -->
-# EVMS - Exposure and Vulnerability Management System
+# EVMS - Enterprise Vulnerability Management Scanner
 
-## Overview
+**A streamlined, single-script vulnerability management solution**
 
-The Exposure and Vulnerability Management System (EVMS) is an autonomous, Human-On-The-Loop (HOTL) supported vulnerability scanning and risk assessment platform that leverages Graph Reinforcement Learning (GraphRL) for intelligent threat discovery, correlation, and risk prioritization.
+EVMS is a focused, practical vulnerability management tool that performs automated discovery, scanning, prioritization, and reporting against ASN, CIDR, TLD, FQDN, or IP addresses.
 
-## Architecture
+## 🎯 Core Objectives
 
-### Core Components
+1. **Single Python Script**: Everything runs from one executable script
+2. **Automated Scanning**: Discovery, port scanning, service fingerprinting, and vulnerability detection
+3. **Intelligent Prioritization**: Risk-based prioritization using exploit availability and lateral movement potential
+4. **Comprehensive Reporting**: HTML, PDF, and JSON reports with LLM-powered analysis
+5. **Real-time Interface**: Simple web interface for control, monitoring, and interaction
+
+## 🛠 Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Orchestrator  │───▶│     Agents      │───▶│   Persistence   │
-│                 │    │                 │    │                 │
-│ - Task Dispatch │    │ - Vulnerability │    │ - NATS JetStream│
-│ - Coordination  │    │   Scanning      │    │ - Graph DB      │
-│ - Scheduling    │    │ - Asset Discovery│    │ - KVS Storage   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         ▲                       ▲                       │
-         │                       │                       ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   HOTL Interface│    │   GraphRL       │    │ Feature Pipeline│
-│                 │    │                 │    │                 │
-│ - Review/Override│    │ - Risk Scoring  │    │ - Data Transform│
-│ - Approval      │    │ - Action Suggest│    │ - Graph Updates │
-│ - Feedback      │    │ - Learning      │    │ - Correlation   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         ▲                       ▲                       ▲
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   EVMS Core     │    │   Security Tools │    │  External APIs  │
+│                 │    │                  │    │                 │
+│ • Scanner       │◄──►│ • masscan        │    │ • CVE Feeds     │
+│ • Prioritizer   │    │ • nuclei         │    │ • Exploit DB    │
+│ • GraphRL       │    │ • httpx          │    │ • OpenAI API    │
+│ • LLM Analyzer  │    │ • subfinder      │    │                 │
+│ • Web Interface │    │ • zeek (optional)│    │                 │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          └───────────────────────┼───────────────────────┘
-                                 ▼
-                    ┌─────────────────┐
-                    │ LLM/RAG Dashboard│
-                    │                 │
-                    │ - Chat Interface│
-                    │ - Reporting     │
-                    │ - Visualization │
-                    └─────────────────┘
+                                 │
+         ┌─────────────────────────────────────────────────┐
+         │              Data Layer                         │
+         │                                                 │
+         │ ┌─────────────┐  ┌─────────────┐  ┌───────────┐ │
+         │ │   Neo4j     │  │    NATS     │  │  SQLite   │ │
+         │ │  GraphDB    │  │ JetStream   │  │  CVE DB   │ │
+         │ └─────────────┘  └─────────────┘  └───────────┘ │
+         └─────────────────────────────────────────────────┘
 ```
 
-## System Flow
+## 🚀 Quick Start
 
-### 1. Task Orchestration
-- **Orchestrator** issues scanning tasks based on:
-  - Scheduled assessments
-  - Risk-based prioritization
-  - GraphRL recommendations
-  - HOTL directives
-
-### 2. Agent Execution
-- **Scanning Agents** perform:
-  - Network discovery and enumeration
-  - Vulnerability assessment
-  - Configuration analysis
-  - Compliance checking
-  - CVE/CWE correlation
-
-### 3. Data Persistence
-- **NATS JetStream** provides:
-  - Reliable message delivery
-  - Event streaming
-  - Fault tolerance
-  - Key-Value storage
-  - Object storage
-- **Graph Database** stores:
-  - Asset relationships
-  - Vulnerability correlations
-  - Risk dependencies
-- **NATS KV Store** maintains:
-  - Configuration state
-  - Agent metadata
-  - Scan results cache
-  - Session data
-
-### 4. Feature Engineering
-- **Pipeline** processes:
-  - Raw scan data transformation
-  - Graph relationship updates
-  - Feature vector generation
-  - Correlation analysis
-
-### 5. GraphRL Intelligence
-- **Reinforcement Learning** provides:
-  - Dynamic risk scoring
-  - Action recommendations
-  - Adaptive scanning strategies
-  - Continuous learning from outcomes
-
-### 6. Human Oversight
-- **HOTL Interface** enables:
-  - Review of high-risk findings
-  - Override of automated decisions
-  - Approval of remediation actions
-  - Feedback for model training
-
-### 7. Gradient Descent Learning
-- **Training Loop**:
-  - Reward signals from HOTL feedback
-  - Backpropagation through graph networks
-  - Model parameter updates
-  - Performance optimization
-
-## Technology Stack
-
-### Open Source Core Components
-- **Masscan**: Ultra-fast network discovery and port scanning
-- **Nuclei**: Template-based vulnerability scanner with extensive community templates
-- **Zeek**: Network security monitoring and protocol analysis
-- **NATS.io + JetStream**: Event bus, message streaming and persistence
-- **GraphRL**: Custom graph-based reinforcement learning for risk prioritization
-- **LLM/RAG**: Large Language Models with Retrieval-Augmented Generation for natural language queries
-
-### Integrated Security Tools
-- **Masscan**: High-speed port scanner for network discovery and enumeration
-- **Nuclei**: Template-based vulnerability scanner with community-driven detection rules
-- **Subfinder**: Subdomain discovery tool for comprehensive asset mapping
-- **Httpx**: HTTP toolkit for web service probing and technology fingerprinting
-
-### Supporting Infrastructure
-- **Neo4j**: Graph database for unified asset relationships
-- **NATS KV Store**: High-performance key-value storage and caching
-- **Node.js**: Runtime environment for orchestration and services
-- **Python**: Machine learning and data processing components
-
-### Capabilities Delivered
-- **Active Discovery**: Masscan for rapid network enumeration
-- **Passive Discovery**: Zeek for traffic-based asset identification
-- **Fingerprinting**: Service and OS detection via Nuclei templates
-- **Identity Flows**: User and service authentication tracking
-- **Behavioral Flows**: Network communication pattern analysis
-- **Protocol Intelligence**: Deep packet inspection and protocol analysis
-- **Device Classification**: ML-based device type and role identification
-- **Exposure Mapping**: Attack surface visualization and analysis
-- **Risk Scoring**: GraphRL-powered intelligent risk prioritization
-- **Unified Asset Graph**: Comprehensive relationship modeling
-- **Natural-language ESM Queries**: LLM-powered security analytics interface
-
-### User Interface
-- **Dashboard**: Real-time risk visualization and metrics
-- **Chat Interface**: LLM/RAG-powered natural language interaction for queries, analysis, and reporting
-- **Reporting**: Automated and on-demand report generation with multiple formats
-- **WebSocket Integration**: Real-time updates and notifications
-
-## Key Features
-
-### Autonomous Operation
-- **Self-Directed Scanning**: AI-driven target selection
-- **Adaptive Strategies**: Learning from scan results
-- **Dynamic Prioritization**: Risk-based task scheduling
-- **Continuous Improvement**: Model refinement through feedback
-
-### Vulnerability Intelligence
-- **CVE/CWE Correlation**: Automated vulnerability mapping
-- **Configuration Analysis**: "Worst practice" detection
-- **Asset Discovery**: Network topology mapping
-- **Risk Aggregation**: Multi-factor risk scoring
-
-### Human-AI Collaboration
-- **HOTL Workflow**: Human oversight for critical decisions
-- **Explainable AI**: Transparent reasoning for recommendations
-- **Feedback Loop**: Human input improves model performance
-- **Override Capability**: Human control over automated actions
-
-### C3CI Integration
-- **Command**: Centralized control interface
-- **Control**: Distributed agent management
-- **Coordination**: Multi-agent task synchronization
-- **Intelligence**: Threat intelligence integration
-
-## Data Flow
-
-```
-Scan Request → Orchestrator → Agent Pool → Target Systems
-     ↓              ↓             ↓            ↓
-Task Queue → NATS JetStream → Scan Results → Raw Data
-     ↓              ↓             ↓            ↓
-Feature Pipeline → Graph Updates → ML Training → Model Updates
-     ↓              ↓             ↓            ↓
-Risk Scores → HOTL Review → Feedback → Gradient Descent
-     ↓              ↓             ↓            ↓
-Dashboard → Reports → Actions → Remediation
-```
-
-## Security Considerations
-
-### Data Protection
-- **Encryption**: All data encrypted in transit and at rest
-- **Access Control**: Role-based permissions
-- **Audit Logging**: Complete activity tracking
-- **Data Retention**: Configurable retention policies
-
-### Network Security
-- **Secure Communications**: TLS/mTLS for all connections
-- **Network Segmentation**: Isolated scanning networks
-- **Credential Management**: Secure secret storage
-- **Agent Authentication**: Certificate-based identity
-
-### Compliance
-- **Regulatory Alignment**: SOC2, ISO27001, NIST frameworks
-- **Privacy Protection**: GDPR/CCPA compliance
-- **Data Classification**: Sensitivity-based handling
-- **Incident Response**: Automated breach detection
-
-## Deployment Architecture
-
-### Microservices Design
-```
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│  Orchestrator   │  │   Agent Pool    │  │  Data Services  │
-│   Service       │  │    Services     │  │                 │
-│                 │  │                 │  │ - Graph DB      │
-│ - Task Mgmt     │  │ - Vuln Scanner  │  │ - NATS Cluster  │
-│ - Scheduling    │  │ - Asset Disc    │  │ - Redis KVS     │
-│ - Coordination  │  │ - Config Audit  │  │                 │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│   ML Services   │  │  API Gateway    │  │  UI Services    │
-│                 │  │                 │  │                 │
-│ - GraphRL       │  │ - Authentication│  │ - Dashboard     │
-│ - Feature Eng   │  │ - Rate Limiting │  │ - Chat Bot      │
-│ - Model Training│  │ - Load Balancing│  │ - Reporting     │
-│                 │  │                 │  │                 │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-```
-
-### Scalability Features
-- **Horizontal Scaling**: Auto-scaling agent pools
-- **Load Distribution**: Intelligent task distribution
-- **Resource Management**: Dynamic resource allocation
-- **Performance Monitoring**: Real-time metrics and alerting
-
-## Getting Started
-
-### Prerequisites
-- Node.js 18+ runtime environment
-- NATS Server with JetStream enabled
-- Graph database (Neo4j/ArangoDB)
-- Redis for key-value storage
-- GPU resources for ML training (optional but recommended)
-
-### Security Tools Setup
-The following tools must be installed in the `tools/` directory:
+### 1. Setup Environment
 
 ```bash
-# Create tools directory structure
-mkdir -p tools/{masscan/bin,nuclei,subfinder,httpx}
-
-# Install Masscan (compile from source or download binary)
-# Place binary at: tools/masscan/bin/masscan
-
-# Install Nuclei
-# Download from: https://github.com/projectdiscovery/nuclei
-# Place binary at: tools/nuclei/nuclei
-
-# Install Subfinder  
-# Download from: https://github.com/projectdiscovery/subfinder
-# Place binary at: tools/subfinder/subfinder
-
-# Install Httpx
-# Download from: https://github.com/projectdiscovery/httpx
-# Place binary at: tools/httpx/httpx
-```
-
-**Note**: EVMS includes built-in fallback scanning capabilities when tools are not available, but the integrated tools provide enhanced performance and detection capabilities.
-
-### Installation
-```bash
-# Clone the repository
-git clone <repository-url>
+# Clone and setup
+git clone <repository>
 cd EVMS
 
-# Install dependencies
-npm install
+# Run setup (installs dependencies and tools)
+python setup.py
 
 # Configure environment
 cp .env.example .env
 # Edit .env with your configuration
-
-# Initialize database
-npm run db:init
-
-# Start services
-npm run start:all
 ```
 
-### LLM/RAG Chat System
+### 2. Start Services
 
-### Natural Language Interface
-EVMS includes a sophisticated chat interface powered by Large Language Models and Retrieval-Augmented Generation:
+```bash
+# Start Neo4j and NATS (if using Docker)
+docker-compose up -d
 
-#### **Capabilities**
-- **Interactive Queries**: Ask questions about vulnerabilities, assets, risks, and compliance in natural language
-- **Deterministic Responses**: Answers grounded in actual graph database data with source citations
-- **On-Demand Reports**: Generate custom reports through conversational requests
-- **Dashboard Population**: Request specific dashboard widgets and metrics
-- **Analysis & Insights**: Deep analysis of security data with actionable recommendations
-
-#### **Chat Features**
-- **Session Management**: Persistent chat history with context awareness
-- **Real-Time Updates**: WebSocket-based live notifications and responses
-- **Multi-Format Reports**: Generate reports in Markdown, HTML, JSON, or plain text
-- **Intent Classification**: Automatic routing of queries to appropriate handlers
-- **Metadata Enrichment**: Responses include confidence scores, data sources, and relevance metrics
-
-#### **RAG Pipeline**
-- **Graph Database Integration**: Retrieves relevant data from Neo4j knowledge graph
-- **Semantic Search**: Intelligent query analysis and data retrieval
-- **Context Ranking**: Relevance scoring and result prioritization
-- **Source Attribution**: Clear citations and data provenance
-- **Fallback Handling**: Graceful degradation when data is unavailable
-
-#### **Report Generation**
-- **Template-Based**: Professional report formats for different audiences
-- **Dynamic Content**: LLM-generated sections based on current data
-- **Multiple Formats**: Support for various output formats and styles
-- **Executive & Technical**: Tailored content for different stakeholder needs
-
-### Usage Examples
-```
-User: "Show me critical vulnerabilities discovered in the last 24 hours"
-EVMS: "I found 12 critical vulnerabilities in the past 24 hours affecting 8 assets..."
-
-User: "Generate an executive risk assessment report"
-EVMS: "I've generated an executive risk assessment report. You can access it here..."
-
-User: "What's the current security posture of our web servers?"
-EVMS: "Based on the latest scans, your web servers show the following security posture..."
+# Or install manually:
+# - Neo4j: https://neo4j.com/download/
+# - NATS: https://nats.io/download/
 ```
 
-## Configuration
-- **NATS Configuration**: Connection strings and credentials
-- **Database Setup**: Graph DB and KVS connection details
-- **ML Parameters**: Model hyperparameters and training settings
-- **Scanning Policies**: Target definitions and scan schedules
-- **LLM Configuration**: OpenAI API keys, model selection, and temperature settings
-- **RAG Parameters**: Retrieval limits, similarity thresholds, and context windows
+### 3. Run EVMS
 
-## API Documentation
+```bash
+# Web interface only
+python evms.py --web-only
 
-### REST Endpoints
-- `GET /api/v1/scans` - List all scans
-- `POST /api/v1/scans` - Initiate new scan
-- `GET /api/v1/risks` - Retrieve risk assessments
-- `POST /api/v1/hotl/review` - Submit HOTL review
-- `GET /api/v1/dashboard/metrics` - Dashboard data
-- `POST /api/chat/message` - Send chat message to LLM/RAG system
-- `GET /api/chat/history/:sessionId` - Retrieve chat history
-- `POST /api/reports/generate` - Generate on-demand reports
-- `GET /api/dashboard/populate` - Populate dashboard widgets
+# Command line scan
+python evms.py --target 192.168.1.0/24
+
+# Scan with specific type
+python evms.py --target example.com --target-type domain
+
+# Interactive mode (scan + web interface)
+python evms.py --target 10.0.0.1
+```
+
+## 📊 Vulnerability Prioritization
+
+EVMS uses intelligent prioritization based on exploit availability and lateral movement potential:
+
+### Priority Levels
+
+- **🔴 Critical**: Service with High/Critical exploit + lateral movement potential
+- **🟠 High**: Service with Medium exploit + lateral movement potential  
+- **🟡 Medium**: Service with Low/Info exploit + no lateral movement potential
+- **🟢 Low**: Weak configuration (RDP, VNC, Telnet, etc.)
+
+### Prioritization Logic
+
+```python
+def prioritize_vulnerability(vuln, target_ip):
+    exploit_available, maturity = check_exploit_availability(vuln.cve_id)
+    lateral_movement = assess_lateral_movement_potential(target_ip)
+    
+    if exploit_available and maturity in ['functional', 'poc']:
+        if vuln.severity in ['CRITICAL', 'HIGH'] and lateral_movement:
+            return 'Critical'
+        elif vuln.severity == 'MEDIUM' and lateral_movement:
+            return 'High'
+        elif vuln.severity in ['LOW', 'INFO'] and not lateral_movement:
+            return 'Medium'
+    
+    if is_weak_configuration(vuln.service):
+        return 'Low'
+    
+    return cvss_based_priority(vuln.cvss_score)
+```
+
+## 🔧 Security Tools Integration
+
+### Required Tools
+- **masscan**: Fast port scanner
+- **nuclei**: Vulnerability scanner with templates
+- **httpx**: HTTP service fingerprinting
+- **subfinder**: Subdomain discovery
+
+### Optional Tools
+- **zeek**: Network flow capture and analysis (passive mode)
+
+### Tool Configuration
+```json
+{
+  "scanning": {
+    "masscan_rate": 1000,
+    "nuclei_templates": "./tools/nuclei/templates",
+    "scan_timeout": 600,
+    "max_targets": 100
+  }
+}
+```
+
+## 🧠 GraphRL & Machine Learning
+
+### Graph Database Schema
+```cypher
+// Assets and their relationships
+(Asset)-[:RUNS]->(Service)
+(Asset)-[:HAS_VULNERABILITY]->(Vulnerability)
+(Service)-[:AFFECTED_BY]->(Vulnerability)
+(Asset)-[:CONNECTED_TO]->(Asset)  // Network topology
+```
+
+### GraphRL Features
+- **Vulnerability Correlation**: ML-based vulnerability relationship discovery
+- **Risk Scoring**: Graph-based risk propagation
+- **Lateral Movement Assessment**: Network topology analysis
+- **Gradient Descent**: Continuous learning from scan results
+
+## 🤖 LLM/RAG Analysis
+
+### Deterministic Analysis
+- **Graph-Grounded Responses**: All analysis based on actual scan data
+- **Source Attribution**: Clear citations of CVE IDs and CVSS scores
+- **Confidence Scoring**: Reliability metrics for each analysis
+- **Factual Reporting**: No hallucination, only data-driven insights
+
+### Analysis Types
+- **Risk Assessment**: Overall security posture evaluation
+- **Attack Vector Analysis**: Potential exploitation paths
+- **Remediation Guidance**: Prioritized fix recommendations
+- **Business Impact**: Risk quantification and business context
+
+## 🌐 Web Interface
+
+### Features
+- **Scan Control**: Start scans for any target type
+- **Real-time Updates**: WebSocket-based live notifications
+- **Chat Interface**: Natural language interaction with scan results
+- **Dashboard**: Visual representation of scan results and trends
+- **Report Generation**: On-demand HTML, PDF, and JSON reports
+
+### API Endpoints
+```
+POST /api/scan              # Start new scan
+GET  /api/results/<target>  # Get scan results
+GET  /api/report/<target>/<format>  # Generate report
+```
 
 ### WebSocket Events
-- `scan.started` - Scan initiation notification
-- `scan.completed` - Scan completion with results
-- `risk.updated` - Risk score changes
-- `chat_response` - LLM response to user message
-- `chat_history` - Historical chat messages
-- `system_update` - Real-time system notifications
-- `report_generated` - Report generation completion
-- `hotl.required` - Human review needed
+```
+scan_complete    # Scan finished notification
+scan_error       # Scan failure notification
+chat_response    # LLM chat response
+```
 
-### GraphQL Schema
-```graphql
-type Asset {
-  id: ID!
-  hostname: String!
-  ipAddress: String!
-  vulnerabilities: [Vulnerability!]!
-  riskScore: Float!
-}
+## 📋 Usage Examples
 
-type Vulnerability {
-  id: ID!
-  cveId: String
-  severity: Severity!
-  description: String!
-  assets: [Asset!]!
+### Command Line Scanning
+
+```bash
+# Scan single IP
+python evms.py --target 192.168.1.100
+
+# Scan CIDR range
+python evms.py --target 10.0.0.0/24
+
+# Scan domain with subdomains
+python evms.py --target example.com --target-type domain
+
+# ASN scanning (requires BGP data)
+python evms.py --target AS15169 --target-type asn
+```
+
+### Web Interface Usage
+
+1. **Start Web Interface**: `python evms.py --web-only`
+2. **Access**: http://localhost:5000
+3. **Start Scan**: Enter target in scan form
+4. **Monitor Progress**: Real-time updates in interface
+5. **Generate Reports**: Select target and format
+6. **Chat Analysis**: Ask questions about scan results
+
+### API Usage
+
+```python
+import requests
+
+# Start scan
+response = requests.post('http://localhost:5000/api/scan', 
+                        json={'target': '192.168.1.1', 'target_type': 'ip'})
+
+# Get results
+results = requests.get('http://localhost:5000/api/results/192.168.1.1').json()
+
+# Generate PDF report
+report_url = 'http://localhost:5000/api/report/192.168.1.1/pdf'
+```
+
+## 📊 Report Formats
+
+### JSON Report
+```json
+{
+  "target": "192.168.1.100",
+  "timestamp": "2025-12-02T10:30:00Z",
+  "priority": "High",
+  "risk_score": 7.5,
+  "vulnerabilities": [...],
+  "llm_analysis": "...",
+  "recommendations": [...]
 }
 ```
 
-## Monitoring and Observability
+### HTML Report
+- Executive summary with risk metrics
+- Detailed vulnerability listings
+- Remediation recommendations
+- Visual charts and graphs
 
-### Metrics Collection
-- **System Metrics**: CPU, memory, network utilization
-- **Application Metrics**: Scan rates, detection accuracy
-- **ML Metrics**: Model performance, training loss
-- **Business Metrics**: Risk reduction, MTTR
+### PDF Report
+- Professional formatting
+- Executive and technical sections
+- Compliance-ready documentation
+- Printable format
 
-### Logging Strategy
-- **Structured Logging**: JSON format with correlation IDs
-- **Log Levels**: DEBUG, INFO, WARN, ERROR, FATAL
-- **Log Aggregation**: Centralized log collection
-- **Log Analysis**: Automated anomaly detection
+## ⚙️ Configuration
 
-### Alerting Rules
-- **Critical Vulnerabilities**: Immediate notification
-- **System Failures**: Service degradation alerts
-- **Model Drift**: ML performance degradation
-- **Capacity Limits**: Resource exhaustion warnings
+### Environment Variables
+```bash
+# Database connections
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password
+NATS_URL=nats://localhost:4222
 
-## Contributing
+# LLM configuration
+OPENAI_API_KEY=your_api_key_here
 
-### Development Workflow
+# Scanning parameters
+MASSCAN_RATE=1000
+SCAN_TIMEOUT=600
+```
+
+### Configuration File (evms_config.json)
+```json
+{
+  "tools_dir": "./tools",
+  "data_dir": "./data",
+  "reports_dir": "./reports",
+  "web_port": 5000,
+  "scanning": {
+    "masscan_rate": 1000,
+    "scan_timeout": 600,
+    "max_targets": 100
+  },
+  "prioritization": {
+    "critical_cvss_threshold": 9.0,
+    "high_cvss_threshold": 7.0,
+    "medium_cvss_threshold": 4.0
+  }
+}
+```
+
+## 🔒 Security Considerations
+
+### Scanning Ethics
+- **Passive Mode**: Default non-intrusive scanning
+- **Rate Limiting**: Configurable scan rates to avoid DoS
+- **Target Validation**: Ensure authorization before scanning
+- **Network Isolation**: Consider network segmentation
+
+### Data Protection
+- **Local Storage**: All data stored locally by default
+- **Encryption**: Sensitive data encrypted at rest
+- **Access Control**: Web interface authentication
+- **Audit Logging**: Complete audit trail of all activities
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+**Tools Not Found**
+```bash
+# Re-run setup to download tools
+python setup.py
+
+# Check tool status
+ls -la tools/*/
+```
+
+**Database Connection Failed**
+```bash
+# Check services
+docker-compose ps
+
+# Restart services
+docker-compose restart
+```
+
+**Scan Timeout**
+```bash
+# Increase timeout in config
+"scan_timeout": 1200  # 20 minutes
+```
+
+**Permission Denied**
+```bash
+# Make tools executable
+chmod +x tools/*/bin/*
+chmod +x tools/*/*
+```
+
+## 📈 Performance Tuning
+
+### Scanning Performance
+- **Masscan Rate**: Adjust based on network capacity
+- **Concurrent Scans**: Limit based on system resources
+- **Target Batching**: Process large ranges in batches
+
+### Database Performance
+- **Neo4j Memory**: Increase heap size for large datasets
+- **Indexing**: Ensure proper indexes on frequently queried fields
+- **Connection Pooling**: Configure appropriate pool sizes
+
+## 🤝 Contributing
+
 1. Fork the repository
 2. Create feature branch
-3. Implement changes with tests
+3. Make changes with tests
 4. Submit pull request
-5. Code review and approval
-6. Merge to main branch
 
-### Code Standards
-- **ESLint**: JavaScript/TypeScript linting
-- **Prettier**: Code formatting
-- **Jest**: Unit testing framework
-- **Documentation**: JSDoc comments required
+## 📄 License
 
-### Testing Strategy
-- **Unit Tests**: Component-level testing
-- **Integration Tests**: Service interaction testing
-- **E2E Tests**: Full workflow validation
-- **Performance Tests**: Load and stress testing
+(c) Shane D. Shook, PhD, 2025 All Rights Reserved
 
-## License
+## 🆘 Support
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-For support and questions:
-- **Documentation**: [Wiki](wiki-url)
-- **Issues**: [GitHub Issues](issues-url)
-- **Discussions**: [GitHub Discussions](discussions-url)
-- **Email**: evms-support@organization.com
+For issues and questions:
+1. Check troubleshooting section
+2. Review logs in `evms.log`
+3. Open GitHub issue with details
+4. Include configuration and error messages
 
 ---
 
-*EVMS - Intelligent, Autonomous Vulnerability Management for Modern Infrastructure*
+**EVMS - Streamlined vulnerability management for the modern enterprise**

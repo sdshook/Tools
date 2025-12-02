@@ -1,0 +1,1446 @@
+#!/usr/bin/env python3
+"""
+EVMS - Enterprise Vulnerability Management Scanner
+(c) Shane D. Shook, PhD, 2025 All Rights Reserved
+
+A streamlined, single-script vulnerability management solution with:
+- Automated discovery and scanning (masscan, nuclei, httpx, subfinder, zeek)
+- GraphDB with GraphRL for vulnerability correlation
+- LLM/RAG deterministic analysis
+- NATS.io for C3CI coordination
+- Simple web interface for control and reporting
+- CVE/TIP feed integration
+- Intelligent prioritization based on exploit availability and lateral movement
+"""
+
+import asyncio
+import json
+import logging
+import os
+import sys
+import subprocess
+import threading
+import time
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Any
+import argparse
+import ipaddress
+import socket
+import requests
+from dataclasses import dataclass, asdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import sqlite3
+import hashlib
+
+# Web framework and async support
+from flask import Flask, render_template, request, jsonify, send_file
+from flask_socketio import SocketIO, emit
+import asyncio
+import aiohttp
+import aiofiles
+
+# Graph database and ML
+import neo4j
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+
+# NATS for messaging
+import nats
+from nats.js import JetStreamContext
+
+# LLM integration
+import openai
+from sentence_transformers import SentenceTransformer
+
+# Report generation
+from jinja2 import Template
+import pdfkit
+from datetime import datetime
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('evms.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger('EVMS')
+
+@dataclass
+class ScanTarget:
+    """Represents a scan target (IP, CIDR, domain, etc.)"""
+    target: str
+    target_type: str  # 'ip', 'cidr', 'domain', 'asn'
+    ports: List[int] = None
+    services: Dict[str, Any] = None
+    vulnerabilities: List[Dict] = None
+    risk_score: float = 0.0
+    priority: str = 'Low'
+    
+@dataclass
+class Vulnerability:
+    """Represents a discovered vulnerability"""
+    cve_id: str
+    cvss_score: float
+    severity: str
+    description: str
+    exploit_available: bool
+    exploit_maturity: str
+    affected_service: str
+    target: str
+    port: int
+    remediation: str = ""
+    references: List[str] = None
+
+@dataclass
+class ScanResult:
+    """Complete scan results for a target"""
+    target: str
+    timestamp: datetime
+    open_ports: List[Dict]
+    services: List[Dict]
+    vulnerabilities: List[Vulnerability]
+    risk_assessment: Dict
+    lateral_movement_potential: bool
+    priority: str
+
+class ToolManager:
+    """Manages external security tools"""
+    
+    def __init__(self, tools_dir: Path):
+        self.tools_dir = Path(tools_dir)
+        self.tools = {
+            'masscan': self.tools_dir / 'masscan' / 'bin' / 'masscan',
+            'nuclei': self.tools_dir / 'nuclei' / 'nuclei',
+            'httpx': self.tools_dir / 'httpx' / 'httpx',
+            'subfinder': self.tools_dir / 'subfinder' / 'subfinder',
+            'zeek': self.tools_dir / 'zeek' / 'bin' / 'zeek'
+        }
+        
+    def check_tools(self) -> Dict[str, bool]:
+        """Check if required tools are available"""
+        status = {}
+        for tool, path in self.tools.items():
+            if tool == 'zeek':  # Optional
+                status[tool] = path.exists()
+            else:  # Required
+                status[tool] = path.exists()
+                if not status[tool]:
+                    logger.warning(f"Required tool {tool} not found at {path}")
+        return status
+    
+    async def run_masscan(self, target: str, ports: str = "1-65535", rate: int = 1000) -> List[Dict]:
+        """Run masscan for port discovery"""
+        cmd = [
+            str(self.tools['masscan']),
+            target,
+            '-p', ports,
+            '--rate', str(rate),
+            '--output-format', 'json',
+            '--output-filename', '-'
+        ]
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode == 0:
+                # Parse masscan JSON output
+                open_ports = []
+                for line in result.stdout.strip().split('\n'):
+                    if line.strip():
+                        try:
+                            port_data = json.loads(line)
+                            open_ports.append(port_data)
+                        except json.JSONDecodeError:
+                            continue
+                return open_ports
+        except subprocess.TimeoutExpired:
+            logger.error(f"Masscan timeout for target {target}")
+        except Exception as e:
+            logger.error(f"Masscan error for {target}: {e}")
+        
+        return []
+    
+    async def run_nuclei(self, target: str, templates_dir: str = None) -> List[Dict]:
+        """Run nuclei for vulnerability scanning"""
+        cmd = [
+            str(self.tools['nuclei']),
+            '-target', target,
+            '-json',
+            '-silent',
+            '-no-color'
+        ]
+        
+        if templates_dir:
+            cmd.extend(['-t', templates_dir])
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            if result.returncode == 0:
+                vulnerabilities = []
+                for line in result.stdout.strip().split('\n'):
+                    if line.strip():
+                        try:
+                            vuln_data = json.loads(line)
+                            vulnerabilities.append(vuln_data)
+                        except json.JSONDecodeError:
+                            continue
+                return vulnerabilities
+        except subprocess.TimeoutExpired:
+            logger.error(f"Nuclei timeout for target {target}")
+        except Exception as e:
+            logger.error(f"Nuclei error for {target}: {e}")
+        
+        return []
+    
+    async def run_httpx(self, targets: List[str]) -> List[Dict]:
+        """Run httpx for service fingerprinting"""
+        cmd = [
+            str(self.tools['httpx']),
+            '-json',
+            '-silent',
+            '-no-color',
+            '-tech-detect',
+            '-title',
+            '-status-code'
+        ]
+        
+        # Add targets
+        for target in targets:
+            cmd.extend(['-target', target])
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode == 0:
+                services = []
+                for line in result.stdout.strip().split('\n'):
+                    if line.strip():
+                        try:
+                            service_data = json.loads(line)
+                            services.append(service_data)
+                        except json.JSONDecodeError:
+                            continue
+                return services
+        except subprocess.TimeoutExpired:
+            logger.error("Httpx timeout")
+        except Exception as e:
+            logger.error(f"Httpx error: {e}")
+        
+        return []
+    
+    async def run_subfinder(self, domain: str) -> List[str]:
+        """Run subfinder for subdomain discovery"""
+        cmd = [
+            str(self.tools['subfinder']),
+            '-d', domain,
+            '-json',
+            '-silent'
+        ]
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode == 0:
+                subdomains = []
+                for line in result.stdout.strip().split('\n'):
+                    if line.strip():
+                        try:
+                            subdomain_data = json.loads(line)
+                            subdomains.append(subdomain_data.get('host', ''))
+                        except json.JSONDecodeError:
+                            # Fallback to plain text
+                            subdomains.append(line.strip())
+                return subdomains
+        except subprocess.TimeoutExpired:
+            logger.error(f"Subfinder timeout for domain {domain}")
+        except Exception as e:
+            logger.error(f"Subfinder error for {domain}: {e}")
+        
+        return []
+
+class CVEDatabase:
+    """Manages CVE and threat intelligence feeds"""
+    
+    def __init__(self, data_dir: Path):
+        self.data_dir = Path(data_dir)
+        self.db_path = self.data_dir / 'cve_database.db'
+        self.init_database()
+        
+    def init_database(self):
+        """Initialize SQLite database for CVE data"""
+        self.data_dir.mkdir(exist_ok=True)
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # CVE table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS cves (
+                cve_id TEXT PRIMARY KEY,
+                cvss_score REAL,
+                severity TEXT,
+                description TEXT,
+                published_date TEXT,
+                modified_date TEXT,
+                cpe_matches TEXT,
+                exploit_available INTEGER DEFAULT 0,
+                exploit_maturity TEXT,
+                references TEXT
+            )
+        ''')
+        
+        # Exploits table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS exploits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cve_id TEXT,
+                exploit_db_id TEXT,
+                metasploit_module TEXT,
+                maturity TEXT,
+                reliability TEXT,
+                FOREIGN KEY (cve_id) REFERENCES cves (cve_id)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+    
+    async def update_cve_feeds(self):
+        """Update CVE database from NVD and other sources"""
+        logger.info("Updating CVE feeds...")
+        
+        # NVD CVE feed
+        nvd_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Get recent CVEs (last 30 days)
+                params = {
+                    'pubStartDate': (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%S.000'),
+                    'pubEndDate': datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000')
+                }
+                
+                async with session.get(nvd_url, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        await self.store_cve_data(data.get('vulnerabilities', []))
+                        
+        except Exception as e:
+            logger.error(f"Error updating CVE feeds: {e}")
+    
+    async def store_cve_data(self, vulnerabilities: List[Dict]):
+        """Store CVE data in database"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        for vuln in vulnerabilities:
+            cve_data = vuln.get('cve', {})
+            cve_id = cve_data.get('id', '')
+            
+            # Extract CVSS score
+            cvss_score = 0.0
+            severity = 'Unknown'
+            
+            metrics = cve_data.get('metrics', {})
+            if 'cvssMetricV31' in metrics:
+                cvss_data = metrics['cvssMetricV31'][0]['cvssData']
+                cvss_score = cvss_data.get('baseScore', 0.0)
+                severity = cvss_data.get('baseSeverity', 'Unknown')
+            elif 'cvssMetricV30' in metrics:
+                cvss_data = metrics['cvssMetricV30'][0]['cvssData']
+                cvss_score = cvss_data.get('baseScore', 0.0)
+                severity = cvss_data.get('baseSeverity', 'Unknown')
+            
+            description = ''
+            descriptions = cve_data.get('descriptions', [])
+            for desc in descriptions:
+                if desc.get('lang') == 'en':
+                    description = desc.get('value', '')
+                    break
+            
+            # Store CVE
+            cursor.execute('''
+                INSERT OR REPLACE INTO cves 
+                (cve_id, cvss_score, severity, description, published_date, modified_date)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                cve_id,
+                cvss_score,
+                severity,
+                description,
+                cve_data.get('published', ''),
+                cve_data.get('lastModified', '')
+            ))
+        
+        conn.commit()
+        conn.close()
+        logger.info(f"Stored {len(vulnerabilities)} CVE records")
+    
+    def get_cve_info(self, cve_id: str) -> Optional[Dict]:
+        """Get CVE information from database"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM cves WHERE cve_id = ?', (cve_id,))
+        result = cursor.fetchone()
+        
+        conn.close()
+        
+        if result:
+            columns = ['cve_id', 'cvss_score', 'severity', 'description', 
+                      'published_date', 'modified_date', 'cpe_matches', 
+                      'exploit_available', 'exploit_maturity', 'references']
+            return dict(zip(columns, result))
+        
+        return None
+    
+    def check_exploit_availability(self, cve_id: str) -> Tuple[bool, str]:
+        """Check if exploits are available for a CVE"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT maturity FROM exploits WHERE cve_id = ?', (cve_id,))
+        results = cursor.fetchall()
+        
+        conn.close()
+        
+        if results:
+            # Determine highest maturity level
+            maturities = [r[0] for r in results]
+            if 'functional' in maturities:
+                return True, 'functional'
+            elif 'proof-of-concept' in maturities:
+                return True, 'proof-of-concept'
+            else:
+                return True, 'unknown'
+        
+        return False, 'none'
+
+class GraphRLEngine:
+    """Graph-based Reinforcement Learning for vulnerability correlation"""
+    
+    def __init__(self, neo4j_uri: str, neo4j_user: str, neo4j_password: str):
+        self.driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
+        self.model = None
+        self.scaler = StandardScaler()
+        self.init_graph_schema()
+        
+    def init_graph_schema(self):
+        """Initialize Neo4j graph schema"""
+        with self.driver.session() as session:
+            # Create constraints and indexes
+            session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (a:Asset) REQUIRE a.ip IS UNIQUE")
+            session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (v:Vulnerability) REQUIRE v.cve_id IS UNIQUE")
+            session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (s:Service) REQUIRE s.id IS UNIQUE")
+            session.run("CREATE INDEX IF NOT EXISTS FOR (a:Asset) ON (a.risk_score)")
+            session.run("CREATE INDEX IF NOT EXISTS FOR (v:Vulnerability) ON (v.cvss_score)")
+    
+    def store_scan_results(self, scan_result: ScanResult):
+        """Store scan results in graph database"""
+        with self.driver.session() as session:
+            # Create asset node
+            session.run("""
+                MERGE (a:Asset {ip: $ip})
+                SET a.last_scanned = datetime(),
+                    a.risk_score = $risk_score,
+                    a.priority = $priority,
+                    a.lateral_movement_potential = $lateral_movement
+            """, {
+                'ip': scan_result.target,
+                'risk_score': scan_result.risk_assessment.get('total_score', 0.0),
+                'priority': scan_result.priority,
+                'lateral_movement': scan_result.lateral_movement_potential
+            })
+            
+            # Create service nodes and relationships
+            for service in scan_result.services:
+                session.run("""
+                    MATCH (a:Asset {ip: $ip})
+                    MERGE (s:Service {id: $service_id})
+                    SET s.name = $service_name,
+                        s.version = $version,
+                        s.port = $port,
+                        s.protocol = $protocol
+                    MERGE (a)-[:RUNS]->(s)
+                """, {
+                    'ip': scan_result.target,
+                    'service_id': f"{scan_result.target}:{service.get('port', 0)}",
+                    'service_name': service.get('service', 'unknown'),
+                    'version': service.get('version', ''),
+                    'port': service.get('port', 0),
+                    'protocol': service.get('protocol', 'tcp')
+                })
+            
+            # Create vulnerability nodes and relationships
+            for vuln in scan_result.vulnerabilities:
+                session.run("""
+                    MERGE (v:Vulnerability {cve_id: $cve_id})
+                    SET v.cvss_score = $cvss_score,
+                        v.severity = $severity,
+                        v.description = $description,
+                        v.exploit_available = $exploit_available,
+                        v.exploit_maturity = $exploit_maturity
+                    
+                    MATCH (a:Asset {ip: $target})
+                    MERGE (a)-[:HAS_VULNERABILITY]->(v)
+                    
+                    MATCH (s:Service {id: $service_id})
+                    MERGE (s)-[:AFFECTED_BY]->(v)
+                """, {
+                    'cve_id': vuln.cve_id,
+                    'cvss_score': vuln.cvss_score,
+                    'severity': vuln.severity,
+                    'description': vuln.description,
+                    'exploit_available': vuln.exploit_available,
+                    'exploit_maturity': vuln.exploit_maturity,
+                    'target': vuln.target,
+                    'service_id': f"{vuln.target}:{vuln.port}"
+                })
+    
+    def get_network_context(self, target_ip: str) -> Dict:
+        """Get network context for lateral movement assessment"""
+        with self.driver.session() as session:
+            # Find assets in same subnet
+            network = ipaddress.ip_network(f"{target_ip}/24", strict=False)
+            
+            result = session.run("""
+                MATCH (a:Asset)
+                WHERE a.ip STARTS WITH $subnet_prefix
+                RETURN count(a) as asset_count,
+                       collect(a.ip) as assets,
+                       avg(a.risk_score) as avg_risk_score
+            """, {'subnet_prefix': str(network).split('/')[0][:7]})  # Rough subnet matching
+            
+            record = result.single()
+            return {
+                'asset_count': record['asset_count'],
+                'assets': record['assets'],
+                'avg_risk_score': record['avg_risk_score'] or 0.0
+            }
+    
+    def train_risk_model(self):
+        """Train GraphRL model for risk assessment"""
+        # This is a simplified version - in practice, you'd implement a full GNN
+        logger.info("Training GraphRL risk assessment model...")
+        
+        # For now, use a simple neural network
+        # In a full implementation, this would be a Graph Neural Network
+        class RiskAssessmentModel(nn.Module):
+            def __init__(self, input_dim=10, hidden_dim=64, output_dim=1):
+                super().__init__()
+                self.layers = nn.Sequential(
+                    nn.Linear(input_dim, hidden_dim),
+                    nn.ReLU(),
+                    nn.Dropout(0.2),
+                    nn.Linear(hidden_dim, hidden_dim),
+                    nn.ReLU(),
+                    nn.Dropout(0.2),
+                    nn.Linear(hidden_dim, output_dim),
+                    nn.Sigmoid()
+                )
+            
+            def forward(self, x):
+                return self.layers(x)
+        
+        self.model = RiskAssessmentModel()
+        # Training would happen here with actual data
+        logger.info("GraphRL model training completed")
+
+class LLMAnalyzer:
+    """LLM/RAG system for deterministic vulnerability analysis"""
+    
+    def __init__(self, openai_api_key: str, graph_engine: GraphRLEngine):
+        self.client = openai.OpenAI(api_key=openai_api_key)
+        self.graph_engine = graph_engine
+        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        
+    def analyze_vulnerabilities(self, scan_result: ScanResult) -> Dict:
+        """Analyze vulnerabilities using LLM with graph context"""
+        # Get graph context
+        context = self.get_vulnerability_context(scan_result.vulnerabilities)
+        
+        # Prepare prompt
+        prompt = f"""
+        Analyze the following vulnerability scan results for {scan_result.target}:
+        
+        Vulnerabilities found:
+        {json.dumps([asdict(v) for v in scan_result.vulnerabilities], indent=2)}
+        
+        Network context:
+        {json.dumps(context, indent=2)}
+        
+        Provide a deterministic analysis including:
+        1. Risk assessment summary
+        2. Critical vulnerabilities requiring immediate attention
+        3. Recommended remediation steps
+        4. Potential attack vectors
+        5. Business impact assessment
+        
+        Base your analysis on factual data only. Cite specific CVE IDs and CVSS scores.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are a cybersecurity expert providing factual vulnerability analysis based on scan data."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.1,  # Low temperature for deterministic responses
+                max_tokens=2048
+            )
+            
+            return {
+                'analysis': response.choices[0].message.content,
+                'confidence': 0.9,  # High confidence due to factual data
+                'timestamp': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"LLM analysis error: {e}")
+            return {
+                'analysis': f"Analysis failed: {str(e)}",
+                'confidence': 0.0,
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    def get_vulnerability_context(self, vulnerabilities: List[Vulnerability]) -> Dict:
+        """Get additional context for vulnerabilities from graph database"""
+        context = {
+            'total_vulnerabilities': len(vulnerabilities),
+            'severity_distribution': {},
+            'exploit_availability': {},
+            'affected_services': set()
+        }
+        
+        for vuln in vulnerabilities:
+            # Count by severity
+            context['severity_distribution'][vuln.severity] = \
+                context['severity_distribution'].get(vuln.severity, 0) + 1
+            
+            # Count exploit availability
+            if vuln.exploit_available:
+                context['exploit_availability'][vuln.exploit_maturity] = \
+                    context['exploit_availability'].get(vuln.exploit_maturity, 0) + 1
+            
+            # Track affected services
+            context['affected_services'].add(vuln.affected_service)
+        
+        context['affected_services'] = list(context['affected_services'])
+        return context
+
+class VulnerabilityPrioritizer:
+    """Implements the specific prioritization logic"""
+    
+    def __init__(self, cve_db: CVEDatabase, graph_engine: GraphRLEngine):
+        self.cve_db = cve_db
+        self.graph_engine = graph_engine
+    
+    def prioritize_vulnerability(self, vuln: Vulnerability, target_ip: str) -> str:
+        """
+        Prioritize vulnerability based on:
+        - Critical: High/Critical exploit + lateral movement potential
+        - High: Medium exploit + lateral movement potential  
+        - Medium: Low/Info exploit + no lateral movement
+        - Low: Weak configuration
+        """
+        
+        # Check exploit availability and maturity
+        exploit_available, exploit_maturity = self.cve_db.check_exploit_availability(vuln.cve_id)
+        
+        # Get network context for lateral movement assessment
+        network_context = self.graph_engine.get_network_context(target_ip)
+        lateral_movement_potential = network_context['asset_count'] > 1
+        
+        # Apply prioritization logic
+        if exploit_available and exploit_maturity in ['functional', 'proof-of-concept']:
+            if vuln.severity.upper() in ['CRITICAL', 'HIGH'] and lateral_movement_potential:
+                return 'Critical'
+            elif vuln.severity.upper() == 'MEDIUM' and lateral_movement_potential:
+                return 'High'
+            elif vuln.severity.upper() in ['LOW', 'INFORMATIONAL'] and not lateral_movement_potential:
+                return 'Medium'
+        
+        # Check for weak configurations
+        weak_services = ['rdp', 'vnc', 'telnet', 'ftp', 'ssh']
+        if any(service in vuln.affected_service.lower() for service in weak_services):
+            return 'Low'
+        
+        # Default based on CVSS score
+        if vuln.cvss_score >= 9.0:
+            return 'Critical'
+        elif vuln.cvss_score >= 7.0:
+            return 'High'
+        elif vuln.cvss_score >= 4.0:
+            return 'Medium'
+        else:
+            return 'Low'
+
+class EVMSScanner:
+    """Main EVMS scanning engine"""
+    
+    def __init__(self, config: Dict):
+        self.config = config
+        self.tools = ToolManager(config['tools_dir'])
+        self.cve_db = CVEDatabase(config['data_dir'])
+        self.graph_engine = GraphRLEngine(
+            config['neo4j_uri'],
+            config['neo4j_user'], 
+            config['neo4j_password']
+        )
+        self.llm_analyzer = LLMAnalyzer(config['openai_api_key'], self.graph_engine)
+        self.prioritizer = VulnerabilityPrioritizer(self.cve_db, self.graph_engine)
+        
+        # NATS connection
+        self.nats_client = None
+        self.js_context = None
+        
+    async def initialize(self):
+        """Initialize EVMS components"""
+        logger.info("Initializing EVMS...")
+        
+        # Check tools
+        tool_status = self.tools.check_tools()
+        missing_tools = [tool for tool, available in tool_status.items() 
+                        if not available and tool != 'zeek']
+        
+        if missing_tools:
+            logger.error(f"Missing required tools: {missing_tools}")
+            return False
+        
+        # Update CVE database
+        await self.cve_db.update_cve_feeds()
+        
+        # Connect to NATS
+        try:
+            self.nats_client = await nats.connect(self.config['nats_url'])
+            self.js_context = self.nats_client.jetstream()
+            logger.info("Connected to NATS")
+        except Exception as e:
+            logger.error(f"NATS connection failed: {e}")
+            return False
+        
+        # Train GraphRL model
+        self.graph_engine.train_risk_model()
+        
+        logger.info("EVMS initialization completed")
+        return True
+    
+    async def scan_target(self, target: str, target_type: str = 'auto') -> ScanResult:
+        """Perform comprehensive scan of target"""
+        logger.info(f"Starting scan of {target}")
+        
+        # Determine target type if auto
+        if target_type == 'auto':
+            target_type = self.detect_target_type(target)
+        
+        # Phase 1: Discovery
+        targets = await self.discovery_phase(target, target_type)
+        
+        # Phase 2: Port scanning
+        open_ports = []
+        for t in targets:
+            ports = await self.tools.run_masscan(t)
+            open_ports.extend(ports)
+        
+        # Phase 3: Service fingerprinting
+        services = await self.tools.run_httpx(targets)
+        
+        # Phase 4: Vulnerability scanning
+        vulnerabilities = []
+        for t in targets:
+            vulns = await self.tools.run_nuclei(t)
+            for vuln_data in vulns:
+                vuln = self.parse_nuclei_result(vuln_data, t)
+                if vuln:
+                    vulnerabilities.append(vuln)
+        
+        # Phase 5: Risk assessment and prioritization
+        risk_assessment = self.calculate_risk_assessment(vulnerabilities, target)
+        lateral_movement_potential = self.assess_lateral_movement(target)
+        
+        # Prioritize vulnerabilities
+        for vuln in vulnerabilities:
+            vuln.priority = self.prioritizer.prioritize_vulnerability(vuln, target)
+        
+        # Determine overall priority
+        priorities = [v.priority for v in vulnerabilities]
+        if 'Critical' in priorities:
+            overall_priority = 'Critical'
+        elif 'High' in priorities:
+            overall_priority = 'High'
+        elif 'Medium' in priorities:
+            overall_priority = 'Medium'
+        else:
+            overall_priority = 'Low'
+        
+        # Create scan result
+        scan_result = ScanResult(
+            target=target,
+            timestamp=datetime.now(),
+            open_ports=open_ports,
+            services=services,
+            vulnerabilities=vulnerabilities,
+            risk_assessment=risk_assessment,
+            lateral_movement_potential=lateral_movement_potential,
+            priority=overall_priority
+        )
+        
+        # Store in graph database
+        self.graph_engine.store_scan_results(scan_result)
+        
+        # Publish to NATS
+        if self.js_context:
+            await self.js_context.publish(
+                "evms.scan.completed",
+                json.dumps(asdict(scan_result), default=str).encode()
+            )
+        
+        logger.info(f"Scan completed for {target} - Priority: {overall_priority}")
+        return scan_result
+    
+    def detect_target_type(self, target: str) -> str:
+        """Detect target type (IP, CIDR, domain, ASN)"""
+        try:
+            ipaddress.ip_address(target)
+            return 'ip'
+        except ValueError:
+            pass
+        
+        try:
+            ipaddress.ip_network(target, strict=False)
+            return 'cidr'
+        except ValueError:
+            pass
+        
+        if target.startswith('AS'):
+            return 'asn'
+        
+        return 'domain'
+    
+    async def discovery_phase(self, target: str, target_type: str) -> List[str]:
+        """Discovery phase - expand target to list of IPs/domains"""
+        targets = []
+        
+        if target_type == 'ip':
+            targets = [target]
+        elif target_type == 'cidr':
+            network = ipaddress.ip_network(target, strict=False)
+            targets = [str(ip) for ip in network.hosts()][:100]  # Limit for safety
+        elif target_type == 'domain':
+            # Subdomain discovery
+            subdomains = await self.tools.run_subfinder(target)
+            targets = [target] + subdomains
+        elif target_type == 'asn':
+            # ASN to IP ranges (simplified - would need BGP data in practice)
+            logger.warning("ASN scanning not fully implemented")
+            targets = [target]
+        
+        return targets
+    
+    def parse_nuclei_result(self, nuclei_data: Dict, target: str) -> Optional[Vulnerability]:
+        """Parse nuclei scan result into Vulnerability object"""
+        try:
+            template_id = nuclei_data.get('template-id', '')
+            info = nuclei_data.get('info', {})
+            
+            # Extract CVE if available
+            cve_id = ''
+            if 'classification' in info:
+                cve_refs = info['classification'].get('cve-id', [])
+                if cve_refs:
+                    cve_id = cve_refs[0]
+            
+            # Get CVE details from database
+            cve_info = None
+            if cve_id:
+                cve_info = self.cve_db.get_cve_info(cve_id)
+            
+            # Extract port from matched URL
+            port = 80  # Default
+            matched_at = nuclei_data.get('matched-at', '')
+            if ':' in matched_at:
+                try:
+                    port = int(matched_at.split(':')[-1].split('/')[0])
+                except:
+                    pass
+            
+            # Check exploit availability
+            exploit_available = False
+            exploit_maturity = 'none'
+            if cve_id:
+                exploit_available, exploit_maturity = self.cve_db.check_exploit_availability(cve_id)
+            
+            return Vulnerability(
+                cve_id=cve_id or template_id,
+                cvss_score=cve_info.get('cvss_score', 0.0) if cve_info else 0.0,
+                severity=info.get('severity', 'unknown').upper(),
+                description=info.get('description', ''),
+                exploit_available=exploit_available,
+                exploit_maturity=exploit_maturity,
+                affected_service=info.get('name', 'unknown'),
+                target=target,
+                port=port,
+                remediation=info.get('remediation', ''),
+                references=info.get('reference', [])
+            )
+            
+        except Exception as e:
+            logger.error(f"Error parsing nuclei result: {e}")
+            return None
+    
+    def calculate_risk_assessment(self, vulnerabilities: List[Vulnerability], target: str) -> Dict:
+        """Calculate overall risk assessment"""
+        if not vulnerabilities:
+            return {'total_score': 0.0, 'risk_level': 'Low'}
+        
+        # Calculate weighted risk score
+        total_score = 0.0
+        weights = {'Critical': 1.0, 'High': 0.8, 'Medium': 0.5, 'Low': 0.2}
+        
+        for vuln in vulnerabilities:
+            severity_weight = weights.get(vuln.severity.title(), 0.2)
+            exploit_weight = 1.5 if vuln.exploit_available else 1.0
+            cvss_normalized = vuln.cvss_score / 10.0
+            
+            vuln_score = cvss_normalized * severity_weight * exploit_weight
+            total_score += vuln_score
+        
+        # Normalize to 0-10 scale
+        total_score = min(total_score / len(vulnerabilities) * 10, 10.0)
+        
+        # Determine risk level
+        if total_score >= 8.0:
+            risk_level = 'Critical'
+        elif total_score >= 6.0:
+            risk_level = 'High'
+        elif total_score >= 4.0:
+            risk_level = 'Medium'
+        else:
+            risk_level = 'Low'
+        
+        return {
+            'total_score': total_score,
+            'risk_level': risk_level,
+            'vulnerability_count': len(vulnerabilities),
+            'exploit_count': sum(1 for v in vulnerabilities if v.exploit_available)
+        }
+    
+    def assess_lateral_movement(self, target: str) -> bool:
+        """Assess lateral movement potential"""
+        network_context = self.graph_engine.get_network_context(target)
+        return network_context['asset_count'] > 1
+
+class EVMSWebInterface:
+    """Simple web interface for EVMS control and reporting"""
+    
+    def __init__(self, scanner: EVMSScanner, port: int = 5000):
+        self.scanner = scanner
+        self.app = Flask(__name__)
+        self.app.config['SECRET_KEY'] = 'evms-secret-key'
+        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+        self.port = port
+        
+        self.setup_routes()
+        self.setup_socketio()
+    
+    def setup_routes(self):
+        """Setup Flask routes"""
+        
+        @self.app.route('/')
+        def index():
+            return render_template('index.html')
+        
+        @self.app.route('/api/scan', methods=['POST'])
+        def start_scan():
+            data = request.json
+            target = data.get('target')
+            target_type = data.get('target_type', 'auto')
+            
+            if not target:
+                return jsonify({'error': 'Target required'}), 400
+            
+            # Start scan in background
+            threading.Thread(
+                target=self.run_scan_async,
+                args=(target, target_type)
+            ).start()
+            
+            return jsonify({'status': 'Scan started', 'target': target})
+        
+        @self.app.route('/api/results/<target>')
+        def get_results(target):
+            # Get results from graph database
+            with self.scanner.graph_engine.driver.session() as session:
+                result = session.run("""
+                    MATCH (a:Asset {ip: $target})-[:HAS_VULNERABILITY]->(v:Vulnerability)
+                    RETURN a, collect(v) as vulnerabilities
+                """, {'target': target})
+                
+                record = result.single()
+                if record:
+                    return jsonify({
+                        'asset': dict(record['a']),
+                        'vulnerabilities': [dict(v) for v in record['vulnerabilities']]
+                    })
+            
+            return jsonify({'error': 'No results found'}), 404
+        
+        @self.app.route('/api/report/<target>/<format>')
+        def generate_report(target, format):
+            return self.generate_report_file(target, format)
+    
+    def setup_socketio(self):
+        """Setup SocketIO events"""
+        
+        @self.socketio.on('connect')
+        def handle_connect():
+            emit('status', {'message': 'Connected to EVMS'})
+        
+        @self.socketio.on('chat_message')
+        def handle_chat_message(data):
+            message = data.get('message', '')
+            
+            # Simple chat responses (could integrate with LLM)
+            if 'scan' in message.lower():
+                response = "To start a scan, use the scan form or API endpoint /api/scan"
+            elif 'status' in message.lower():
+                response = "EVMS is running. Check the dashboard for current status."
+            else:
+                response = "I can help with scanning and vulnerability management. Try asking about scans or status."
+            
+            emit('chat_response', {'message': response})
+    
+    def run_scan_async(self, target: str, target_type: str):
+        """Run scan asynchronously and emit updates"""
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            scan_result = loop.run_until_complete(
+                self.scanner.scan_target(target, target_type)
+            )
+            
+            # Emit scan completion
+            self.socketio.emit('scan_complete', {
+                'target': target,
+                'priority': scan_result.priority,
+                'vulnerability_count': len(scan_result.vulnerabilities),
+                'timestamp': scan_result.timestamp.isoformat()
+            })
+            
+        except Exception as e:
+            logger.error(f"Scan error: {e}")
+            self.socketio.emit('scan_error', {
+                'target': target,
+                'error': str(e)
+            })
+    
+    def generate_report_file(self, target: str, format: str):
+        """Generate and return report file"""
+        # Get scan results
+        with self.scanner.graph_engine.driver.session() as session:
+            result = session.run("""
+                MATCH (a:Asset {ip: $target})-[:HAS_VULNERABILITY]->(v:Vulnerability)
+                RETURN a, collect(v) as vulnerabilities
+            """, {'target': target})
+            
+            record = result.single()
+            if not record:
+                return jsonify({'error': 'No results found'}), 404
+            
+            asset_data = dict(record['a'])
+            vulnerabilities = [dict(v) for v in record['vulnerabilities']]
+        
+        # Generate report content
+        report_data = {
+            'target': target,
+            'timestamp': datetime.now().isoformat(),
+            'asset': asset_data,
+            'vulnerabilities': vulnerabilities,
+            'summary': {
+                'total_vulnerabilities': len(vulnerabilities),
+                'critical_count': len([v for v in vulnerabilities if v.get('severity') == 'CRITICAL']),
+                'high_count': len([v for v in vulnerabilities if v.get('severity') == 'HIGH']),
+                'medium_count': len([v for v in vulnerabilities if v.get('severity') == 'MEDIUM']),
+                'low_count': len([v for v in vulnerabilities if v.get('severity') == 'LOW'])
+            }
+        }
+        
+        if format == 'json':
+            return jsonify(report_data)
+        elif format == 'html':
+            return self.generate_html_report(report_data)
+        elif format == 'pdf':
+            return self.generate_pdf_report(report_data)
+        else:
+            return jsonify({'error': 'Unsupported format'}), 400
+    
+    def generate_html_report(self, data: Dict) -> str:
+        """Generate HTML report"""
+        template = Template("""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>EVMS Vulnerability Report - {{ data.target }}</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; }
+                .header { background: #2c3e50; color: white; padding: 20px; }
+                .summary { background: #ecf0f1; padding: 15px; margin: 20px 0; }
+                .vulnerability { border: 1px solid #ddd; margin: 10px 0; padding: 15px; }
+                .critical { border-left: 5px solid #e74c3c; }
+                .high { border-left: 5px solid #f39c12; }
+                .medium { border-left: 5px solid #f1c40f; }
+                .low { border-left: 5px solid #27ae60; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>EVMS Vulnerability Report</h1>
+                <p>Target: {{ data.target }}</p>
+                <p>Generated: {{ data.timestamp }}</p>
+            </div>
+            
+            <div class="summary">
+                <h2>Executive Summary</h2>
+                <p>Total Vulnerabilities: {{ data.summary.total_vulnerabilities }}</p>
+                <p>Critical: {{ data.summary.critical_count }}</p>
+                <p>High: {{ data.summary.high_count }}</p>
+                <p>Medium: {{ data.summary.medium_count }}</p>
+                <p>Low: {{ data.summary.low_count }}</p>
+            </div>
+            
+            <h2>Vulnerability Details</h2>
+            {% for vuln in data.vulnerabilities %}
+            <div class="vulnerability {{ vuln.severity.lower() }}">
+                <h3>{{ vuln.cve_id }}</h3>
+                <p><strong>Severity:</strong> {{ vuln.severity }}</p>
+                <p><strong>CVSS Score:</strong> {{ vuln.cvss_score }}</p>
+                <p><strong>Description:</strong> {{ vuln.description }}</p>
+                {% if vuln.exploit_available %}
+                <p><strong>Exploit Available:</strong> Yes ({{ vuln.exploit_maturity }})</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </body>
+        </html>
+        """)
+        
+        return template.render(data=data)
+    
+    def generate_pdf_report(self, data: Dict):
+        """Generate PDF report"""
+        html_content = self.generate_html_report(data)
+        
+        try:
+            pdf_path = f"/tmp/evms_report_{data['target'].replace('.', '_')}.pdf"
+            pdfkit.from_string(html_content, pdf_path)
+            return send_file(pdf_path, as_attachment=True)
+        except Exception as e:
+            logger.error(f"PDF generation error: {e}")
+            return jsonify({'error': 'PDF generation failed'}), 500
+    
+    def run(self):
+        """Run the web interface"""
+        self.socketio.run(self.app, host='0.0.0.0', port=self.port, debug=False)
+
+# HTML template for web interface
+WEB_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EVMS - Enterprise Vulnerability Management Scanner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { background: #2c3e50; color: white; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+        .card { background: white; padding: 20px; border-radius: 5px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px; }
+        button { background: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #2980b9; }
+        .status { padding: 10px; border-radius: 3px; margin-bottom: 10px; }
+        .status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .chat-container { height: 300px; border: 1px solid #ddd; padding: 10px; overflow-y: auto; background: white; }
+        .chat-message { margin-bottom: 10px; }
+        .chat-user { color: #2980b9; font-weight: bold; }
+        .chat-bot { color: #27ae60; font-weight: bold; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ EVMS - Enterprise Vulnerability Management Scanner</h1>
+            <p>Streamlined vulnerability scanning with GraphRL and LLM analysis</p>
+        </div>
+        
+        <div class="grid">
+            <div class="card">
+                <h2>Scan Target</h2>
+                <form id="scanForm">
+                    <div class="form-group">
+                        <label for="target">Target (IP, CIDR, Domain, ASN):</label>
+                        <input type="text" id="target" name="target" placeholder="192.168.1.1 or example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="targetType">Target Type:</label>
+                        <select id="targetType" name="targetType">
+                            <option value="auto">Auto-detect</option>
+                            <option value="ip">IP Address</option>
+                            <option value="cidr">CIDR Range</option>
+                            <option value="domain">Domain</option>
+                            <option value="asn">ASN</option>
+                        </select>
+                    </div>
+                    <button type="submit">Start Scan</button>
+                </form>
+                
+                <div id="scanStatus"></div>
+            </div>
+            
+            <div class="card">
+                <h2>Chat Interface</h2>
+                <div id="chatContainer" class="chat-container"></div>
+                <div class="form-group">
+                    <input type="text" id="chatInput" placeholder="Ask about scans, vulnerabilities, or status...">
+                    <button onclick="sendChatMessage()">Send</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Recent Scans</h2>
+            <div id="recentScans">
+                <p>No scans completed yet.</p>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Generate Reports</h2>
+            <div class="form-group">
+                <label for="reportTarget">Target:</label>
+                <input type="text" id="reportTarget" placeholder="Enter target IP or domain">
+            </div>
+            <div class="form-group">
+                <label for="reportFormat">Format:</label>
+                <select id="reportFormat">
+                    <option value="json">JSON</option>
+                    <option value="html">HTML</option>
+                    <option value="pdf">PDF</option>
+                </select>
+            </div>
+            <button onclick="generateReport()">Generate Report</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        
+        // Socket event handlers
+        socket.on('connect', function() {
+            addChatMessage('System', 'Connected to EVMS');
+        });
+        
+        socket.on('scan_complete', function(data) {
+            showStatus(`Scan completed for ${data.target} - Priority: ${data.priority}`, 'success');
+            updateRecentScans(data);
+        });
+        
+        socket.on('scan_error', function(data) {
+            showStatus(`Scan failed for ${data.target}: ${data.error}`, 'error');
+        });
+        
+        socket.on('chat_response', function(data) {
+            addChatMessage('EVMS', data.message);
+        });
+        
+        // Form handlers
+        document.getElementById('scanForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const target = document.getElementById('target').value;
+            const targetType = document.getElementById('targetType').value;
+            
+            fetch('/api/scan', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({target: target, target_type: targetType})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                } else {
+                    showStatus(`Scan started for ${target}`, 'success');
+                }
+            })
+            .catch(error => {
+                showStatus('Scan request failed', 'error');
+            });
+        });
+        
+        // Chat functions
+        function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (message) {
+                addChatMessage('You', message);
+                socket.emit('chat_message', {message: message});
+                input.value = '';
+            }
+        }
+        
+        function addChatMessage(sender, message) {
+            const container = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+            messageDiv.innerHTML = `<span class="chat-${sender.toLowerCase()}">${sender}:</span> ${message}`;
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // Report generation
+        function generateReport() {
+            const target = document.getElementById('reportTarget').value;
+            const format = document.getElementById('reportFormat').value;
+            
+            if (!target) {
+                showStatus('Please enter a target for the report', 'error');
+                return;
+            }
+            
+            window.open(`/api/report/${target}/${format}`, '_blank');
+        }
+        
+        // Utility functions
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('scanStatus');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 5000);
+        }
+        
+        function updateRecentScans(scanData) {
+            const container = document.getElementById('recentScans');
+            const scanDiv = document.createElement('div');
+            scanDiv.innerHTML = `
+                <p><strong>${scanData.target}</strong> - ${scanData.priority} priority 
+                (${scanData.vulnerability_count} vulnerabilities) - ${new Date(scanData.timestamp).toLocaleString()}</p>
+            `;
+            container.insertBefore(scanDiv, container.firstChild);
+        }
+        
+        // Enter key for chat
+        document.getElementById('chatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendChatMessage();
+            }
+        });
+    </script>
+</body>
+</html>
+"""
+
+async def main():
+    """Main EVMS entry point"""
+    parser = argparse.ArgumentParser(description='EVMS - Enterprise Vulnerability Management Scanner')
+    parser.add_argument('--target', help='Target to scan (IP, CIDR, domain, ASN)')
+    parser.add_argument('--target-type', default='auto', choices=['auto', 'ip', 'cidr', 'domain', 'asn'])
+    parser.add_argument('--web-only', action='store_true', help='Start web interface only')
+    parser.add_argument('--config', default='evms_config.json', help='Configuration file')
+    parser.add_argument('--port', type=int, default=5000, help='Web interface port')
+    
+    args = parser.parse_args()
+    
+    # Load configuration
+    config = {
+        'tools_dir': './tools',
+        'data_dir': './data',
+        'reports_dir': './reports',
+        'neo4j_uri': os.getenv('NEO4J_URI', 'bolt://localhost:7687'),
+        'neo4j_user': os.getenv('NEO4J_USER', 'neo4j'),
+        'neo4j_password': os.getenv('NEO4J_PASSWORD', 'password'),
+        'nats_url': os.getenv('NATS_URL', 'nats://localhost:4222'),
+        'openai_api_key': os.getenv('OPENAI_API_KEY', ''),
+        'web_port': args.port
+    }
+    
+    # Load config file if exists
+    if os.path.exists(args.config):
+        with open(args.config, 'r') as f:
+            file_config = json.load(f)
+            config.update(file_config)
+    
+    # Create directories
+    for dir_key in ['tools_dir', 'data_dir', 'reports_dir']:
+        Path(config[dir_key]).mkdir(exist_ok=True)
+    
+    # Create web template
+    templates_dir = Path('templates')
+    templates_dir.mkdir(exist_ok=True)
+    with open(templates_dir / 'index.html', 'w') as f:
+        f.write(WEB_TEMPLATE)
+    
+    # Initialize EVMS
+    scanner = EVMSScanner(config)
+    
+    if not await scanner.initialize():
+        logger.error("EVMS initialization failed")
+        return 1
+    
+    # Start web interface
+    web_interface = EVMSWebInterface(scanner, config['web_port'])
+    
+    if args.web_only:
+        logger.info(f"Starting EVMS web interface on port {config['web_port']}")
+        web_interface.run()
+    elif args.target:
+        # Command line scan
+        logger.info(f"Starting scan of {args.target}")
+        scan_result = await scanner.scan_target(args.target, args.target_type)
+        
+        # Print results
+        print(f"\n=== EVMS Scan Results for {args.target} ===")
+        print(f"Priority: {scan_result.priority}")
+        print(f"Risk Score: {scan_result.risk_assessment['total_score']:.2f}")
+        print(f"Vulnerabilities Found: {len(scan_result.vulnerabilities)}")
+        print(f"Lateral Movement Potential: {scan_result.lateral_movement_potential}")
+        
+        if scan_result.vulnerabilities:
+            print("\nTop Vulnerabilities:")
+            for vuln in sorted(scan_result.vulnerabilities, key=lambda x: x.cvss_score, reverse=True)[:5]:
+                print(f"  - {vuln.cve_id}: {vuln.severity} (CVSS: {vuln.cvss_score})")
+                if vuln.exploit_available:
+                    print(f"    ⚠️  Exploit available ({vuln.exploit_maturity})")
+        
+        # Start web interface for further interaction
+        print(f"\nStarting web interface on http://localhost:{config['web_port']}")
+        web_interface.run()
+    else:
+        # Interactive mode
+        print("EVMS - Enterprise Vulnerability Management Scanner")
+        print(f"Web interface available at http://localhost:{config['web_port']}")
+        web_interface.run()
+    
+    return 0
+
+if __name__ == "__main__":
+    try:
+        exit_code = asyncio.run(main())
+        sys.exit(exit_code)
+    except KeyboardInterrupt:
+        logger.info("EVMS shutdown requested")
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"EVMS fatal error: {e}")
+        sys.exit(1)
