@@ -1,4 +1,4 @@
-<!-- EVMS (c) Shane D. Shook, 2025 All Rights Reserved -->
+<!-- EVMS (c) Shane D. Shook, PhD, 2025 All Rights Reserved -->
 # Contributing to EVMS
 
 Thank you for your interest in contributing to the Exposure and Vulnerability Management System (EVMS). This document provides guidelines and information for contributors.

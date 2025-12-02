@@ -1,4 +1,4 @@
-<!-- EVMS (c) Shane D. Shook, 2025 All Rights Reserved -->
+<!-- EVMS (c) Shane D. Shook, PhD, 2025 All Rights Reserved -->
 # Changelog
 
 All notable changes to the EVMS (Exposure and Vulnerability Management System) project will be documented in this file.

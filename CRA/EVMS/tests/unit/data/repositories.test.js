@@ -1,4 +1,4 @@
-// EVMS (c) Shane D. Shook, 2025 All Rights Reserved
+// EVMS (c) Shane D. Shook, PhD, 2025 All Rights Reserved
 // Data repositories unit tests
 
 module.exports = {};
