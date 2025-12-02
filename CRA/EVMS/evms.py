@@ -13,9 +13,12 @@ A streamlined, single-script vulnerability management solution with:
 """
 
 import asyncio
+import csv
+import io
 import json
 import logging
 import os
+import re
 import sys
 import subprocess
 import threading
@@ -41,25 +44,50 @@ import aiohttp
 
 
 # Graph database and ML
-import neo4j
-import numpy as np
-from sklearn.preprocessing import StandardScaler
+try:
+    import neo4j
+except ImportError:
+    neo4j = None
+try:
+    import numpy as np
+    from sklearn.preprocessing import StandardScaler
+except ImportError:
+    np = None
+    StandardScaler = None
 
-from sklearn.ensemble import RandomForestClassifier
-import xgboost as xgb
-import lightgbm as lgb
+try:
+    from sklearn.ensemble import RandomForestClassifier
+except ImportError:
+    RandomForestClassifier = None
+try:
+    import xgboost as xgb
+except ImportError:
+    xgb = None
+try:
+    import lightgbm as lgb
+except ImportError:
+    lgb = None
 
 
 # Simple event system for internal coordination
 from collections import defaultdict
 
 # LLM integration
-import openai
-from sentence_transformers import SentenceTransformer
+try:
+    import openai
+except ImportError:
+    openai = None
+try:
+    from sentence_transformers import SentenceTransformer
+except ImportError:
+    SentenceTransformer = None
 
 # Report generation
 from jinja2 import Template
-import pdfkit
+try:
+    import pdfkit
+except ImportError:
+    pdfkit = None
 from datetime import datetime
 
 # Configure logging
@@ -321,7 +349,7 @@ class CVEDatabase:
                 cpe_matches TEXT,
                 exploit_available INTEGER DEFAULT 0,
                 exploit_maturity TEXT,
-                references TEXT
+                reference_urls TEXT
             )
         ''')
         
@@ -334,8 +362,24 @@ class CVEDatabase:
                 metasploit_module TEXT,
                 maturity TEXT,
                 reliability TEXT,
-                FOREIGN KEY (cve_id) REFERENCES cves (cve_id)
+                exploit_type TEXT,
+                platform TEXT,
+                description TEXT,
+                date_published TEXT,
+                author TEXT,
+                verified INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+        ''')
+        
+        # Create index for faster CVE lookups
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_exploits_cve_id ON exploits (cve_id)
+        ''')
+        
+        # Create index for maturity-based queries
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_exploits_maturity ON exploits (maturity)
         ''')
         
         conn.commit()
@@ -360,9 +404,135 @@ class CVEDatabase:
                     if response.status == 200:
                         data = await response.json()
                         await self.store_cve_data(data.get('vulnerabilities', []))
+                
+                # Update Exploit DB data
+                await self.update_exploit_feeds(session)
                         
         except Exception as e:
             logger.error(f"Error updating CVE feeds: {e}")
+    
+    async def update_exploit_feeds(self, session: aiohttp.ClientSession):
+        """Update exploit database from Exploit-DB"""
+        logger.info("Updating Exploit-DB feeds...")
+        
+        # Exploit-DB CSV URL (GitLab raw file)
+        exploitdb_url = "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv"
+        
+        try:
+            # Use custom headers to avoid robots.txt blocking
+            headers = {
+                'User-Agent': 'EVMS-Security-Scanner/1.0 (Vulnerability Research)',
+                'Accept': 'text/csv,text/plain,*/*'
+            }
+            
+            async with session.get(exploitdb_url, headers=headers) as response:
+                if response.status == 200:
+                    csv_content = await response.text()
+                    await self.parse_exploit_csv(csv_content)
+                else:
+                    logger.warning(f"Failed to fetch Exploit-DB CSV: HTTP {response.status}")
+                    # Fallback: try alternative sources or skip
+                    
+        except Exception as e:
+            logger.error(f"Error updating Exploit-DB feeds: {e}")
+    
+    async def parse_exploit_csv(self, csv_content: str):
+        """Parse Exploit-DB CSV and store exploit data"""
+        logger.info("Parsing Exploit-DB CSV data...")
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Clear existing exploit data for fresh update
+        cursor.execute('DELETE FROM exploits')
+        
+        csv_reader = csv.reader(io.StringIO(csv_content))
+        header = next(csv_reader, None)  # Skip header row
+        
+        exploit_count = 0
+        cve_pattern = re.compile(r'CVE-\d{4}-\d{4,7}', re.IGNORECASE)
+        
+        for row in csv_reader:
+            try:
+                if len(row) < 3:  # Ensure minimum required columns
+                    continue
+                
+                # Typical Exploit-DB CSV format:
+                # id,file,description,date,author,type,platform,port
+                edb_id = row[0].strip() if len(row) > 0 else ''
+                file_path = row[1].strip() if len(row) > 1 else ''
+                description = row[2].strip() if len(row) > 2 else ''
+                date_published = row[3].strip() if len(row) > 3 else ''
+                author = row[4].strip() if len(row) > 4 else ''
+                exploit_type = row[5].strip() if len(row) > 5 else ''
+                platform = row[6].strip() if len(row) > 6 else ''
+                
+                # Extract CVE IDs from description
+                cve_matches = cve_pattern.findall(description)
+                
+                # Determine exploit maturity based on type and description
+                maturity = self.determine_exploit_maturity(description, exploit_type, file_path)
+                
+                # Store exploit for each CVE found
+                for cve_id in cve_matches:
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO exploits 
+                        (cve_id, exploit_db_id, metasploit_module, maturity, reliability, 
+                         exploit_type, platform, description, date_published, author, verified)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        cve_id.upper(),
+                        edb_id,
+                        'metasploit' if 'metasploit' in file_path.lower() else None,
+                        maturity,
+                        'normal',  # Default reliability
+                        exploit_type,
+                        platform,
+                        description[:500],  # Truncate long descriptions
+                        date_published,
+                        author,
+                        1 if 'verified' in description.lower() else 0
+                    ))
+                    exploit_count += 1
+                
+                # If no CVE found but exploit exists, we might want to store it anyway
+                # for future CVE mapping improvements
+                
+            except Exception as e:
+                logger.debug(f"Error parsing exploit row: {e}")
+                continue
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Stored {exploit_count} exploit-to-CVE mappings from Exploit-DB")
+    
+    def determine_exploit_maturity(self, description: str, exploit_type: str, file_path: str) -> str:
+        """Determine exploit maturity level based on available information"""
+        desc_lower = description.lower()
+        type_lower = exploit_type.lower()
+        path_lower = file_path.lower()
+        
+        # Functional exploits (highest maturity)
+        if any(keyword in desc_lower for keyword in [
+            'remote code execution', 'rce', 'shell', 'privilege escalation',
+            'authentication bypass', 'sql injection'
+        ]):
+            return 'functional'
+        
+        # Metasploit modules are typically functional
+        if 'metasploit' in path_lower or '.rb' in path_lower:
+            return 'functional'
+        
+        # Proof-of-concept indicators
+        if any(keyword in desc_lower for keyword in [
+            'poc', 'proof of concept', 'proof-of-concept', 'demonstration',
+            'denial of service', 'dos', 'crash'
+        ]):
+            return 'proof-of-concept'
+        
+        # Default to proof-of-concept for safety
+        return 'proof-of-concept'
     
     async def store_cve_data(self, vulnerabilities: List[Dict]):
         """Store CVE data in database"""
@@ -435,22 +605,90 @@ class CVEDatabase:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        cursor.execute('SELECT maturity FROM exploits WHERE cve_id = ?', (cve_id,))
+        cursor.execute('''
+            SELECT maturity, metasploit_module, verified, exploit_db_id, platform, exploit_type
+            FROM exploits 
+            WHERE cve_id = ? 
+            ORDER BY 
+                CASE maturity 
+                    WHEN 'functional' THEN 1 
+                    WHEN 'proof-of-concept' THEN 2 
+                    ELSE 3 
+                END,
+                verified DESC
+        ''', (cve_id,))
         results = cursor.fetchall()
         
         conn.close()
         
         if results:
-            # Determine highest maturity level
-            maturities = [r[0] for r in results]
-            if 'functional' in maturities:
-                return True, 'functional'
-            elif 'proof-of-concept' in maturities:
-                return True, 'proof-of-concept'
-            else:
-                return True, 'unknown'
+            # Get the best exploit (highest maturity, verified if possible)
+            best_exploit = results[0]
+            maturity, metasploit_module, verified, edb_id, platform, exploit_type = best_exploit
+            
+            # Count different types of exploits
+            functional_count = sum(1 for r in results if r[0] == 'functional')
+            poc_count = sum(1 for r in results if r[0] == 'proof-of-concept')
+            metasploit_count = sum(1 for r in results if r[1] is not None)
+            verified_count = sum(1 for r in results if r[2] == 1)
+            
+            # Build detailed maturity description
+            details = []
+            if functional_count > 0:
+                details.append(f"{functional_count} functional")
+            if poc_count > 0:
+                details.append(f"{poc_count} PoC")
+            if metasploit_count > 0:
+                details.append(f"{metasploit_count} Metasploit")
+            if verified_count > 0:
+                details.append(f"{verified_count} verified")
+            
+            maturity_desc = maturity
+            if details:
+                maturity_desc += f" ({', '.join(details)})"
+            
+            return True, maturity_desc
         
         return False, 'none'
+    
+    def get_exploit_details(self, cve_id: str) -> List[Dict]:
+        """Get detailed exploit information for a CVE"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT exploit_db_id, metasploit_module, maturity, reliability, 
+                   exploit_type, platform, description, date_published, author, verified
+            FROM exploits 
+            WHERE cve_id = ?
+            ORDER BY 
+                CASE maturity 
+                    WHEN 'functional' THEN 1 
+                    WHEN 'proof-of-concept' THEN 2 
+                    ELSE 3 
+                END,
+                verified DESC
+        ''', (cve_id,))
+        results = cursor.fetchall()
+        
+        conn.close()
+        
+        exploits = []
+        for row in results:
+            exploits.append({
+                'exploit_db_id': row[0],
+                'metasploit_module': row[1],
+                'maturity': row[2],
+                'reliability': row[3],
+                'exploit_type': row[4],
+                'platform': row[5],
+                'description': row[6],
+                'date_published': row[7],
+                'author': row[8],
+                'verified': bool(row[9])
+            })
+        
+        return exploits
 
 class GraphEnsembleEngine:
     """Graph-based Ensemble Classifier for vulnerability prioritization"""
