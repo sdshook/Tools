@@ -1,0 +1,320 @@
+version: '3.8'
+
+services:
+  # NATS JetStream for messaging
+  nats:
+    image: nats:2.10-alpine
+    container_name: evms-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+      - "6222:6222"
+    command: [
+      "--jetstream",
+      "--store_dir=/data",
+      "--max_memory_store=1GB",
+      "--max_file_store=10GB",
+      "--http_port=8222"
+    ]
+    volumes:
+      - nats_data:/data
+    networks:
+      - evms-network
+    restart: unless-stopped
+
+  # Neo4j Graph Database
+  neo4j:
+    image: neo4j:5.12-community
+    container_name: evms-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/evms_password
+      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*,gds.*
+      - NEO4J_dbms_memory_heap_initial_size=512m
+      - NEO4J_dbms_memory_heap_max_size=2G
+      - NEO4J_dbms_memory_pagecache_size=1G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    networks:
+      - evms-network
+    restart: unless-stopped
+
+  # Redis for caching and KV storage
+  redis:
+    image: redis:7.2-alpine
+    container_name: evms-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass evms_redis_password
+    volumes:
+      - redis_data:/data
+    networks:
+      - evms-network
+    restart: unless-stopped
+
+  # EVMS Orchestrator Service
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    container_name: evms-orchestrator
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NATS_URL=nats://nats:4222
+      - GRAPH_DB_URL=bolt://neo4j:7687
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=evms_redis_password
+    depends_on:
+      - nats
+      - neo4j
+      - redis
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    networks:
+      - evms-network
+    restart: unless-stopped
+
+  # EVMS Scanning Agents with Masscan and Nuclei
+  agents:
+    build:
+      context: .
+      dockerfile: Dockerfile.agents
+    container_name: evms-agents
+    environment:
+      - NODE_ENV=production
+      - NATS_URL=nats://nats:4222
+      - GRAPH_DB_URL=bolt://neo4j:7687
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=evms_redis_password
+      - AGENT_POOL_SIZE=5
+    depends_on:
+      - nats
+      - neo4j
+      - redis
+      - orchestrator
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - ./nuclei-templates:/app/nuclei-templates
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - evms-network
+    restart: unless-stopped
+    deploy:
+      replicas: 3
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    privileged: true
+
+  # Zeek Network Security Monitor
+  zeek:
+    image: zeek/zeek:6.0.3
+    container_name: evms-zeek
+    environment:
+      - ZEEK_INTERFACE=eth0
+    volumes:
+      - ./zeek/scripts:/usr/local/zeek/share/zeek/site
+      - ./zeek/logs:/usr/local/zeek/logs
+      - zeek_data:/usr/local/zeek/spool
+    networks:
+      - evms-network
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    network_mode: host
+
+  # GraphRL ML Service
+  graphrl:
+    build:
+      context: .
+      dockerfile: Dockerfile.graphrl
+    container_name: evms-graphrl
+    environment:
+      - PYTHONPATH=/app
+      - NATS_URL=nats://nats:4222
+      - GRAPH_DB_URL=bolt://neo4j:7687
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=evms_redis_password
+      - CUDA_VISIBLE_DEVICES=0
+    depends_on:
+      - nats
+      - neo4j
+      - redis
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - evms-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Dashboard UI Service
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: evms-dashboard
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - API_URL=http://orchestrator:3000
+      - WEBSOCKET_URL=ws://orchestrator:3000
+    depends_on:
+      - orchestrator
+    volumes:
+      - ./config:/app/config
+    networks:
+      - evms-network
+    restart: unless-stopped
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: evms-prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - evms-network
+    restart: unless-stopped
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: evms-grafana
+    ports:
+      - "3002:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=evms_grafana_password
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - evms-network
+    restart: unless-stopped
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.49
+    container_name: evms-jaeger
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - evms-network
+    restart: unless-stopped
+
+  # Elasticsearch for logging
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.9.0
+    container_name: evms-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - evms-network
+    restart: unless-stopped
+
+  # Kibana for log visualization
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.9.0
+    container_name: evms-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    networks:
+      - evms-network
+    restart: unless-stopped
+
+  # Vector database for RAG
+  qdrant:
+    image: qdrant/qdrant:v1.5.0
+    container_name: evms-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - evms-network
+    restart: unless-stopped
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: evms-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - orchestrator
+      - dashboard
+      - grafana
+      - kibana
+    networks:
+      - evms-network
+    restart: unless-stopped
+
+volumes:
+  nats_data:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
+  neo4j_plugins:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  elasticsearch_data:
+  qdrant_data:
+  zeek_data:
+
+networks:
+  evms-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
