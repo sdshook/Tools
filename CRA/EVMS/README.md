@@ -68,15 +68,23 @@ docker-compose up -d
 
 ### 3. Run EVMS
 
+**Supported Target Types:** ASN, CIDR, Domain (FQDN/TLD), or IP Address
+
 ```bash
 # Web interface only
 python evms.py --web-only
 
-# Command line scan
+# IP Address scanning
+python evms.py --target 192.168.1.100
+
+# CIDR range scanning
 python evms.py --target 192.168.1.0/24
 
-# Scan with specific type
+# Domain/FQDN scanning (with subdomain discovery)
 python evms.py --target example.com --target-type domain
+
+# ASN scanning (Autonomous System Number)
+python evms.py --target AS15169 --target-type asn
 
 # Interactive mode (scan + web interface)
 python evms.py --target 10.0.0.1
@@ -248,17 +256,19 @@ chat_response    # LLM chat response
 
 ### Command Line Scanning
 
+**Available Target Types:** ASN, CIDR, Domain (FQDN/TLD), or IP Address
+
 ```bash
-# Scan single IP
+# IP Address - Scan single IP
 python evms.py --target 192.168.1.100
 
-# Scan CIDR range
+# CIDR - Scan network range
 python evms.py --target 10.0.0.0/24
 
-# Scan domain with subdomains
+# Domain/FQDN/TLD - Scan domain with subdomain discovery
 python evms.py --target example.com --target-type domain
 
-# ASN scanning (requires BGP data)
+# ASN - Scan Autonomous System Number (requires BGP data)
 python evms.py --target AS15169 --target-type asn
 ```
 
