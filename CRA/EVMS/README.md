@@ -34,10 +34,15 @@ EVMS is a focused, practical vulnerability management tool that performs automat
          │                                                 │
          │ ┌─────────────┐  ┌─────────────┐  ┌───────────┐ │
          │ │   Neo4j     │  │ Event Bus   │  │  SQLite   │ │
-         │ │  GraphDB    │  │ (Internal)  │  │  CVE DB   │ │
+         │ │  GraphDB    │  │ (Internal)  │  │CVE+Exploit│ │
          │ └─────────────┘  └─────────────┘  └───────────┘ │
          └─────────────────────────────────────────────────┘
 ```
+
+**Data Layer Components:**
+- **Neo4j GraphDB**: Network topology, asset relationships, lateral movement analysis
+- **SQLite CVE+Exploit DB**: NVD vulnerability data + Exploit-DB integration with daily updates
+- **Event Bus**: Real-time scan progress and WebSocket communication
 
 ## 🚀 Quick Start
 
@@ -289,6 +294,42 @@ def extract_graph_features(vuln, target_ip):
     "max_targets": 100
   }
 }
+```
+
+## 🗃️ Vulnerability Data Sources
+
+EVMS integrates multiple authoritative sources for comprehensive vulnerability intelligence:
+
+### CVE Database (NVD)
+- **Source**: NIST National Vulnerability Database
+- **Update Frequency**: Daily automatic updates
+- **Data**: CVSS scores, severity ratings, vulnerability descriptions, CPE matches
+- **Status**: ✅ **Fully Implemented** - Automatic feed updates with 30-day rolling window
+
+### Exploit Database Integration
+- **Source**: Exploit-DB (GitLab repository)
+- **Update Frequency**: Daily automatic updates from `files_exploits.csv`
+- **Data**: Exploit availability, maturity classification, platform details, author information
+- **Features**:
+  - Automatic CVE extraction from exploit descriptions
+  - Intelligent maturity classification (functional vs proof-of-concept)
+  - Metasploit module detection
+  - Platform-specific exploit mapping
+- **Status**: ✅ **Fully Implemented** - Complete integration with CVE-based prioritization
+
+### Data Processing Pipeline
+```python
+# Automatic daily updates
+await cve_db.update_cve_feeds()      # NVD CVE data
+await cve_db.update_exploit_feeds()  # Exploit-DB CSV data
+
+# Exploit availability checking
+available, maturity = cve_db.check_exploit_availability("CVE-2024-12345")
+# Returns: (True, "functional (2 functional, 1 PoC)")
+
+# Detailed exploit information
+exploits = cve_db.get_exploit_details("CVE-2024-12345")
+# Returns: [{'exploit_db_id': '52177', 'maturity': 'functional', 'platform': 'linux', ...}]
 ```
 
 ## 🧠 Ensemble Machine Learning & GraphDB
