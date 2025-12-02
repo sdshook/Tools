@@ -1,0 +1,383 @@
+# EVMS (c) Shane D. Shook, 2025 All Rights Reserved
+# EVMS API OpenAPI Specification
+
+openapi: 3.0.3
+info:
+  title: EVMS API
+  description: |
+    Exposure and Vulnerability Management System (EVMS) API
+    
+    This API provides comprehensive vulnerability management capabilities including:
+    - Asset discovery and inventory
+    - Vulnerability scanning and assessment
+    - Risk scoring and prioritization
+    - GraphRL-powered recommendations
+    - Human-on-the-loop workflows
+    - Real-time monitoring and alerting
+  version: 1.0.0
+  contact:
+    name: EVMS Support
+    email: support@example.com
+  license:
+    name: All Rights Reserved
+    url: https://example.com/license
+
+servers:
+  - url: https://api.evms.example.com/v1
+    description: Production server
+  - url: https://staging-api.evms.example.com/v1
+    description: Staging server
+  - url: http://localhost:3000/api/v1
+    description: Development server
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns the health status of the EVMS API
+      tags:
+        - System
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  timestamp:
+                    type: string
+                    format: date-time
+                  version:
+                    type: string
+                    example: "1.0.0"
+
+  /auth/login:
+    post:
+      summary: User authentication
+      description: Authenticate user and return JWT token
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  expiresIn:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+
+  /assets:
+    get:
+      summary: List assets
+      description: Retrieve a list of discovered assets
+      tags:
+        - Assets
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: filter
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of assets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Asset'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /vulnerabilities:
+    get:
+      summary: List vulnerabilities
+      description: Retrieve a list of discovered vulnerabilities
+      tags:
+        - Vulnerabilities
+      parameters:
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [critical, high, medium, low, info]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, resolved, false_positive, accepted_risk]
+      responses:
+        '200':
+          description: List of vulnerabilities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Vulnerability'
+
+  /scans:
+    post:
+      summary: Create new scan
+      description: Initiate a new vulnerability scan
+      tags:
+        - Scans
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanRequest'
+      responses:
+        '201':
+          description: Scan created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scan'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [super_admin, admin, security_analyst, operator, viewer]
+        createdAt:
+          type: string
+          format: date-time
+
+    Asset:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        hostname:
+          type: string
+        ipAddress:
+          type: string
+          format: ipv4
+        assetType:
+          type: string
+          enum: [server, workstation, network_device, application, database]
+        operatingSystem:
+          type: string
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+        lastSeen:
+          type: string
+          format: date-time
+        riskScore:
+          type: number
+          minimum: 0
+          maximum: 10
+
+    Service:
+      type: object
+      properties:
+        port:
+          type: integer
+        protocol:
+          type: string
+        service:
+          type: string
+        version:
+          type: string
+        banner:
+          type: string
+
+    Vulnerability:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        cveId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [critical, high, medium, low, info]
+        cvssScore:
+          type: number
+          minimum: 0
+          maximum: 10
+        assetId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [open, resolved, false_positive, accepted_risk]
+        discoveredAt:
+          type: string
+          format: date-time
+        riskScore:
+          type: number
+          minimum: 0
+          maximum: 10
+
+    Scan:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [network_discovery, vulnerability_scan, compliance_check]
+        targets:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+
+    ScanRequest:
+      type: object
+      required:
+        - name
+        - type
+        - targets
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [network_discovery, vulnerability_scan, compliance_check]
+        targets:
+          type: array
+          items:
+            type: string
+        options:
+          type: object
+          additionalProperties: true
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        pages:
+          type: integer
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+
+tags:
+  - name: System
+    description: System health and status endpoints
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Assets
+    description: Asset discovery and inventory management
+  - name: Vulnerabilities
+    description: Vulnerability management and tracking
+  - name: Scans
+    description: Vulnerability scanning operations
+  - name: Risks
+    description: Risk assessment and management
+  - name: Reports
+    description: Reporting and analytics
+  - name: GraphRL
+    description: Graph reinforcement learning endpoints
+  - name: HOTL
+    description: Human-on-the-loop workflow management

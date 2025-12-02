@@ -1,0 +1,45 @@
+# EVMS (c) Shane D. Shook, 2025 All Rights Reserved
+# EVMS Orchestrator Service Dockerfile
+
+FROM node:18-alpine
+
+# Install system dependencies
+RUN apk add --no-cache \
+    curl \
+    git \
+    ca-certificates
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy source code
+COPY src/services/orchestrator/ ./src/services/orchestrator/
+COPY src/config/ ./src/config/
+COPY src/data/ ./src/data/
+COPY src/utils/ ./src/utils/
+
+# Create non-root user
+RUN addgroup -g 1001 -S evms && \
+    adduser -S evms -u 1001
+
+# Change ownership
+RUN chown -R evms:evms /app
+
+# Switch to non-root user
+USER evms
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Start orchestrator service
+CMD ["node", "src/services/orchestrator/index.js"]
