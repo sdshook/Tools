@@ -755,24 +755,35 @@ class EVMSScanner:
         if target_type == 'auto':
             target_type = self.detect_target_type(target)
         
-        # Phase 1: Discovery
-        targets = await self.discovery_phase(target, target_type)
+        # Phase 1: Discovery - Get all targets (IPs/domains)
+        discovery_targets = await self.discovery_phase(target, target_type)
+        logger.info(f"Discovery found {len(discovery_targets)} targets")
         
-        # Phase 2: Port scanning
-        open_ports = []
-        for t in targets:
+        # Phase 2: Port scanning - Find open ports/services
+        all_open_ports = []
+        for t in discovery_targets:
+            logger.info(f"Port scanning {t}")
             ports = await self.tools.run_masscan(t)
-            open_ports.extend(ports)
+            all_open_ports.extend(ports)
         
-        # Phase 3: Service fingerprinting
-        services = await self.tools.run_httpx(targets)
+        logger.info(f"Found {len(all_open_ports)} open ports")
         
-        # Phase 4: Vulnerability scanning
+        # Phase 3: Build service URLs from discovered ports
+        service_urls = self.build_service_urls(all_open_ports)
+        logger.info(f"Built {len(service_urls)} service URLs")
+        
+        # Phase 4: Service fingerprinting on discovered services
+        services = []
+        if service_urls:
+            services = await self.tools.run_httpx(service_urls)
+        
+        # Phase 5: Vulnerability scanning on discovered services
         vulnerabilities = []
-        for t in targets:
-            vulns = await self.tools.run_nuclei(t)
+        for service_url in service_urls:
+            logger.info(f"Vulnerability scanning {service_url}")
+            vulns = await self.tools.run_nuclei(service_url)
             for vuln_data in vulns:
-                vuln = self.parse_nuclei_result(vuln_data, t)
+                vuln = self.parse_nuclei_result(vuln_data, service_url)
                 if vuln:
                     vulnerabilities.append(vuln)
         
@@ -799,7 +810,7 @@ class EVMSScanner:
         scan_result = ScanResult(
             target=target,
             timestamp=datetime.now(),
-            open_ports=open_ports,
+            open_ports=all_open_ports,
             services=services,
             vulnerabilities=vulnerabilities,
             risk_assessment=risk_assessment,
@@ -842,7 +853,7 @@ class EVMSScanner:
         return 'domain'
     
     async def discovery_phase(self, target: str, target_type: str) -> List[str]:
-        """Discovery phase - expand target to list of IPs/domains"""
+        """Discovery phase - expand target to list of IPs"""
         targets = []
         
         if target_type == 'ip':
@@ -853,13 +864,79 @@ class EVMSScanner:
         elif target_type == 'domain':
             # Subdomain discovery
             subdomains = await self.tools.run_subfinder(target)
-            targets = [target] + subdomains
+            all_domains = [target] + subdomains
+            
+            # Resolve all domains to IPs
+            targets = []
+            for domain in all_domains:
+                try:
+                    # Resolve domain to IP addresses
+                    result = socket.getaddrinfo(domain, None, socket.AF_INET)
+                    ips = list(set([r[4][0] for r in result]))
+                    targets.extend(ips)
+                    logger.info(f"Resolved {domain} to {ips}")
+                except socket.gaierror as e:
+                    logger.warning(f"Failed to resolve {domain}: {e}")
+                    continue
         elif target_type == 'asn':
             # ASN to IP ranges (simplified - would need BGP data in practice)
             logger.warning("ASN scanning not fully implemented")
             targets = [target]
         
+        # Remove duplicates
+        targets = list(set(targets))
         return targets
+    
+    def build_service_urls(self, open_ports: List[Dict]) -> List[str]:
+        """Build service URLs from masscan open port results"""
+        service_urls = []
+        
+        for port_info in open_ports:
+            ip = port_info.get('ip', '')
+            port = port_info.get('port', 0)
+            protocol = port_info.get('protocol', 'tcp')
+            
+            if not ip or not port:
+                continue
+            
+            # Build URLs based on common port/service mappings
+            if port in [80, 8080, 8000, 8008, 8888]:
+                service_urls.append(f"http://{ip}:{port}")
+            elif port in [443, 8443, 9443]:
+                service_urls.append(f"https://{ip}:{port}")
+            elif port in [21]:  # FTP
+                service_urls.append(f"ftp://{ip}:{port}")
+            elif port in [22]:  # SSH
+                service_urls.append(f"ssh://{ip}:{port}")
+            elif port in [23]:  # Telnet
+                service_urls.append(f"telnet://{ip}:{port}")
+            elif port in [25, 587, 465]:  # SMTP
+                service_urls.append(f"smtp://{ip}:{port}")
+            elif port in [53]:  # DNS
+                service_urls.append(f"dns://{ip}:{port}")
+            elif port in [110, 995]:  # POP3
+                service_urls.append(f"pop3://{ip}:{port}")
+            elif port in [143, 993]:  # IMAP
+                service_urls.append(f"imap://{ip}:{port}")
+            elif port in [3389]:  # RDP
+                service_urls.append(f"rdp://{ip}:{port}")
+            elif port in [5900, 5901, 5902]:  # VNC
+                service_urls.append(f"vnc://{ip}:{port}")
+            else:
+                # For unknown ports, try both HTTP and HTTPS
+                service_urls.append(f"http://{ip}:{port}")
+                if port != 80:  # Don't duplicate port 80
+                    service_urls.append(f"https://{ip}:{port}")
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_urls = []
+        for url in service_urls:
+            if url not in seen:
+                seen.add(url)
+                unique_urls.append(url)
+        
+        return unique_urls
     
     def parse_nuclei_result(self, nuclei_data: Dict, target: str) -> Optional[Vulnerability]:
         """Parse nuclei scan result into Vulnerability object"""
