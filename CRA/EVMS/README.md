@@ -68,7 +68,7 @@ docker-compose up -d
 
 ### 3. Run EVMS
 
-**Supported Target Types:** ASN, CIDR, Domain (FQDN/TLD), or IP Address
+**Supported Target Types:** ASN, CIDR, TLD (Top-Level Domain), FQDN (Fully Qualified Domain Name), or IP Address
 
 ```bash
 # Web interface only
@@ -80,8 +80,11 @@ python evms.py --target 192.168.1.100
 # CIDR range scanning
 python evms.py --target 192.168.1.0/24
 
-# Domain/FQDN scanning (with subdomain discovery)
+# TLD scanning (domain + all subdomains)
 python evms.py --target example.com --target-type domain
+
+# FQDN scanning (specific host)
+python evms.py --target www.example.com --target-type domain
 
 # ASN scanning (Autonomous System Number)
 python evms.py --target AS15169 --target-type asn
@@ -256,7 +259,7 @@ chat_response    # LLM chat response
 
 ### Command Line Scanning
 
-**Available Target Types:** ASN, CIDR, Domain (FQDN/TLD), or IP Address
+**Available Target Types:** ASN, CIDR, TLD (Top-Level Domain), FQDN (Fully Qualified Domain Name), or IP Address
 
 ```bash
 # IP Address - Scan single IP
@@ -265,8 +268,11 @@ python evms.py --target 192.168.1.100
 # CIDR - Scan network range
 python evms.py --target 10.0.0.0/24
 
-# Domain/FQDN/TLD - Scan domain with subdomain discovery
+# TLD - Scan domain with subdomain discovery
 python evms.py --target example.com --target-type domain
+
+# FQDN - Scan specific fully qualified domain name
+python evms.py --target www.example.com --target-type domain
 
 # ASN - Scan Autonomous System Number (requires BGP data)
 python evms.py --target AS15169 --target-type asn
@@ -303,7 +309,7 @@ report_url = 'http://localhost:5000/api/report/192.168.1.1/pdf'
 
 | Option | Type | Default | Description | Example |
 |--------|------|---------|-------------|---------|
-| `--target` | string | None | Target to scan (IP, CIDR, domain, ASN) | `--target 192.168.1.100` |
+| `--target` | string | None | Target to scan (IP, CIDR, TLD, FQDN, ASN) | `--target 192.168.1.100` |
 | `--target-type` | choice | `auto` | Target type: `auto`, `ip`, `cidr`, `domain`, `asn` | `--target-type domain` |
 | `--web-only` | flag | False | Start web interface only (no scanning) | `--web-only` |
 | `--config` | string | `evms_config.json` | Configuration file path | `--config custom_config.json` |
@@ -315,8 +321,11 @@ report_url = 'http://localhost:5000/api/report/192.168.1.1/pdf'
 # Auto-detect target type and scan
 python evms.py --target 192.168.1.100
 
-# Explicit target type specification
+# TLD scanning (domain + subdomains)
 python evms.py --target example.com --target-type domain
+
+# FQDN scanning (specific host)
+python evms.py --target mail.example.com --target-type domain
 
 # Web interface only on custom port
 python evms.py --web-only --port 8080
@@ -422,24 +431,42 @@ EVMS supports comprehensive target discovery for all input types with intelligen
 
 ### Supported Target Types
 
-#### Domain Discovery
+#### TLD (Top-Level Domain) Discovery
 ```bash
 python evms.py --target example.com
 ```
 **Process:**
-1. **Subdomain Enumeration**: Uses subfinder to discover subdomains
-2. **DNS Resolution**: Resolves all domains to unique IP addresses
-3. **Complete Coverage**: Scans all discovered IPs and services
+1. **Subdomain Enumeration**: Uses subfinder to discover all subdomains
+2. **DNS Resolution**: Resolves all domains to unique IP addresses  
+3. **Complete Coverage**: Scans entire domain infrastructure
 
-**Example Flow:**
+#### FQDN (Fully Qualified Domain Name) Discovery
+```bash
+python evms.py --target www.example.com
 ```
-Input: example.com
+**Process:**
+1. **Direct Resolution**: Resolves specific FQDN to IP address
+2. **Targeted Scanning**: Focuses on single host infrastructure
+3. **Service Discovery**: Enumerates services on resolved IP
+
+**TLD Example Flow:**
+```
+Input: example.com (TLD)
 ↓
 Subfinder Discovery: [www.example.com, api.example.com, mail.example.com]
 ↓
 DNS Resolution: [192.168.1.1, 192.168.1.2, 192.168.1.3]
 ↓
-Port Scanning → Service Discovery → Vulnerability Scanning
+Complete Infrastructure Scan: All IPs + Services
+```
+
+**FQDN Example Flow:**
+```
+Input: www.example.com (FQDN)
+↓
+Direct DNS Resolution: 192.168.1.1
+↓
+Targeted Host Scan: Single IP + Services
 ```
 
 #### ASN Discovery
