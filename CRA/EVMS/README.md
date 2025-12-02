@@ -287,6 +287,101 @@ results = requests.get('http://localhost:5000/api/results/192.168.1.1').json()
 report_url = 'http://localhost:5000/api/report/192.168.1.1/pdf'
 ```
 
+## 🎯 Target Discovery & Scanning
+
+EVMS supports comprehensive target discovery for all input types with intelligent sampling and complete attack surface mapping.
+
+### Supported Target Types
+
+#### Domain Discovery
+```bash
+python evms.py --target example.com
+```
+**Process:**
+1. **Subdomain Enumeration**: Uses subfinder to discover subdomains
+2. **DNS Resolution**: Resolves all domains to unique IP addresses
+3. **Complete Coverage**: Scans all discovered IPs and services
+
+**Example Flow:**
+```
+Input: example.com
+↓
+Subfinder Discovery: [www.example.com, api.example.com, mail.example.com]
+↓
+DNS Resolution: [192.168.1.1, 192.168.1.2, 192.168.1.3]
+↓
+Port Scanning → Service Discovery → Vulnerability Scanning
+```
+
+#### ASN Discovery
+```bash
+python evms.py --target AS15169    # Google
+python evms.py --target as1234     # Lowercase
+python evms.py --target 1234       # Plain number
+```
+**Process:**
+1. **BGP Data Sources**: Multiple fallback APIs (BGPView, RIPE, whois)
+2. **CIDR Extraction**: Discovers all network ranges for the ASN
+3. **Intelligent Sampling**: Smart IP selection based on network size
+
+**Sampling Strategy:**
+- **Small networks** (<1000 IPs): Scan all hosts
+- **Medium networks** (1000-10000 IPs): Sample 500 IPs
+- **Large networks** (>10000 IPs): Sample 1000 IPs
+
+#### CIDR Discovery
+```bash
+python evms.py --target 192.168.1.0/24    # Small network - scan all
+python evms.py --target 10.0.0.0/22       # Medium network - sample 500
+python evms.py --target 172.16.0.0/16     # Large network - sample 1000
+```
+**Smart Sampling Strategy:**
+1. **Network Boundaries**: Always include first/last IPs
+2. **Common Server IPs**: Target typical server addresses (.1, .10, .100)
+3. **Random Sampling**: Fill remaining slots with random IPs
+
+#### IP Discovery
+```bash
+python evms.py --target 192.168.1.100
+```
+**Process:** Direct scanning of specified IP address
+
+### Complete Scanning Flow
+
+```
+1. Target Input → Target Type Detection
+2. Target Discovery → IP List Generation
+3. Port Scanning (masscan) → Open Ports Discovery
+4. Service URL Building → Service URLs Creation
+5. Service Fingerprinting (httpx) → Web Technologies
+6. Vulnerability Scanning (nuclei) → Vulnerabilities
+7. Risk Assessment → Prioritized Results
+```
+
+### Performance Considerations
+
+#### ASN Scanning
+- **API Rate Limits**: Multiple fallback sources prevent failures
+- **Large ASNs**: Intelligent sampling prevents overwhelming scans
+- **Timeout Handling**: 30-second timeouts for API calls
+
+#### CIDR Scanning
+- **Memory Usage**: Streaming IP generation for large networks
+- **Scan Time**: Sampling reduces scan time from hours to minutes
+- **Coverage**: Smart sampling ensures good coverage of likely targets
+
+#### Domain Scanning
+- **DNS Resolution**: Parallel resolution with error handling
+- **Duplicate Removal**: Multiple domains may resolve to same IP
+- **Subdomain Limits**: Subfinder naturally limits results
+
+### Error Handling
+
+- **API Unavailable**: Falls back to whois command for ASN data
+- **DNS Failures**: Logs warning and continues with other domains
+- **Invalid Formats**: Validates and skips malformed inputs
+- **Memory Limits**: Streaming generation for large networks
+
 ## 📊 Report Formats
 
 ### JSON Report
