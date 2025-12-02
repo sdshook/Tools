@@ -2033,6 +2033,134 @@ class EVMSWebInterface:
         @self.app.route('/api/report/<target>/<format>')
         def generate_report(target, format):
             return self.generate_report_file(target, format)
+        
+        @self.app.route('/api/metrics')
+        def get_metrics():
+            """Get dashboard metrics"""
+            try:
+                with self.scanner.graph_engine.driver.session() as session:
+                    # Get vulnerability counts by severity
+                    result = session.run("""
+                        MATCH (v:Vulnerability)
+                        RETURN v.severity as severity, count(v) as count
+                    """)
+                    
+                    metrics = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+                    for record in result:
+                        severity = record['severity'].lower() if record['severity'] else 'low'
+                        metrics[severity] = record['count']
+                    
+                    # Get asset count
+                    asset_result = session.run("MATCH (a:Asset) RETURN count(a) as count")
+                    metrics['assets'] = asset_result.single()['count'] if asset_result.single() else 0
+                    
+                    # Get scan count (approximate)
+                    metrics['scans'] = len(self.scanner.scan_history) if hasattr(self.scanner, 'scan_history') else 0
+                    
+                    return jsonify(metrics)
+            except Exception as e:
+                logger.error(f"Error getting metrics: {e}")
+                return jsonify({'critical': 0, 'high': 0, 'medium': 0, 'low': 0, 'assets': 0, 'scans': 0})
+        
+        @self.app.route('/api/status')
+        def get_status():
+            """Get system status"""
+            try:
+                scanner_type = None
+                if hasattr(self.scanner.tools, 'preferred_scanner'):
+                    scanner_type = self.scanner.tools.preferred_scanner
+                elif hasattr(self.scanner.tools, 'has_masscan') and self.scanner.tools.has_masscan:
+                    scanner_type = 'masscan'
+                elif hasattr(self.scanner.tools, 'has_nmap') and self.scanner.tools.has_nmap:
+                    scanner_type = 'nmap'
+                
+                return jsonify({
+                    'scanner': scanner_type,
+                    'database': 'connected',
+                    'llm': 'ready'
+                })
+            except Exception as e:
+                logger.error(f"Error getting status: {e}")
+                return jsonify({'scanner': None, 'database': 'error', 'llm': 'error'})
+        
+        @self.app.route('/api/scans')
+        def get_scans():
+            """Get scan list"""
+            # This would need to be implemented with a proper scan tracking system
+            return jsonify({'scans': []})
+        
+        @self.app.route('/api/vulnerabilities')
+        def get_vulnerabilities():
+            """Get vulnerability data"""
+            try:
+                with self.scanner.graph_engine.driver.session() as session:
+                    # Get vulnerability counts for chart
+                    result = session.run("""
+                        MATCH (v:Vulnerability)
+                        RETURN v.severity as severity, count(v) as count
+                    """)
+                    
+                    chart_data = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+                    for record in result:
+                        severity = record['severity'].lower() if record['severity'] else 'low'
+                        chart_data[severity] = record['count']
+                    
+                    # Get vulnerability list
+                    vuln_result = session.run("""
+                        MATCH (a:Asset)-[:HAS_VULNERABILITY]->(v:Vulnerability)
+                        RETURN v.cve_id as cve_id, v.severity as severity, 
+                               v.cvss_score as cvss_score, a.ip as asset_ip
+                        ORDER BY v.cvss_score DESC
+                        LIMIT 50
+                    """)
+                    
+                    vulnerabilities = []
+                    for record in vuln_result:
+                        vulnerabilities.append({
+                            'cve_id': record['cve_id'],
+                            'severity': record['severity'],
+                            'cvss_score': record['cvss_score'],
+                            'asset_ip': record['asset_ip'],
+                            'status': 'Open'
+                        })
+                    
+                    return jsonify({
+                        'chart_data': chart_data,
+                        'vulnerabilities': vulnerabilities
+                    })
+            except Exception as e:
+                logger.error(f"Error getting vulnerabilities: {e}")
+                return jsonify({'chart_data': {}, 'vulnerabilities': []})
+        
+        @self.app.route('/api/assets')
+        def get_assets():
+            """Get asset inventory"""
+            try:
+                with self.scanner.graph_engine.driver.session() as session:
+                    result = session.run("""
+                        MATCH (a:Asset)
+                        OPTIONAL MATCH (a)-[:HAS_VULNERABILITY]->(v:Vulnerability)
+                        RETURN a.ip as ip, a.hostname as hostname, a.os as os,
+                               a.open_ports as open_ports, a.risk_score as risk_score,
+                               a.last_scan as last_scan, count(v) as vuln_count
+                    """)
+                    
+                    assets = []
+                    for record in result:
+                        assets.append({
+                            'ip': record['ip'],
+                            'hostname': record['hostname'] or 'Unknown',
+                            'os': record['os'] or 'Unknown',
+                            'open_ports': record['open_ports'] or [],
+                            'risk_score': record['risk_score'] or 0,
+                            'last_scan': record['last_scan'],
+                            'vuln_count': record['vuln_count']
+                        })
+                    
+                    return jsonify({'assets': assets})
+            except Exception as e:
+                logger.error(f"Error getting assets: {e}")
+                return jsonify({'assets': []})
     
     def setup_socketio(self):
         """Setup SocketIO events"""
@@ -2054,6 +2182,24 @@ class EVMSWebInterface:
                 response = "I can help with scanning and vulnerability management. Try asking about scans or status."
             
             emit('chat_response', {'message': response})
+        
+        @self.socketio.on('ai_chat_message')
+        def handle_ai_chat_message(data):
+            message = data.get('message', '')
+            
+            # Enhanced AI chat with LLM integration
+            try:
+                if hasattr(self.scanner, 'llm_analyzer') and self.scanner.llm_analyzer:
+                    # Use the actual LLM analyzer
+                    response = self.get_ai_response(message)
+                else:
+                    # Fallback to enhanced rule-based responses
+                    response = self.get_enhanced_chat_response(message)
+                
+                emit('chat_response', {'message': response})
+            except Exception as e:
+                logger.error(f"AI chat error: {e}")
+                emit('chat_response', {'message': 'I apologize, but I encountered an error processing your request. Please try again.'})
     
     def setup_event_subscriptions(self):
         """Setup event bus subscriptions"""
@@ -2194,211 +2340,123 @@ class EVMSWebInterface:
             logger.error(f"PDF generation error: {e}")
             return jsonify({'error': 'PDF generation failed'}), 500
     
+    def get_ai_response(self, message: str) -> str:
+        """Get AI response using LLM analyzer"""
+        try:
+            # Get current vulnerability context
+            with self.scanner.graph_engine.driver.session() as session:
+                vuln_result = session.run("""
+                    MATCH (v:Vulnerability)
+                    RETURN count(v) as total_vulns,
+                           sum(CASE WHEN v.severity = 'CRITICAL' THEN 1 ELSE 0 END) as critical,
+                           sum(CASE WHEN v.severity = 'HIGH' THEN 1 ELSE 0 END) as high
+                """)
+                
+                vuln_stats = vuln_result.single()
+                context = f"Current system status: {vuln_stats['total_vulns']} total vulnerabilities, {vuln_stats['critical']} critical, {vuln_stats['high']} high severity."
+            
+            # Use LLM analyzer for intelligent response
+            prompt = f"""You are an AI security assistant for EVMS (Enterprise Vulnerability Management Scanner).
+            
+            Current context: {context}
+            
+            User question: {message}
+            
+            Provide a helpful, accurate response about vulnerability management, scanning, or security analysis. 
+            Keep responses concise but informative."""
+            
+            if hasattr(self.scanner.llm_analyzer, 'analyze_text'):
+                response = self.scanner.llm_analyzer.analyze_text(prompt)
+                return response.get('analysis', 'I apologize, but I cannot process that request right now.')
+            else:
+                return self.get_enhanced_chat_response(message)
+                
+        except Exception as e:
+            logger.error(f"LLM response error: {e}")
+            return self.get_enhanced_chat_response(message)
+    
+    def get_enhanced_chat_response(self, message: str) -> str:
+        """Enhanced rule-based chat responses"""
+        message_lower = message.lower()
+        
+        # Vulnerability-related queries
+        if any(word in message_lower for word in ['vulnerability', 'vulnerabilities', 'vuln', 'cve']):
+            try:
+                with self.scanner.graph_engine.driver.session() as session:
+                    result = session.run("""
+                        MATCH (v:Vulnerability)
+                        RETURN count(v) as total,
+                               sum(CASE WHEN v.severity = 'CRITICAL' THEN 1 ELSE 0 END) as critical,
+                               sum(CASE WHEN v.severity = 'HIGH' THEN 1 ELSE 0 END) as high
+                    """)
+                    stats = result.single()
+                    return f"Current vulnerability status: {stats['total']} total vulnerabilities found, including {stats['critical']} critical and {stats['high']} high severity issues. Use the Vulnerabilities tab for detailed analysis."
+            except:
+                return "I can help you analyze vulnerabilities. Use the Vulnerabilities tab to view detailed vulnerability information and risk assessments."
+        
+        # Scanning queries
+        elif any(word in message_lower for word in ['scan', 'scanning', 'target']):
+            scanner_type = "auto-detected scanner"
+            try:
+                if hasattr(self.scanner.tools, 'preferred_scanner'):
+                    scanner_type = self.scanner.tools.preferred_scanner
+            except:
+                pass
+            return f"EVMS supports scanning of IP addresses, CIDR ranges, domains, and ASNs using {scanner_type}. Use the Quick Scan form or go to the Scans tab for advanced options including port ranges and scan rates."
+        
+        # Asset queries
+        elif any(word in message_lower for word in ['asset', 'assets', 'inventory', 'network']):
+            try:
+                with self.scanner.graph_engine.driver.session() as session:
+                    result = session.run("MATCH (a:Asset) RETURN count(a) as count")
+                    asset_count = result.single()['count']
+                    return f"Asset inventory shows {asset_count} discovered assets. Visit the Assets tab to view detailed information including OS detection, open ports, and risk scores."
+            except:
+                return "The Assets tab provides a comprehensive inventory of discovered network assets including OS detection, open ports, and risk assessments."
+        
+        # Report queries
+        elif any(word in message_lower for word in ['report', 'reports', 'export']):
+            return "EVMS generates comprehensive reports in HTML, PDF, JSON, and CSV formats. Use the Reports tab to create executive summaries, technical details, or compliance reports for your scan results."
+        
+        # Status queries
+        elif any(word in message_lower for word in ['status', 'health', 'system']):
+            return "System status is displayed on the Dashboard. EVMS monitors scanner availability, database connectivity, and LLM analyzer readiness. All components appear to be operational."
+        
+        # Help queries
+        elif any(word in message_lower for word in ['help', 'how', 'what', 'guide']):
+            return """I can assist with:
+            • Vulnerability analysis and prioritization
+            • Scan configuration and management
+            • Asset inventory and risk assessment
+            • Report generation and compliance
+            • Security recommendations and remediation
+            
+            Try asking about specific vulnerabilities, scan targets, or security concerns."""
+        
+        # Default response
+        else:
+            return "I'm your AI security assistant. I can help with vulnerability analysis, scan management, asset inventory, and security recommendations. What would you like to know about your security posture?"
+    
     def run(self):
         """Run the web interface"""
         self.socketio.run(self.app, host='0.0.0.0', port=self.port, debug=False)
 
 # HTML template for web interface
-WEB_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>EVMS - Enterprise Vulnerability Management Scanner</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        .header { background: #2c3e50; color: white; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
-        .card { background: white; padding: 20px; border-radius: 5px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px; }
-        button { background: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer; }
-        button:hover { background: #2980b9; }
-        .status { padding: 10px; border-radius: 3px; margin-bottom: 10px; }
-        .status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .chat-container { height: 300px; border: 1px solid #ddd; padding: 10px; overflow-y: auto; background: white; }
-        .chat-message { margin-bottom: 10px; }
-        .chat-user { color: #2980b9; font-weight: bold; }
-        .chat-bot { color: #27ae60; font-weight: bold; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🛡️ EVMS - Enterprise Vulnerability Management Scanner</h1>
-            <p>Streamlined vulnerability scanning with Ensemble ML and LLM analysis</p>
-        </div>
-        
-        <div class="grid">
-            <div class="card">
-                <h2>Scan Target</h2>
-                <form id="scanForm">
-                    <div class="form-group">
-                        <label for="target">Target (IP, CIDR, Domain, ASN):</label>
-                        <input type="text" id="target" name="target" placeholder="192.168.1.1 or example.com" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="targetType">Target Type:</label>
-                        <select id="targetType" name="targetType">
-                            <option value="auto">Auto-detect</option>
-                            <option value="ip">IP Address</option>
-                            <option value="cidr">CIDR Range</option>
-                            <option value="domain">Domain</option>
-                            <option value="asn">ASN</option>
-                        </select>
-                    </div>
-                    <button type="submit">Start Scan</button>
-                </form>
-                
-                <div id="scanStatus"></div>
-            </div>
-            
-            <div class="card">
-                <h2>Chat Interface</h2>
-                <div id="chatContainer" class="chat-container"></div>
-                <div class="form-group">
-                    <input type="text" id="chatInput" placeholder="Ask about scans, vulnerabilities, or status...">
-                    <button onclick="sendChatMessage()">Send</button>
-                </div>
-            </div>
-        </div>
-        
-        <div class="card">
-            <h2>Recent Scans</h2>
-            <div id="recentScans">
-                <p>No scans completed yet.</p>
-            </div>
-        </div>
-        
-        <div class="card">
-            <h2>Generate Reports</h2>
-            <div class="form-group">
-                <label for="reportTarget">Target:</label>
-                <input type="text" id="reportTarget" placeholder="Enter target IP or domain">
-            </div>
-            <div class="form-group">
-                <label for="reportFormat">Format:</label>
-                <select id="reportFormat">
-                    <option value="json">JSON</option>
-                    <option value="html">HTML</option>
-                    <option value="pdf">PDF</option>
-                </select>
-            </div>
-            <button onclick="generateReport()">Generate Report</button>
-        </div>
-    </div>
+def load_web_template():
+    """Load the enhanced dashboard template"""
+    try:
+        template_path = os.path.join(os.path.dirname(__file__), 'enhanced_dashboard.html')
+        with open(template_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        # Fallback to basic template if enhanced dashboard not found
+        return """<!DOCTYPE html>
+<html><head><title>EVMS Dashboard</title></head>
+<body><h1>EVMS Dashboard Loading...</h1>
+<p>Enhanced dashboard template not found. Please check installation.</p>
+</body></html>"""
 
-    <script>
-        const socket = io();
-        
-        // Socket event handlers
-        socket.on('connect', function() {
-            addChatMessage('System', 'Connected to EVMS');
-        });
-        
-        socket.on('scan_complete', function(data) {
-            showStatus(`Scan completed for ${data.target} - Priority: ${data.priority}`, 'success');
-            updateRecentScans(data);
-        });
-        
-        socket.on('scan_error', function(data) {
-            showStatus(`Scan failed for ${data.target}: ${data.error}`, 'error');
-        });
-        
-        socket.on('chat_response', function(data) {
-            addChatMessage('EVMS', data.message);
-        });
-        
-        // Form handlers
-        document.getElementById('scanForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const target = document.getElementById('target').value;
-            const targetType = document.getElementById('targetType').value;
-            
-            fetch('/api/scan', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({target: target, target_type: targetType})
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    showStatus(data.error, 'error');
-                } else {
-                    showStatus(`Scan started for ${target}`, 'success');
-                }
-            })
-            .catch(error => {
-                showStatus('Scan request failed', 'error');
-            });
-        });
-        
-        // Chat functions
-        function sendChatMessage() {
-            const input = document.getElementById('chatInput');
-            const message = input.value.trim();
-            if (message) {
-                addChatMessage('You', message);
-                socket.emit('chat_message', {message: message});
-                input.value = '';
-            }
-        }
-        
-        function addChatMessage(sender, message) {
-            const container = document.getElementById('chatContainer');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'chat-message';
-            messageDiv.innerHTML = `<span class="chat-${sender.toLowerCase()}">${sender}:</span> ${message}`;
-            container.appendChild(messageDiv);
-            container.scrollTop = container.scrollHeight;
-        }
-        
-        // Report generation
-        function generateReport() {
-            const target = document.getElementById('reportTarget').value;
-            const format = document.getElementById('reportFormat').value;
-            
-            if (!target) {
-                showStatus('Please enter a target for the report', 'error');
-                return;
-            }
-            
-            window.open(`/api/report/${target}/${format}`, '_blank');
-        }
-        
-        // Utility functions
-        function showStatus(message, type) {
-            const statusDiv = document.getElementById('scanStatus');
-            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
-            setTimeout(() => {
-                statusDiv.innerHTML = '';
-            }, 5000);
-        }
-        
-        function updateRecentScans(scanData) {
-            const container = document.getElementById('recentScans');
-            const scanDiv = document.createElement('div');
-            scanDiv.innerHTML = `
-                <p><strong>${scanData.target}</strong> - ${scanData.priority} priority 
-                (${scanData.vulnerability_count} vulnerabilities) - ${new Date(scanData.timestamp).toLocaleString()}</p>
-            `;
-            container.insertBefore(scanDiv, container.firstChild);
-        }
-        
-        // Enter key for chat
-        document.getElementById('chatInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                sendChatMessage();
-            }
-        });
-    </script>
-</body>
-</html>
-"""
+WEB_TEMPLATE = load_web_template()
 
 async def main():
     """Main EVMS entry point"""

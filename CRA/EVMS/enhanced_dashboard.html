@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EVMS - Enterprise Vulnerability Management Scanner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8f9fa; }
+        
+        /* Navigation */
+        .navbar { background: #2c3e50; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .navbar h1 { font-size: 1.5rem; }
+        .nav-links { display: flex; gap: 2rem; }
+        .nav-links a { color: white; text-decoration: none; padding: 0.5rem 1rem; border-radius: 4px; transition: background 0.3s; cursor: pointer; }
+        .nav-links a:hover, .nav-links a.active { background: #34495e; }
+        
+        /* Layout */
+        .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .main-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 2rem; }
+        
+        /* Cards */
+        .card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .card h2 { margin-bottom: 1rem; color: #2c3e50; font-size: 1.2rem; }
+        .card h3 { margin-bottom: 0.5rem; color: #34495e; font-size: 1rem; }
+        
+        /* Metrics Cards */
+        .metric-card { text-align: center; }
+        .metric-value { font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem; }
+        .metric-label { color: #7f8c8d; font-size: 0.9rem; }
+        .metric-critical { color: #e74c3c; }
+        .metric-high { color: #f39c12; }
+        .metric-medium { color: #f1c40f; }
+        .metric-low { color: #27ae60; }
+        .metric-info { color: #3498db; }
+        
+        /* Status Indicators */
+        .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+        .status-online { background: #27ae60; }
+        .status-scanning { background: #f39c12; animation: pulse 2s infinite; }
+        .status-offline { background: #e74c3c; }
+        
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        /* Forms */
+        .form-group { margin-bottom: 1rem; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50; }
+        input, select, textarea { width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: #3498db; box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2); }
+        
+        /* Buttons */
+        .btn { padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; font-weight: 600; transition: all 0.3s; }
+        .btn-primary { background: #3498db; color: white; }
+        .btn-primary:hover { background: #2980b9; }
+        .btn-success { background: #27ae60; color: white; }
+        .btn-success:hover { background: #229954; }
+        .btn-danger { background: #e74c3c; color: white; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-secondary { background: #95a5a6; color: white; }
+        .btn-secondary:hover { background: #7f8c8d; }
+        
+        /* Tables */
+        .table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        .table th, .table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #ecf0f1; }
+        .table th { background: #f8f9fa; font-weight: 600; color: #2c3e50; }
+        .table tbody tr:hover { background: #f8f9fa; }
+        
+        /* Vulnerability Severity */
+        .severity-critical { background: #e74c3c; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+        .severity-high { background: #f39c12; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+        .severity-medium { background: #f1c40f; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+        .severity-low { background: #27ae60; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+        
+        /* Chat Interface */
+        .chat-container { height: 400px; border: 1px solid #ddd; border-radius: 4px; overflow-y: auto; padding: 1rem; background: #fafafa; }
+        .chat-message { margin-bottom: 1rem; }
+        .chat-message.user { text-align: right; }
+        .chat-message.bot { text-align: left; }
+        .chat-bubble { display: inline-block; padding: 0.75rem 1rem; border-radius: 18px; max-width: 80%; }
+        .chat-bubble.user { background: #3498db; color: white; }
+        .chat-bubble.bot { background: white; border: 1px solid #ddd; }
+        .chat-input { display: flex; gap: 0.5rem; margin-top: 1rem; }
+        .chat-input input { flex: 1; }
+        
+        /* Progress Bars */
+        .progress { background: #ecf0f1; border-radius: 4px; height: 8px; overflow: hidden; }
+        .progress-bar { height: 100%; background: #3498db; transition: width 0.3s; }
+        
+        /* Alerts */
+        .alert { padding: 1rem; border-radius: 4px; margin-bottom: 1rem; }
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        .alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        
+        /* Tabs */
+        .tabs { display: flex; border-bottom: 1px solid #ddd; margin-bottom: 1rem; }
+        .tab { padding: 0.75rem 1.5rem; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.3s; }
+        .tab:hover { background: #f8f9fa; }
+        .tab.active { border-bottom-color: #3498db; color: #3498db; font-weight: 600; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container { padding: 1rem; }
+            .dashboard-grid { grid-template-columns: 1fr; }
+            .main-grid { grid-template-columns: 1fr; }
+            .form-row { grid-template-columns: 1fr; }
+            .nav-links { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>🛡️ EVMS Dashboard</h1>
+        <div class="nav-links">
+            <a class="active" onclick="showTab('dashboard')">Dashboard</a>
+            <a onclick="showTab('scans')">Scans</a>
+            <a onclick="showTab('vulnerabilities')">Vulnerabilities</a>
+            <a onclick="showTab('assets')">Assets</a>
+            <a onclick="showTab('reports')">Reports</a>
+            <a onclick="showTab('chat')">AI Assistant</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Dashboard Tab -->
+        <div id="dashboard-tab" class="tab-content active">
+            <div class="dashboard-grid">
+                <div class="card metric-card">
+                    <div class="metric-value metric-critical" id="criticalCount">0</div>
+                    <div class="metric-label">Critical Vulnerabilities</div>
+                </div>
+                <div class="card metric-card">
+                    <div class="metric-value metric-high" id="highCount">0</div>
+                    <div class="metric-label">High Risk Vulnerabilities</div>
+                </div>
+                <div class="card metric-card">
+                    <div class="metric-value metric-info" id="assetCount">0</div>
+                    <div class="metric-label">Assets Monitored</div>
+                </div>
+                <div class="card metric-card">
+                    <div class="metric-value metric-info" id="scanCount">0</div>
+                    <div class="metric-label">Scans Completed</div>
+                </div>
+            </div>
+
+            <div class="main-grid">
+                <div class="card">
+                    <h2>System Status</h2>
+                    <div style="margin-bottom: 1rem;">
+                        <span class="status-indicator status-online"></span>
+                        <strong>EVMS Core:</strong> Online
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <span class="status-indicator" id="scannerStatus"></span>
+                        <strong>Scanner:</strong> <span id="scannerType">Detecting...</span>
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <span class="status-indicator status-online"></span>
+                        <strong>Database:</strong> Connected
+                    </div>
+                    <div>
+                        <span class="status-indicator status-online"></span>
+                        <strong>LLM Analyzer:</strong> Ready
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Quick Scan</h2>
+                    <form id="quickScanForm">
+                        <div class="form-group">
+                            <label for="quickTarget">Target:</label>
+                            <input type="text" id="quickTarget" placeholder="192.168.1.1 or example.com" required>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="quickTargetType">Type:</label>
+                                <select id="quickTargetType">
+                                    <option value="auto">Auto-detect</option>
+                                    <option value="ip">IP Address</option>
+                                    <option value="cidr">CIDR Range</option>
+                                    <option value="domain">Domain</option>
+                                    <option value="asn">ASN</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="quickScanner">Scanner:</label>
+                                <select id="quickScanner">
+                                    <option value="">Auto-detect</option>
+                                    <option value="masscan">masscan</option>
+                                    <option value="nmap">nmap</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Start Scan</button>
+                    </form>
+                    <div id="quickScanStatus"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Recent Activity</h2>
+                <div id="recentActivity">
+                    <p style="color: #7f8c8d; text-align: center; padding: 2rem;">No recent activity</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scans Tab -->
+        <div id="scans-tab" class="tab-content">
+            <div class="card">
+                <h2>Scan Management</h2>
+                <div class="form-row">
+                    <button class="btn btn-primary" onclick="showNewScanForm()">New Scan</button>
+                    <button class="btn btn-secondary" onclick="refreshScans()">Refresh</button>
+                </div>
+                
+                <div id="newScanForm" style="display: none; margin-top: 1rem; padding: 1rem; border: 1px solid #ddd; border-radius: 4px;">
+                    <h3>Configure New Scan</h3>
+                    <form id="advancedScanForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="scanTarget">Target:</label>
+                                <input type="text" id="scanTarget" placeholder="192.168.1.1 or example.com" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="scanType">Target Type:</label>
+                                <select id="scanType">
+                                    <option value="auto">Auto-detect</option>
+                                    <option value="ip">IP Address</option>
+                                    <option value="cidr">CIDR Range</option>
+                                    <option value="domain">Domain</option>
+                                    <option value="asn">ASN</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="scanPorts">Port Range:</label>
+                                <input type="text" id="scanPorts" placeholder="1-65535 or 80,443,8080" value="1-1000">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanRate">Scan Rate:</label>
+                                <select id="scanRate">
+                                    <option value="1000">Normal (1000 pps)</option>
+                                    <option value="5000">Fast (5000 pps)</option>
+                                    <option value="10000">Very Fast (10000 pps)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-success">Start Advanced Scan</button>
+                        <button type="button" class="btn btn-secondary" onclick="hideNewScanForm()">Cancel</button>
+                    </form>
+                </div>
+
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Target</th>
+                            <th>Status</th>
+                            <th>Progress</th>
+                            <th>Started</th>
+                            <th>Duration</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scanTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: #7f8c8d; padding: 2rem;">No scans found</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Vulnerabilities Tab -->
+        <div id="vulnerabilities-tab" class="tab-content">
+            <div class="card">
+                <h2>Vulnerability Overview</h2>
+                <div class="dashboard-grid">
+                    <div style="position: relative; height: 300px;">
+                        <canvas id="vulnerabilityChart"></canvas>
+                    </div>
+                    <div>
+                        <h3>Top Vulnerabilities</h3>
+                        <div id="topVulnerabilities">
+                            <p style="color: #7f8c8d; text-align: center; padding: 2rem;">No vulnerabilities found</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>CVE ID</th>
+                            <th>Severity</th>
+                            <th>CVSS Score</th>
+                            <th>Asset</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vulnerabilityTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: #7f8c8d; padding: 2rem;">No vulnerabilities found</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Assets Tab -->
+        <div id="assets-tab" class="tab-content">
+            <div class="card">
+                <h2>Asset Inventory</h2>
+                <div class="form-row">
+                    <button class="btn btn-primary" onclick="refreshAssets()">Refresh Assets</button>
+                    <button class="btn btn-secondary" onclick="exportAssets()">Export</button>
+                </div>
+                
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>Hostname</th>
+                            <th>OS</th>
+                            <th>Open Ports</th>
+                            <th>Risk Score</th>
+                            <th>Last Scan</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="assetTableBody">
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: #7f8c8d; padding: 2rem;">No assets found</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Reports Tab -->
+        <div id="reports-tab" class="tab-content">
+            <div class="card">
+                <h2>Report Management</h2>
+                <div class="main-grid">
+                    <div>
+                        <h3>Generate New Report</h3>
+                        <form id="reportForm">
+                            <div class="form-group">
+                                <label for="reportTarget">Target:</label>
+                                <input type="text" id="reportTarget" placeholder="Enter target IP or domain" required>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="reportFormat">Format:</label>
+                                    <select id="reportFormat">
+                                        <option value="html">HTML Report</option>
+                                        <option value="pdf">PDF Report</option>
+                                        <option value="json">JSON Data</option>
+                                        <option value="csv">CSV Export</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="reportTemplate">Template:</label>
+                                    <select id="reportTemplate">
+                                        <option value="executive">Executive Summary</option>
+                                        <option value="technical">Technical Details</option>
+                                        <option value="compliance">Compliance Report</option>
+                                        <option value="custom">Custom Report</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-success">Generate Report</button>
+                        </form>
+                    </div>
+                    
+                    <div>
+                        <h3>Recent Reports</h3>
+                        <div id="recentReports">
+                            <p style="color: #7f8c8d; text-align: center; padding: 2rem;">No reports generated</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Tab -->
+        <div id="chat-tab" class="tab-content">
+            <div class="card">
+                <h2>AI Security Assistant</h2>
+                <div class="chat-container" id="aiChatContainer">
+                    <div class="chat-message bot">
+                        <div class="chat-bubble bot">
+                            Hello! I'm your AI security assistant. I can help you analyze vulnerabilities, interpret scan results, and provide security recommendations. What would you like to know?
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="aiChatInput" placeholder="Ask about vulnerabilities, scan results, or security recommendations...">
+                    <button class="btn btn-primary" onclick="sendAIMessage()">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentTab = 'dashboard';
+        let vulnerabilityChart = null;
+
+        // Socket event handlers
+        socket.on('connect', function() {
+            console.log('Connected to EVMS');
+            updateSystemStatus();
+        });
+
+        socket.on('scan_complete', function(data) {
+            showAlert(`Scan completed for ${data.target} - Priority: ${data.priority}`, 'success');
+            updateDashboardMetrics();
+            updateRecentActivity(`Scan completed: ${data.target}`, 'success');
+        });
+
+        socket.on('scan_error', function(data) {
+            showAlert(`Scan failed for ${data.target}: ${data.error}`, 'error');
+            updateRecentActivity(`Scan failed: ${data.target}`, 'error');
+        });
+
+        socket.on('chat_response', function(data) {
+            addAIChatMessage('bot', data.message);
+        });
+
+        socket.on('scan_progress', function(data) {
+            updateScanProgress(data.target, data.progress);
+        });
+
+        // Tab Management
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from nav links
+            document.querySelectorAll('.nav-links a').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+            currentTab = tabName;
+            
+            // Load tab-specific data
+            loadTabData(tabName);
+        }
+
+        function loadTabData(tabName) {
+            switch(tabName) {
+                case 'dashboard':
+                    updateDashboardMetrics();
+                    break;
+                case 'scans':
+                    loadScans();
+                    break;
+                case 'vulnerabilities':
+                    loadVulnerabilities();
+                    break;
+                case 'assets':
+                    loadAssets();
+                    break;
+                case 'reports':
+                    loadReports();
+                    break;
+            }
+        }
+
+        // Dashboard Functions
+        function updateDashboardMetrics() {
+            fetch('/api/metrics')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('criticalCount').textContent = data.critical || 0;
+                    document.getElementById('highCount').textContent = data.high || 0;
+                    document.getElementById('assetCount').textContent = data.assets || 0;
+                    document.getElementById('scanCount').textContent = data.scans || 0;
+                })
+                .catch(error => console.error('Error loading metrics:', error));
+        }
+
+        function updateSystemStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    const scannerStatus = document.getElementById('scannerStatus');
+                    const scannerType = document.getElementById('scannerType');
+                    
+                    if (data.scanner) {
+                        scannerStatus.className = 'status-indicator status-online';
+                        scannerType.textContent = data.scanner + ' (Ready)';
+                    } else {
+                        scannerStatus.className = 'status-indicator status-offline';
+                        scannerType.textContent = 'Not Available';
+                    }
+                })
+                .catch(error => console.error('Error loading status:', error));
+        }
+
+        // Quick Scan Form
+        document.getElementById('quickScanForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const target = document.getElementById('quickTarget').value;
+            const targetType = document.getElementById('quickTargetType').value;
+            const scanner = document.getElementById('quickScanner').value;
+            
+            startScan(target, targetType, scanner, 'quickScanStatus');
+        });
+
+        // Advanced Scan Form
+        document.getElementById('advancedScanForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const target = document.getElementById('scanTarget').value;
+            const targetType = document.getElementById('scanType').value;
+            const ports = document.getElementById('scanPorts').value;
+            const rate = document.getElementById('scanRate').value;
+            
+            startAdvancedScan(target, targetType, ports, rate);
+        });
+
+        function startScan(target, targetType, scanner, statusElementId) {
+            const payload = {
+                target: target,
+                target_type: targetType
+            };
+            
+            if (scanner) {
+                payload.scanner = scanner;
+            }
+            
+            fetch('/api/scan', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showAlert(data.error, 'error');
+                } else {
+                    showAlert(`Scan started for ${target}`, 'success');
+                    updateRecentActivity(`Scan started: ${target}`, 'info');
+                }
+            })
+            .catch(error => {
+                showAlert('Scan request failed', 'error');
+            });
+        }
+
+        // Scan Management
+        function showNewScanForm() {
+            document.getElementById('newScanForm').style.display = 'block';
+        }
+
+        function hideNewScanForm() {
+            document.getElementById('newScanForm').style.display = 'none';
+        }
+
+        function loadScans() {
+            fetch('/api/scans')
+                .then(response => response.json())
+                .then(data => {
+                    updateScanTable(data.scans || []);
+                })
+                .catch(error => console.error('Error loading scans:', error));
+        }
+
+        function updateScanTable(scans) {
+            const tbody = document.getElementById('scanTableBody');
+            if (scans.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #7f8c8d; padding: 2rem;">No scans found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = scans.map(scan => `
+                <tr>
+                    <td>${scan.target}</td>
+                    <td><span class="status-indicator status-${scan.status}"></span>${scan.status}</td>
+                    <td>
+                        <div class="progress">
+                            <div class="progress-bar" style="width: ${scan.progress}%"></div>
+                        </div>
+                        ${scan.progress}%
+                    </td>
+                    <td>${new Date(scan.started).toLocaleString()}</td>
+                    <td>${scan.duration || 'Running...'}</td>
+                    <td>
+                        <button class="btn btn-secondary" onclick="viewScanDetails('${scan.id}')">View</button>
+                        ${scan.status === 'running' ? '<button class="btn btn-danger" onclick="stopScan(\'' + scan.id + '\')">Stop</button>' : ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Vulnerability Management
+        function loadVulnerabilities() {
+            fetch('/api/vulnerabilities')
+                .then(response => response.json())
+                .then(data => {
+                    updateVulnerabilityChart(data.chart_data || {});
+                    updateVulnerabilityTable(data.vulnerabilities || []);
+                })
+                .catch(error => console.error('Error loading vulnerabilities:', error));
+        }
+
+        function updateVulnerabilityChart(data) {
+            const ctx = document.getElementById('vulnerabilityChart').getContext('2d');
+            
+            if (vulnerabilityChart) {
+                vulnerabilityChart.destroy();
+            }
+            
+            vulnerabilityChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Critical', 'High', 'Medium', 'Low'],
+                    datasets: [{
+                        data: [data.critical || 0, data.high || 0, data.medium || 0, data.low || 0],
+                        backgroundColor: ['#e74c3c', '#f39c12', '#f1c40f', '#27ae60']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        // AI Chat Functions
+        function sendAIMessage() {
+            const input = document.getElementById('aiChatInput');
+            const message = input.value.trim();
+            if (message) {
+                addAIChatMessage('user', message);
+                socket.emit('ai_chat_message', {message: message});
+                input.value = '';
+            }
+        }
+
+        function addAIChatMessage(sender, message) {
+            const container = document.getElementById('aiChatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${sender}`;
+            messageDiv.innerHTML = `<div class="chat-bubble ${sender}">${message}</div>`;
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Utility Functions
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.textContent = message;
+            
+            document.querySelector('.container').insertBefore(alertDiv, document.querySelector('.container').firstChild);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
+        }
+
+        function updateRecentActivity(message, type) {
+            const container = document.getElementById('recentActivity');
+            const activityDiv = document.createElement('div');
+            activityDiv.innerHTML = `
+                <div style="padding: 0.5rem; border-left: 3px solid ${type === 'success' ? '#27ae60' : type === 'error' ? '#e74c3c' : '#3498db'}; margin-bottom: 0.5rem;">
+                    <strong>${new Date().toLocaleTimeString()}</strong> - ${message}
+                </div>
+            `;
+            
+            if (container.firstChild && container.firstChild.tagName === 'P') {
+                container.innerHTML = '';
+            }
+            
+            container.insertBefore(activityDiv, container.firstChild);
+            
+            // Keep only last 10 activities
+            while (container.children.length > 10) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        // Enter key handlers
+        document.getElementById('aiChatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendAIMessage();
+            }
+        });
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDashboardMetrics();
+            updateSystemStatus();
+        });
+    </script>
+</body>
+</html>
