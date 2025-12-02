@@ -297,6 +297,125 @@ results = requests.get('http://localhost:5000/api/results/192.168.1.1').json()
 report_url = 'http://localhost:5000/api/report/192.168.1.1/pdf'
 ```
 
+## 📋 Complete CLI & API Reference
+
+### Command Line Interface (CLI) Options
+
+| Option | Type | Default | Description | Example |
+|--------|------|---------|-------------|---------|
+| `--target` | string | None | Target to scan (IP, CIDR, domain, ASN) | `--target 192.168.1.100` |
+| `--target-type` | choice | `auto` | Target type: `auto`, `ip`, `cidr`, `domain`, `asn` | `--target-type domain` |
+| `--web-only` | flag | False | Start web interface only (no scanning) | `--web-only` |
+| `--config` | string | `evms_config.json` | Configuration file path | `--config custom_config.json` |
+| `--port` | integer | `5000` | Web interface port | `--port 8080` |
+
+### CLI Usage Examples
+
+```bash
+# Auto-detect target type and scan
+python evms.py --target 192.168.1.100
+
+# Explicit target type specification
+python evms.py --target example.com --target-type domain
+
+# Web interface only on custom port
+python evms.py --web-only --port 8080
+
+# Custom configuration file
+python evms.py --target 10.0.0.0/24 --config production_config.json
+```
+
+### REST API Endpoints
+
+| Method | Endpoint | Description | Request Body | Response |
+|--------|----------|-------------|--------------|----------|
+| `GET` | `/` | Web interface homepage | None | HTML page |
+| `POST` | `/api/scan` | Start new scan | `{"target": "string", "target_type": "string"}` | `{"status": "string", "target": "string"}` |
+| `GET` | `/api/results/<target>` | Get scan results for target | None | `{"asset": {}, "vulnerabilities": []}` |
+| `GET` | `/api/report/<target>/<format>` | Generate report (html/pdf/json) | None | Report file or JSON |
+
+### API Request/Response Examples
+
+#### Start Scan
+```bash
+curl -X POST http://localhost:5000/api/scan \
+  -H "Content-Type: application/json" \
+  -d '{"target": "192.168.1.100", "target_type": "ip"}'
+
+# Response
+{"status": "Scan started", "target": "192.168.1.100"}
+```
+
+#### Get Results
+```bash
+curl http://localhost:5000/api/results/192.168.1.100
+
+# Response
+{
+  "asset": {
+    "ip": "192.168.1.100",
+    "hostname": "server.local",
+    "ports": [22, 80, 443]
+  },
+  "vulnerabilities": [
+    {
+      "cve_id": "CVE-2023-1234",
+      "severity": "High",
+      "cvss_score": 7.5,
+      "description": "Remote code execution vulnerability"
+    }
+  ]
+}
+```
+
+#### Generate Report
+```bash
+# HTML Report
+curl http://localhost:5000/api/report/192.168.1.100/html
+
+# PDF Report
+curl http://localhost:5000/api/report/192.168.1.100/pdf
+
+# JSON Report
+curl http://localhost:5000/api/report/192.168.1.100/json
+```
+
+### WebSocket Events
+
+| Event | Direction | Description | Data Format |
+|-------|-----------|-------------|-------------|
+| `connect` | Client → Server | Client connection established | None |
+| `status` | Server → Client | Connection status message | `{"message": "string"}` |
+| `chat_message` | Client → Server | Send chat message | `{"message": "string"}` |
+| `chat_response` | Server → Client | Chat response from EVMS | `{"message": "string"}` |
+| `scan_complete` | Server → Client | Scan completion notification | `{"target": "string", "status": "complete"}` |
+| `scan_error` | Server → Client | Scan error notification | `{"target": "string", "error": "string"}` |
+
+### WebSocket Usage Example
+
+```javascript
+// Connect to WebSocket
+const socket = io();
+
+// Listen for status updates
+socket.on('status', (data) => {
+    console.log('Status:', data.message);
+});
+
+// Send chat message
+socket.emit('chat_message', {message: 'What is the scan status?'});
+
+// Listen for chat responses
+socket.on('chat_response', (data) => {
+    console.log('EVMS:', data.message);
+});
+
+// Listen for scan completion
+socket.on('scan_complete', (data) => {
+    console.log('Scan completed for:', data.target);
+});
+```
+
 ## 🎯 Target Discovery & Scanning
 
 EVMS supports comprehensive target discovery for all input types with intelligent sampling and complete attack surface mapping.
