@@ -31,8 +31,8 @@ EVMS is a focused, practical vulnerability management tool that performs automat
          │              Data Layer                         │
          │                                                 │
          │ ┌─────────────┐  ┌─────────────┐  ┌───────────┐ │
-         │ │   Neo4j     │  │    NATS     │  │  SQLite   │ │
-         │ │  GraphDB    │  │ JetStream   │  │  CVE DB   │ │
+         │ │   Neo4j     │  │ Event Bus   │  │  SQLite   │ │
+         │ │  GraphDB    │  │ (Internal)  │  │  CVE DB   │ │
          │ └─────────────┘  └─────────────┘  └───────────┘ │
          └─────────────────────────────────────────────────┘
 ```
@@ -57,12 +57,11 @@ cp .env.example .env
 ### 2. Start Services
 
 ```bash
-# Start Neo4j and NATS (if using Docker)
+# Start Neo4j (if using Docker)
 docker-compose up -d
 
 # Or install manually:
 # - Neo4j: https://neo4j.com/download/
-# - NATS: https://nats.io/download/
 ```
 
 ### 3. Run EVMS
@@ -268,7 +267,6 @@ report_url = 'http://localhost:5000/api/report/192.168.1.1/pdf'
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=password
-NATS_URL=nats://localhost:4222
 
 # LLM configuration
 OPENAI_API_KEY=your_api_key_here

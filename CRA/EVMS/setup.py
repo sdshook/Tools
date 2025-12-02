@@ -154,62 +154,22 @@ def setup_tools():
         run_command(f"git clone https://github.com/projectdiscovery/nuclei-templates.git {templates_dir}")
 
 def setup_services():
-    """Setup external services (NATS, Neo4j)"""
+    """Setup external services (Neo4j)"""
     print("Setting up external services...")
     
     # Check if Docker is available
     docker_available = run_command("docker --version", check=False).returncode == 0
     
     if docker_available:
-        print("Docker detected. Setting up services with Docker...")
-        
-        # Create docker-compose.yml
-        docker_compose = """
-version: '3.8'
-services:
-  neo4j:
-    image: neo4j:5.13
-    ports:
-      - "7474:7474"
-      - "7687:7687"
-    environment:
-      - NEO4J_AUTH=neo4j/password
-      - NEO4J_PLUGINS=["apoc"]
-    volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
-      - neo4j_import:/var/lib/neo4j/import
-      - neo4j_plugins:/plugins
-
-  nats:
-    image: nats:2.10-alpine
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-    command: ["-js", "-m", "8222"]
-    volumes:
-      - nats_data:/data
-
-volumes:
-  neo4j_data:
-  neo4j_logs:
-  neo4j_import:
-  neo4j_plugins:
-  nats_data:
-"""
-        
-        with open('docker-compose.yml', 'w') as f:
-            f.write(docker_compose)
+        print("Docker detected. Setting up Neo4j with Docker...")
         
         print("Starting services with Docker Compose...")
         run_command("docker-compose up -d")
         
         print("Services started. Neo4j available at http://localhost:7474")
-        print("NATS available at nats://localhost:4222")
     else:
-        print("Docker not available. Please install Neo4j and NATS manually:")
+        print("Docker not available. Please install Neo4j manually:")
         print("Neo4j: https://neo4j.com/download/")
-        print("NATS: https://nats.io/download/")
 
 def create_directories():
     """Create required directories"""
@@ -226,9 +186,6 @@ def setup_environment_file():
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=password
-
-# NATS Configuration
-NATS_URL=nats://localhost:4222
 
 # OpenAI Configuration (required for LLM features)
 OPENAI_API_KEY=your_openai_api_key_here
@@ -269,7 +226,7 @@ def main():
         print("=" * 60)
         print("\nNext steps:")
         print("1. Copy .env.example to .env and update configuration")
-        print("2. Ensure Neo4j and NATS are running")
+        print("2. Ensure Neo4j is running")
         print("3. Run: python evms.py --help")
         print("4. Start web interface: python evms.py --web-only")
         print("5. Run a scan: python evms.py --target 192.168.1.1")

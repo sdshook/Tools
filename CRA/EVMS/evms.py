@@ -7,7 +7,6 @@ A streamlined, single-script vulnerability management solution with:
 - Automated discovery and scanning (masscan, nuclei, httpx, subfinder, zeek)
 - GraphDB with GraphRL for vulnerability correlation
 - LLM/RAG deterministic analysis
-- NATS.io for C3CI coordination
 - Simple web interface for control and reporting
 - CVE/TIP feed integration
 - Intelligent prioritization based on exploit availability and lateral movement
@@ -49,9 +48,8 @@ import torch.optim as optim
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
-# NATS for messaging
-import nats
-from nats.js import JetStreamContext
+# Simple event system for internal coordination
+from collections import defaultdict
 
 # LLM integration
 import openai
@@ -72,6 +70,37 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger('EVMS')
+
+class SimpleEventBus:
+    """Lightweight event system for single-process EVMS"""
+    
+    def __init__(self):
+        self.subscribers = defaultdict(list)
+    
+    def subscribe(self, event_type: str, callback):
+        """Subscribe to an event type"""
+        self.subscribers[event_type].append(callback)
+        logger.debug(f"Subscribed to event: {event_type}")
+    
+    def publish(self, event_type: str, data: Any):
+        """Publish an event to all subscribers"""
+        logger.debug(f"Publishing event: {event_type}")
+        for callback in self.subscribers[event_type]:
+            try:
+                if asyncio.iscoroutinefunction(callback):
+                    asyncio.create_task(callback(data))
+                else:
+                    callback(data)
+            except Exception as e:
+                logger.error(f"Event callback error for {event_type}: {e}")
+    
+    def unsubscribe(self, event_type: str, callback):
+        """Unsubscribe from an event type"""
+        if callback in self.subscribers[event_type]:
+            self.subscribers[event_type].remove(callback)
+
+# Global event bus instance
+event_bus = SimpleEventBus()
 
 @dataclass
 class ScanTarget:
@@ -696,10 +725,6 @@ class EVMSScanner:
         self.llm_analyzer = LLMAnalyzer(config['openai_api_key'], self.graph_engine)
         self.prioritizer = VulnerabilityPrioritizer(self.cve_db, self.graph_engine)
         
-        # NATS connection
-        self.nats_client = None
-        self.js_context = None
-        
     async def initialize(self):
         """Initialize EVMS components"""
         logger.info("Initializing EVMS...")
@@ -715,15 +740,6 @@ class EVMSScanner:
         
         # Update CVE database
         await self.cve_db.update_cve_feeds()
-        
-        # Connect to NATS
-        try:
-            self.nats_client = await nats.connect(self.config['nats_url'])
-            self.js_context = self.nats_client.jetstream()
-            logger.info("Connected to NATS")
-        except Exception as e:
-            logger.error(f"NATS connection failed: {e}")
-            return False
         
         # Train GraphRL model
         self.graph_engine.train_risk_model()
@@ -794,12 +810,14 @@ class EVMSScanner:
         # Store in graph database
         self.graph_engine.store_scan_results(scan_result)
         
-        # Publish to NATS
-        if self.js_context:
-            await self.js_context.publish(
-                "evms.scan.completed",
-                json.dumps(asdict(scan_result), default=str).encode()
-            )
+        # Publish scan completion event
+        event_bus.publish('scan.completed', {
+            'target': scan_result.target,
+            'priority': scan_result.priority,
+            'vulnerability_count': len(scan_result.vulnerabilities),
+            'timestamp': scan_result.timestamp.isoformat(),
+            'risk_score': scan_result.risk_assessment.get('total_score', 0.0)
+        })
         
         logger.info(f"Scan completed for {target} - Priority: {overall_priority}")
         return scan_result
@@ -948,6 +966,7 @@ class EVMSWebInterface:
         
         self.setup_routes()
         self.setup_socketio()
+        self.setup_event_subscriptions()
     
     def setup_routes(self):
         """Setup Flask routes"""
@@ -1016,6 +1035,21 @@ class EVMSWebInterface:
             
             emit('chat_response', {'message': response})
     
+    def setup_event_subscriptions(self):
+        """Setup event bus subscriptions"""
+        
+        def on_scan_complete(data):
+            """Handle scan completion events"""
+            self.socketio.emit('scan_complete', data)
+        
+        def on_scan_error(data):
+            """Handle scan error events"""
+            self.socketio.emit('scan_error', data)
+        
+        # Subscribe to events
+        event_bus.subscribe('scan.completed', on_scan_complete)
+        event_bus.subscribe('scan.error', on_scan_error)
+    
     def run_scan_async(self, target: str, target_type: str):
         """Run scan asynchronously and emit updates"""
         try:
@@ -1026,17 +1060,12 @@ class EVMSWebInterface:
                 self.scanner.scan_target(target, target_type)
             )
             
-            # Emit scan completion
-            self.socketio.emit('scan_complete', {
-                'target': target,
-                'priority': scan_result.priority,
-                'vulnerability_count': len(scan_result.vulnerabilities),
-                'timestamp': scan_result.timestamp.isoformat()
-            })
+            # Scan completion event is already published by the scanner
+            # The event bus will notify the web interface
             
         except Exception as e:
             logger.error(f"Scan error: {e}")
-            self.socketio.emit('scan_error', {
+            event_bus.publish('scan.error', {
                 'target': target,
                 'error': str(e)
             })
@@ -1370,7 +1399,6 @@ async def main():
         'neo4j_uri': os.getenv('NEO4J_URI', 'bolt://localhost:7687'),
         'neo4j_user': os.getenv('NEO4J_USER', 'neo4j'),
         'neo4j_password': os.getenv('NEO4J_PASSWORD', 'password'),
-        'nats_url': os.getenv('NATS_URL', 'nats://localhost:4222'),
         'openai_api_key': os.getenv('OPENAI_API_KEY', ''),
         'web_port': args.port
     }
