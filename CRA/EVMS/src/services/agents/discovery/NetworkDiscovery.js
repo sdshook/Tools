@@ -17,8 +17,9 @@ class AssetDiscoveryAgent {
     this.activeTasks = new Map();
     this.discoveredAssets = new Map();
     this.scanners = {
-      nmap: '/usr/bin/nmap',
-      arp: '/usr/sbin/arp'
+      masscan: './tools/masscan/bin/masscan',
+      subfinder: './tools/subfinder/subfinder',
+      httpx: './tools/httpx/httpx'
     };
   }
 
@@ -182,10 +183,10 @@ class AssetDiscoveryAgent {
     const liveHosts = [];
     
     try {
-      if (this.availableTools.nmap) {
-        // Use nmap for network sweep
-        const nmapHosts = await this.performNmapSweep(networkRange, parameters);
-        liveHosts.push(...nmapHosts);
+      if (this.availableTools.masscan) {
+        // Use masscan for network sweep
+        const masscanHosts = await this.performMasscanSweep(networkRange, parameters);
+        liveHosts.push(...masscanHosts);
       } else {
         // Use built-in ping sweep
         const pingHosts = await this.performPingSweep(networkRange, parameters);
@@ -198,57 +199,60 @@ class AssetDiscoveryAgent {
     return liveHosts;
   }
 
-  async performNmapSweep(networkRange, parameters) {
+  async performMasscanSweep(networkRange, parameters) {
     return new Promise((resolve, reject) => {
-      const args = ['-sn', networkRange]; // Ping scan only
+      // Use masscan for host discovery by scanning common ports
+      const ports = parameters.discoveryPorts || '80,443,22,21,25,53,110,143,993,995,3389';
+      const rate = parameters.rate || '1000';
+      const args = ['-p', ports, '--rate', rate, '--output-format', 'json', networkRange];
       
-      const nmap = spawn(this.scanners.nmap, args);
+      const masscan = spawn(this.scanners.masscan, args);
       let output = '';
       let errorOutput = '';
       
-      nmap.stdout.on('data', (data) => {
+      masscan.stdout.on('data', (data) => {
         output += data.toString();
       });
       
-      nmap.stderr.on('data', (data) => {
+      masscan.stderr.on('data', (data) => {
         errorOutput += data.toString();
       });
       
-      nmap.on('close', (code) => {
+      masscan.on('close', (code) => {
         if (code === 0) {
-          const hosts = this.parseNmapSweepOutput(output);
+          const hosts = this.parseMasscanSweepOutput(output);
           resolve(hosts);
         } else {
-          reject(new Error(`Nmap sweep failed: ${errorOutput}`));
+          reject(new Error(`Masscan sweep failed: ${errorOutput}`));
         }
       });
       
       // Set timeout
       setTimeout(() => {
-        nmap.kill();
+        masscan.kill();
         reject(new Error('Network sweep timeout'));
       }, 300000); // 5 minutes timeout
     });
   }
 
-  parseNmapSweepOutput(output) {
-    const hosts = [];
-    const lines = output.split('\n');
+  parseMasscanSweepOutput(output) {
+    const hosts = new Set(); // Use Set to avoid duplicates
     
-    for (const line of lines) {
-      const hostMatch = line.match(/Nmap scan report for (.+)/);
-      if (hostMatch) {
-        const hostInfo = hostMatch[1];
-        
-        // Extract IP address
-        const ipMatch = hostInfo.match(/(\d+\.\d+\.\d+\.\d+)/);
-        if (ipMatch) {
-          hosts.push(ipMatch[1]);
+    try {
+      const lines = output.trim().split('\n');
+      for (const line of lines) {
+        if (line.trim()) {
+          const data = JSON.parse(line);
+          if (data.ip) {
+            hosts.add(data.ip);
+          }
         }
       }
+    } catch (error) {
+      logger.warn('Failed to parse Masscan JSON output, using fallback');
     }
     
-    return hosts;
+    return Array.from(hosts);
   }
 
   async performPingSweep(networkRange, parameters) {
