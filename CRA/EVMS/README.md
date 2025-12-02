@@ -2,9 +2,9 @@
 
 **(c) Shane D. Shook, PhD, 2025 All Rights Reserved**
 
-**A streamlined, single-script vulnerability management solution**
+**A streamlined, single-script enterprise vulnerability scanner**
 
-EVMS is a focused, practical vulnerability management tool that performs automated discovery, scanning, prioritization, and reporting against ASN, CIDR, TLD, FQDN, or IP addresses.
+EVMS is a focused, practical enterprise vulnerability scanner that performs automated discovery, scanning, prioritization, and reporting against ASN, CIDR, TLD, FQDN, or IP addresses.
 
 ## 🎯 Core Objectives
 
@@ -12,7 +12,7 @@ EVMS is a focused, practical vulnerability management tool that performs automat
 2. **Automated Scanning**: Discovery, port scanning, service fingerprinting, and vulnerability detection
 3. **Intelligent Prioritization**: Risk-based prioritization using exploit availability and lateral movement potential
 4. **Comprehensive Reporting**: HTML, PDF, JSON, and CSV reports with LLM-powered analysis
-5. **Enterprise Web Dashboard**: Professional web interface with real-time metrics, AI assistant, and comprehensive management capabilities
+5. **Enterprise Web Dashboard**: Professional web interface with real-time metrics, AI assistant, and comprehensive scanning management capabilities
 
 ## 🛠 Architecture
 
@@ -450,11 +450,11 @@ CREATE INDEX vulnerability_impact FOR (v:Vulnerability) ON (v.impact)
 
 ## 🌐 Enterprise Web Dashboard
 
-EVMS features a comprehensive enterprise-grade web interface that transforms vulnerability management from command-line operations into a professional, intuitive dashboard experience.
+EVMS features a comprehensive enterprise-grade web interface that transforms vulnerability scanning from command-line operations into a professional, intuitive dashboard experience.
 
 ### 🎯 Dashboard Overview
 
-The EVMS web interface provides a complete vulnerability management platform with:
+The EVMS web interface provides a complete vulnerability scanning platform with:
 
 - **Professional UI**: Modern, responsive design optimized for security teams
 - **Real-time Metrics**: Live vulnerability counts, asset inventory, and system status
@@ -572,9 +572,9 @@ python evms.py --target 192.168.1.0/24
 ### 🎯 Use Cases
 
 #### For Security Teams
-- **Centralized Management**: Single pane of glass for vulnerability operations
-- **Real-time Visibility**: Live updates on security posture changes
-- **Intelligent Analysis**: AI-powered insights and prioritization
+- **Centralized Scanning**: Single pane of glass for vulnerability scanning operations
+- **Real-time Visibility**: Live updates on scan progress and vulnerability discovery
+- **Intelligent Analysis**: AI-powered insights and vulnerability prioritization
 - **Comprehensive Reporting**: Multiple formats for different stakeholders
 
 #### For Management
@@ -584,17 +584,17 @@ python evms.py --target 192.168.1.0/24
 - **ROI Tracking**: Scan efficiency and vulnerability reduction metrics
 
 #### For Operations
-- **Automated Workflows**: Scheduled and on-demand scanning
-- **Asset Discovery**: Comprehensive network inventory management
-- **Integration Ready**: API-first design for tool integration
-- **Scalable Architecture**: Enterprise-grade performance and reliability
+- **Automated Scanning**: Scheduled and on-demand vulnerability scanning
+- **Asset Discovery**: Comprehensive network asset discovery and inventory
+- **Integration Ready**: API-first design for integration with security tools
+- **Scalable Architecture**: Enterprise-grade scanning performance and reliability
 
 ### 🔒 Security Features
 
 - **Secure Communication**: HTTPS support and secure WebSocket connections
 - **Access Control**: Built-in authentication and authorization (configurable)
-- **Data Protection**: Secure handling of vulnerability and asset data
-- **Audit Trail**: Complete logging of all user actions and system events
+- **Data Protection**: Secure handling of vulnerability scan data and asset information
+- **Audit Trail**: Complete logging of all scan activities and system events
 
 ## 📋 Usage Examples
 
