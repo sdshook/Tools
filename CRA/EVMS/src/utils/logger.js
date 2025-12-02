@@ -4,6 +4,7 @@
 const winston = require('winston');
 const path = require('path');
 const fs = require('fs');
+const DailyRotateFile = require('winston-daily-rotate-file');
 
 class Logger {
   constructor() {
@@ -24,19 +25,24 @@ class Logger {
       file: { 
         enabled: true, 
         dirname: path.join(process.cwd(), 'data', 'logs'),
-        filename: 'evms.log'
+        filename: 'evms-%DATE%.log'
       },
       errorFile: { 
         enabled: true, 
         dirname: path.join(process.cwd(), 'data', 'logs'),
-        filename: 'error.log'
+        filename: 'error-%DATE%.log'
+      },
+      auditFile: {
+        enabled: true,
+        dirname: path.join(process.cwd(), 'data', 'logs'),
+        filename: 'audit-%DATE%.log'
       }
     };
 
     const logConfig = config || defaultConfig;
 
     // Ensure log directory exists
-    if (logConfig.file?.enabled || logConfig.errorFile?.enabled) {
+    if (logConfig.file?.enabled || logConfig.errorFile?.enabled || logConfig.auditFile?.enabled) {
       const logDir = logConfig.file?.dirname || path.join(process.cwd(), 'data', 'logs');
       if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir, { recursive: true });
@@ -53,39 +59,45 @@ class Logger {
         format: winston.format.combine(
           winston.format.colorize(),
           winston.format.timestamp(),
-          winston.format.printf(({ timestamp, level, message, ...meta }) => {
-            const metaStr = Object.keys(meta).length ? JSON.stringify(meta, null, 2) : '';
-            return `${timestamp} [${level}]: ${message} ${metaStr}`;
+          winston.format.printf(({ timestamp, level, message, service, requestId, ...meta }) => {
+            const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
+            const reqId = requestId ? ` [${requestId}]` : '';
+            const svc = service ? ` [${service}]` : '';
+            return `${timestamp}${svc}${reqId} [${level}]: ${message}${metaStr}`;
           })
         )
       }));
     }
 
-    // File transport
+    // File transport with rotation
     if (logConfig.file?.enabled) {
-      transports.push(new winston.transports.File({
+      transports.push(new DailyRotateFile({
         level: logConfig.file.level || logConfig.level,
         filename: path.join(logConfig.file.dirname, logConfig.file.filename),
+        datePattern: 'YYYY-MM-DD',
+        zippedArchive: true,
+        maxSize: '20m',
+        maxFiles: '14d',
         format: winston.format.combine(
           winston.format.timestamp(),
           winston.format.json()
-        ),
-        maxsize: logConfig.file.maxsize || 10 * 1024 * 1024, // 10MB
-        maxFiles: logConfig.file.maxFiles || 5,
+        )
       }));
     }
 
-    // Error file transport
+    // Error file transport with rotation
     if (logConfig.errorFile?.enabled) {
-      transports.push(new winston.transports.File({
+      transports.push(new DailyRotateFile({
         level: 'error',
         filename: path.join(logConfig.errorFile.dirname, logConfig.errorFile.filename),
+        datePattern: 'YYYY-MM-DD',
+        zippedArchive: true,
+        maxSize: '20m',
+        maxFiles: '30d',
         format: winston.format.combine(
           winston.format.timestamp(),
           winston.format.json()
-        ),
-        maxsize: logConfig.errorFile.maxsize || 10 * 1024 * 1024, // 10MB
-        maxFiles: logConfig.errorFile.maxFiles || 10,
+        )
       }));
     }
 
@@ -104,6 +116,25 @@ class Logger {
         pid: process.pid,
       },
       transports,
+    });
+
+    // Create separate audit logger
+    this.auditLogger = winston.createLogger({
+      level: 'info',
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json()
+      ),
+      transports: [
+        new DailyRotateFile({
+          filename: path.join(logConfig.auditFile?.dirname || logConfig.file.dirname, 
+                            logConfig.auditFile?.filename || 'audit-%DATE%.log'),
+          datePattern: 'YYYY-MM-DD',
+          zippedArchive: true,
+          maxSize: '50m',
+          maxFiles: '90d'
+        })
+      ]
     });
 
     this.initialized = true;
@@ -139,23 +170,35 @@ class Logger {
   }
 
   // Audit logging
-  audit(event, details = {}) {
-    this.getLogger().info('AUDIT', {
+  audit(event, details = {}, userId = null) {
+    const auditEntry = {
       event,
       details,
+      userId,
       timestamp: new Date().toISOString(),
       type: 'audit',
-    });
+      sessionId: details.sessionId || null,
+      ipAddress: details.ipAddress || null,
+      userAgent: details.userAgent || null
+    };
+    
+    this.auditLogger.info('AUDIT_EVENT', auditEntry);
+    this.getLogger().info('AUDIT', auditEntry);
   }
 
   // Security logging
-  security(event, details = {}) {
-    this.getLogger().warn('SECURITY', {
+  security(event, details = {}, severity = 'medium') {
+    const securityEntry = {
       event,
       details,
+      severity,
       timestamp: new Date().toISOString(),
       type: 'security',
-    });
+      source: details.source || 'unknown',
+      threat_level: details.threat_level || severity
+    };
+    
+    this.getLogger().warn('SECURITY', securityEntry);
   }
 
   // Performance logging
@@ -171,14 +214,18 @@ class Logger {
 
   // Request logging middleware
   requestLogger() {
+    const self = this;
     return (req, res, next) => {
       const start = Date.now();
       
       // Generate request ID if not present
       req.id = req.headers['x-request-id'] || require('crypto').randomUUID();
       
+      // Add request ID to response headers
+      res.setHeader('X-Request-ID', req.id);
+      
       // Log request
-      this.info('HTTP Request', {
+      self.info('HTTP Request', {
         requestId: req.id,
         method: req.method,
         url: req.url,
@@ -192,7 +239,7 @@ class Logger {
       res.end = function(...args) {
         const duration = Date.now() - start;
         
-        logger.info('HTTP Response', {
+        self.info('HTTP Response', {
           requestId: req.id,
           method: req.method,
           url: req.url,
@@ -210,8 +257,9 @@ class Logger {
 
   // Error logging middleware
   errorLogger() {
+    const self = this;
     return (err, req, res, next) => {
-      this.error('HTTP Error', {
+      self.error('HTTP Error', {
         requestId: req.id,
         method: req.method,
         url: req.url,
@@ -231,6 +279,46 @@ class Logger {
   // Create child logger with additional context
   child(meta = {}) {
     return this.getLogger().child(meta);
+  }
+
+  // Structured logging for different event types
+  scanEvent(scanId, event, details = {}) {
+    this.info('SCAN_EVENT', {
+      scanId,
+      event,
+      details,
+      timestamp: new Date().toISOString(),
+      type: 'scan'
+    });
+  }
+
+  vulnerabilityEvent(vulnId, event, details = {}) {
+    this.info('VULNERABILITY_EVENT', {
+      vulnId,
+      event,
+      details,
+      timestamp: new Date().toISOString(),
+      type: 'vulnerability'
+    });
+  }
+
+  agentEvent(agentId, event, details = {}) {
+    this.info('AGENT_EVENT', {
+      agentId,
+      event,
+      details,
+      timestamp: new Date().toISOString(),
+      type: 'agent'
+    });
+  }
+
+  graphrlEvent(event, details = {}) {
+    this.info('GRAPHRL_EVENT', {
+      event,
+      details,
+      timestamp: new Date().toISOString(),
+      type: 'graphrl'
+    });
   }
 }
 
