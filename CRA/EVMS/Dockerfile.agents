@@ -1,0 +1,98 @@
+# EVMS Agents Dockerfile with Masscan and Nuclei
+FROM ubuntu:22.04
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    build-essential \
+    libpcap-dev \
+    libssl-dev \
+    pkg-config \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 18
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs
+
+# Install Go (required for Nuclei)
+RUN wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz \
+    && tar -C /usr/local -xzf go1.21.5.linux-amd64.tar.gz \
+    && rm go1.21.5.linux-amd64.tar.gz
+
+ENV PATH=$PATH:/usr/local/go/bin
+
+# Install Masscan
+RUN git clone https://github.com/robertdavidgraham/masscan.git /tmp/masscan \
+    && cd /tmp/masscan \
+    && make \
+    && make install \
+    && rm -rf /tmp/masscan
+
+# Install Nuclei
+RUN go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest \
+    && mv /root/go/bin/nuclei /usr/local/bin/
+
+# Install Nmap for additional scanning capabilities
+RUN apt-get update && apt-get install -y nmap && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Create non-root user for security
+RUN groupadd -r evms && useradd -r -g evms evms
+
+# Copy package files
+COPY package*.json ./
+
+# Install Node.js dependencies
+RUN npm ci --only=production
+
+# Copy application code
+COPY src/ ./src/
+COPY config/ ./config/
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data /app/nuclei-templates \
+    && chown -R evms:evms /app
+
+# Download Nuclei templates
+RUN nuclei -update-templates -templates-directory /app/nuclei-templates
+
+# Create Masscan configuration
+RUN echo "# Masscan configuration" > /app/config/masscan.conf \
+    && echo "rate = 10000" >> /app/config/masscan.conf \
+    && echo "output-format = json" >> /app/config/masscan.conf \
+    && echo "output-filename = /app/data/masscan-results.json" >> /app/config/masscan.conf
+
+# Create Nuclei configuration
+RUN echo "# Nuclei configuration" > /app/config/nuclei.yaml \
+    && echo "templates-directory: /app/nuclei-templates" >> /app/config/nuclei.yaml \
+    && echo "output: /app/data/nuclei-results.json" >> /app/config/nuclei.yaml \
+    && echo "json: true" >> /app/config/nuclei.yaml \
+    && echo "stats: true" >> /app/config/nuclei.yaml \
+    && echo "silent: false" >> /app/config/nuclei.yaml
+
+# Set proper permissions
+RUN chown -R evms:evms /app/config /app/data /app/nuclei-templates
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Switch to non-root user
+USER evms
+
+# Expose port
+EXPOSE 3000
+
+# Start the agents service
+CMD ["node", "src/services/agents/index.js"]
