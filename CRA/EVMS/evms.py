@@ -18,6 +18,7 @@ import io
 import json
 import logging
 import os
+import platform
 import re
 import sys
 import subprocess
@@ -175,19 +176,41 @@ class ToolManager:
     
     def __init__(self, tools_dir: Path):
         self.tools_dir = Path(tools_dir)
+        self.is_windows = platform.system().lower() == 'windows'
+        
+        # Configure tools based on platform
         self.tools = {
-            'masscan': self.tools_dir / 'masscan' / 'bin' / 'masscan',
             'nuclei': self.tools_dir / 'nuclei' / 'nuclei',
             'httpx': self.tools_dir / 'httpx' / 'httpx',
             'subfinder': self.tools_dir / 'subfinder' / 'subfinder',
             'zeek': self.tools_dir / 'zeek' / 'bin' / 'zeek'
         }
         
+        # Platform-specific port scanner configuration
+        if self.is_windows:
+            # Use nmap on Windows (masscan not available)
+            self.tools['nmap'] = 'nmap'  # Assume nmap is in PATH after installation
+            self.port_scanner = 'nmap'
+        else:
+            # Use masscan on Linux/Unix
+            self.tools['masscan'] = self.tools_dir / 'masscan' / 'bin' / 'masscan'
+            self.port_scanner = 'masscan'
+        
     def check_tools(self) -> Dict[str, bool]:
         """Check if required tools are available"""
         status = {}
         for tool, path in self.tools.items():
-            if tool == 'zeek':  # Optional
+            if tool == 'nmap':
+                # Check if nmap is available in PATH
+                try:
+                    result = subprocess.run(['nmap', '--version'], 
+                                          capture_output=True, text=True, timeout=5)
+                    status[tool] = result.returncode == 0
+                except (subprocess.TimeoutExpired, FileNotFoundError):
+                    status[tool] = False
+                if not status[tool]:
+                    logger.warning(f"Required tool {tool} not found in PATH")
+            elif tool == 'zeek':  # Optional
                 status[tool] = path.exists()
             else:  # Required
                 status[tool] = path.exists()
@@ -225,6 +248,69 @@ class ToolManager:
             logger.error(f"Masscan error for {target}: {e}")
         
         return []
+    
+    async def run_nmap(self, target: str, ports: str = "1-65535") -> List[Dict]:
+        """Run nmap for port discovery (Windows alternative to masscan)"""
+        cmd = [
+            str(self.tools['nmap']),
+            '-p', ports,
+            '--open',
+            '--min-rate', '1000',
+            '-T4',
+            '-oX', '-',  # XML output to stdout
+            target
+        ]
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode == 0:
+                # Parse nmap XML output to match masscan format
+                open_ports = []
+                import xml.etree.ElementTree as ET
+                
+                try:
+                    root = ET.fromstring(result.stdout)
+                    for host in root.findall('host'):
+                        # Get IP address
+                        ip_elem = host.find('address[@addrtype="ipv4"]')
+                        if ip_elem is None:
+                            continue
+                        ip = ip_elem.get('addr')
+                        
+                        # Get open ports
+                        ports_elem = host.find('ports')
+                        if ports_elem is not None:
+                            for port in ports_elem.findall('port'):
+                                state = port.find('state')
+                                if state is not None and state.get('state') == 'open':
+                                    port_num = int(port.get('portid'))
+                                    protocol = port.get('protocol', 'tcp')
+                                    
+                                    # Format to match masscan output structure
+                                    port_data = {
+                                        'ip': ip,
+                                        'port': port_num,
+                                        'proto': protocol,
+                                        'status': 'open'
+                                    }
+                                    open_ports.append(port_data)
+                except ET.ParseError as e:
+                    logger.error(f"Failed to parse nmap XML output: {e}")
+                
+                return open_ports
+        except subprocess.TimeoutExpired:
+            logger.error(f"Nmap timeout for target {target}")
+        except Exception as e:
+            logger.error(f"Nmap error for {target}: {e}")
+        
+        return []
+    
+    async def run_port_scan(self, target: str, ports: str = "1-65535", rate: int = 1000) -> List[Dict]:
+        """Run port scanning using the appropriate tool for the platform"""
+        if self.port_scanner == 'nmap':
+            return await self.run_nmap(target, ports)
+        else:
+            return await self.run_masscan(target, ports, rate)
     
     async def run_nuclei(self, target: str, templates_dir: str = None) -> List[Dict]:
         """Run nuclei for vulnerability scanning"""
@@ -1381,7 +1467,7 @@ class EVMSScanner:
         all_open_ports = []
         for t in discovery_targets:
             logger.info(f"Port scanning {t}")
-            ports = await self.tools.run_masscan(t)
+            ports = await self.tools.run_port_scan(t)
             all_open_ports.extend(ports)
         
         logger.info(f"Found {len(all_open_ports)} open ports")

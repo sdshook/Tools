@@ -20,7 +20,7 @@ EVMS is a focused, practical vulnerability management tool that performs automat
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   EVMS Core     │    │   Security Tools │    │  External APIs  │
 │                 │    │                  │    │                 │
-│ • Scanner       │◄──►│ • masscan        │    │ • CVE Feeds     │
+│ • Scanner       │◄──►│ • masscan/nmap   │    │ • CVE Feeds     │
 │ • Prioritizer   │    │ • nuclei         │    │ • Exploit DB    │
 │ • Ensemble ML   │    │ • httpx          │    │ • OpenAI API    │
 │ • LLM Analyzer  │    │ • subfinder      │    │                 │
@@ -270,7 +270,7 @@ def extract_graph_features(vuln, target_ip):
 ## 🔧 Security Tools Integration
 
 ### Required Tools
-- **masscan**: Fast port scanner
+- **masscan/nmap**: Fast port scanner (platform-aware: masscan on Linux, nmap on Windows)
 - **nuclei**: Vulnerability scanner with templates
 - **httpx**: HTTP service fingerprinting
 - **subfinder**: Subdomain discovery
@@ -502,7 +502,9 @@ python evms.py --target 10.0.0.0/24 --config production_config.json
 ```
 
 **Windows Notes:**
-- Uses **nmap** instead of masscan for port scanning
+- **Automatic Platform Detection**: EVMS automatically detects Windows and uses **nmap** for port scanning instead of masscan
+- **Seamless Operation**: No configuration changes needed - the same commands work on both Windows and Linux
+- **Compatible Output**: nmap results are automatically converted to match masscan format for consistent processing
 - All ProjectDiscovery tools (nuclei, httpx, subfinder) have native Windows support
 - Requires Docker Desktop or Neo4j Desktop for database functionality
 
@@ -679,7 +681,7 @@ python evms.py --target 192.168.1.100
 ```
 1. Target Input → Target Type Detection
 2. Target Discovery → IP List Generation
-3. Port Scanning (masscan) → Open Ports Discovery
+3. Port Scanning (masscan/nmap) → Open Ports Discovery
 4. Service URL Building → Service URLs Creation
 5. Service Fingerprinting (httpx) → Web Technologies
 6. Vulnerability Scanning (nuclei) → Vulnerabilities
