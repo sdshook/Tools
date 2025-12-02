@@ -177,6 +177,7 @@ class ToolManager:
     def __init__(self, tools_dir: Path):
         self.tools_dir = Path(tools_dir)
         self.is_windows = platform.system().lower() == 'windows'
+        self.has_wsl2 = self._detect_wsl2() if self.is_windows else False
         
         # Configure tools based on platform
         self.tools = {
@@ -187,14 +188,75 @@ class ToolManager:
         }
         
         # Platform-specific port scanner configuration
-        if self.is_windows:
-            # Use nmap on Windows (masscan not available)
+        if self.is_windows and self.has_wsl2:
+            # Prefer masscan via WSL2 on Windows (faster than nmap)
+            self.tools['masscan'] = 'wsl masscan'  # Use masscan through WSL2
+            self.tools['nmap'] = 'nmap'  # Keep nmap as fallback
+            self.port_scanner = 'masscan'
+            self.use_wsl2 = True
+        elif self.is_windows:
+            # Use nmap on Windows without WSL2
             self.tools['nmap'] = 'nmap'  # Assume nmap is in PATH after installation
             self.port_scanner = 'nmap'
+            self.use_wsl2 = False
         else:
             # Use masscan on Linux/Unix
             self.tools['masscan'] = self.tools_dir / 'masscan' / 'bin' / 'masscan'
             self.port_scanner = 'masscan'
+            self.use_wsl2 = False
+    
+    def _detect_wsl2(self) -> bool:
+        """Detect if WSL2 is available on Windows"""
+        try:
+            # Check if wsl command exists and can list distributions
+            result = subprocess.run(['wsl', '--list', '--quiet'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0 and result.stdout.strip():
+                # Check if masscan is available in WSL2
+                masscan_check = subprocess.run(['wsl', 'which', 'masscan'], 
+                                             capture_output=True, text=True, timeout=10)
+                if masscan_check.returncode == 0:
+                    logger.info("WSL2 with masscan detected - using masscan via WSL2")
+                    return True
+                else:
+                    logger.info("WSL2 detected but masscan not installed - falling back to nmap")
+                    return False
+            return False
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            logger.debug("WSL2 not available - using nmap")
+            return False
+    
+    def set_scanner_preference(self, scanner: str) -> bool:
+        """Set preferred port scanner if available"""
+        available_scanners = []
+        
+        if not self.is_windows:
+            available_scanners.append('masscan')
+        elif self.has_wsl2:
+            available_scanners.extend(['masscan', 'nmap'])
+        else:
+            available_scanners.append('nmap')
+        
+        if scanner in available_scanners:
+            self.port_scanner = scanner
+            if scanner == 'masscan' and self.is_windows:
+                self.use_wsl2 = True
+            logger.info(f"Port scanner preference set to: {scanner}")
+            return True
+        else:
+            logger.warning(f"Scanner {scanner} not available. Available: {available_scanners}")
+            return False
+    
+    def get_available_scanners(self) -> List[str]:
+        """Get list of available port scanners"""
+        available = []
+        if not self.is_windows:
+            available.append('masscan')
+        elif self.has_wsl2:
+            available.extend(['masscan', 'nmap'])
+        else:
+            available.append('nmap')
+        return available
         
     def check_tools(self) -> Dict[str, bool]:
         """Check if required tools are available"""
@@ -210,6 +272,16 @@ class ToolManager:
                     status[tool] = False
                 if not status[tool]:
                     logger.warning(f"Required tool {tool} not found in PATH")
+            elif tool == 'masscan' and self.use_wsl2:
+                # Check if masscan is available via WSL2
+                try:
+                    result = subprocess.run(['wsl', 'masscan', '--version'], 
+                                          capture_output=True, text=True, timeout=5)
+                    status[tool] = result.returncode == 0
+                except (subprocess.TimeoutExpired, FileNotFoundError):
+                    status[tool] = False
+                if not status[tool]:
+                    logger.warning(f"Required tool {tool} not found in WSL2")
             elif tool == 'zeek':  # Optional
                 status[tool] = path.exists()
             else:  # Required
@@ -220,14 +292,26 @@ class ToolManager:
     
     async def run_masscan(self, target: str, ports: str = "1-65535", rate: int = 1000) -> List[Dict]:
         """Run masscan for port discovery"""
-        cmd = [
-            str(self.tools['masscan']),
-            target,
-            '-p', ports,
-            '--rate', str(rate),
-            '--output-format', 'json',
-            '--output-filename', '-'
-        ]
+        if self.use_wsl2:
+            # Build command for WSL2 execution
+            cmd = [
+                'wsl', 'masscan',
+                target,
+                '-p', ports,
+                '--rate', str(rate),
+                '--output-format', 'json',
+                '--output-filename', '-'
+            ]
+        else:
+            # Build command for native execution
+            cmd = [
+                str(self.tools['masscan']),
+                target,
+                '-p', ports,
+                '--rate', str(rate),
+                '--output-format', 'json',
+                '--output-filename', '-'
+            ]
         
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -2321,6 +2405,7 @@ async def main():
     parser = argparse.ArgumentParser(description='EVMS - Enterprise Vulnerability Management Scanner')
     parser.add_argument('--target', help='Target to scan (IP, CIDR, domain, ASN)')
     parser.add_argument('--target-type', default='auto', choices=['auto', 'ip', 'cidr', 'domain', 'asn'])
+    parser.add_argument('--scanner', choices=['masscan', 'nmap'], help='Preferred port scanner (auto-detected if not specified)')
     parser.add_argument('--web-only', action='store_true', help='Start web interface only')
     parser.add_argument('--config', default='evms_config.json', help='Configuration file')
     parser.add_argument('--port', type=int, default=5000, help='Web interface port')
@@ -2361,6 +2446,14 @@ async def main():
     if not await scanner.initialize():
         logger.error("EVMS initialization failed")
         return 1
+    
+    # Set scanner preference if specified
+    if args.scanner:
+        if not scanner.tools.set_scanner_preference(args.scanner):
+            logger.error(f"Failed to set scanner preference to {args.scanner}")
+            available = scanner.tools.get_available_scanners()
+            logger.info(f"Available scanners: {', '.join(available)}")
+            return 1
     
     # Start web interface
     web_interface = EVMSWebInterface(scanner, config['web_port'])

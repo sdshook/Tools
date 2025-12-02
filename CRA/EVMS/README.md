@@ -20,7 +20,7 @@ EVMS is a focused, practical vulnerability management tool that performs automat
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   EVMS Core     │    │   Security Tools │    │  External APIs  │
 │                 │    │                  │    │                 │
-│ • Scanner       │◄──►│ • masscan/nmap   │    │ • CVE Feeds     │
+│ • Scanner       │◄──►│ • masscan/WSL2   │    │ • CVE Feeds     │
 │ • Prioritizer   │    │ • nuclei         │    │ • Exploit DB    │
 │ • Ensemble ML   │    │ • httpx          │    │ • OpenAI API    │
 │ • LLM Analyzer  │    │ • subfinder      │    │                 │
@@ -56,12 +56,39 @@ EVMS fully supports Windows 10/11 with the following setup:
 3. **Windows Package Manager (winget)**: Included in Windows 10 1709+ and Windows 11
 
 ### Windows-Specific Tool Support
-| Tool | Windows Support | Alternative |
-|------|----------------|-------------|
-| **nuclei** | ✅ Native Windows binary | - |
-| **httpx** | ✅ Native Windows binary | - |
-| **subfinder** | ✅ Native Windows binary | - |
-| **masscan** | ❌ Not available | **nmap** (auto-installed) |
+| Tool | Windows Support | Alternative | Notes |
+|------|----------------|-------------|-------|
+| **nuclei** | ✅ Native Windows binary | - | Full support |
+| **httpx** | ✅ Native Windows binary | - | Full support |
+| **subfinder** | ✅ Native Windows binary | - | Full support |
+| **masscan** | ⚡ WSL2 support | **nmap** (fallback) | Preferred via WSL2 for speed |
+
+### Port Scanner Options on Windows
+EVMS automatically detects and configures the best available port scanner:
+
+1. **masscan via WSL2** (Preferred) - Fastest option, requires WSL2 setup
+2. **nmap** (Fallback) - Native Windows support, slower but reliable
+
+**WSL2 Setup for masscan (Recommended):**
+```powershell
+# Enable WSL2 (requires restart)
+wsl --install
+
+# Install Ubuntu and masscan
+wsl --install -d Ubuntu
+wsl -d Ubuntu -e sudo apt update
+wsl -d Ubuntu -e sudo apt install -y masscan
+
+# Verify installation
+wsl masscan --version
+```
+
+**Manual Scanner Selection:**
+```bash
+# Force use of specific scanner
+python evms.py --scanner masscan --target 192.168.1.0/24
+python evms.py --scanner nmap --target 192.168.1.0/24
+```
 
 ### Windows Setup Steps
 ```powershell
@@ -203,6 +230,47 @@ python evms.py --target AS15169 --target-type asn
 
 # Interactive mode (scan + web interface)
 python evms.py --target 10.0.0.1
+```
+
+## 🔧 Platform-Aware Scanning
+
+EVMS automatically detects your platform and configures the optimal scanning tools:
+
+### Scanning Workflow
+```
+┌─────────────────┐
+│ Platform Check  │
+└─────────┬───────┘
+          │
+    ┌─────▼─────┐
+    │  Windows? │
+    └─────┬─────┘
+          │
+    ┌─────▼─────┐     ┌─────────────┐
+    │ WSL2      │────►│ masscan     │ (Preferred - Fast)
+    │ Available?│     │ via WSL2    │
+    └─────┬─────┘     └─────────────┘
+          │
+          ▼
+    ┌─────────────┐
+    │ nmap        │ (Fallback - Reliable)
+    │ (Native)    │
+    └─────────────┘
+```
+
+### Scanner Selection Priority
+1. **Linux/Unix**: Native masscan (fastest)
+2. **Windows + WSL2**: masscan via WSL2 (fast, recommended)
+3. **Windows only**: nmap (reliable fallback)
+
+### Manual Override
+```bash
+# Check available scanners
+python evms.py --help
+
+# Force specific scanner
+python evms.py --scanner masscan --target 192.168.1.0/24
+python evms.py --scanner nmap --target 192.168.1.0/24
 ```
 
 ## 📊 Enhanced Vulnerability Prioritization
