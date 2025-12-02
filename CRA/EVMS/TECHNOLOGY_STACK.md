@@ -239,17 +239,24 @@ event http_request(c: connection, method: string, original_URI: string,
 
 #### Integration in EVMS
 ```javascript
-// NATS integration for event-driven architecture
+// NATS integration for event-driven architecture and KV storage
 class NATSEventBus {
   constructor(servers = ['nats://localhost:4222']) {
     this.nc = null;
     this.js = null;
+    this.kv = null;
     this.servers = servers;
   }
   
   async connect() {
     this.nc = await connect({ servers: this.servers });
     this.js = this.nc.jetstream();
+    
+    // Initialize Key-Value store
+    this.kv = await this.js.views.kv('evms-cache', {
+      history: 5,
+      ttl: 3600000 // 1 hour TTL
+    });
     
     // Create streams for different event types
     await this.createStreams();
@@ -306,6 +313,34 @@ class NATSEventBus {
         msg.nak();
       }
     }
+  }
+  
+  // Key-Value store operations
+  async setCache(key, value, ttl = 3600000) {
+    await this.kv.put(key, JSON.stringify(value), { ttl });
+  }
+  
+  async getCache(key) {
+    try {
+      const entry = await this.kv.get(key);
+      return entry ? JSON.parse(entry.string()) : null;
+    } catch (err) {
+      if (err.code === '404') return null;
+      throw err;
+    }
+  }
+  
+  async deleteCache(key) {
+    await this.kv.delete(key);
+  }
+  
+  async listCacheKeys(prefix = '') {
+    const keys = [];
+    const iter = await this.kv.keys(prefix + '*');
+    for await (const key of iter) {
+      keys.push(key);
+    }
+    return keys;
   }
 }
 ```

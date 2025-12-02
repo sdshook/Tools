@@ -352,7 +352,7 @@ Internet → WAF → Load Balancer → API Gateway → Services
 - **Resource Isolation**: Container-based deployment
 
 ### 2. Performance Optimization
-- **Caching Strategy**: Multi-level caching with Redis
+- **Caching Strategy**: Multi-level caching with NATS KV Store
 - **Database Optimization**: Query optimization and indexing
 - **Async Processing**: Event-driven, non-blocking operations
 - **Connection Pooling**: Efficient resource utilization
@@ -399,7 +399,7 @@ spec:
 ### 2. Data Persistence
 - **Graph Database**: Neo4j cluster with read replicas
 - **Message Streaming**: NATS JetStream cluster
-- **Cache Layer**: Redis Cluster with persistence
+- **Cache Layer**: NATS Key-Value Store with persistence
 - **File Storage**: S3-compatible object storage
 
 ### 3. Monitoring Stack

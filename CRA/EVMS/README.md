@@ -60,14 +60,17 @@ The Exposure and Vulnerability Management System (EVMS) is an autonomous, Human-
   - Reliable message delivery
   - Event streaming
   - Fault tolerance
+  - Key-Value storage
+  - Object storage
 - **Graph Database** stores:
   - Asset relationships
   - Vulnerability correlations
   - Risk dependencies
-- **Key-Value Store** maintains:
+- **NATS KV Store** maintains:
   - Configuration state
   - Agent metadata
   - Scan results cache
+  - Session data
 
 ### 4. Feature Engineering
 - **Pipeline** processes:
@@ -109,7 +112,7 @@ The Exposure and Vulnerability Management System (EVMS) is an autonomous, Human-
 
 ### Supporting Infrastructure
 - **Neo4j**: Graph database for unified asset relationships
-- **Redis**: High-performance caching and session storage
+- **NATS KV Store**: High-performance key-value storage and caching
 - **Node.js**: Runtime environment for orchestration and services
 - **Python**: Machine learning and data processing components
 
