@@ -20,6 +20,7 @@ import sys
 import subprocess
 import threading
 import time
+import random
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
@@ -847,8 +848,22 @@ class EVMSScanner:
         except ValueError:
             pass
         
-        if target.startswith('AS'):
-            return 'asn'
+        # Check if it's an ASN (various formats)
+        asn_patterns = [
+            r'^AS\d+$',      # AS1234
+            r'^as\d+$',      # as1234
+            r'^\d+$'         # 1234 (plain number, could be ASN)
+        ]
+        
+        for pattern in asn_patterns:
+            if re.match(pattern, target):
+                # For plain numbers, only treat as ASN if it's a reasonable ASN range
+                if pattern == r'^\d+$':
+                    asn_num = int(target)
+                    if 1 <= asn_num <= 4294967295:  # Valid ASN range
+                        return 'asn'
+                else:
+                    return 'asn'
         
         return 'domain'
     
@@ -860,7 +875,16 @@ class EVMSScanner:
             targets = [target]
         elif target_type == 'cidr':
             network = ipaddress.ip_network(target, strict=False)
-            targets = [str(ip) for ip in network.hosts()][:100]  # Limit for safety
+            # Intelligent CIDR handling based on network size
+            if network.num_addresses > 10000:  # /18 or larger
+                logger.info(f"Large CIDR {target} ({network.num_addresses} addresses), sampling 1000 IPs")
+                targets = self.sample_network_ips(network, 1000)
+            elif network.num_addresses > 1000:  # /22 to /18
+                logger.info(f"Medium CIDR {target} ({network.num_addresses} addresses), sampling 500 IPs")
+                targets = self.sample_network_ips(network, 500)
+            else:  # /22 or smaller
+                logger.info(f"Small CIDR {target} ({network.num_addresses} addresses), scanning all")
+                targets = [str(ip) for ip in network.hosts()]
         elif target_type == 'domain':
             # Subdomain discovery
             subdomains = await self.tools.run_subfinder(target)
@@ -879,9 +903,21 @@ class EVMSScanner:
                     logger.warning(f"Failed to resolve {domain}: {e}")
                     continue
         elif target_type == 'asn':
-            # ASN to IP ranges (simplified - would need BGP data in practice)
-            logger.warning("ASN scanning not fully implemented")
-            targets = [target]
+            # ASN to IP ranges using BGP data
+            asn_ranges = await self.discover_asn_ranges(target)
+            targets = []
+            for cidr in asn_ranges:
+                try:
+                    network = ipaddress.ip_network(cidr, strict=False)
+                    # Limit large networks to avoid overwhelming scans
+                    if network.num_addresses > 1000:
+                        # Sample IPs from large networks
+                        targets.extend(self.sample_network_ips(network, 500))
+                    else:
+                        targets.extend([str(ip) for ip in network.hosts()])
+                except ValueError as e:
+                    logger.warning(f"Invalid CIDR from ASN {target}: {cidr} - {e}")
+                    continue
         
         # Remove duplicates
         targets = list(set(targets))
@@ -937,6 +973,126 @@ class EVMSScanner:
                 unique_urls.append(url)
         
         return unique_urls
+    
+    async def discover_asn_ranges(self, asn: str) -> List[str]:
+        """Discover IP ranges for a given ASN using multiple methods"""
+        ranges = []
+        
+        # Clean ASN input (remove AS prefix if present)
+        asn_number = asn.replace('AS', '').replace('as', '')
+        
+        # Method 1: Try bgpview.io API
+        try:
+            url = f"https://api.bgpview.io/asn/{asn_number}/prefixes"
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'ok':
+                    prefixes = data.get('data', {}).get('ipv4_prefixes', [])
+                    for prefix in prefixes:
+                        cidr = prefix.get('prefix')
+                        if cidr:
+                            ranges.append(cidr)
+                    logger.info(f"BGPView API found {len(ranges)} prefixes for ASN {asn_number}")
+        except Exception as e:
+            logger.warning(f"BGPView API failed for ASN {asn_number}: {e}")
+        
+        # Method 2: Try whois command as fallback
+        if not ranges:
+            try:
+                result = subprocess.run(['whois', f'AS{asn_number}'], 
+                                      capture_output=True, text=True, timeout=30)
+                if result.returncode == 0:
+                    # Parse whois output for CIDR ranges
+                    lines = result.stdout.split('\n')
+                    for line in lines:
+                        line = line.strip()
+                        # Look for route/inetnum entries
+                        if line.startswith('route:') or line.startswith('inetnum:'):
+                            parts = line.split()
+                            if len(parts) > 1:
+                                potential_cidr = parts[1]
+                                # Validate CIDR format
+                                try:
+                                    ipaddress.ip_network(potential_cidr, strict=False)
+                                    ranges.append(potential_cidr)
+                                except ValueError:
+                                    continue
+                    logger.info(f"Whois found {len(ranges)} ranges for ASN {asn_number}")
+            except Exception as e:
+                logger.warning(f"Whois lookup failed for ASN {asn_number}: {e}")
+        
+        # Method 3: Try RIPE API for European ASNs
+        if not ranges:
+            try:
+                url = f"https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn_number}"
+                response = requests.get(url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    prefixes = data.get('data', {}).get('prefixes', [])
+                    for prefix_info in prefixes:
+                        prefix = prefix_info.get('prefix')
+                        if prefix:
+                            ranges.append(prefix)
+                    logger.info(f"RIPE API found {len(ranges)} prefixes for ASN {asn_number}")
+            except Exception as e:
+                logger.warning(f"RIPE API failed for ASN {asn_number}: {e}")
+        
+        if not ranges:
+            logger.error(f"No IP ranges found for ASN {asn_number}")
+            return []
+        
+        # Remove duplicates and sort
+        ranges = list(set(ranges))
+        ranges.sort()
+        
+        logger.info(f"Total unique ranges found for ASN {asn_number}: {len(ranges)}")
+        return ranges
+    
+    def sample_network_ips(self, network: ipaddress.IPv4Network, sample_size: int) -> List[str]:
+        """Intelligently sample IPs from a large network"""
+        
+        all_hosts = list(network.hosts())
+        total_hosts = len(all_hosts)
+        
+        if total_hosts <= sample_size:
+            return [str(ip) for ip in all_hosts]
+        
+        # Intelligent sampling strategy
+        sampled_ips = []
+        
+        # 1. Always include network boundaries (first and last few IPs)
+        boundary_size = min(10, sample_size // 10)
+        sampled_ips.extend(all_hosts[:boundary_size])  # First IPs
+        sampled_ips.extend(all_hosts[-boundary_size:])  # Last IPs
+        
+        # 2. Sample from common server ranges (.1, .10, .100, etc.)
+        common_endings = [1, 10, 50, 100, 200, 250, 254]
+        for ending in common_endings:
+            try:
+                target_ip = ipaddress.IPv4Address(str(network.network_address + ending))
+                if target_ip in network and target_ip not in sampled_ips:
+                    sampled_ips.append(target_ip)
+                    if len(sampled_ips) >= sample_size:
+                        break
+            except (ipaddress.AddressValueError, ValueError):
+                continue
+        
+        # 3. Random sampling for the rest
+        remaining_size = sample_size - len(sampled_ips)
+        if remaining_size > 0:
+            # Exclude already sampled IPs
+            remaining_hosts = [ip for ip in all_hosts if ip not in sampled_ips]
+            if remaining_hosts:
+                random_sample = random.sample(remaining_hosts, 
+                                            min(remaining_size, len(remaining_hosts)))
+                sampled_ips.extend(random_sample)
+        
+        # Convert to strings and remove duplicates
+        result = list(set([str(ip) for ip in sampled_ips]))
+        
+        logger.info(f"Sampled {len(result)} IPs from {network} ({total_hosts} total hosts)")
+        return result
     
     def parse_nuclei_result(self, nuclei_data: Dict, target: str) -> Optional[Vulnerability]:
         """Parse nuclei scan result into Vulnerability object"""
