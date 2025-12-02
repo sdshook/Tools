@@ -87,9 +87,9 @@ EVMS uses intelligent prioritization based on exploit availability and lateral m
 ### Priority Levels
 
 - **🔴 Critical**: Service with High/Critical exploit + lateral movement potential
-- **🟠 High**: Service with Medium exploit + lateral movement potential  
-- **🟡 Medium**: Service with Low/Info exploit + no lateral movement potential
-- **🟢 Low**: Weak configuration (RDP, VNC, Telnet, etc.)
+- **🟠 High**: Service with Medium exploit + lateral movement potential, or High/Critical exploit limited to host
+- **🟡 Medium**: Service with Low/Info exploit + lateral movement potential, or Medium exploit limited to host
+- **🟢 Low**: Weak configuration (RDP, VNC, Telnet, etc.), or Low/Info exploit limited to host
 
 ### Prioritization Logic
 
@@ -103,8 +103,14 @@ def prioritize_vulnerability(vuln, target_ip):
             return 'Critical'
         elif vuln.severity == 'MEDIUM' and lateral_movement:
             return 'High'
-        elif vuln.severity in ['LOW', 'INFO'] and not lateral_movement:
+        elif vuln.severity in ['CRITICAL', 'HIGH'] and not lateral_movement:
+            return 'High'
+        elif vuln.severity in ['LOW', 'INFO'] and lateral_movement:
             return 'Medium'
+        elif vuln.severity == 'MEDIUM' and not lateral_movement:
+            return 'Medium'
+        elif vuln.severity in ['LOW', 'INFO'] and not lateral_movement:
+            return 'Low'
     
     if is_weak_configuration(vuln.service):
         return 'Low'

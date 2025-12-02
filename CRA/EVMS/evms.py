@@ -675,9 +675,9 @@ class VulnerabilityPrioritizer:
         """
         Prioritize vulnerability based on:
         - Critical: High/Critical exploit + lateral movement potential
-        - High: Medium exploit + lateral movement potential  
-        - Medium: Low/Info exploit + no lateral movement
-        - Low: Weak configuration
+        - High: Medium exploit + lateral movement potential, or High/Critical exploit limited to host
+        - Medium: Low/Info exploit + lateral movement potential, or Medium exploit limited to host
+        - Low: Weak configuration, or Low/Info exploit limited to host
         """
         
         # Check exploit availability and maturity
@@ -693,8 +693,14 @@ class VulnerabilityPrioritizer:
                 return 'Critical'
             elif vuln.severity.upper() == 'MEDIUM' and lateral_movement_potential:
                 return 'High'
-            elif vuln.severity.upper() in ['LOW', 'INFORMATIONAL'] and not lateral_movement_potential:
+            elif vuln.severity.upper() in ['CRITICAL', 'HIGH'] and not lateral_movement_potential:
+                return 'High'
+            elif vuln.severity.upper() in ['LOW', 'INFORMATIONAL'] and lateral_movement_potential:
                 return 'Medium'
+            elif vuln.severity.upper() == 'MEDIUM' and not lateral_movement_potential:
+                return 'Medium'
+            elif vuln.severity.upper() in ['LOW', 'INFORMATIONAL'] and not lateral_movement_potential:
+                return 'Low'
         
         # Check for weak configurations
         weak_services = ['rdp', 'vnc', 'telnet', 'ftp', 'ssh']
