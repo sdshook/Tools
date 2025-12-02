@@ -1,5 +1,7 @@
 # EVMS - Enterprise Vulnerability Management Scanner
 
+**(c) Shane D. Shook, PhD, 2025 All Rights Reserved**
+
 **A streamlined, single-script vulnerability management solution**
 
 EVMS is a focused, practical vulnerability management tool that performs automated discovery, scanning, prioritization, and reporting against ASN, CIDR, TLD, FQDN, or IP addresses.
