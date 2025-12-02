@@ -22,7 +22,7 @@ EVMS is a focused, practical vulnerability management tool that performs automat
 │                 │    │                  │    │                 │
 │ • Scanner       │◄──►│ • masscan        │    │ • CVE Feeds     │
 │ • Prioritizer   │    │ • nuclei         │    │ • Exploit DB    │
-│ • GraphRL       │    │ • httpx          │    │ • OpenAI API    │
+│ • Ensemble ML   │    │ • httpx          │    │ • OpenAI API    │
 │ • LLM Analyzer  │    │ • subfinder      │    │                 │
 │ • Web Interface │    │ • zeek (optional)│    │                 │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
@@ -82,43 +82,67 @@ python evms.py --target example.com --target-type domain
 python evms.py --target 10.0.0.1
 ```
 
-## 📊 Vulnerability Prioritization
+## 📊 Enhanced Vulnerability Prioritization
 
-EVMS uses intelligent prioritization based on exploit availability and lateral movement potential:
+EVMS uses an advanced ensemble classifier combined with rule-based validation for intelligent vulnerability prioritization:
 
 ### Priority Levels
 
-- **🔴 Critical**: Service with High/Critical exploit + lateral movement potential
-- **🟠 High**: Service with Medium exploit + lateral movement potential, or High/Critical exploit limited to host
-- **🟡 Medium**: Service with Low/Info exploit + lateral movement potential, or Medium exploit limited to host
+- **🔴 Critical**: High/Critical CVSS + exploit availability + network exposure (ensemble-enhanced)
+- **🟠 High**: Medium exploit + lateral movement potential, or High/Critical exploit limited to host
+- **🟡 Medium**: Low/Info exploit + lateral movement potential, or Medium exploit limited to host
 - **🟢 Low**: Weak configuration (RDP, VNC, Telnet, etc.), or Low/Info exploit limited to host
 
-### Prioritization Logic
+### Ensemble Prioritization Logic
 
 ```python
 def prioritize_vulnerability(vuln, target_ip):
-    exploit_available, maturity = check_exploit_availability(vuln.cve_id)
-    lateral_movement = assess_lateral_movement_potential(target_ip)
+    # Extract comprehensive features from GraphDB
+    features = extract_graph_features(vuln, target_ip)
     
-    if exploit_available and maturity in ['functional', 'poc']:
-        if vuln.severity in ['CRITICAL', 'HIGH'] and lateral_movement:
-            return 'Critical'
-        elif vuln.severity == 'MEDIUM' and lateral_movement:
-            return 'High'
-        elif vuln.severity in ['CRITICAL', 'HIGH'] and not lateral_movement:
-            return 'High'
-        elif vuln.severity in ['LOW', 'INFO'] and lateral_movement:
-            return 'Medium'
-        elif vuln.severity == 'MEDIUM' and not lateral_movement:
-            return 'Medium'
-        elif vuln.severity in ['LOW', 'INFO'] and not lateral_movement:
-            return 'Low'
+    # Get ensemble prediction from specialized models
+    ensemble_priority = predict_priority_ensemble(features)
     
-    if is_weak_configuration(vuln.service):
-        return 'Low'
+    # Validate with rule-based logic
+    rule_priority = rule_based_prioritization(vuln, target_ip)
     
-    return cvss_based_priority(vuln.cvss_score)
+    # Use ensemble if validated, otherwise fallback to rules
+    if validate_ensemble_prediction(ensemble_priority, rule_priority, vuln):
+        return ensemble_priority
+    else:
+        return rule_priority
+
+def extract_graph_features(vuln, target_ip):
+    return {
+        # CVSS & Exploit Features (8)
+        'cvss_score': vuln.cvss_score,
+        'severity_critical': 1 if vuln.severity == 'Critical' else 0,
+        'exploit_available': 1 if vuln.exploit_available else 0,
+        'exploit_maturity_functional': 1 if vuln.exploit_maturity == 'functional' else 0,
+        
+        # Network Topology Features (5) 
+        'subnet_asset_count': get_subnet_asset_count(target_ip),
+        'lateral_movement_ratio': get_lateral_movement_ratio(target_ip),
+        'subnet_vuln_density': get_subnet_vulnerability_density(target_ip),
+        
+        # Service Context Features (6)
+        'affects_web_service': 1 if vuln.port in [80, 443, 8080, 8443] else 0,
+        'affects_remote_access': 1 if vuln.port in [22, 3389, 5900] else 0,
+        'is_common_port': 1 if vuln.port in COMMON_PORTS else 0,
+        
+        # Historical Pattern Features (3)
+        'cve_prevalence': get_cve_network_prevalence(vuln.cve_id),
+        'avg_cve_asset_risk': get_average_cve_asset_risk(vuln.cve_id)
+    }
 ```
+
+### Ensemble Model Weights
+
+- **XGBoost (CVSS/Exploit)**: 40% - Optimized for CVSS scores and exploit data
+- **LightGBM (Network Topology)**: 35% - Specialized in lateral movement analysis  
+- **Random Forest (Service Context)**: 25% - Expert in service-specific vulnerabilities
+
+*Weights dynamically adjust based on vulnerability characteristics*
 
 ## 🔧 Security Tools Integration
 
@@ -127,6 +151,12 @@ def prioritize_vulnerability(vuln, target_ip):
 - **nuclei**: Vulnerability scanner with templates
 - **httpx**: HTTP service fingerprinting
 - **subfinder**: Subdomain discovery
+
+### Required ML Libraries
+- **xgboost**: Gradient boosting for CVSS/exploit analysis
+- **lightgbm**: Fast gradient boosting for network topology
+- **scikit-learn**: Random Forest and ensemble utilities
+- **numpy**: Numerical computing for feature vectors
 
 ### Optional Tools
 - **zeek**: Network flow capture and analysis (passive mode)
@@ -143,7 +173,7 @@ def prioritize_vulnerability(vuln, target_ip):
 }
 ```
 
-## 🧠 GraphRL & Machine Learning
+## 🧠 Ensemble Machine Learning & GraphDB
 
 ### Graph Database Schema
 ```cypher
@@ -152,13 +182,30 @@ def prioritize_vulnerability(vuln, target_ip):
 (Asset)-[:HAS_VULNERABILITY]->(Vulnerability)
 (Service)-[:AFFECTED_BY]->(Vulnerability)
 (Asset)-[:CONNECTED_TO]->(Asset)  // Network topology
+
+// Enhanced indexes for ensemble features
+CREATE INDEX asset_subnet FOR (a:Asset) ON (a.subnet)
+CREATE INDEX service_classification FOR (s:Service) ON (s.is_web_service, s.is_database, s.is_remote_access)
+CREATE INDEX vulnerability_impact FOR (v:Vulnerability) ON (v.impact)
 ```
 
-### GraphRL Features
-- **Vulnerability Correlation**: ML-based vulnerability relationship discovery
-- **Risk Scoring**: Graph-based risk propagation
-- **Lateral Movement Assessment**: Network topology analysis
-- **Gradient Descent**: Continuous learning from scan results
+### Ensemble Classifier Architecture
+- **XGBoost Model**: CVSS score and exploit availability analysis
+- **LightGBM Model**: Network topology and lateral movement assessment  
+- **Random Forest Model**: Service-specific vulnerability context
+- **Weighted Voting**: Intelligent ensemble prediction with dynamic weight adjustment
+
+### ML Features (22 total)
+- **CVSS Features**: Score, severity levels, exploit maturity (8 features)
+- **Network Features**: Subnet analysis, asset density, lateral movement potential (5 features)
+- **Service Features**: Port analysis, service classification, common vulnerabilities (6 features)
+- **Historical Features**: CVE prevalence, risk patterns across network (3 features)
+
+### GraphDB-Powered Intelligence
+- **Feature Engineering**: Comprehensive graph-based feature extraction
+- **Network Context**: Subnet-level vulnerability density analysis
+- **Service Classification**: Automated categorization of web, database, and remote access services
+- **Historical Patterns**: CVE prevalence and risk correlation across the network
 
 ## 🤖 LLM/RAG Analysis
 
@@ -299,7 +346,33 @@ SCAN_TIMEOUT=600
   "prioritization": {
     "critical_cvss_threshold": 9.0,
     "high_cvss_threshold": 7.0,
-    "medium_cvss_threshold": 4.0
+    "medium_cvss_threshold": 4.0,
+    "use_ensemble": true,
+    "ensemble_weights": {
+      "cvss_exploit": 0.4,
+      "network_topology": 0.35,
+      "service_context": 0.25
+    }
+  },
+  "machine_learning": {
+    "training_data_limit": 1000,
+    "min_training_samples": 10,
+    "model_validation_threshold": 1,
+    "xgboost_params": {
+      "max_depth": 6,
+      "learning_rate": 0.1,
+      "n_estimators": 100
+    },
+    "lightgbm_params": {
+      "max_depth": 8,
+      "learning_rate": 0.05,
+      "n_estimators": 150
+    },
+    "random_forest_params": {
+      "n_estimators": 200,
+      "max_depth": 10,
+      "min_samples_split": 5
+    }
   }
 }
 ```
@@ -353,6 +426,24 @@ chmod +x tools/*/bin/*
 chmod +x tools/*/*
 ```
 
+**ML Libraries Missing**
+```bash
+# Install required ML libraries
+pip install xgboost lightgbm scikit-learn numpy
+
+# Verify installation
+python -c "import xgboost, lightgbm, sklearn; print('ML libraries installed successfully')"
+```
+
+**Ensemble Prediction Errors**
+```bash
+# Check training data availability
+# Ensemble falls back to rule-based prioritization if insufficient data
+
+# Disable ensemble temporarily
+# Set "use_ensemble": false in configuration
+```
+
 ## 📈 Performance Tuning
 
 ### Scanning Performance
@@ -364,6 +455,12 @@ chmod +x tools/*/*
 - **Neo4j Memory**: Increase heap size for large datasets
 - **Indexing**: Ensure proper indexes on frequently queried fields
 - **Connection Pooling**: Configure appropriate pool sizes
+
+### Machine Learning Performance
+- **Feature Extraction**: GraphDB indexes optimize feature queries
+- **Model Training**: Adjust ensemble parameters based on dataset size
+- **Prediction Caching**: Results cached to avoid redundant ML inference
+- **Batch Processing**: Process multiple vulnerabilities simultaneously for efficiency
 
 ## 🤝 Contributing
 
