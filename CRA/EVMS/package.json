@@ -1,4 +1,5 @@
 {
+  "_comment": "EVMS (c) Shane D. Shook, 2025 All Rights Reserved",
   "name": "evms-platform",
   "version": "1.0.0",
   "description": "Exposure and Vulnerability Management System - Autonomous GraphRL-powered vulnerability scanning and risk assessment platform",

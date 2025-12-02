@@ -1,3 +1,4 @@
+<!-- EVMS (c) Shane D. Shook, 2025 All Rights Reserved -->
 # Open Source Licenses and Attributions
 
 EVMS leverages several outstanding open-source projects. We are grateful to the maintainers and contributors of these projects and ensure full compliance with their respective licenses.

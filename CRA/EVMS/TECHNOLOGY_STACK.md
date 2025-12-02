@@ -1,3 +1,4 @@
+<!-- EVMS (c) Shane D. Shook, 2025 All Rights Reserved -->
 # EVMS Technology Stack
 
 ## Open Source Foundation
