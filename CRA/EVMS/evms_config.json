@@ -1,39 +1,11 @@
 {
   "tools_dir": "./tools",
   "data_dir": "./data",
-  "reports_dir": "./reports",
   "web_port": 5000,
   
   "neo4j_uri": "bolt://localhost:7687",
   "neo4j_user": "neo4j",
   "neo4j_password": "password",
   
-  "openai_api_key": "",
-  
-  "scanning": {
-    "masscan_rate": 1000,
-    "nuclei_templates": "./tools/nuclei/templates",
-    "scan_timeout": 600,
-    "max_targets": 100
-  },
-  
-  "prioritization": {
-    "critical_cvss_threshold": 9.0,
-    "high_cvss_threshold": 7.0,
-    "medium_cvss_threshold": 4.0,
-    "lateral_movement_subnet_size": 24
-  },
-  
-  "reporting": {
-    "formats": ["json", "html", "pdf"],
-    "max_report_size": "10MB",
-    "retention_days": 30
-  },
-  
-  "llm": {
-    "model": "gpt-4",
-    "temperature": 0.1,
-    "max_tokens": 2048,
-    "timeout": 30
-  }
+  "openai_api_key": ""
 }

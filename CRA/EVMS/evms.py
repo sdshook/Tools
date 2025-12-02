@@ -19,7 +19,7 @@ import os
 import sys
 import subprocess
 import threading
-import time
+
 import random
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -29,26 +29,26 @@ import ipaddress
 import socket
 import requests
 from dataclasses import dataclass, asdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import sqlite3
-import hashlib
+
 
 # Web framework and async support
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_socketio import SocketIO, emit
 import asyncio
 import aiohttp
-import aiofiles
+
 
 # Graph database and ML
 import neo4j
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
+
 from sklearn.ensemble import RandomForestClassifier
 import xgboost as xgb
 import lightgbm as lgb
-from sklearn.metrics import accuracy_score, classification_report
+
 
 # Simple event system for internal coordination
 from collections import defaultdict
