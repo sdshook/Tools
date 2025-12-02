@@ -41,8 +41,60 @@ EVMS is a focused, practical vulnerability management tool that performs automat
 
 ## 🚀 Quick Start
 
+## 🪟 Windows Installation Guide
+
+EVMS fully supports Windows 10/11 with the following setup:
+
+### Prerequisites
+1. **Python 3.8+**: Download from [python.org](https://python.org) or install via Microsoft Store
+2. **Git for Windows**: Download from [git-scm.com](https://git-scm.com/download/win)
+3. **Windows Package Manager (winget)**: Included in Windows 10 1709+ and Windows 11
+
+### Windows-Specific Tool Support
+| Tool | Windows Support | Alternative |
+|------|----------------|-------------|
+| **nuclei** | ✅ Native Windows binary | - |
+| **httpx** | ✅ Native Windows binary | - |
+| **subfinder** | ✅ Native Windows binary | - |
+| **masscan** | ❌ Not available | **nmap** (auto-installed) |
+
+### Windows Setup Steps
+```powershell
+# 1. Clone repository
+git clone <repository>
+cd EVMS
+
+# 2. Run automated setup
+python setup.py
+
+# 3. Configure environment
+copy .env.example .env
+notepad .env  # Edit configuration
+
+# 4. Start services (requires Docker Desktop)
+docker-compose up -d
+
+# 5. Run EVMS
+python evms.py --web-only
+```
+
+### Windows Docker Setup
+For full functionality, install **Docker Desktop for Windows**:
+1. Download from [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
+2. Enable WSL 2 backend (recommended)
+3. Start Docker Desktop
+4. Run `docker-compose up -d` in EVMS directory
+
+### Alternative: Neo4j Desktop
+If Docker is not available, install **Neo4j Desktop**:
+1. Download from [neo4j.com/download](https://neo4j.com/download/)
+2. Create a new database with password "password"
+3. Start the database
+4. Update `.env` file with connection details
+
 ### 1. Setup Environment
 
+#### Linux/macOS
 ```bash
 # Clone and setup
 git clone <repository>
@@ -56,8 +108,28 @@ cp .env.example .env
 # Edit .env with your configuration
 ```
 
+#### Windows
+```powershell
+# Clone and setup
+git clone <repository>
+cd EVMS
+
+# Run setup (installs dependencies and tools)
+python setup.py
+
+# Configure environment
+copy .env.example .env
+# Edit .env with your configuration
+```
+
+**Windows Prerequisites:**
+- Python 3.8+ (from [python.org](https://python.org) or Microsoft Store)
+- Git for Windows
+- Windows Package Manager (winget) - included in Windows 10 1709+
+
 ### 2. Start Services
 
+#### Linux/macOS
 ```bash
 # Start Neo4j (if using Docker)
 docker-compose up -d
@@ -66,11 +138,46 @@ docker-compose up -d
 # - Neo4j: https://neo4j.com/download/
 ```
 
+#### Windows
+```powershell
+# Start Neo4j (if using Docker Desktop)
+docker-compose up -d
+
+# Or install manually:
+# - Neo4j Desktop: https://neo4j.com/download/
+# - Docker Desktop: https://www.docker.com/products/docker-desktop
+```
+
 ### 3. Run EVMS
 
 **Supported Target Types:** ASN, CIDR, TLD (Top-Level Domain), FQDN (Fully Qualified Domain Name), or IP Address
 
+#### Linux/macOS
 ```bash
+# Web interface only
+python evms.py --web-only
+
+# IP Address scanning
+python evms.py --target 192.168.1.100
+
+# CIDR range scanning
+python evms.py --target 192.168.1.0/24
+
+# TLD scanning (domain + all subdomains)
+python evms.py --target example.com --target-type domain
+
+# FQDN scanning (specific host)
+python evms.py --target www.example.com --target-type domain
+
+# ASN scanning (Autonomous System Number)
+python evms.py --target AS15169 --target-type asn
+
+# Interactive mode (scan + web interface)
+python evms.py --target 10.0.0.1
+```
+
+#### Windows
+```powershell
 # Web interface only
 python evms.py --web-only
 
@@ -317,6 +424,7 @@ report_url = 'http://localhost:5000/api/report/192.168.1.1/pdf'
 
 ### CLI Usage Examples
 
+#### Linux/macOS
 ```bash
 # Auto-detect target type and scan
 python evms.py --target 192.168.1.100
@@ -333,6 +441,29 @@ python evms.py --web-only --port 8080
 # Custom configuration file
 python evms.py --target 10.0.0.0/24 --config production_config.json
 ```
+
+#### Windows
+```powershell
+# Auto-detect target type and scan
+python evms.py --target 192.168.1.100
+
+# TLD scanning (domain + subdomains)
+python evms.py --target example.com --target-type domain
+
+# FQDN scanning (specific host)
+python evms.py --target mail.example.com --target-type domain
+
+# Web interface only on custom port
+python evms.py --web-only --port 8080
+
+# Custom configuration file
+python evms.py --target 10.0.0.0/24 --config production_config.json
+```
+
+**Windows Notes:**
+- Uses **nmap** instead of masscan for port scanning
+- All ProjectDiscovery tools (nuclei, httpx, subfinder) have native Windows support
+- Requires Docker Desktop or Neo4j Desktop for database functionality
 
 ### REST API Endpoints
 
@@ -724,10 +855,85 @@ python -c "import xgboost, lightgbm, sklearn; print('ML libraries installed succ
 
 (c) Shane D. Shook, PhD, 2025 All Rights Reserved
 
+## 🪟 Windows Troubleshooting
+
+### Common Windows Issues
+
+#### Python Not Found
+```powershell
+# Install Python from Microsoft Store or python.org
+winget install Python.Python.3.12
+
+# Or download from python.org and add to PATH
+```
+
+#### Git Not Found
+```powershell
+# Install Git for Windows
+winget install Git.Git
+
+# Or download from git-scm.com
+```
+
+#### Docker Issues
+```powershell
+# Install Docker Desktop
+winget install Docker.DockerDesktop
+
+# Enable WSL 2 (recommended)
+wsl --install
+```
+
+#### Tool Installation Failures
+```powershell
+# Check winget availability
+winget --version
+
+# Manual nmap installation if winget fails
+# Download from: https://nmap.org/download.html
+```
+
+#### Permission Errors
+```powershell
+# Run PowerShell as Administrator for setup
+# Right-click PowerShell → "Run as administrator"
+
+# Or use Windows Terminal with admin privileges
+```
+
+#### Path Issues
+```powershell
+# Add Python to PATH manually
+$env:PATH += ";C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312"
+
+# Verify Python installation
+python --version
+```
+
+### Windows-Specific Configuration
+
+#### Neo4j Desktop Setup
+1. Download Neo4j Desktop from [neo4j.com/download](https://neo4j.com/download/)
+2. Create new project and database
+3. Set password to "password" (or update .env file)
+4. Start database before running EVMS
+
+#### Docker Desktop Setup
+1. Install Docker Desktop for Windows
+2. Enable WSL 2 integration (Settings → General → Use WSL 2)
+3. Start Docker Desktop
+4. Verify with: `docker --version`
+
+#### Firewall Configuration
+Windows Defender may block EVMS web interface:
+1. Allow Python through Windows Firewall
+2. Or temporarily disable firewall for testing
+3. Add exception for port 5000 (or custom port)
+
 ## 🆘 Support
 
 For issues and questions:
-1. Check troubleshooting section
+1. Check troubleshooting section (including Windows-specific issues above)
 2. Review logs in `evms.log`
 3. Open GitHub issue with details
 4. Include configuration and error messages

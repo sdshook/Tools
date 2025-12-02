@@ -69,6 +69,11 @@ def setup_tools():
                 'extract_dir': 'masscan-1.3.2',
                 'build_cmd': 'make && mkdir -p bin && cp bin/masscan bin/',
                 'binary_path': 'bin/masscan'
+            },
+            'windows': {
+                'note': 'Masscan not available for Windows. Using nmap as alternative.',
+                'alternative': 'nmap',
+                'install_cmd': 'winget install Insecure.Nmap'
             }
         },
         'nuclei': {
@@ -79,6 +84,10 @@ def setup_tools():
             'darwin': {
                 'amd64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.1.0/nuclei_3.1.0_macOS_amd64.zip',
                 'arm64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.1.0/nuclei_3.1.0_macOS_arm64.zip'
+            },
+            'windows': {
+                'amd64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.1.0/nuclei_3.1.0_windows_amd64.zip',
+                'arm64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.1.0/nuclei_3.1.0_windows_arm64.zip'
             }
         },
         'httpx': {
@@ -89,6 +98,10 @@ def setup_tools():
             'darwin': {
                 'amd64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.3.7/httpx_1.3.7_macOS_amd64.zip',
                 'arm64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.3.7/httpx_1.3.7_macOS_arm64.zip'
+            },
+            'windows': {
+                'amd64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.3.7/httpx_1.3.7_windows_amd64.zip',
+                'arm64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.3.7/httpx_1.3.7_windows_arm64.zip'
             }
         },
         'subfinder': {
@@ -99,6 +112,10 @@ def setup_tools():
             'darwin': {
                 'amd64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.3/subfinder_2.6.3_macOS_amd64.zip',
                 'arm64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.3/subfinder_2.6.3_macOS_arm64.zip'
+            },
+            'windows': {
+                'amd64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.3/subfinder_2.6.3_windows_amd64.zip',
+                'arm64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.3/subfinder_2.6.3_windows_arm64.zip'
             }
         }
     }
@@ -110,7 +127,7 @@ def setup_tools():
         print(f"Setting up {tool_name}...")
         
         if tool_name == 'masscan':
-            # Special handling for masscan (needs compilation)
+            # Special handling for masscan (needs compilation on Linux, alternative on Windows)
             if system == 'linux':
                 config = tool_config['linux']
                 archive_path = tool_dir / 'masscan.tar.gz'
@@ -131,6 +148,16 @@ def setup_tools():
                     dest_binary.parent.mkdir(exist_ok=True)
                     shutil.copy2(src_binary, dest_binary)
                     dest_binary.chmod(0o755)
+            elif system == 'windows':
+                config = tool_config['windows']
+                print(f"Note: {config['note']}")
+                print(f"Installing {config['alternative']} as alternative...")
+                try:
+                    run_command(config['install_cmd'], check=False)
+                    print(f"{config['alternative']} installation attempted via winget")
+                except Exception as e:
+                    print(f"Could not install {config['alternative']} automatically: {e}")
+                    print(f"Please install {config['alternative']} manually from https://nmap.org/download.html")
             else:
                 print(f"Masscan setup not supported on {system}")
         else:
@@ -141,10 +168,16 @@ def setup_tools():
                 download_file(url, archive_path)
                 extract_archive(archive_path, tool_dir)
                 
-                # Make binary executable
-                binary_path = tool_dir / tool_name
-                if binary_path.exists():
+                # Make binary executable (Windows .exe files don't need chmod)
+                if system == 'windows':
+                    binary_path = tool_dir / f"{tool_name}.exe"
+                else:
+                    binary_path = tool_dir / tool_name
+                
+                if binary_path.exists() and system != 'windows':
                     binary_path.chmod(0o755)
+            else:
+                print(f"No {tool_name} binary available for {system} {arch}")
     
     # Download nuclei templates
     nuclei_dir = tools_dir / 'nuclei'
@@ -168,8 +201,13 @@ def setup_services():
         
         print("Services started. Neo4j available at http://localhost:7474")
     else:
+        system = platform.system().lower()
         print("Docker not available. Please install Neo4j manually:")
-        print("Neo4j: https://neo4j.com/download/")
+        if system == 'windows':
+            print("Neo4j Desktop: https://neo4j.com/download/")
+            print("Or install Docker Desktop: https://www.docker.com/products/docker-desktop")
+        else:
+            print("Neo4j: https://neo4j.com/download/")
 
 def create_directories():
     """Create required directories"""
