@@ -9,6 +9,7 @@
     "start:dev": "nodemon src/index.js",
     "start:orchestrator": "node src/services/orchestrator/index.js",
     "start:agents": "node src/services/agents/index.js",
+    "start:chat": "node src/services/chat/index.js",
     "start:graphrl": "python src/ml/graphrl/main.py",
     "start:dashboard": "node src/ui/dashboard/server.js",
     "test": "jest",
@@ -71,6 +72,7 @@
     "openai": "^4.20.1",
     "langchain": "^0.0.208",
     "qdrant-js": "^1.7.0",
+    "winston-daily-rotate-file": "^4.7.1",
     "@tensorflow/tfjs-node": "^4.15.0",
     "zeromq": "^6.0.0-beta.17"
   },

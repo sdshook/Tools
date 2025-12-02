@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EVMS Chat Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            width: 90%;
+            max-width: 800px;
+            height: 80vh;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .chat-header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .chat-header p {
+            opacity: 0.8;
+            font-size: 14px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-content {
+            background: #007bff;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #e9ecef;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-meta {
+            font-size: 11px;
+            opacity: 0.6;
+            margin-top: 5px;
+        }
+
+        .message.user .message-meta {
+            text-align: right;
+        }
+
+        .chat-input {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .input-group input:focus {
+            border-color: #007bff;
+        }
+
+        .input-group button {
+            padding: 12px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .input-group button:hover {
+            background: #0056b3;
+        }
+
+        .input-group button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 10px 16px;
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 18px;
+            margin-bottom: 15px;
+            max-width: 70%;
+        }
+
+        .typing-indicator.show {
+            display: block;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .typing-dots span {
+            width: 8px;
+            height: 8px;
+            background: #007bff;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+
+        .typing-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+            }
+            30% {
+                transform: translateY(-10px);
+            }
+        }
+
+        .status-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status-indicator.connected {
+            background: #28a745;
+            color: white;
+        }
+
+        .status-indicator.disconnected {
+            background: #dc3545;
+            color: white;
+        }
+
+        .quick-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .quick-action {
+            padding: 6px 12px;
+            background: #e9ecef;
+            border: none;
+            border-radius: 15px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .quick-action:hover {
+            background: #dee2e6;
+        }
+
+        .metadata {
+            font-size: 11px;
+            color: #6c757d;
+            margin-top: 5px;
+            padding: 5px 10px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>🛡️ EVMS AI Assistant</h1>
+            <p>Intelligent Vulnerability Management & Risk Assessment</p>
+            <div class="status-indicator" id="status">Connecting...</div>
+        </div>
+        
+        <div class="chat-messages" id="messages">
+            <div class="message assistant">
+                <div class="message-content">
+                    <strong>Welcome to EVMS AI!</strong><br><br>
+                    I'm your cybersecurity assistant. I can help you with:
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Vulnerability analysis and risk assessment</li>
+                        <li>Asset discovery and security posture evaluation</li>
+                        <li>Compliance reporting and gap analysis</li>
+                        <li>Threat intelligence and remediation guidance</li>
+                        <li>Custom security reports and dashboards</li>
+                    </ul>
+                    How can I assist you today?
+                </div>
+                <div class="message-meta">System • Just now</div>
+            </div>
+        </div>
+        
+        <div class="typing-indicator" id="typing">
+            <div class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+        
+        <div class="chat-input">
+            <div class="quick-actions">
+                <button class="quick-action" onclick="sendQuickMessage('Show me the latest vulnerabilities')">Latest Vulnerabilities</button>
+                <button class="quick-action" onclick="sendQuickMessage('Generate a risk assessment report')">Risk Report</button>
+                <button class="quick-action" onclick="sendQuickMessage('What is my current security posture?')">Security Status</button>
+                <button class="quick-action" onclick="sendQuickMessage('Show critical assets')">Critical Assets</button>
+            </div>
+            <div class="input-group">
+                <input type="text" id="messageInput" placeholder="Ask me about vulnerabilities, risks, compliance, or request reports..." />
+                <button id="sendButton" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        class EVMSChat {
+            constructor() {
+                this.socket = null;
+                this.sessionId = this.generateSessionId();
+                this.isConnected = false;
+                
+                this.messagesContainer = document.getElementById('messages');
+                this.messageInput = document.getElementById('messageInput');
+                this.sendButton = document.getElementById('sendButton');
+                this.statusIndicator = document.getElementById('status');
+                this.typingIndicator = document.getElementById('typing');
+                
+                this.init();
+            }
+            
+            generateSessionId() {
+                return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+            }
+            
+            init() {
+                this.connectSocket();
+                this.setupEventListeners();
+            }
+            
+            connectSocket() {
+                this.socket = io();
+                
+                this.socket.on('connect', () => {
+                    this.isConnected = true;
+                    this.updateStatus('connected', 'Connected');
+                    this.socket.emit('join_session', this.sessionId);
+                });
+                
+                this.socket.on('disconnect', () => {
+                    this.isConnected = false;
+                    this.updateStatus('disconnected', 'Disconnected');
+                });
+                
+                this.socket.on('chat_response', (response) => {
+                    this.hideTyping();
+                    this.addMessage('assistant', response.content, response.metadata);
+                });
+                
+                this.socket.on('chat_history', (history) => {
+                    // Load previous chat history if any
+                    if (history.messages && history.messages.length > 1) {
+                        this.loadChatHistory(history.messages);
+                    }
+                });
+                
+                this.socket.on('system_update', (update) => {
+                    this.showSystemUpdate(update);
+                });
+                
+                this.socket.on('error', (error) => {
+                    this.addMessage('system', `Error: ${error.message}`, { error: true });
+                });
+            }
+            
+            setupEventListeners() {
+                this.messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+                
+                this.sendButton.addEventListener('click', () => {
+                    this.sendMessage();
+                });
+            }
+            
+            sendMessage() {
+                const message = this.messageInput.value.trim();
+                if (!message || !this.isConnected) return;
+                
+                this.addMessage('user', message);
+                this.messageInput.value = '';
+                this.showTyping();
+                
+                this.socket.emit('chat_message', {
+                    message,
+                    sessionId: this.sessionId,
+                    context: {
+                        timestamp: new Date().toISOString()
+                    }
+                });
+            }
+            
+            sendQuickMessage(message) {
+                this.messageInput.value = message;
+                this.sendMessage();
+            }
+            
+            addMessage(type, content, metadata = {}) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${type}`;
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                
+                if (type === 'assistant' && content.includes('\n')) {
+                    contentDiv.innerHTML = this.formatMessage(content);
+                } else {
+                    contentDiv.textContent = content;
+                }
+                
+                const metaDiv = document.createElement('div');
+                metaDiv.className = 'message-meta';
+                metaDiv.textContent = `${this.formatType(type)} • ${this.formatTime(new Date())}`;
+                
+                messageDiv.appendChild(contentDiv);
+                messageDiv.appendChild(metaDiv);
+                
+                // Add metadata if present
+                if (metadata && Object.keys(metadata).length > 0) {
+                    const metadataDiv = document.createElement('div');
+                    metadataDiv.className = 'metadata';
+                    metadataDiv.textContent = this.formatMetadata(metadata);
+                    messageDiv.appendChild(metadataDiv);
+                }
+                
+                this.messagesContainer.appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+            
+            formatMessage(content) {
+                return content
+                    .replace(/\n/g, '<br>')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .replace(/`(.*?)`/g, '<code>$1</code>');
+            }
+            
+            formatType(type) {
+                const types = {
+                    user: '👤 You',
+                    assistant: '🤖 EVMS AI',
+                    system: '⚙️ System'
+                };
+                return types[type] || type;
+            }
+            
+            formatTime(date) {
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+            
+            formatMetadata(metadata) {
+                const parts = [];
+                if (metadata.queryType) parts.push(`Type: ${metadata.queryType}`);
+                if (metadata.confidence) parts.push(`Confidence: ${(metadata.confidence * 100).toFixed(0)}%`);
+                if (metadata.sources) parts.push(`Sources: ${metadata.sources.length}`);
+                if (metadata.retrievedNodes) parts.push(`Data points: ${metadata.retrievedNodes}`);
+                return parts.join(' • ');
+            }
+            
+            showTyping() {
+                this.typingIndicator.classList.add('show');
+                this.scrollToBottom();
+            }
+            
+            hideTyping() {
+                this.typingIndicator.classList.remove('show');
+            }
+            
+            updateStatus(status, text) {
+                this.statusIndicator.className = `status-indicator ${status}`;
+                this.statusIndicator.textContent = text;
+            }
+            
+            scrollToBottom() {
+                setTimeout(() => {
+                    this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+                }, 100);
+            }
+            
+            loadChatHistory(messages) {
+                // Clear welcome message
+                this.messagesContainer.innerHTML = '';
+                
+                messages.forEach(message => {
+                    this.addMessage(message.type, message.content, message.metadata);
+                });
+            }
+            
+            showSystemUpdate(update) {
+                const message = `System Update: ${update.type} - ${JSON.stringify(update.data)}`;
+                this.addMessage('system', message, { systemUpdate: true });
+            }
+        }
+        
+        // Initialize chat when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.evmsChat = new EVMSChat();
+        });
+        
+        // Global function for quick actions
+        function sendQuickMessage(message) {
+            if (window.evmsChat) {
+                window.evmsChat.sendQuickMessage(message);
+            }
+        }
+    </script>
+</body>
+</html>

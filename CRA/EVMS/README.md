@@ -137,9 +137,10 @@ The Exposure and Vulnerability Management System (EVMS) is an autonomous, Human-
 - **Natural-language ESM Queries**: LLM-powered security analytics interface
 
 ### User Interface
-- **Dashboard**: Real-time risk visualization
-- **Chat Interface**: Natural language interaction
-- **Reporting**: Automated and on-demand reports
+- **Dashboard**: Real-time risk visualization and metrics
+- **Chat Interface**: LLM/RAG-powered natural language interaction for queries, analysis, and reporting
+- **Reporting**: Automated and on-demand report generation with multiple formats
+- **WebSocket Integration**: Real-time updates and notifications
 
 ## Key Features
 
@@ -284,11 +285,57 @@ npm run db:init
 npm run start:all
 ```
 
-### Configuration
+### LLM/RAG Chat System
+
+### Natural Language Interface
+EVMS includes a sophisticated chat interface powered by Large Language Models and Retrieval-Augmented Generation:
+
+#### **Capabilities**
+- **Interactive Queries**: Ask questions about vulnerabilities, assets, risks, and compliance in natural language
+- **Deterministic Responses**: Answers grounded in actual graph database data with source citations
+- **On-Demand Reports**: Generate custom reports through conversational requests
+- **Dashboard Population**: Request specific dashboard widgets and metrics
+- **Analysis & Insights**: Deep analysis of security data with actionable recommendations
+
+#### **Chat Features**
+- **Session Management**: Persistent chat history with context awareness
+- **Real-Time Updates**: WebSocket-based live notifications and responses
+- **Multi-Format Reports**: Generate reports in Markdown, HTML, JSON, or plain text
+- **Intent Classification**: Automatic routing of queries to appropriate handlers
+- **Metadata Enrichment**: Responses include confidence scores, data sources, and relevance metrics
+
+#### **RAG Pipeline**
+- **Graph Database Integration**: Retrieves relevant data from Neo4j knowledge graph
+- **Semantic Search**: Intelligent query analysis and data retrieval
+- **Context Ranking**: Relevance scoring and result prioritization
+- **Source Attribution**: Clear citations and data provenance
+- **Fallback Handling**: Graceful degradation when data is unavailable
+
+#### **Report Generation**
+- **Template-Based**: Professional report formats for different audiences
+- **Dynamic Content**: LLM-generated sections based on current data
+- **Multiple Formats**: Support for various output formats and styles
+- **Executive & Technical**: Tailored content for different stakeholder needs
+
+### Usage Examples
+```
+User: "Show me critical vulnerabilities discovered in the last 24 hours"
+EVMS: "I found 12 critical vulnerabilities in the past 24 hours affecting 8 assets..."
+
+User: "Generate an executive risk assessment report"
+EVMS: "I've generated an executive risk assessment report. You can access it here..."
+
+User: "What's the current security posture of our web servers?"
+EVMS: "Based on the latest scans, your web servers show the following security posture..."
+```
+
+## Configuration
 - **NATS Configuration**: Connection strings and credentials
 - **Database Setup**: Graph DB and KVS connection details
 - **ML Parameters**: Model hyperparameters and training settings
 - **Scanning Policies**: Target definitions and scan schedules
+- **LLM Configuration**: OpenAI API keys, model selection, and temperature settings
+- **RAG Parameters**: Retrieval limits, similarity thresholds, and context windows
 
 ## API Documentation
 
@@ -298,11 +345,19 @@ npm run start:all
 - `GET /api/v1/risks` - Retrieve risk assessments
 - `POST /api/v1/hotl/review` - Submit HOTL review
 - `GET /api/v1/dashboard/metrics` - Dashboard data
+- `POST /api/chat/message` - Send chat message to LLM/RAG system
+- `GET /api/chat/history/:sessionId` - Retrieve chat history
+- `POST /api/reports/generate` - Generate on-demand reports
+- `GET /api/dashboard/populate` - Populate dashboard widgets
 
 ### WebSocket Events
 - `scan.started` - Scan initiation notification
 - `scan.completed` - Scan completion with results
 - `risk.updated` - Risk score changes
+- `chat_response` - LLM response to user message
+- `chat_history` - Historical chat messages
+- `system_update` - Real-time system notifications
+- `report_generated` - Report generation completion
 - `hotl.required` - Human review needed
 
 ### GraphQL Schema
