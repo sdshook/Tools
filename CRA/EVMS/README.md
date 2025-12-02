@@ -111,6 +111,12 @@ The Exposure and Vulnerability Management System (EVMS) is an autonomous, Human-
 - **GraphRL**: Custom graph-based reinforcement learning for risk prioritization
 - **LLM/RAG**: Large Language Models with Retrieval-Augmented Generation for natural language queries
 
+### Integrated Security Tools
+- **Masscan**: High-speed port scanner for network discovery and enumeration
+- **Nuclei**: Template-based vulnerability scanner with community-driven detection rules
+- **Subfinder**: Subdomain discovery tool for comprehensive asset mapping
+- **Httpx**: HTTP toolkit for web service probing and technology fingerprinting
+
 ### Supporting Infrastructure
 - **Neo4j**: Graph database for unified asset relationships
 - **NATS KV Store**: High-performance key-value storage and caching
@@ -232,6 +238,31 @@ Dashboard → Reports → Actions → Remediation
 - Graph database (Neo4j/ArangoDB)
 - Redis for key-value storage
 - GPU resources for ML training (optional but recommended)
+
+### Security Tools Setup
+The following tools must be installed in the `tools/` directory:
+
+```bash
+# Create tools directory structure
+mkdir -p tools/{masscan/bin,nuclei,subfinder,httpx}
+
+# Install Masscan (compile from source or download binary)
+# Place binary at: tools/masscan/bin/masscan
+
+# Install Nuclei
+# Download from: https://github.com/projectdiscovery/nuclei
+# Place binary at: tools/nuclei/nuclei
+
+# Install Subfinder  
+# Download from: https://github.com/projectdiscovery/subfinder
+# Place binary at: tools/subfinder/subfinder
+
+# Install Httpx
+# Download from: https://github.com/projectdiscovery/httpx
+# Place binary at: tools/httpx/httpx
+```
+
+**Note**: EVMS includes built-in fallback scanning capabilities when tools are not available, but the integrated tools provide enhanced performance and detection capabilities.
 
 ### Installation
 ```bash
