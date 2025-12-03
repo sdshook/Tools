@@ -698,6 +698,123 @@
             }
         }
 
+        // Asset Management Functions
+        function loadAssets() {
+            refreshAssets();
+        }
+
+        function refreshAssets() {
+            fetch('/api/assets')
+                .then(response => response.json())
+                .then(data => {
+                    updateAssetTable(data.assets || []);
+                })
+                .catch(error => {
+                    console.error('Error loading assets:', error);
+                    showAlert('Failed to load assets', 'error');
+                });
+        }
+
+        function updateAssetTable(assets) {
+            const tbody = document.getElementById('assetTableBody');
+            
+            if (assets.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #7f8c8d; padding: 2rem;">No assets found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = assets.map(asset => `
+                <tr>
+                    <td>${asset.ip}</td>
+                    <td>${asset.hostname || 'Unknown'}</td>
+                    <td>${asset.os || 'Unknown'}</td>
+                    <td>${asset.open_ports ? asset.open_ports.join(', ') : 'None'}</td>
+                    <td>
+                        <span class="severity-${asset.risk_score >= 7 ? 'critical' : asset.risk_score >= 5 ? 'high' : asset.risk_score >= 3 ? 'medium' : 'low'}">
+                            ${asset.risk_score.toFixed(1)}
+                        </span>
+                    </td>
+                    <td>${asset.last_scan ? new Date(asset.last_scan).toLocaleString() : 'Never'}</td>
+                    <td>
+                        <button class="btn btn-primary" onclick="scanAsset('${asset.ip}')">Scan</button>
+                        <button class="btn btn-secondary" onclick="viewAssetDetails('${asset.ip}')">Details</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function exportAssets() {
+            fetch('/api/assets')
+                .then(response => response.json())
+                .then(data => {
+                    const csv = convertToCSV(data.assets || []);
+                    downloadCSV(csv, 'assets.csv');
+                })
+                .catch(error => {
+                    console.error('Error exporting assets:', error);
+                    showAlert('Failed to export assets', 'error');
+                });
+        }
+
+        function scanAsset(ip) {
+            showAlert(`Starting scan of ${ip}...`, 'info');
+            fetch('/api/scan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    target: ip,
+                    target_type: 'ip'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(`Scan of ${ip} started successfully`, 'success');
+                    updateRecentActivity(`Started scan of ${ip}`, 'success');
+                } else {
+                    showAlert(`Failed to start scan of ${ip}: ${data.error}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error starting scan:', error);
+                showAlert(`Failed to start scan of ${ip}`, 'error');
+            });
+        }
+
+        function viewAssetDetails(ip) {
+            // This could open a modal or navigate to a details page
+            showAlert(`Asset details for ${ip} - Feature coming soon`, 'info');
+        }
+
+        function convertToCSV(data) {
+            if (data.length === 0) return '';
+            
+            const headers = Object.keys(data[0]);
+            const csvContent = [
+                headers.join(','),
+                ...data.map(row => headers.map(header => {
+                    const value = row[header];
+                    return Array.isArray(value) ? `"${value.join(', ')}"` : `"${value || ''}"`;
+                }).join(','))
+            ].join('\n');
+            
+            return csvContent;
+        }
+
+        function downloadCSV(csv, filename) {
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('hidden', '');
+            a.setAttribute('href', url);
+            a.setAttribute('download', filename);
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
         // Enter key handlers
         document.getElementById('aiChatInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {

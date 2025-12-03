@@ -182,7 +182,7 @@ class ToolManager:
         # Configure tools based on platform
         self.tools = {
             'nuclei': self.tools_dir / 'nuclei' / 'nuclei',
-            'httpx': self.tools_dir / 'httpx' / 'httpx',
+            'httpx': Path.home() / 'go' / 'bin' / 'httpx',  # Use ProjectDiscovery httpx
             'subfinder': self.tools_dir / 'subfinder' / 'subfinder',
             'zeek': self.tools_dir / 'zeek' / 'bin' / 'zeek'
         }
@@ -290,13 +290,47 @@ class ToolManager:
                     logger.warning(f"Required tool {tool} not found at {path}")
         return status
     
+    async def resolve_target_to_ip(self, target: str) -> str:
+        """Resolve domain name to IP address, return as-is if already an IP"""
+        import socket
+        import ipaddress
+        
+        # Check if target is already an IP address
+        try:
+            ipaddress.ip_address(target)
+            return target  # Already an IP
+        except ValueError:
+            pass
+        
+        # Check if target is a CIDR range
+        try:
+            ipaddress.ip_network(target, strict=False)
+            return target  # Already a CIDR range
+        except ValueError:
+            pass
+        
+        # Try to resolve domain name
+        try:
+            ip = socket.gethostbyname(target)
+            logger.info(f"Resolved {target} to {ip}")
+            return ip
+        except socket.gaierror as e:
+            logger.error(f"Failed to resolve {target}: {e}")
+            return None
+    
     async def run_masscan(self, target: str, ports: str = "1-65535", rate: int = 1000) -> List[Dict]:
         """Run masscan for port discovery"""
+        # Resolve domain to IP if needed (masscan only accepts IPs)
+        resolved_target = await self.resolve_target_to_ip(target)
+        if not resolved_target:
+            logger.error(f"Failed to resolve target {target} to IP address")
+            return []
+        
         if self.use_wsl2:
             # Build command for WSL2 execution
             cmd = [
                 'wsl', 'masscan',
-                target,
+                resolved_target,
                 '-p', ports,
                 '--rate', str(rate),
                 '--output-format', 'json',
@@ -306,7 +340,7 @@ class ToolManager:
             # Build command for native execution
             cmd = [
                 str(self.tools['masscan']),
-                target,
+                resolved_target,
                 '-p', ports,
                 '--rate', str(rate),
                 '--output-format', 'json',
@@ -318,14 +352,67 @@ class ToolManager:
             if result.returncode == 0:
                 # Parse masscan JSON output
                 open_ports = []
-                for line in result.stdout.strip().split('\n'):
-                    if line.strip():
+                output_lines = result.stdout.strip().split('\n')
+                
+                # Filter out rate/status messages and parse JSON
+                for line in output_lines:
+                    line = line.strip()
+                    if line and (line.startswith('{') or line.startswith('[')):
                         try:
-                            port_data = json.loads(line)
-                            open_ports.append(port_data)
-                        except json.JSONDecodeError:
+                            # Handle both single JSON objects and arrays
+                            if line.startswith('[') and line.endswith(']'):
+                                # Parse JSON array
+                                json_data = json.loads(line)
+                                if isinstance(json_data, list):
+                                    # Process each item in the array
+                                    for item in json_data:
+                                        if 'ports' in item:
+                                            # Masscan format: {"ip": "x.x.x.x", "ports": [{"port": 80, "proto": "tcp", ...}]}
+                                            for port_info in item['ports']:
+                                                open_ports.append({
+                                                    'ip': item['ip'],
+                                                    'port': port_info['port'],
+                                                    'protocol': port_info.get('proto', 'tcp'),
+                                                    'status': port_info.get('status', 'open')
+                                                })
+                                        else:
+                                            open_ports.append(item)
+                                else:
+                                    if 'ports' in json_data:
+                                        # Single masscan result
+                                        for port_info in json_data['ports']:
+                                            open_ports.append({
+                                                'ip': json_data['ip'],
+                                                'port': port_info['port'],
+                                                'protocol': port_info.get('proto', 'tcp'),
+                                                'status': port_info.get('status', 'open')
+                                            })
+                                    else:
+                                        open_ports.append(json_data)
+                            elif line.startswith('{'):
+                                # Parse single JSON object
+                                port_data = json.loads(line)
+                                if 'ports' in port_data:
+                                    # Masscan format: {"ip": "x.x.x.x", "ports": [{"port": 80, "proto": "tcp", ...}]}
+                                    for port_info in port_data['ports']:
+                                        open_ports.append({
+                                            'ip': port_data['ip'],
+                                            'port': port_info['port'],
+                                            'protocol': port_info.get('proto', 'tcp'),
+                                            'status': port_info.get('status', 'open')
+                                        })
+                                else:
+                                    open_ports.append(port_data)
+                        except json.JSONDecodeError as e:
+                            logger.debug(f"Failed to parse JSON line: {line} - {e}")
                             continue
+                
+                logger.info(f"Masscan found {len(open_ports)} open ports on {resolved_target}")
                 return open_ports
+            else:
+                logger.error(f"Masscan failed with return code {result.returncode}")
+                logger.error(f"Stderr: {result.stderr}")
+                return []
         except subprocess.TimeoutExpired:
             logger.error(f"Masscan timeout for target {target}")
         except Exception as e:
@@ -440,9 +527,9 @@ class ToolManager:
             '-status-code'
         ]
         
-        # Add targets
+        # Add targets using -u flag
         for target in targets:
-            cmd.extend(['-target', target])
+            cmd.extend(['-u', target])
         
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -918,42 +1005,76 @@ class GraphEnsembleEngine:
         
         logger.info("Initialized ensemble models: CVSS/Exploit, Network Topology, Service Context")
     
-    def store_scan_results(self, scan_result: ScanResult):
+    def store_scan_results(self, scan_result: ScanResult, discovery_targets: List[str] = None):
         """Store scan results in graph database with enhanced metadata for ensemble features"""
         with self.driver.session() as session:
-            # Extract subnet for network topology features
-            try:
-                network = ipaddress.ip_network(f"{scan_result.target}/24", strict=False)
-                subnet = str(network.network_address)
-            except:
-                subnet = scan_result.target.rsplit('.', 1)[0] + '.0'
-            
-            # Create asset node with enhanced properties
+            # Create scan node first
+            scan_id = f"scan_{scan_result.target}_{int(scan_result.timestamp.timestamp())}"
             session.run("""
-                MERGE (a:Asset {ip: $ip})
-                SET a.last_scanned = datetime(),
-                    a.risk_score = $risk_score,
-                    a.priority = $priority,
-                    a.lateral_movement_potential = $lateral_movement,
-                    a.subnet = $subnet,
-                    a.service_count = $service_count,
-                    a.vulnerability_count = $vuln_count,
-                    a.critical_vuln_count = $critical_count,
-                    a.high_vuln_count = $high_count
+                CREATE (s:Scan {
+                    id: $scan_id,
+                    target: $target,
+                    status: 'completed',
+                    timestamp: $timestamp,
+                    duration: $duration,
+                    open_ports: $open_ports,
+                    vulnerability_count: $vuln_count,
+                    risk_score: $risk_score,
+                    priority: $priority
+                })
             """, {
-                'ip': scan_result.target,
-                'risk_score': scan_result.risk_assessment.get('total_score', 0.0),
-                'priority': scan_result.priority,
-                'lateral_movement': scan_result.lateral_movement_potential,
-                'subnet': subnet,
-                'service_count': len(scan_result.services),
+                'scan_id': scan_id,
+                'target': scan_result.target,
+                'timestamp': scan_result.timestamp.isoformat(),
+                'duration': 0,  # We don't track duration yet, could be added
+                'open_ports': len(scan_result.services),
                 'vuln_count': len(scan_result.vulnerabilities),
-                'critical_count': len([v for v in scan_result.vulnerabilities if v.severity == 'Critical']),
-                'high_count': len([v for v in scan_result.vulnerabilities if v.severity == 'High'])
+                'risk_score': scan_result.risk_assessment.get('total_score', 0.0),
+                'priority': scan_result.priority
             })
+            
+            # If discovery_targets is provided, create individual assets for each IP
+            # Otherwise, use the original target (for backward compatibility)
+            targets_to_store = discovery_targets if discovery_targets else [scan_result.target]
+            
+            for target_ip in targets_to_store:
+                # Extract subnet for network topology features
+                try:
+                    network = ipaddress.ip_network(f"{target_ip}/24", strict=False)
+                    subnet = str(network.network_address)
+                except:
+                    subnet = target_ip.rsplit('.', 1)[0] + '.0'
+                
+                # Create asset node with enhanced properties
+                session.run("""
+                    MERGE (a:Asset {ip: $ip})
+                    SET a.last_scanned = datetime(),
+                        a.risk_score = $risk_score,
+                        a.priority = $priority,
+                        a.lateral_movement_potential = $lateral_movement,
+                        a.subnet = $subnet,
+                        a.service_count = $service_count,
+                        a.vulnerability_count = $vuln_count,
+                        a.critical_vuln_count = $critical_count,
+                        a.high_vuln_count = $high_count,
+                        a.hostname = $hostname
+                """, {
+                    'ip': target_ip,
+                    'hostname': scan_result.target if target_ip != scan_result.target else None,
+                    'risk_score': scan_result.risk_assessment.get('total_score', 0.0),
+                    'priority': scan_result.priority,
+                    'lateral_movement': scan_result.lateral_movement_potential,
+                    'subnet': subnet,
+                    'service_count': len(scan_result.services),
+                    'vuln_count': len(scan_result.vulnerabilities),
+                    'critical_count': len([v for v in scan_result.vulnerabilities if v.severity == 'Critical']),
+                    'high_count': len([v for v in scan_result.vulnerabilities if v.severity == 'High'])
+                })
             
             # Create service nodes with enhanced properties
             for service in scan_result.services:
+                # Use the service's IP address, not the scan target
+                service_ip = service.get('ip', scan_result.target)
                 session.run("""
                     MATCH (a:Asset {ip: $ip})
                     MERGE (s:Service {id: $service_id})
@@ -966,8 +1087,8 @@ class GraphEnsembleEngine:
                         s.is_remote_access = $is_remote
                     MERGE (a)-[:RUNS]->(s)
                 """, {
-                    'ip': scan_result.target,
-                    'service_id': f"{scan_result.target}:{service.get('port', 0)}",
+                    'ip': service_ip,
+                    'service_id': f"{service_ip}:{service.get('port', 0)}",
                     'service_name': service.get('service', 'unknown'),
                     'version': service.get('version', ''),
                     'port': service.get('port', 0),
@@ -1142,7 +1263,8 @@ class GraphEnsembleEngine:
     
     def get_network_context(self, target_ip: str) -> Dict:
         """Enhanced network context for lateral movement assessment"""
-        return self._extract_network_features(None, target_ip)
+        with self.driver.session() as session:
+            return self._extract_network_features(session, target_ip)
     
     def train_ensemble_models(self):
         """Train ensemble classifier models using historical graph data"""
@@ -1560,10 +1682,14 @@ class EVMSScanner:
         service_urls = self.build_service_urls(all_open_ports)
         logger.info(f"Built {len(service_urls)} service URLs")
         
-        # Phase 4: Service fingerprinting on discovered services
-        services = []
+        # Phase 4: Convert port scan results to services
+        services = self.convert_ports_to_services(all_open_ports)
+        
+        # Phase 4b: Service fingerprinting on discovered HTTP/HTTPS services
         if service_urls:
-            services = await self.tools.run_httpx(service_urls)
+            httpx_services = await self.tools.run_httpx(service_urls)
+            # Merge httpx results with port-based services
+            services.extend(httpx_services)
         
         # Phase 5: Vulnerability scanning on discovered services
         vulnerabilities = []
@@ -1607,7 +1733,7 @@ class EVMSScanner:
         )
         
         # Store in graph database
-        self.graph_engine.store_scan_results(scan_result)
+        self.graph_engine.store_scan_results(scan_result, discovery_targets)
         
         # Publish scan completion event
         event_bus.publish('scan.completed', {
@@ -1760,6 +1886,58 @@ class EVMSScanner:
                 unique_urls.append(url)
         
         return unique_urls
+    
+    def convert_ports_to_services(self, open_ports: List[Dict]) -> List[Dict]:
+        """Convert port scan results to service objects"""
+        services = []
+        
+        # Common port to service mappings
+        port_service_map = {
+            21: 'ftp',
+            22: 'ssh',
+            23: 'telnet',
+            25: 'smtp',
+            53: 'dns',
+            80: 'http',
+            110: 'pop3',
+            143: 'imap',
+            443: 'https',
+            465: 'smtps',
+            587: 'smtp',
+            993: 'imaps',
+            995: 'pop3s',
+            3389: 'rdp',
+            5432: 'postgresql',
+            3306: 'mysql',
+            1433: 'mssql',
+            6379: 'redis',
+            27017: 'mongodb',
+            8080: 'http-alt',
+            8443: 'https-alt'
+        }
+        
+        for port_info in open_ports:
+            ip = port_info.get('ip', '')
+            port = port_info.get('port', 0)
+            protocol = port_info.get('protocol', 'tcp')
+            
+            if not ip or not port:
+                continue
+                
+            service_name = port_service_map.get(port, f'unknown-{port}')
+            
+            service = {
+                'ip': ip,
+                'port': port,
+                'protocol': protocol,
+                'service': service_name,
+                'version': '',  # Will be filled by service fingerprinting if available
+                'status': port_info.get('status', 'open')
+            }
+            
+            services.append(service)
+        
+        return services
     
     async def discover_asn_ranges(self, asn: str) -> List[str]:
         """Discover IP ranges for a given ASN using multiple methods"""
@@ -1972,7 +2150,7 @@ class EVMSScanner:
     def assess_lateral_movement(self, target: str) -> bool:
         """Assess lateral movement potential"""
         network_context = self.graph_engine.get_network_context(target)
-        return network_context['asset_count'] > 1
+        return network_context['subnet_asset_count'] > 1
 
 class EVMSWebInterface:
     """Simple web interface for EVMS control and reporting"""
@@ -2086,8 +2264,37 @@ class EVMSWebInterface:
         @self.app.route('/api/scans')
         def get_scans():
             """Get scan list"""
-            # This would need to be implemented with a proper scan tracking system
-            return jsonify({'scans': []})
+            try:
+                with self.scanner.graph_engine.driver.session() as session:
+                    result = session.run("""
+                        MATCH (s:Scan)
+                        RETURN s.id as id, s.target as target, s.status as status,
+                               s.timestamp as timestamp, s.duration as duration,
+                               s.open_ports as open_ports, s.vulnerability_count as vuln_count,
+                               s.risk_score as risk_score, s.priority as priority
+                        ORDER BY s.timestamp DESC
+                        LIMIT 50
+                    """)
+                    
+                    scans = []
+                    for record in result:
+                        scan_data = {
+                            'id': record['id'],
+                            'target': record['target'],
+                            'status': record['status'],
+                            'timestamp': record['timestamp'] if isinstance(record['timestamp'], str) else (record['timestamp'].isoformat() if record['timestamp'] else None),
+                            'duration': record['duration'],
+                            'open_ports': record['open_ports'],
+                            'vulnerability_count': record['vuln_count'],
+                            'risk_score': record['risk_score'],
+                            'priority': record['priority']
+                        }
+                        scans.append(scan_data)
+                    
+                    return jsonify({'scans': scans})
+            except Exception as e:
+                logger.error(f"Error getting scans: {e}")
+                return jsonify({'scans': []})
         
         @self.app.route('/api/vulnerabilities')
         def get_vulnerabilities():
@@ -2238,19 +2445,83 @@ class EVMSWebInterface:
     
     def generate_report_file(self, target: str, format: str):
         """Generate and return report file"""
-        # Get scan results
+        print(f"Generating report for {target} using database query")
+        
+        # Query database for real data
         with self.scanner.graph_engine.driver.session() as session:
-            result = session.run("""
-                MATCH (a:Asset {ip: $target})-[:HAS_VULNERABILITY]->(v:Vulnerability)
-                RETURN a, collect(v) as vulnerabilities
-            """, {'target': target})
+            # Get asset data
+            asset_result = session.run("""
+                MATCH (a:Asset)
+                WHERE a.hostname CONTAINS $target OR a.ip CONTAINS $target
+                RETURN a.ip, a.hostname, a.scan_id
+                LIMIT 1
+            """, target=target)
             
-            record = result.single()
-            if not record:
-                return jsonify({'error': 'No results found'}), 404
+            asset_record = asset_result.single()
+            if asset_record:
+                asset_ip = asset_record['a.ip']
+                asset_hostname = asset_record['a.hostname']
+            else:
+                asset_ip = target
+                asset_hostname = target
             
-            asset_data = dict(record['a'])
-            vulnerabilities = [dict(v) for v in record['vulnerabilities']]
+            # Get services for this target
+            services_result = session.run("""
+                MATCH (a:Asset)-[:RUNS]->(s:Service)
+                WHERE a.hostname CONTAINS $target OR a.ip CONTAINS $target
+                RETURN a.ip, a.hostname, s.port, s.protocol, s.name, s.version, 
+                       s.is_web_service, s.is_database, s.is_remote_access
+                ORDER BY a.ip, s.port
+            """, target=target)
+            
+            services = []
+            discovered_ips = set()
+            for record in services_result:
+                discovered_ips.add(record['a.ip'])
+                services.append({
+                    'ip': record['a.ip'],
+                    'hostname': record['a.hostname'],
+                    'port': record['s.port'],
+                    'protocol': record['s.protocol'],
+                    'service': record['s.name'],
+                    'version': record['s.version'] or 'Unknown',
+                    'is_web_service': record['s.is_web_service'],
+                    'is_database': record['s.is_database'],
+                    'is_remote_access': record['s.is_remote_access']
+                })
+            
+            # Get vulnerabilities for this target
+            vuln_result = session.run("""
+                MATCH (a:Asset)-[:HAS_VULNERABILITY]->(v:Vulnerability)
+                WHERE a.hostname CONTAINS $target OR a.ip CONTAINS $target
+                RETURN v.cve_id, v.severity, v.description, v.cvss_score
+            """, target=target)
+            
+            vulnerabilities = []
+            for record in vuln_result:
+                vulnerabilities.append({
+                    'cve_id': record['v.cve_id'],
+                    'severity': record['v.severity'],
+                    'description': record['v.description'],
+                    'cvss_score': record['v.cvss_score']
+                })
+        
+        # Build asset data from database results
+        asset_data = {
+            'ip': asset_ip,
+            'hostname': asset_hostname,
+            'risk_score': 0.0,
+            'vulnerability_count': len(vulnerabilities),
+            'priority': 'Low',
+            'last_scanned': datetime.now().isoformat(),
+            'service_count': len(services),
+            'critical_vuln_count': len([v for v in vulnerabilities if v.get('severity') == 'CRITICAL']),
+            'high_vuln_count': len([v for v in vulnerabilities if v.get('severity') == 'HIGH']),
+            'discovered_ips': list(discovered_ips),
+            'ports_scanned': 65535,
+            'open_ports': len(services),
+            'services': services
+        }
         
         # Generate report content
         report_data = {
@@ -2308,7 +2579,40 @@ class EVMSWebInterface:
                 <p>High: {{ data.summary.high_count }}</p>
                 <p>Medium: {{ data.summary.medium_count }}</p>
                 <p>Low: {{ data.summary.low_count }}</p>
+                <p>Services Discovered: {{ data.asset.service_count }}</p>
+                <p>Open Ports: {{ data.asset.open_ports }}</p>
+                <p>Discovered IPs: {{ data.asset.discovered_ips|length }}</p>
             </div>
+            
+            <h2>Service Fingerprinting Results</h2>
+            {% if data.asset.services %}
+            <table border="1" style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+                <tr style="background-color: #f2f2f2;">
+                    <th style="padding: 10px; text-align: left;">IP Address</th>
+                    <th style="padding: 10px; text-align: left;">Port</th>
+                    <th style="padding: 10px; text-align: left;">Protocol</th>
+                    <th style="padding: 10px; text-align: left;">Service</th>
+                    <th style="padding: 10px; text-align: left;">Version</th>
+                    <th style="padding: 10px; text-align: left;">Type</th>
+                </tr>
+                {% for service in data.asset.services %}
+                <tr>
+                    <td style="padding: 10px;">{{ service.ip }}</td>
+                    <td style="padding: 10px;">{{ service.port }}</td>
+                    <td style="padding: 10px;">{{ service.protocol }}</td>
+                    <td style="padding: 10px;">{{ service.service }}</td>
+                    <td style="padding: 10px;">{{ service.version }}</td>
+                    <td style="padding: 10px;">
+                        {% if service.is_web_service %}Web Service{% endif %}
+                        {% if service.is_database %}Database{% endif %}
+                        {% if service.is_remote_access %}Remote Access{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% else %}
+            <p>No services discovered.</p>
+            {% endif %}
             
             <h2>Vulnerability Details</h2>
             {% for vuln in data.vulnerabilities %}
@@ -2329,13 +2633,36 @@ class EVMSWebInterface:
         return template.render(data=data)
     
     def generate_pdf_report(self, data: Dict):
-        """Generate PDF report"""
+        """Generate PDF report using weasyprint"""
         html_content = self.generate_html_report(data)
         
         try:
+            import weasyprint
+            import tempfile
+            import os
+            
             pdf_path = f"/tmp/evms_report_{data['target'].replace('.', '_')}.pdf"
-            pdfkit.from_string(html_content, pdf_path)
-            return send_file(pdf_path, as_attachment=True)
+            
+            # Write HTML to temporary file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+                f.write(html_content)
+                html_path = f.name
+            
+            # Use weasyprint to generate PDF
+            weasyprint.HTML(html_path).write_pdf(pdf_path)
+            
+            # Clean up temp file
+            os.unlink(html_path)
+            
+            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+                return send_file(pdf_path, as_attachment=True, download_name=f"evms_report_{data['target']}.pdf")
+            else:
+                logger.error("PDF file was not created or is empty")
+                return jsonify({'error': 'PDF generation failed'}), 500
+                
+        except ImportError:
+            logger.error("weasyprint not installed. Install with: pip install weasyprint")
+            return jsonify({'error': 'PDF generation failed - weasyprint not installed'}), 500
         except Exception as e:
             logger.error(f"PDF generation error: {e}")
             return jsonify({'error': 'PDF generation failed'}), 500
