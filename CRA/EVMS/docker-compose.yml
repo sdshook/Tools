@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   neo4j:
-    image: neo4j:5.13
+    image: neo4j:2025.10.1
     container_name: evms-neo4j
     ports:
       - "7474:7474"  # HTTP

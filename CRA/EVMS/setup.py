@@ -78,44 +78,44 @@ def setup_tools():
         },
         'nuclei': {
             'linux': {
-                'amd64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.1.0/nuclei_3.1.0_linux_amd64.zip',
-                'arm64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.1.0/nuclei_3.1.0_linux_arm64.zip'
+                'amd64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.3.6/nuclei_3.3.6_linux_amd64.zip',
+                'arm64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.3.6/nuclei_3.3.6_linux_arm64.zip'
             },
             'darwin': {
-                'amd64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.1.0/nuclei_3.1.0_macOS_amd64.zip',
-                'arm64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.1.0/nuclei_3.1.0_macOS_arm64.zip'
+                'amd64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.3.6/nuclei_3.3.6_macOS_amd64.zip',
+                'arm64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.3.6/nuclei_3.3.6_macOS_arm64.zip'
             },
             'windows': {
-                'amd64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.1.0/nuclei_3.1.0_windows_amd64.zip',
-                'arm64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.1.0/nuclei_3.1.0_windows_arm64.zip'
+                'amd64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.3.6/nuclei_3.3.6_windows_amd64.zip',
+                'arm64': 'https://github.com/projectdiscovery/nuclei/releases/download/v3.3.6/nuclei_3.3.6_windows_arm64.zip'
             }
         },
         'httpx': {
             'linux': {
-                'amd64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.3.7/httpx_1.3.7_linux_amd64.zip',
-                'arm64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.3.7/httpx_1.3.7_linux_arm64.zip'
+                'amd64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.7.2/httpx_1.7.2_linux_amd64.zip',
+                'arm64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.7.2/httpx_1.7.2_linux_arm64.zip'
             },
             'darwin': {
-                'amd64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.3.7/httpx_1.3.7_macOS_amd64.zip',
-                'arm64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.3.7/httpx_1.3.7_macOS_arm64.zip'
+                'amd64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.7.2/httpx_1.7.2_macOS_amd64.zip',
+                'arm64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.7.2/httpx_1.7.2_macOS_arm64.zip'
             },
             'windows': {
-                'amd64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.3.7/httpx_1.3.7_windows_amd64.zip',
-                'arm64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.3.7/httpx_1.3.7_windows_arm64.zip'
+                'amd64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.7.2/httpx_1.7.2_windows_amd64.zip',
+                'arm64': 'https://github.com/projectdiscovery/httpx/releases/download/v1.7.2/httpx_1.7.2_windows_arm64.zip'
             }
         },
         'subfinder': {
             'linux': {
-                'amd64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.3/subfinder_2.6.3_linux_amd64.zip',
-                'arm64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.3/subfinder_2.6.3_linux_arm64.zip'
+                'amd64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.8/subfinder_2.6.8_linux_amd64.zip',
+                'arm64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.8/subfinder_2.6.8_linux_arm64.zip'
             },
             'darwin': {
-                'amd64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.3/subfinder_2.6.3_macOS_amd64.zip',
-                'arm64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.3/subfinder_2.6.3_macOS_arm64.zip'
+                'amd64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.8/subfinder_2.6.8_macOS_amd64.zip',
+                'arm64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.8/subfinder_2.6.8_macOS_arm64.zip'
             },
             'windows': {
-                'amd64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.3/subfinder_2.6.3_windows_amd64.zip',
-                'arm64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.3/subfinder_2.6.3_windows_arm64.zip'
+                'amd64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.8/subfinder_2.6.8_windows_amd64.zip',
+                'arm64': 'https://github.com/projectdiscovery/subfinder/releases/download/v2.6.8/subfinder_2.6.8_windows_arm64.zip'
             }
         }
     }
