@@ -103,3 +103,17 @@ logs/
 *.temp
 temp/
 tmp/
+
+# EVMS test and temporary files
+CRA/EVMS/*_report.html
+CRA/EVMS/*_report.pdf
+CRA/EVMS/*_final.html
+CRA/EVMS/*_weasy.pdf
+CRA/EVMS/directsupport_*
+CRA/EVMS/nuclei.zip
+CRA/EVMS/tools/
+CRA/EVMS/templates/index.html
+CRA/EVMS/data/
+CRA/EVMS/*.deb
+CRA/EVMS/LICENSE.md
+CRA/EVMS/README_*.md
