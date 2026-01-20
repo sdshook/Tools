@@ -599,6 +599,11 @@ impl WebGuardSystem {
     pub fn get_embedding_stats(&self) -> HashMap<String, f32> {
         self.embedding_learner.get_stats()
     }
+    
+    /// Debug: print current learning state
+    pub fn debug_print_learning_state(&self) {
+        self.embedding_learner.debug_print_state();
+    }
 
     /// Export learned knowledge from cognitive mesh
     pub fn export_knowledge(&self) -> Option<String> {

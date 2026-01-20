@@ -2,28 +2,29 @@
 /// 
 /// This module implements BIDIRECTIONAL HEBBIAN LEARNING:
 /// - BOTH positive and negative reinforcement ADD to memory (no forgetting)
-/// - Positive reinforcement: "This pattern = threat/benign, remember it!"
-/// - Negative reinforcement: "This was misclassified, remember the correction!"
-/// - BDH stores experiences with valence, PSI provides persistent recall
-/// - Retrieval-augmented decision making using accumulated experience
+/// - Character embeddings ADAPT based on reinforcement (Hebbian weight updates)
+/// - Memory retrieval influences scoring, but embedding adaptation enables GENERALIZATION
 /// 
-/// Key principles:
-/// 1. Character embeddings provide stable feature extraction
-/// 2. BDH memory stores ALL experiences (positive AND negative reinforcement)
-/// 3. Valence indicates threat (+) vs benign (-) 
-/// 4. Decisions use memory retrieval, not just prototype distance
-/// 5. NO FORGETTING - both successes and failures strengthen memory
+/// Key principles for TRUE ADAPTIVE LEARNING:
+/// 1. Character embeddings LEARN which characters indicate threats
+/// 2. Both positive and negative reinforcement STRENGTHEN learning (no subtraction)
+/// 3. Hebbian updates to char embeddings enable generalization to UNSEEN patterns
+/// 4. Memory provides retrieval-augmented scoring
+/// 5. Prototypes adapt toward learned class centroids
 
 use std::collections::HashMap;
 
 /// Embedding dimension - dense representation size
 pub const EMBED_DIM: usize = 32;
 
-/// Learning rate for Hebbian weight updates
-const HEBBIAN_LEARNING_RATE: f32 = 0.1;
+/// Learning rate for Hebbian weight updates (char embeddings)
+const HEBBIAN_LEARNING_RATE: f32 = 0.05;
 
 /// Character embedding dimension (intermediate)
 const CHAR_EMBED_DIM: usize = 16;
+
+/// Learning rate for projection weight updates
+const PROJECTION_LEARNING_RATE: f32 = 0.02;
 
 /// Memory entry for BDH-style storage
 #[derive(Clone, Debug)]
@@ -110,18 +111,12 @@ impl EmbeddingLearner {
             }
         }
         
-        // Initialize prototypes to be WELL-SEPARATED
-        // Threat: positive in first half, negative in second half
-        // Benign: opposite pattern
-        // This creates clear initial decision boundary
+        // Initialize prototypes to be NEUTRAL and let learning separate them
+        // Both start at small random-like values - learning will push them apart
         for i in 0..EMBED_DIM {
-            if i < EMBED_DIM / 2 {
-                self.threat_prototype[i] = 1.0;
-                self.benign_prototype[i] = -1.0;
-            } else {
-                self.threat_prototype[i] = -1.0;
-                self.benign_prototype[i] = 1.0;
-            }
+            let seed = i as f32;
+            self.threat_prototype[i] = ((seed * 0.618033988749).fract() - 0.5) * 0.1;
+            self.benign_prototype[i] = -((seed * 0.618033988749).fract() - 0.5) * 0.1;
         }
     }
     
@@ -176,13 +171,15 @@ impl EmbeddingLearner {
         let threat_dist = self.euclidean_distance(embedding, &self.threat_prototype);
         let benign_dist = self.euclidean_distance(embedding, &self.benign_prototype);
         let margin = benign_dist - threat_dist;
-        let prototype_score = 1.0 / (1.0 + (-margin * 2.0).exp());
+        
+        // Scale margin more aggressively for better separation
+        let prototype_score = 1.0 / (1.0 + (-margin * 5.0).exp());
         
         // Component 2: Memory-based score (BDH retrieval)
         let memory_score = self.retrieve_memory_score(embedding);
         
-        // Combine: memory evidence weighted by amount of experience
-        let memory_weight = (self.total_memories as f32 / 50.0).min(0.7);  // Max 70% from memory
+        // Combine: as memory grows, rely more on learned experience
+        let memory_weight = (self.total_memories as f32 / 30.0).min(0.8);  // Up to 80% from memory
         let prototype_weight = 1.0 - memory_weight;
         
         prototype_score * prototype_weight + memory_score * memory_weight
@@ -258,30 +255,21 @@ impl EmbeddingLearner {
         }
     }
     
-    /// POSITIVE REINFORCEMENT: Store correct classification in memory
-    /// Both threat and benign correct predictions ADD to memory
+    /// POSITIVE REINFORCEMENT: Learn from correct classification
+    /// Key: BOTH memory storage AND embedding weight updates for generalization
     pub fn learn(&mut self, request: &str, is_threat: bool, reward: f32) {
         let embedding = self.embed(request);
-        
-        // ALWAYS add to memory - positive reinforcement ADDS knowledge
-        // Reward magnitude determines reinforcement strength
         let reinforcement = reward.abs().max(0.1);
-        
-        // Valence: positive for threat, negative for benign
         let valence = if is_threat { reinforcement } else { -reinforcement };
         
-        // Check if similar memory exists - if so, STRENGTHEN it (Hebbian)
+        // 1. MEMORY: Store/strengthen experience
         let similar_idx = self.find_similar_memory(&embedding, 0.9);
         
         if let Some(idx) = similar_idx {
-            // Strengthen existing memory (Hebbian: neurons that fire together wire together)
             self.memory[idx].reinforcement += reinforcement * HEBBIAN_LEARNING_RATE;
             self.memory[idx].uses += 1;
-            
-            // Update Hebbian connections to recently activated memories
             self.update_hebbian_connections(idx);
         } else {
-            // Add new memory
             let entry = MemoryEntry {
                 embedding,
                 valence,
@@ -291,11 +279,17 @@ impl EmbeddingLearner {
             };
             self.memory.push(entry);
             self.total_memories += 1;
-            
-            // Create Hebbian connections to similar existing memories
             let new_idx = self.memory.len() - 1;
             self.create_hebbian_connections(new_idx);
         }
+        
+        // 2. ADAPTIVE LEARNING: Update char embeddings via Hebbian learning
+        // This is what enables GENERALIZATION to unseen patterns!
+        // Characters that appear in threats should produce threat-like embeddings
+        self.hebbian_char_update(request, is_threat, reinforcement);
+        
+        // 3. Update prototypes toward class centroids
+        self.update_prototype(&embedding, is_threat);
         
         // Update experience counts
         if is_threat {
@@ -303,9 +297,82 @@ impl EmbeddingLearner {
         } else {
             self.benign_experiences += 1;
         }
+    }
+    
+    /// Hebbian update to character embeddings - enables generalization
+    /// Uses GRADIENT-BASED Hebbian: compute how to change embeddings to move output toward target
+    fn hebbian_char_update(&mut self, request: &str, is_threat: bool, strength: f32) {
+        let bytes = request.as_bytes();
+        if bytes.is_empty() {
+            return;
+        }
         
-        // Update prototypes using exponential moving average
-        self.update_prototype(&embedding, is_threat);
+        // Get CURRENT embedding to compute gradient
+        let current_embedding = self.embed(request);
+        
+        // Target: which prototype should this pattern move toward?
+        let target = if is_threat { &self.threat_prototype } else { &self.benign_prototype };
+        
+        // Compute error signal: direction to move the embedding
+        let mut error = [0.0f32; EMBED_DIM];
+        for k in 0..EMBED_DIM {
+            error[k] = target[k] - current_embedding[k];
+        }
+        
+        // Learning rate scaled by strength (stronger for errors)
+        let lr = HEBBIAN_LEARNING_RATE * strength.min(3.0);
+        
+        // Backprop the error through projection to get char embedding gradient
+        let mut char_grad = [0.0f32; CHAR_EMBED_DIM];
+        for j in 0..CHAR_EMBED_DIM {
+            for k in 0..EMBED_DIM {
+                char_grad[j] += error[k] * self.projection_weights[j][k];
+            }
+        }
+        
+        // Update char embeddings for characters in this request
+        // Hebbian: strengthen connections in direction of gradient
+        for &byte in bytes {
+            let char_idx = byte as usize;
+            for j in 0..CHAR_EMBED_DIM {
+                // Additive update in gradient direction
+                let delta = lr * char_grad[j] * 0.01;
+                self.char_embeddings[char_idx][j] += delta.clamp(-0.1, 0.1);
+            }
+        }
+        
+        // Also update projection weights
+        self.hebbian_projection_update(request, &error, strength);
+    }
+    
+    /// Hebbian update to projection weights using error signal
+    fn hebbian_projection_update(&mut self, request: &str, error: &[f32; EMBED_DIM], strength: f32) {
+        let bytes = request.as_bytes();
+        if bytes.is_empty() {
+            return;
+        }
+        
+        let lr = PROJECTION_LEARNING_RATE * strength.min(3.0);
+        
+        // Compute aggregated char embedding (input to projection)
+        let mut char_agg = [0.0f32; CHAR_EMBED_DIM];
+        for &byte in bytes {
+            for j in 0..CHAR_EMBED_DIM {
+                char_agg[j] += self.char_embeddings[byte as usize][j];
+            }
+        }
+        let norm = (bytes.len() as f32).sqrt().max(1.0);
+        for j in 0..CHAR_EMBED_DIM {
+            char_agg[j] /= norm;
+        }
+        
+        // Hebbian update: Δw_jk = η * input_j * error_k
+        for j in 0..CHAR_EMBED_DIM {
+            for k in 0..EMBED_DIM {
+                let delta = lr * char_agg[j] * error[k] * 0.01;
+                self.projection_weights[j][k] += delta.clamp(-0.05, 0.05);
+            }
+        }
     }
     
     /// Find similar memory entry (for Hebbian strengthening)
@@ -366,27 +433,43 @@ impl EmbeddingLearner {
         }
     }
     
-    /// Update prototype using exponential moving average
+    /// Update prototype using exponential moving average with L2 normalization
+    /// Key: prototypes MUST stay bounded and separate for adaptive learning
     fn update_prototype(&mut self, embedding: &[f32; EMBED_DIM], is_threat: bool) {
-        let alpha = 0.1;  // Learning rate for prototype update
+        // Adaptive alpha: learn faster early, slower later
+        let base_alpha = 0.05;  // Reduced for stability
+        let experience_count = if is_threat { 
+            self.threat_experiences 
+        } else { 
+            self.benign_experiences 
+        };
+        let alpha = base_alpha / (1.0 + experience_count as f32 * 0.001);
+        
         let prototype = if is_threat {
             &mut self.threat_prototype
         } else {
             &mut self.benign_prototype
         };
         
+        // Update with EMA
         for i in 0..EMBED_DIM {
             prototype[i] = prototype[i] * (1.0 - alpha) + embedding[i] * alpha;
+        }
+        
+        // L2 normalize to keep bounded
+        let norm: f32 = prototype.iter().map(|x| x * x).sum::<f32>().sqrt() + 1e-8;
+        for i in 0..EMBED_DIM {
+            prototype[i] /= norm;
         }
     }
     
     /// NEGATIVE REINFORCEMENT: Learn from prediction errors
     /// 
-    /// Key insight: Errors ALSO add to memory - they teach us what we got wrong!
-    /// - False Negative: "This WAS a threat, remember it as such!"
-    /// - False Positive: "This was NOT a threat, remember it as benign!"
+    /// CRITICAL: Errors teach us the most! We learn with STRONGER reinforcement.
+    /// - False Negative: "This WAS a threat!" -> Strong Hebbian update toward threat
+    /// - False Positive: "This was NOT a threat!" -> Update toward benign
     /// 
-    /// Both add new memories with STRONGER reinforcement (we learn more from mistakes)
+    /// Both update MEMORY and EMBEDDING WEIGHTS (for generalization)
     pub fn learn_from_error(&mut self, request: &str, predicted_threat: bool, actual_threat: bool) {
         if predicted_threat == actual_threat {
             return;  // No error
@@ -394,38 +477,30 @@ impl EmbeddingLearner {
         
         let embedding = self.embed(request);
         
-        // Errors get STRONGER reinforcement - we learn more from mistakes!
-        // FN (missed threat) is more critical than FP in security
+        // Errors get STRONGER reinforcement - biological systems learn more from mistakes!
+        // FN (missed threat) is CRITICAL in security
         let reinforcement = if actual_threat && !predicted_threat {
-            2.0  // False Negative - critical, learn strongly
+            3.0  // False Negative - CRITICAL, learn very strongly
         } else {
-            1.0  // False Positive - less critical but still learn
+            1.5  // False Positive - still important
         };
         
-        // Store the CORRECTED classification in memory
-        // This is negative reinforcement: "I was wrong, the correct answer is..."
         let valence = if actual_threat { reinforcement } else { -reinforcement };
         
-        // Check if similar memory exists
+        // 1. MEMORY: Store/update with correct classification
         let similar_idx = self.find_similar_memory(&embedding, 0.85);
         
         if let Some(idx) = similar_idx {
-            // CORRECT the existing memory if it had wrong classification
             if self.memory[idx].is_threat != actual_threat {
-                // Flip the classification and strengthen
                 self.memory[idx].is_threat = actual_threat;
                 self.memory[idx].valence = valence;
                 self.memory[idx].reinforcement += reinforcement;
             } else {
-                // Same classification, just strengthen
                 self.memory[idx].reinforcement += reinforcement * HEBBIAN_LEARNING_RATE;
             }
             self.memory[idx].uses += 1;
-            
-            // Update Hebbian connections
             self.update_hebbian_connections(idx);
         } else {
-            // Add new memory with the CORRECT classification
             let entry = MemoryEntry {
                 embedding,
                 valence,
@@ -435,11 +510,16 @@ impl EmbeddingLearner {
             };
             self.memory.push(entry);
             self.total_memories += 1;
-            
-            // Create Hebbian connections
             let new_idx = self.memory.len() - 1;
             self.create_hebbian_connections(new_idx);
         }
+        
+        // 2. ADAPTIVE LEARNING: Stronger Hebbian update for errors!
+        // This is what enables GENERALIZATION - learn from mistakes
+        self.hebbian_char_update(request, actual_threat, reinforcement);
+        
+        // 3. Update prototypes
+        self.update_prototype(&embedding, actual_threat);
         
         // Update experience counts
         if actual_threat {
@@ -447,9 +527,6 @@ impl EmbeddingLearner {
         } else {
             self.benign_experiences += 1;
         }
-        
-        // Update prototypes toward correct classification
-        self.update_prototype(&embedding, actual_threat);
     }
     
     // NOTE: Old gradient-based update functions removed
@@ -461,7 +538,7 @@ impl EmbeddingLearner {
     pub fn get_stats(&self) -> HashMap<String, f32> {
         let mut stats = HashMap::new();
         
-        // Distance between prototypes
+        // Distance between prototypes - KEY METRIC for learning
         let prototype_dist = self.euclidean_distance(&self.threat_prototype, &self.benign_prototype);
         stats.insert("prototype_separation".to_string(), prototype_dist);
         
@@ -487,6 +564,13 @@ impl EmbeddingLearner {
         }
         
         stats
+    }
+    
+    /// Debug: print learning state
+    pub fn debug_print_state(&self) {
+        let proto_dist = self.euclidean_distance(&self.threat_prototype, &self.benign_prototype);
+        println!("  [DEBUG] Memories: {} | Proto sep: {:.4} | Threat exp: {} | Benign exp: {}",
+                 self.total_memories, proto_dist, self.threat_experiences, self.benign_experiences);
     }
     
     /// Get the current prototype separation (key metric for learning progress)

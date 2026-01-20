@@ -7,13 +7,6 @@
     "detection_rate": 1.0
   },
   {
-    "attack_type": "Web Service Exploit",
-    "samples_tested": 31,
-    "detected": 31,
-    "missed": 0,
-    "detection_rate": 1.0
-  },
-  {
     "attack_type": "LDAP Injection",
     "samples_tested": 5,
     "detected": 5,
@@ -30,14 +23,21 @@
   {
     "attack_type": "Command Injection",
     "samples_tested": 10,
-    "detected": 9,
-    "missed": 1,
-    "detection_rate": 0.9
+    "detected": 10,
+    "missed": 0,
+    "detection_rate": 1.0
   },
   {
     "attack_type": "Path Traversal",
     "samples_tested": 10,
     "detected": 10,
+    "missed": 0,
+    "detection_rate": 1.0
+  },
+  {
+    "attack_type": "Web Service Exploit",
+    "samples_tested": 31,
+    "detected": 31,
     "missed": 0,
     "detection_rate": 1.0
   }

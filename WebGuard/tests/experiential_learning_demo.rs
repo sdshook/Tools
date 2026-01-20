@@ -641,8 +641,10 @@ fn test_comprehensive_experiential_learning() {
         println!("  Pass {} Results (on UNSEEN test data):", pass);
         println!("    Accuracy:  {:.1}% | Precision: {:.1}% | Recall: {:.1}% | F1: {:.3}", 
                  accuracy * 100.0, precision * 100.0, recall * 100.0, f1_score);
-        println!("    TP: {} | TN: {} | FP: {} | FN: {} | Train Errors: {} | Improvement: {:+.3}\n",
+        println!("    TP: {} | TN: {} | FP: {} | FN: {} | Train Errors: {} | Improvement: {:+.3}",
                  tp, tn, fp, fn_count, train_errors, improvement);
+        webguard.debug_print_learning_state();
+        println!();
         
         iteration_counter += 1;
         total_patterns_learned += train_errors;  // Patterns learned from errors
