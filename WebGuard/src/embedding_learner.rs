@@ -1,64 +1,64 @@
 /// Learnable Embedding System for Experiential Reinforcement Learning
 /// 
-/// This module implements a trainable embedding system that learns to produce
-/// dense vector representations from HTTP requests. The embeddings are updated
-/// via reinforcement learning signals (rewards from correct/incorrect classifications).
+/// This module implements TRUE ADAPTIVE LEARNING:
+/// - The embedding function (char embeddings + projection) learns from experience
+/// - Errors cause weight updates that change HOW inputs are embedded
+/// - Over time, threats and benign naturally separate in embedding space
+/// - NO pattern storage, NO rules - pure learned representations
 /// 
 /// Key principles:
-/// 1. Dense embeddings (no sparse vectors) - every dimension carries signal
-/// 2. Reward-based learning - positive rewards pull similar patterns together
-/// 3. Contrastive learning - FP/FN errors push patterns apart
-/// 4. PSI/BDH integration - embeddings are stored and retrieved from memory
+/// 1. Character embeddings learn which characters are threat-indicative
+/// 2. Projection weights learn to amplify discriminative features
+/// 3. Prototypes track cluster centers but the EMBEDDING FUNCTION does the real learning
+/// 4. Contrastive updates ensure separation increases over time
 
 use std::collections::HashMap;
 
 /// Embedding dimension - dense representation size
 pub const EMBED_DIM: usize = 32;
 
-/// Learning rate for embedding weight updates (lower = more stable)
+/// Learning rate for embedding weight updates (keep small for stability)
 const BASE_LEARNING_RATE: f32 = 0.02;
 
 /// Momentum for smoother learning
-const MOMENTUM: f32 = 0.5;
+const MOMENTUM: f32 = 0.7;
 
 /// Character embedding dimension (intermediate)
 const CHAR_EMBED_DIM: usize = 16;
 
-/// Learnable embedding system
+/// Pure adaptive embedding learner - no pattern storage
 #[derive(Clone, Debug)]
 pub struct EmbeddingLearner {
     /// Character-level embeddings (256 possible byte values)
+    /// THESE ARE THE PRIMARY LEARNABLE WEIGHTS
     char_embeddings: [[f32; CHAR_EMBED_DIM]; 256],
     
     /// Projection weights: CHAR_EMBED_DIM -> EMBED_DIM
+    /// Transform aggregated char embeddings to final embedding space
     projection_weights: [[f32; EMBED_DIM]; CHAR_EMBED_DIM],
     
     /// Bias for projection
     projection_bias: [f32; EMBED_DIM],
     
-    /// Threat prototype - learned center of threat cluster
+    /// Threat prototype - running average of threat embeddings
     threat_prototype: [f32; EMBED_DIM],
     
-    /// Benign prototype - learned center of benign cluster
+    /// Benign prototype - running average of benign embeddings
     benign_prototype: [f32; EMBED_DIM],
     
-    /// Momentum accumulators for char embeddings
+    /// Momentum accumulators for char embeddings (for stable learning)
     char_momentum: [[f32; CHAR_EMBED_DIM]; 256],
     
     /// Momentum accumulators for projection weights
     proj_momentum: [[f32; EMBED_DIM]; CHAR_EMBED_DIM],
     
-    /// Adaptive learning rate (decreases over time)
+    /// Current learning rate
     current_learning_rate: f32,
     
     /// Total updates performed
     update_count: usize,
     
-    /// Running statistics for normalization
-    running_mean: [f32; EMBED_DIM],
-    running_var: [f32; EMBED_DIM],
-    
-    /// Experience counts for confidence
+    /// Experience counts
     threat_experiences: usize,
     benign_experiences: usize,
 }
@@ -76,8 +76,6 @@ impl EmbeddingLearner {
             proj_momentum: [[0.0; EMBED_DIM]; CHAR_EMBED_DIM],
             current_learning_rate: BASE_LEARNING_RATE,
             update_count: 0,
-            running_mean: [0.0; EMBED_DIM],
-            running_var: [1.0; EMBED_DIM],
             threat_experiences: 0,
             benign_experiences: 0,
         };
@@ -107,12 +105,18 @@ impl EmbeddingLearner {
             }
         }
         
-        // Initialize prototypes at SAME location (no initial separation)
-        // This forces the system to LEARN the separation through experience
+        // Initialize prototypes to be WELL-SEPARATED
+        // Threat: positive in first half, negative in second half
+        // Benign: opposite pattern
+        // This creates clear initial decision boundary
         for i in 0..EMBED_DIM {
-            // Both prototypes start at origin - system must learn to separate them
-            self.threat_prototype[i] = 0.0;
-            self.benign_prototype[i] = 0.0;
+            if i < EMBED_DIM / 2 {
+                self.threat_prototype[i] = 1.0;
+                self.benign_prototype[i] = -1.0;
+            } else {
+                self.threat_prototype[i] = -1.0;
+                self.benign_prototype[i] = 1.0;
+            }
         }
     }
     
@@ -160,27 +164,17 @@ impl EmbeddingLearner {
         embedding
     }
     
-    /// Calculate threat score based on embedding distances to prototypes
+    /// Calculate threat score based purely on learned embedding distances
+    /// Uses margin-based scoring for more stable decisions
     pub fn threat_score(&self, embedding: &[f32; EMBED_DIM]) -> f32 {
         let threat_dist = self.euclidean_distance(embedding, &self.threat_prototype);
         let benign_dist = self.euclidean_distance(embedding, &self.benign_prototype);
         
-        // Convert distances to score using softmax-like function
-        // Closer to threat = higher score
-        let threat_proximity = (-threat_dist).exp();
-        let benign_proximity = (-benign_dist).exp();
+        // Margin-based scoring: positive margin = closer to threat
+        let margin = benign_dist - threat_dist;
         
-        let score = threat_proximity / (threat_proximity + benign_proximity + 1e-8);
-        
-        // Apply experience-based confidence
-        let total_exp = (self.threat_experiences + self.benign_experiences) as f32;
-        if total_exp < 10.0 {
-            // Low experience - temper the score toward 0.5
-            let confidence = total_exp / 10.0;
-            return 0.5 + (score - 0.5) * confidence;
-        }
-        
-        score
+        // Sigmoid with scaling
+        1.0 / (1.0 + (-margin * 2.0).exp())
     }
     
     /// Euclidean distance between two embeddings
@@ -192,8 +186,14 @@ impl EmbeddingLearner {
     }
     
     /// Learn from a labeled example using reinforcement signal
-    /// This is the core experiential learning function
+    /// For CORRECT predictions: reinforce the embedding weights
+    /// Prototypes are FIXED - only the embedding function adapts
     pub fn learn(&mut self, request: &str, is_threat: bool, reward: f32) {
+        // Only learn from positive rewards (correct predictions)
+        if reward <= 0.0 {
+            return;
+        }
+        
         let embedding = self.embed(request);
         
         // Update experience counts
@@ -203,89 +203,201 @@ impl EmbeddingLearner {
             self.benign_experiences += 1;
         }
         
-        // Calculate learning rate with decay (slower decay for stability)
+        // Update learning rate with decay
         self.update_count += 1;
         self.current_learning_rate = BASE_LEARNING_RATE / (1.0 + 0.0001 * self.update_count as f32);
         
-        let lr = self.current_learning_rate * reward.abs();
+        let lr = self.current_learning_rate * reward.abs() * 0.5;  // Reduced for stability
         
-        // Update prototypes using exponential moving average (more stable)
-        let proto_lr = 0.05;  // Very slow prototype updates for stability
+        // Reinforce the embedding weights to continue producing this embedding
+        // Use class-balanced learning: weight threat samples higher due to imbalance
+        let class_weight = if is_threat { 2.0 } else { 0.5 };  // Oversample threats
         
-        if is_threat {
-            for i in 0..EMBED_DIM {
-                // EMA update: new = old * (1 - lr) + new_val * lr
-                self.threat_prototype[i] = self.threat_prototype[i] * (1.0 - proto_lr) 
-                                         + embedding[i] * proto_lr;
-            }
-        } else {
-            for i in 0..EMBED_DIM {
-                self.benign_prototype[i] = self.benign_prototype[i] * (1.0 - proto_lr) 
-                                         + embedding[i] * proto_lr;
-            }
-        }
-        
-        // Update character embeddings via backprop-like gradient (conservative)
-        self.update_char_embeddings(request, &embedding, is_threat, lr * 0.5);
+        self.update_char_embeddings(request, &embedding, is_threat, lr * class_weight);
     }
     
-    /// Learn from a prediction error (FP or FN) with contrastive update
-    /// THIS IS THE KEY FUNCTION FOR IMPROVEMENT OVER PASSES
-    /// FN is weighted MORE heavily than FP (security principle: FN = breach)
-    /// Learning rate adapts based on experience (more stable over time)
+    /// Learn from a prediction error - TRUE ADAPTIVE LEARNING
+    /// 
+    /// Key insight: The EMBEDDING FUNCTION learns, not the prototypes
+    /// - Prototypes are FIXED reference points in embedding space
+    /// - The embedding weights learn to map threats toward threat_prototype
+    /// - The embedding weights learn to map benign toward benign_prototype
+    /// 
+    /// This is like learning a transformation that separates classes
     pub fn learn_from_error(&mut self, request: &str, predicted_threat: bool, actual_threat: bool) {
         if predicted_threat == actual_threat {
             return;  // No error
         }
         
+        // Get current embedding BEFORE any updates
         let embedding = self.embed(request);
         
-        // Adaptive learning rate: starts higher, decreases with experience
-        // This prevents early instability while ensuring continued learning
-        let experience = (self.threat_experiences + self.benign_experiences) as f32;
-        let experience_factor = 1.0 / (1.0 + experience / 100.0);  // Decreases over time
+        // Compute distances to FIXED prototypes
+        let threat_dist = self.euclidean_distance(&embedding, &self.threat_prototype);
+        let benign_dist = self.euclidean_distance(&embedding, &self.benign_prototype);
+        
+        let base_lr = self.current_learning_rate;
         
         if actual_threat && !predicted_threat {
-            // FALSE NEGATIVE: Missed a threat - CRITICAL SECURITY FAILURE
-            // Base rate 0.2, decreases to ~0.1 with experience
-            let fn_lr = 0.20 * (0.5 + experience_factor * 0.5);
+            // FALSE NEGATIVE: Missed a threat - CRITICAL ERROR
+            // FN leads to breach, so we learn VERY aggressively
             
-            // 1. Move threat prototype toward this missed threat
-            for i in 0..EMBED_DIM {
-                self.threat_prototype[i] = self.threat_prototype[i] * (1.0 - fn_lr) 
-                                         + embedding[i] * fn_lr;
-            }
+            // Learning rate scales with error + class weight (FN >> FP importance)
+            let error_mag = (benign_dist - threat_dist + 1.0).max(0.5);
+            let fn_weight = 3.0;  // FN is 3x worse than FP in security context
+            let lr = base_lr * error_mag.min(2.0) * fn_weight;
             
-            // 2. Move benign prototype AWAY from this threat (contrastive)
-            for i in 0..EMBED_DIM {
-                let direction = self.benign_prototype[i] - embedding[i];
-                self.benign_prototype[i] += direction * fn_lr * 0.5;
-            }
-            
-            // 3. Update char embeddings to make this threat more detectable
-            self.update_char_embeddings(request, &embedding, true, fn_lr);
+            // Update embedding weights to move this input toward threat_prototype
+            self.update_char_embeddings_for_class(request, true, lr);
             
             self.threat_experiences += 1;
             
         } else if !actual_threat && predicted_threat {
             // FALSE POSITIVE: Incorrectly flagged benign
-            // Base rate 0.08, decreases to ~0.04 with experience
-            let fp_lr = 0.08 * (0.5 + experience_factor * 0.5);
+            // Less critical than FN, but still learn
             
-            // Move benign prototype toward this embedding
-            for i in 0..EMBED_DIM {
-                self.benign_prototype[i] = self.benign_prototype[i] * (1.0 - fp_lr) 
-                                         + embedding[i] * fp_lr;
-            }
-            // Slightly move threat prototype away
-            for i in 0..EMBED_DIM {
-                let direction = self.threat_prototype[i] - embedding[i];
-                self.threat_prototype[i] += direction * fp_lr * 0.3;
-            }
+            let error_mag = (threat_dist - benign_dist + 1.0).max(0.5);
+            let lr = base_lr * error_mag.min(1.5);  // Less aggressive for FP
+            
+            // Update embedding weights to move this input toward benign_prototype
+            self.update_char_embeddings_for_class(request, false, lr);
+            
             self.benign_experiences += 1;
+        }
+        
+        self.update_count += 1;
+    }
+    
+    /// Update character embeddings to make them more indicative of a class
+    /// Simple but effective: characters in threats should produce threat-like embeddings
+    fn update_char_embeddings_for_class(&mut self, request: &str, is_threat: bool, lr: f32) {
+        let bytes = request.as_bytes();
+        if bytes.is_empty() {
+            return;
+        }
+        
+        // Target prototype (fixed)
+        let target = if is_threat { &self.threat_prototype } else { &self.benign_prototype };
+        
+        // For each character, update its embedding to be more like the target
+        // This is a simple "label propagation" - characters in threat requests
+        // should produce embeddings that are closer to threat_prototype
+        
+        let char_lr = lr / (bytes.len() as f32).max(1.0);  // Scale by frequency
+        
+        for &byte in bytes {
+            let char_idx = byte as usize;
             
-            // Update char embeddings for FP
-            self.update_char_embeddings(request, &embedding, false, fp_lr);
+            // Update each dimension of the character embedding
+            // to push the resulting document embedding toward the target
+            for j in 0..CHAR_EMBED_DIM {
+                // Compute how this character embedding affects the output
+                // The effect goes through the projection weights
+                let mut target_direction = 0.0f32;
+                for k in 0..EMBED_DIM {
+                    // We want embedding[k] to be closer to target[k]
+                    // char_embeddings[j] contributes to embedding[k] via projection_weights[j][k]
+                    target_direction += self.projection_weights[j][k] * target[k];
+                }
+                
+                // Move char embedding toward producing target-like output
+                let update = char_lr * (target_direction - self.char_embeddings[char_idx][j] * 0.1);
+                self.char_embeddings[char_idx][j] += update.clamp(-0.1, 0.1);
+            }
+        }
+        
+        // Also update projection weights to amplify discriminative char embeddings
+        // Characters that appear in threats should contribute more to threat dimensions
+        let proj_lr = lr * 0.1;
+        
+        // Average char embedding for this request
+        let mut char_avg = [0.0f32; CHAR_EMBED_DIM];
+        for &byte in bytes {
+            for j in 0..CHAR_EMBED_DIM {
+                char_avg[j] += self.char_embeddings[byte as usize][j];
+            }
+        }
+        for j in 0..CHAR_EMBED_DIM {
+            char_avg[j] /= bytes.len() as f32;
+        }
+        
+        // Update projection to map this char pattern toward target
+        for j in 0..CHAR_EMBED_DIM {
+            for k in 0..EMBED_DIM {
+                // If char_avg[j] is high and target[k] is high, increase weight
+                let update = proj_lr * char_avg[j] * target[k];
+                self.projection_weights[j][k] += update.clamp(-0.05, 0.05);
+            }
+        }
+    }
+    
+    /// Update embedding weights to produce embeddings closer to target
+    /// This is the key to ADAPTIVE learning - the embedding function changes
+    fn update_embedding_weights_toward_target(&mut self, request: &str, target: &[f32; EMBED_DIM], lr: f32) {
+        let bytes = request.as_bytes();
+        if bytes.is_empty() {
+            return;
+        }
+        
+        // Compute current embedding ONCE (before any updates)
+        let current_embed = self.embed(request);
+        
+        // Compute direction vector (gradient direction)
+        let mut direction = [0.0f32; EMBED_DIM];
+        for k in 0..EMBED_DIM {
+            direction[k] = target[k] - current_embed[k];
+        }
+        
+        // Aggregate char embedding for this request (for projection weight update)
+        let mut char_sum = [0.0f32; CHAR_EMBED_DIM];
+        for &byte in bytes {
+            let char_idx = byte as usize;
+            for j in 0..CHAR_EMBED_DIM {
+                char_sum[j] += self.char_embeddings[char_idx][j];
+            }
+        }
+        let norm = (bytes.len() as f32).sqrt().max(1.0);
+        for j in 0..CHAR_EMBED_DIM {
+            char_sum[j] /= norm;
+        }
+        
+        // Update character embeddings
+        // Use a scaled learning rate based on character frequency in request
+        let char_lr = lr / norm;  // Scale by request length
+        
+        for &byte in bytes {
+            let char_idx = byte as usize;
+            
+            for j in 0..CHAR_EMBED_DIM {
+                let mut grad = 0.0f32;
+                for k in 0..EMBED_DIM {
+                    // Gradient: projection_weight * direction
+                    grad += self.projection_weights[j][k] * direction[k];
+                }
+                
+                // Apply momentum for stability
+                self.char_momentum[char_idx][j] = MOMENTUM * self.char_momentum[char_idx][j] 
+                                                 + (1.0 - MOMENTUM) * grad;
+                
+                // Update with clipping to prevent explosion
+                let update = (char_lr * self.char_momentum[char_idx][j]).clamp(-0.1, 0.1);
+                self.char_embeddings[char_idx][j] += update;
+            }
+        }
+        
+        // Update projection weights
+        let proj_lr = lr * 0.3;  // More conservative for projection
+        for j in 0..CHAR_EMBED_DIM {
+            for k in 0..EMBED_DIM {
+                let grad = char_sum[j] * direction[k];
+                
+                self.proj_momentum[j][k] = MOMENTUM * self.proj_momentum[j][k] 
+                                          + (1.0 - MOMENTUM) * grad;
+                
+                // Clipped update
+                let update = (proj_lr * self.proj_momentum[j][k]).clamp(-0.05, 0.05);
+                self.projection_weights[j][k] += update;
+            }
         }
     }
     
@@ -339,6 +451,16 @@ impl EmbeddingLearner {
         stats.insert("benign_experiences".to_string(), self.benign_experiences as f32);
         stats.insert("learning_rate".to_string(), self.current_learning_rate);
         stats.insert("total_updates".to_string(), self.update_count as f32);
+        
+        // Calculate average weight magnitude (indicator of learning)
+        let mut avg_char_weight = 0.0f32;
+        for i in 0..256 {
+            for j in 0..CHAR_EMBED_DIM {
+                avg_char_weight += self.char_embeddings[i][j].abs();
+            }
+        }
+        avg_char_weight /= (256 * CHAR_EMBED_DIM) as f32;
+        stats.insert("avg_char_weight".to_string(), avg_char_weight);
         
         stats
     }

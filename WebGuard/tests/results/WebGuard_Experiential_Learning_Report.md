@@ -1,64 +1,54 @@
 # WebGuard Experiential Learning Report
 
-Generated: 2026-01-20 19:45:51
+Generated: 2026-01-20 20:12:50
 
 ## Summary
 
 | Metric | Value |
 |--------|-------|
-| Total Samples | 6,930 |
-| Patterns Learned | 185 |
-| Final Accuracy | 91.8% |
-| Final Precision | 79.3% |
-| Final Recall | 83.6% |
-| Final F1 | 0.814 |
+| Total Samples | 4,125 |
+| Patterns Learned | 221 |
+| Final Accuracy | 76.1% |
+| Final Precision | 36.6% |
+| Final Recall | 88.2% |
+| Final F1 | 0.517 |
 
 ## Attack Detection
 
 | Attack Type | Detected | Missed | Rate |
 |-------------|----------|--------|------|
-| LDAP Injection | 4 | 1 | 80% |
-| Command Injection | 8 | 2 | 80% |
-| Cross-Site Scripting | 5 | 5 | 50% |
-| Web Service Exploit | 6 | 4 | 60% |
-| SQL Injection | 3 | 7 | 30% |
-| Path Traversal | 9 | 1 | 90% |
+| Command Injection | 0 | 10 | 0% |
+| Path Traversal | 0 | 10 | 0% |
+| Web Service Exploit | 0 | 10 | 0% |
+| SQL Injection | 0 | 10 | 0% |
+| Cross-Site Scripting | 0 | 10 | 0% |
+| LDAP Injection | 0 | 5 | 0% |
 
 ## Multipass Learning
 
 | Pass | F1 Score | Improvement |
 |------|----------|-------------|
-| 1 | 0.759 | +0.000 |
-| 2 | 0.720 | -0.039 |
-| 3 | 0.726 | +0.006 |
-| 4 | 0.744 | +0.018 |
-| 5 | 0.750 | +0.006 |
-| 6 | 0.752 | +0.002 |
-| 7 | 0.752 | +0.000 |
-| 8 | 0.765 | +0.013 |
-| 9 | 0.772 | +0.007 |
-| 10 | 0.779 | +0.007 |
-| 11 | 0.786 | +0.007 |
-| 12 | 0.796 | +0.011 |
-| 13 | 0.807 | +0.011 |
-| 14 | 0.814 | +0.007 |
-| 15 | 0.814 | +0.000 |
-| 16 | 0.804 | -0.011 |
-| 17 | 0.804 | +0.000 |
-| 18 | 0.804 | +0.000 |
-| 19 | 0.804 | +0.000 |
-| 20 | 0.804 | +0.000 |
-| 21 | 0.814 | +0.011 |
-| 22 | 0.814 | +0.000 |
-| 23 | 0.814 | +0.000 |
-| 24 | 0.814 | +0.000 |
-| 25 | 0.814 | +0.000 |
+| 1 | 0.254 | +0.000 |
+| 2 | 0.254 | +0.000 |
+| 3 | 0.254 | +0.000 |
+| 4 | 0.254 | +0.000 |
+| 5 | 0.266 | +0.012 |
+| 6 | 0.266 | +0.000 |
+| 7 | 0.340 | +0.074 |
+| 8 | 0.378 | +0.038 |
+| 9 | 0.337 | -0.041 |
+| 10 | 0.368 | +0.031 |
+| 11 | 0.288 | -0.080 |
+| 12 | 0.368 | +0.080 |
+| 13 | 0.455 | +0.087 |
+| 14 | 0.500 | +0.045 |
+| 15 | 0.517 | +0.017 |
 
 ## Reward System
 
 | Metric | Value |
 |--------|-------|
-| Total Reward | 937.17 |
-| Positive | 6272 |
-| Negative | 658 |
-| Efficiency | 90.5% |
+| Total Reward | 2022.51 |
+| Positive | 3902 |
+| Negative | 223 |
+| Efficiency | 94.6% |

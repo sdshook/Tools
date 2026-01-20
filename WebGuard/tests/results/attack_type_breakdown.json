@@ -1,44 +1,44 @@
 [
   {
-    "attack_type": "LDAP Injection",
-    "samples_tested": 5,
-    "detected": 4,
-    "missed": 1,
-    "detection_rate": 0.8
-  },
-  {
     "attack_type": "Command Injection",
     "samples_tested": 10,
-    "detected": 8,
-    "missed": 2,
-    "detection_rate": 0.8
-  },
-  {
-    "attack_type": "Cross-Site Scripting",
-    "samples_tested": 10,
-    "detected": 5,
-    "missed": 5,
-    "detection_rate": 0.5
-  },
-  {
-    "attack_type": "Web Service Exploit",
-    "samples_tested": 10,
-    "detected": 6,
-    "missed": 4,
-    "detection_rate": 0.6
-  },
-  {
-    "attack_type": "SQL Injection",
-    "samples_tested": 10,
-    "detected": 3,
-    "missed": 7,
-    "detection_rate": 0.3
+    "detected": 0,
+    "missed": 10,
+    "detection_rate": 0.0
   },
   {
     "attack_type": "Path Traversal",
     "samples_tested": 10,
-    "detected": 9,
-    "missed": 1,
-    "detection_rate": 0.9
+    "detected": 0,
+    "missed": 10,
+    "detection_rate": 0.0
+  },
+  {
+    "attack_type": "Web Service Exploit",
+    "samples_tested": 10,
+    "detected": 0,
+    "missed": 10,
+    "detection_rate": 0.0
+  },
+  {
+    "attack_type": "SQL Injection",
+    "samples_tested": 10,
+    "detected": 0,
+    "missed": 10,
+    "detection_rate": 0.0
+  },
+  {
+    "attack_type": "Cross-Site Scripting",
+    "samples_tested": 10,
+    "detected": 0,
+    "missed": 10,
+    "detection_rate": 0.0
+  },
+  {
+    "attack_type": "LDAP Injection",
+    "samples_tested": 5,
+    "detected": 0,
+    "missed": 5,
+    "detection_rate": 0.0
   }
 ]

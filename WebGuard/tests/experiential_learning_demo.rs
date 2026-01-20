@@ -494,35 +494,78 @@ fn test_comprehensive_experiential_learning() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // PHASE 3: MULTIPASS LEARNING (Self-improvement through repeated exposure)
+    // PHASE 3: ADAPTIVE SELF-LEARNING (True generalization test)
     // ═══════════════════════════════════════════════════════════════════════════════
     println!("\n┌────────────────────────────────────────────────────────────────────────────┐");
-    println!("│ PHASE 3: MULTIPASS SELF-LEARNING - Iterative Improvement                  │");
+    println!("│ PHASE 3: ADAPTIVE SELF-LEARNING - Generalization Test                     │");
     println!("└────────────────────────────────────────────────────────────────────────────┘");
     
-    // Increased passes to demonstrate learning convergence
-    // With embedding-based RL, each pass should improve as prototypes separate
-    let num_passes = 25;
+    // TRUE ADAPTIVE LEARNING TEST:
+    // - Split data into TRAIN and TEST sets
+    // - Each pass: train on train set, evaluate on HELD-OUT test set
+    // - Improvement on test set proves GENERALIZATION, not memorization
     
-    // Use the SAME benign samples that were trained in Phase 1 (not new random ones)
-    let mut combined_samples: Vec<TestSample> = Vec::new();
-    combined_samples.extend(benign_training_samples.iter().take(200).cloned()); // SAME benign from Phase 1
-    combined_samples.extend(threat_samples.clone()); // With threats
+    let num_passes = 15;
+    
+    // Split threats into TRAIN (70%) and TEST (30%) - tests on UNSEEN threats
+    let threat_split = (threat_samples.len() * 7) / 10;
+    let train_threats: Vec<TestSample> = threat_samples.iter().take(threat_split).cloned().collect();
+    let test_threats: Vec<TestSample> = threat_samples.iter().skip(threat_split).cloned().collect();
+    
+    // Split benign similarly
+    let benign_for_test: Vec<TestSample> = benign_training_samples.iter().skip(400).take(100).cloned().collect();
+    let benign_for_train: Vec<TestSample> = benign_training_samples.iter().take(200).cloned().collect();
+    
+    // Training set: 200 benign + 70% of threats
+    let mut train_samples: Vec<TestSample> = Vec::new();
+    train_samples.extend(benign_for_train.clone());
+    train_samples.extend(train_threats.clone());
+    
+    // Test set: 100 DIFFERENT benign + 30% UNSEEN threats
+    let mut test_samples: Vec<TestSample> = Vec::new();
+    test_samples.extend(benign_for_test.clone());
+    test_samples.extend(test_threats.clone());
+    
+    println!("📊 Dataset Split for Generalization Test:");
+    println!("   Training: {} benign + {} threats = {} samples", 
+             benign_for_train.len(), train_threats.len(), train_samples.len());
+    println!("   Testing:  {} benign + {} UNSEEN threats = {} samples",
+             benign_for_test.len(), test_threats.len(), test_samples.len());
+    println!("   (Test set contains threats NEVER seen during training)\n");
     
     let mut previous_f1: f32 = 0.0;
     
-    println!("🔄 Executing {} learning passes to demonstrate convergence...", num_passes);
-    println!("   PSI/BDH has NO context window - all learned patterns persist");
-    println!("   Expected: Logarithmic improvement toward near-100% detection\n");
+    println!("🔄 Executing {} learning passes...", num_passes);
+    println!("   Each pass: Train on training set → Evaluate on HELD-OUT test set");
+    println!("   Improvement on test set proves TRUE ADAPTIVE LEARNING\n");
     
     for pass in 1..=num_passes {
+        // TRAIN PHASE: Learn from training samples
+        let mut train_errors = 0;
+        for sample in &train_samples {
+            let result = webguard.analyze_request(&sample.request);
+            let predicted_threat = result.threat_score > 0.5;
+            let actual_threat = sample.is_threat;
+            
+            let reward = calculate_reward(predicted_threat, actual_threat, result.confidence);
+            cumulative_reward += reward;
+            if reward > 0.0 { positive_rewards += 1; } else { negative_rewards += 1; }
+            
+            if predicted_threat != actual_threat {
+                train_errors += 1;
+                webguard.learn_from_error(&sample.request, predicted_threat, actual_threat);
+            } else {
+                webguard.learn_from_validation(&sample.request, actual_threat, sample.attack_type.clone());
+            }
+        }
+        
+        // TEST PHASE: Evaluate on HELD-OUT test set (no learning here!)
         let mut tp = 0;
         let mut tn = 0;
         let mut fp = 0;
         let mut fn_count = 0;
-        let mut pass_reward: f32 = 0.0;
         
-        for sample in &combined_samples {
+        for sample in &test_samples {
             let result = webguard.analyze_request(&sample.request);
             let predicted_threat = result.threat_score > 0.5;
             let actual_threat = sample.is_threat;
@@ -533,34 +576,20 @@ fn test_comprehensive_experiential_learning() {
                 (true, false) => fp += 1,
                 (false, true) => fn_count += 1,
             }
-            
-            let reward = calculate_reward(predicted_threat, actual_threat, result.confidence);
-            pass_reward += reward;
-            cumulative_reward += reward;
-            if reward > 0.0 { positive_rewards += 1; } else { negative_rewards += 1; }
-            
-            // ERROR-DRIVEN LEARNING: Learn more aggressively from mistakes (FP/FN)
-            // This is key to improvement over multipass iterations
-            if predicted_threat != actual_threat {
-                // This was an error - use stronger learning signal
-                webguard.learn_from_error(&sample.request, predicted_threat, actual_threat);
-            } else {
-                // Correct prediction - normal reinforcement
-                webguard.learn_from_validation(&sample.request, actual_threat, sample.attack_type.clone());
-            }
         }
         
         let (accuracy, precision, recall, f1_score) = calculate_metrics(tp, tn, fp, fn_count);
         let improvement = if pass > 1 { f1_score - previous_f1 } else { 0.0 };
+        let pass_reward = cumulative_reward / pass as f32;
         
-        println!("  Pass {} Results:", pass);
+        println!("  Pass {} Results (on UNSEEN test data):", pass);
         println!("    Accuracy:  {:.1}% | Precision: {:.1}% | Recall: {:.1}% | F1: {:.3}", 
                  accuracy * 100.0, precision * 100.0, recall * 100.0, f1_score);
-        println!("    TP: {} | TN: {} | FP: {} | FN: {} | Pass Reward: {:.2} | Improvement: {:+.3}\n",
-                 tp, tn, fp, fn_count, pass_reward, improvement);
+        println!("    TP: {} | TN: {} | FP: {} | FN: {} | Train Errors: {} | Improvement: {:+.3}\n",
+                 tp, tn, fp, fn_count, train_errors, improvement);
         
         iteration_counter += 1;
-        total_patterns_learned += 5;
+        total_patterns_learned += train_errors;  // Patterns learned from errors
         
         learning_progression.push(LearningProgress {
             iteration: iteration_counter,
@@ -613,7 +642,7 @@ fn test_comprehensive_experiential_learning() {
     let knowledge_export = webguard.export_knowledge()
         .unwrap_or_else(|| "{}".to_string());
     
-    let total_samples = benign_training_samples.len() + threat_samples.len() + (combined_samples.len() * num_passes);
+    let total_samples = benign_training_samples.len() + threat_samples.len() + (train_samples.len() * num_passes);
     
     println!("📈 Learning Progression:");
     println!("   Initial Detection Rate: {:.1}%", initial_detection_rate * 100.0);
