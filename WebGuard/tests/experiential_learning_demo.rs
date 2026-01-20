@@ -459,6 +459,41 @@ fn test_comprehensive_experiential_learning() {
     });
     
     // ═══════════════════════════════════════════════════════════════════════════════
+    // PHASE 2.5: RETENTION TEST - Verify benign patterns still recognized
+    // ═══════════════════════════════════════════════════════════════════════════════
+    println!("\n┌────────────────────────────────────────────────────────────────────────────┐");
+    println!("│ PHASE 2.5: RETENTION TEST - Verifying Benign Learning Retained            │");
+    println!("└────────────────────────────────────────────────────────────────────────────┘");
+    
+    // Re-test the SAME benign samples from Phase 1 to verify retention
+    let retention_benign = generate_benign_samples(100);  // Same pattern pool as Phase 1
+    let mut retention_fp = 0;
+    let mut retention_tn = 0;
+    
+    for sample in &retention_benign {
+        let result = webguard.analyze_request(&sample.request);
+        let predicted_threat = result.threat_score > 0.5;
+        
+        if predicted_threat {
+            retention_fp += 1;
+        } else {
+            retention_tn += 1;
+        }
+    }
+    
+    let retention_accuracy = retention_tn as f32 / (retention_tn + retention_fp) as f32;
+    println!("📊 Benign Retention Test (100 samples from same pattern pool):");
+    println!("   True Negatives: {} | False Positives: {}", retention_tn, retention_fp);
+    println!("   Retention Accuracy: {:.1}%", retention_accuracy * 100.0);
+    
+    if retention_fp > 10 {
+        println!("   ⚠️  WARNING: Threat learning interfered with benign recognition!");
+        println!("   This indicates the differential RL suppression factor may need tuning.");
+    } else {
+        println!("   ✅ Benign patterns correctly retained after threat learning!");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
     // PHASE 3: MULTIPASS LEARNING (Self-improvement through repeated exposure)
     // ═══════════════════════════════════════════════════════════════════════════════
     println!("\n┌────────────────────────────────────────────────────────────────────────────┐");
@@ -466,13 +501,15 @@ fn test_comprehensive_experiential_learning() {
     println!("└────────────────────────────────────────────────────────────────────────────┘");
     
     let num_passes = 5;
+    // Use the SAME benign samples that were trained in Phase 1 (not new random ones)
     let mut combined_samples: Vec<TestSample> = Vec::new();
-    combined_samples.extend(generate_benign_samples(200)); // Mix benign
+    combined_samples.extend(benign_training_samples.iter().take(200).cloned()); // SAME benign from Phase 1
     combined_samples.extend(threat_samples.clone()); // With threats
     
     let mut previous_f1: f32 = 0.0;
     
-    println!("🔄 Executing {} learning passes with {} mixed samples each...\n", num_passes, combined_samples.len());
+    println!("🔄 Executing {} learning passes with {} mixed samples each...", num_passes, combined_samples.len());
+    println!("   (Using SAME benign patterns from Phase 1 to test retention)\n");
     
     for pass in 1..=num_passes {
         let mut tp = 0;
@@ -498,8 +535,15 @@ fn test_comprehensive_experiential_learning() {
             cumulative_reward += reward;
             if reward > 0.0 { positive_rewards += 1; } else { negative_rewards += 1; }
             
-            // Continue learning
-            webguard.learn_from_validation(&sample.request, actual_threat, sample.attack_type.clone());
+            // ERROR-DRIVEN LEARNING: Learn more aggressively from mistakes (FP/FN)
+            // This is key to improvement over multipass iterations
+            if predicted_threat != actual_threat {
+                // This was an error - use stronger learning signal
+                webguard.learn_from_error(&sample.request, predicted_threat, actual_threat);
+            } else {
+                // Correct prediction - normal reinforcement
+                webguard.learn_from_validation(&sample.request, actual_threat, sample.attack_type.clone());
+            }
         }
         
         let (accuracy, precision, recall, f1_score) = calculate_metrics(tp, tn, fp, fn_count);

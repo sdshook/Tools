@@ -335,6 +335,66 @@ impl BdhMemory {
         self.traces.iter().map(|t| cosine_sim(&t.vec, q)).fold(0.0, |a,b| a.max(b))
     }
     
+    /// Find the most similar trace to the query vector
+    /// Returns (index, similarity, current_valence)
+    pub fn find_most_similar_trace(&self, q: &[f32; EMBED_DIM]) -> (usize, f32, f32) {
+        let mut best_idx = 0;
+        let mut best_sim = 0.0f32;
+        let mut best_valence = 0.0f32;
+        
+        for (idx, trace) in self.traces.iter().enumerate() {
+            let sim = cosine_sim(&trace.vec, q);
+            if sim > best_sim {
+                best_sim = sim;
+                best_idx = idx;
+                best_valence = trace.valence;
+            }
+        }
+        
+        (best_idx, best_sim, best_valence)
+    }
+    
+    /// Find the most similar trace of the SAME TYPE (benign or threat)
+    /// This prevents cross-contamination between benign and threat patterns
+    /// target_valence: 0.0 = looking for benign, 1.0 = looking for threat
+    pub fn find_most_similar_trace_of_type(&self, q: &[f32; EMBED_DIM], target_valence: f32) -> (usize, f32, f32) {
+        let mut best_idx = 0;
+        let mut best_sim = 0.0f32;
+        let mut best_valence = 0.0f32;
+        
+        // Determine if looking for benign (valence < 0.5) or threat (valence >= 0.5)
+        let is_looking_for_threat = target_valence > 0.5;
+        
+        for (idx, trace) in self.traces.iter().enumerate() {
+            let trace_is_threat = trace.valence > 0.5;
+            
+            // Only consider traces of the same type
+            if trace_is_threat == is_looking_for_threat {
+                let sim = cosine_sim(&trace.vec, q);
+                if sim > best_sim {
+                    best_sim = sim;
+                    best_idx = idx;
+                    best_valence = trace.valence;
+                }
+            }
+        }
+        
+        (best_idx, best_sim, best_valence)
+    }
+    
+    /// Reinforce an existing trace by adjusting its valence
+    /// This is the key mechanism for learning from errors:
+    /// - Positive delta moves toward threat (1.0)
+    /// - Negative delta moves toward benign (0.0)
+    pub fn reinforce_trace(&mut self, trace_idx: usize, valence_delta: f32) {
+        if trace_idx < self.traces.len() {
+            let trace = &mut self.traces[trace_idx];
+            trace.valence = (trace.valence + valence_delta).max(0.0).min(1.0);
+            trace.uses += 1;  // Track reinforcement count
+            trace.cum_reward += valence_delta;  // Track cumulative adjustment
+        }
+    }
+    
     /// Differential similarity using reinforcement learning principles:
     /// Returns threat_similarity - benign_similarity, creating a contrastive signal
     /// that rewards similarity to threats and suppresses similarity to benign patterns.
@@ -351,10 +411,13 @@ impl BdhMemory {
             .map(|t| cosine_sim(&t.vec, q))
             .fold(0.0f32, |a, b| a.max(b));
         
+        // Key insight: If benign_sim > threat_sim, this is likely a benign pattern
+        // The suppression should be strong enough to override any incidental threat similarity
+        
         // Differential: threat similarity minus benign similarity
-        // The 0.8 factor controls how strongly benign patterns suppress threat scores
-        // Higher factor = benign patterns have more suppressive effect
-        let differential = threat_sim - (benign_sim * 0.8);
+        // Using 1.0 factor ensures benign patterns fully suppress if they match better
+        // This implements proper RL: learned benign patterns = negative reward for threat classification
+        let differential = threat_sim - benign_sim;
         
         // Clamp to [0, 1] range - negative means more benign than threat
         differential.max(0.0).min(1.0)

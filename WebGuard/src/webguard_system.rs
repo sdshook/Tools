@@ -492,19 +492,38 @@ impl WebGuardSystem {
     }
 
     /// Feed learning results into the cognitive mesh system
-    pub fn learn_from_validation(&mut self, request: &str, is_threat: bool, attack_type: Option<String>) {
+    /// This implements true reinforcement learning by:
+    /// 1. Finding similar existing patterns of the SAME TYPE and reinforcing
+    /// 2. Adding new patterns if none match or if type differs significantly
+    /// 3. NEVER cross-contaminating benign patterns with threat learning
+    pub fn learn_from_validation(&mut self, request: &str, is_threat: bool, _attack_type: Option<String>) {
         if self.config.enable_experiential_learning {
             let features = self.feature_extractor.extract_features(request);
             let mut mesh = self.mesh_cognition.lock().unwrap();
             
-            // Store learning in service memory
             if let Some(service_memory) = mesh.get_service_memory(&self.service_id) {
                 if let Ok(mut bdh) = service_memory.try_lock() {
-                    let threat_value = if is_threat { 1.0 } else { 0.0 };
+                    let target_valence = if is_threat { 1.0 } else { 0.0 };
+                    
                     if features.len() >= 32 {
                         let mut array = [0.0f32; 32];
                         array.copy_from_slice(&features[..32]);
-                        bdh.add_trace(array, threat_value);
+                        
+                        // Find most similar pattern of the SAME TYPE
+                        // This prevents benign patterns from being updated with threat data
+                        let similarity_threshold = 0.85;  // Higher threshold
+                        let (best_match_idx, best_similarity, current_valence) = 
+                            bdh.find_most_similar_trace_of_type(&array, target_valence);
+                        
+                        if best_similarity > similarity_threshold {
+                            // Reinforce existing pattern of same type
+                            let learning_rate = 0.2;
+                            let valence_delta = (target_valence - current_valence) * learning_rate;
+                            bdh.reinforce_trace(best_match_idx, valence_delta);
+                        } else {
+                            // New pattern or different type - add as new trace
+                            bdh.add_trace(array, target_valence);
+                        }
                     }
                 }
             }
@@ -514,6 +533,50 @@ impl WebGuardSystem {
                 mesh.update_host_aggression(0.1);
             } else {
                 mesh.update_host_aggression(-0.05);
+            }
+        }
+    }
+    
+    /// Learn from a prediction error (FP or FN) with stronger correction
+    /// FP (false positive): benign classified as threat - reinforce benign
+    /// FN (false negative): threat classified as benign - add/reinforce threat
+    pub fn learn_from_error(&mut self, request: &str, predicted_threat: bool, actual_threat: bool) {
+        if predicted_threat == actual_threat {
+            return; // No error, normal learning
+        }
+        
+        if self.config.enable_experiential_learning {
+            let features = self.feature_extractor.extract_features(request);
+            let mut mesh = self.mesh_cognition.lock().unwrap();
+            
+            if let Some(service_memory) = mesh.get_service_memory(&self.service_id) {
+                if let Ok(mut bdh) = service_memory.try_lock() {
+                    let target_valence = if actual_threat { 1.0 } else { 0.0 };
+                    
+                    if features.len() >= 32 {
+                        let mut array = [0.0f32; 32];
+                        array.copy_from_slice(&features[..32]);
+                        
+                        if actual_threat && !predicted_threat {
+                            // FALSE NEGATIVE: Missed a threat
+                            // Add as new threat pattern with strong valence
+                            bdh.add_trace(array, 1.0);
+                        } else if !actual_threat && predicted_threat {
+                            // FALSE POSITIVE: Incorrectly flagged benign
+                            // Find and reinforce the most similar BENIGN pattern
+                            let (best_idx, best_sim, current_val) = 
+                                bdh.find_most_similar_trace_of_type(&array, 0.0);
+                            
+                            if best_sim > 0.7 {
+                                // Strengthen the benign classification
+                                bdh.reinforce_trace(best_idx, -0.3);  // Push toward 0
+                            } else {
+                                // Add new benign pattern
+                                bdh.add_trace(array, 0.0);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
