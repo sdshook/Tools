@@ -620,6 +620,54 @@ fn test_comprehensive_experiential_learning() {
     }
     
     // ═══════════════════════════════════════════════════════════════════════════════
+    // FINAL ATTACK TYPE EVALUATION (after learning)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    println!("\n┌────────────────────────────────────────────────────────────────────────────┐");
+    println!("│ FINAL ATTACK TYPE DETECTION (After Adaptive Learning)                     │");
+    println!("└────────────────────────────────────────────────────────────────────────────┘");
+    
+    // Re-evaluate attack detection on ALL threat samples
+    let mut final_attack_metrics: std::collections::HashMap<String, (usize, usize, usize)> = std::collections::HashMap::new();
+    
+    for sample in &threat_samples {
+        let attack_type = sample.attack_type.clone().unwrap_or("Unknown".to_string());
+        final_attack_metrics.entry(attack_type).or_insert((0, 0, 0));
+    }
+    
+    for sample in &threat_samples {
+        let result = webguard.analyze_request(&sample.request);
+        let predicted_threat = result.threat_score > 0.5;
+        let attack_type = sample.attack_type.clone().unwrap_or("Unknown".to_string());
+        
+        let entry = final_attack_metrics.get_mut(&attack_type).unwrap();
+        entry.0 += 1; // samples tested
+        
+        if predicted_threat {
+            entry.1 += 1; // detected
+        } else {
+            entry.2 += 1; // missed
+        }
+    }
+    
+    // Update threat_samples_by_type with final results
+    threat_samples_by_type.clear();
+    println!("  Attack Type Detection Results (FINAL):");
+    println!("  ─────────────────────────────────────────────────────────");
+    for (attack_type, (tested, detected, missed)) in &final_attack_metrics {
+        let detection_rate = if *tested > 0 { *detected as f32 / *tested as f32 } else { 0.0 };
+        println!("  │ {:25} │ Detected: {:2}/{:2} ({:5.1}%) │", 
+                 attack_type, detected, tested, detection_rate * 100.0);
+        threat_samples_by_type.push(AttackTypeMetrics {
+            attack_type: attack_type.clone(),
+            samples_tested: *tested,
+            detected: *detected,
+            missed: *missed,
+            detection_rate,
+        });
+    }
+    println!("  ─────────────────────────────────────────────────────────");
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
     // FINAL RESULTS AND SUMMARY
     // ═══════════════════════════════════════════════════════════════════════════════
     println!("╔══════════════════════════════════════════════════════════════════════════════╗");
