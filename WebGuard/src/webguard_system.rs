@@ -249,46 +249,70 @@ impl WebGuardSystem {
     }
 
     /// Perform cognitive analysis using PSI/BHSM/CMNN architecture
-    fn perform_cognitive_analysis(&mut self, request: &str, features: &[f32]) -> CognitiveAnalysisResult {
-        let mut mesh = self.mesh_cognition.lock().unwrap();
+    fn perform_cognitive_analysis(&mut self, _request: &str, features: &[f32]) -> CognitiveAnalysisResult {
+        let mesh = self.mesh_cognition.lock().unwrap();
         
-        // Get service memory for BHSM analysis
-        let bhsm_activation = if let Some(service_memory) = mesh.get_service_memory(&self.service_id) {
+        // Get service memory for BHSM analysis using differential RL approach
+        let (bhsm_activation, has_learned_patterns) = if let Some(service_memory) = mesh.get_service_memory(&self.service_id) {
             if let Ok(bdh) = service_memory.try_lock() {
-                // Use features to query BHSM memory
                 if features.len() >= 32 {
                     let mut array = [0.0f32; 32];
                     array.copy_from_slice(&features[..32]);
-                    bdh.max_similarity(&array)
+                    // Use differential similarity: threat_sim - benign_sim
+                    // This is the key RL fix: benign patterns now SUPPRESS threat scores
+                    let differential = bdh.differential_threat_similarity(&array);
+                    let has_patterns = bdh.get_trace_count() > 0;
+                    (differential, has_patterns)
                 } else {
-                    0.0
+                    (0.0, false)
                 }
             } else {
-                0.0
+                (0.0, false)
             }
         } else {
-            0.0
+            (0.0, false)
         };
         
-        // PSI valence calculation based on threat patterns
-        let psi_valence = features.iter().sum::<f32>() / features.len() as f32;
-        
-        // CMNN confidence based on pattern consistency
-        let cmnn_confidence = if psi_valence > 0.3 {
-            (psi_valence * bhsm_activation).min(1.0)
+        // PSI valence: Start neutral (0.5) when no patterns learned
+        // Then adjust based on BHSM differential activation
+        let psi_valence = if has_learned_patterns {
+            // With learned patterns, use BHSM differential as primary signal
+            // bhsm_activation is already differential (threat - benign)
+            bhsm_activation
         } else {
-            0.0
+            // No patterns yet - use conservative baseline (assume benign until proven otherwise)
+            // Raw feature average, but dampened to avoid over-alerting on unknown patterns
+            let raw_avg = features.iter().sum::<f32>() / features.len() as f32;
+            raw_avg * 0.3  // Dampen to 30% - be cautious but not paranoid
+        };
+        
+        // CMNN confidence based on having learned patterns and pattern match strength
+        let cmnn_confidence = if has_learned_patterns && bhsm_activation > 0.1 {
+            // High confidence when we have strong differential match to threats
+            bhsm_activation.min(1.0)
+        } else if has_learned_patterns {
+            // We have patterns but no strong threat match - moderately confident it's benign
+            0.3
+        } else {
+            // No patterns learned yet - low confidence
+            0.1
         };
         
         // Get mesh aggression level
         let mesh_aggression = mesh.get_host_aggression();
         
-        // Service consensus (simplified - would involve cross-service communication)
-        let service_consensus = if cmnn_confidence > 0.5 { 0.8 } else { 0.2 };
+        // Service consensus based on differential threat detection
+        let service_consensus = if bhsm_activation > 0.5 { 
+            0.8  // High consensus on threat
+        } else if bhsm_activation < 0.2 && has_learned_patterns {
+            0.2  // High consensus on benign (low differential = more similar to benign)
+        } else {
+            0.5  // Uncertain
+        };
         
-        // Extract learned patterns (simplified representation)
-        let learned_patterns = if psi_valence > 0.5 {
-            vec!["sql_injection".to_string(), "xss_attempt".to_string()]
+        // Extract learned patterns only when differential indicates threat
+        let learned_patterns = if psi_valence > 0.5 && bhsm_activation > 0.3 {
+            vec!["potential_threat".to_string()]
         } else {
             Vec::new()
         };

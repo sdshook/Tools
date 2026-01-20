@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-WebGuard Experiential Learning Visualization Generator
+WebGuard Comprehensive Experiential Learning Visualization Generator
 
 This script generates comprehensive visualizations showing WebGuard's
-experiential learning capabilities and progress over time.
+experiential learning capabilities, multipass learning, reward system benefits,
+and learning progression over time.
 """
 
 import json
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import seaborn as sns
 import numpy as np
 from pathlib import Path
@@ -16,7 +18,7 @@ import argparse
 from datetime import datetime
 
 # Set style for better-looking plots
-plt.style.use('seaborn-v0_8')
+plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette("husl")
 
 class ExperientialVisualizationGenerator:
@@ -30,17 +32,31 @@ class ExperientialVisualizationGenerator:
         (self.viz_dir / "performance_metrics").mkdir(exist_ok=True)
         (self.viz_dir / "threat_detection").mkdir(exist_ok=True)
         (self.viz_dir / "comparative_analysis").mkdir(exist_ok=True)
-        (self.viz_dir / "experiential_data").mkdir(exist_ok=True)
+        (self.viz_dir / "reward_analysis").mkdir(exist_ok=True)
+        (self.viz_dir / "multipass_learning").mkdir(exist_ok=True)
     
     def load_data(self):
         """Load test results and learning progression data"""
         try:
-            # Load main results
-            with open(self.results_dir / "experiential_learning_results.json", 'r') as f:
+            # Load comprehensive results
+            with open(self.results_dir / "comprehensive_learning_results.json", 'r') as f:
                 self.results = json.load(f)
             
             # Load learning progression CSV
             self.progression_df = pd.read_csv(self.results_dir / "learning_progression.csv")
+            
+            # Load multipass results if available
+            try:
+                self.multipass_df = pd.read_csv(self.results_dir / "multipass_results.csv")
+            except:
+                self.multipass_df = None
+            
+            # Load attack type breakdown
+            try:
+                with open(self.results_dir / "attack_type_breakdown.json", 'r') as f:
+                    self.attack_breakdown = json.load(f)
+            except:
+                self.attack_breakdown = []
             
             print(f"✅ Loaded data: {len(self.progression_df)} learning iterations")
             return True

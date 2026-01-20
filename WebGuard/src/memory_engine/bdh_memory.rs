@@ -334,6 +334,75 @@ impl BdhMemory {
     pub fn max_similarity(&self, q: &[f32; EMBED_DIM]) -> f32 {
         self.traces.iter().map(|t| cosine_sim(&t.vec, q)).fold(0.0, |a,b| a.max(b))
     }
+    
+    /// Differential similarity using reinforcement learning principles:
+    /// Returns threat_similarity - benign_similarity, creating a contrastive signal
+    /// that rewards similarity to threats and suppresses similarity to benign patterns.
+    pub fn differential_threat_similarity(&self, q: &[f32; EMBED_DIM]) -> f32 {
+        // Calculate maximum similarity to threat patterns (valence > 0.5)
+        let threat_sim = self.traces.iter()
+            .filter(|t| t.valence > 0.5)
+            .map(|t| cosine_sim(&t.vec, q))
+            .fold(0.0f32, |a, b| a.max(b));
+        
+        // Calculate maximum similarity to benign patterns (valence <= 0.5)
+        let benign_sim = self.traces.iter()
+            .filter(|t| t.valence <= 0.5)
+            .map(|t| cosine_sim(&t.vec, q))
+            .fold(0.0f32, |a, b| a.max(b));
+        
+        // Differential: threat similarity minus benign similarity
+        // The 0.8 factor controls how strongly benign patterns suppress threat scores
+        // Higher factor = benign patterns have more suppressive effect
+        let differential = threat_sim - (benign_sim * 0.8);
+        
+        // Clamp to [0, 1] range - negative means more benign than threat
+        differential.max(0.0).min(1.0)
+    }
+    
+    /// Weighted threat similarity incorporating cumulative reward history
+    /// Patterns that have been repeatedly validated get stronger influence
+    pub fn reward_weighted_threat_similarity(&self, q: &[f32; EMBED_DIM]) -> f32 {
+        if self.traces.is_empty() {
+            return 0.0;
+        }
+        
+        let mut weighted_threat_sum = 0.0f32;
+        let mut weighted_benign_sum = 0.0f32;
+        let mut threat_weight_total = 0.0f32;
+        let mut benign_weight_total = 0.0f32;
+        
+        for trace in &self.traces {
+            let sim = cosine_sim(&trace.vec, q);
+            // Use cumulative reward as confidence weight (more uses = more reliable)
+            let confidence = (trace.uses as f32).sqrt().min(10.0) / 10.0;
+            
+            if trace.valence > 0.5 {
+                // Threat pattern
+                weighted_threat_sum += sim * confidence;
+                threat_weight_total += confidence;
+            } else {
+                // Benign pattern
+                weighted_benign_sum += sim * confidence;
+                benign_weight_total += confidence;
+            }
+        }
+        
+        let avg_threat_sim = if threat_weight_total > 0.0 {
+            weighted_threat_sum / threat_weight_total
+        } else {
+            0.0
+        };
+        
+        let avg_benign_sim = if benign_weight_total > 0.0 {
+            weighted_benign_sum / benign_weight_total
+        } else {
+            0.0
+        };
+        
+        // Differential with reward weighting
+        (avg_threat_sim - avg_benign_sim * 0.8).max(0.0).min(1.0)
+    }
 
     pub fn add_mesh_trace(&mut self, vec: [f32; EMBED_DIM], valence: f32) -> String {
         let id = format!("mesh_{}", Uuid::new_v4().to_string()[..8].to_string());
