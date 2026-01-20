@@ -1,12 +1,14 @@
-/// Retrospective Learning System for WebGuard
-/// 
-/// This module implements learning from false negatives - cases where threats were missed
-/// and later discovered. In nature, we learn more from mistakes than successes, and this
-/// system captures that principle for cybersecurity.
+//! Retrospective Learning System for WebGuard
+//! 
+//! This module implements learning from false negatives - cases where threats were missed
+//! and later discovered. In nature, we learn more from mistakes than successes, and this
+//! system captures that principle for cybersecurity.
+
+#![allow(dead_code)]
 
 use std::collections::{HashMap, VecDeque};
 use serde::{Serialize, Deserialize};
-use tracing::{info, warn, debug};
+use tracing::{info, debug};
 
 use crate::eq_iq_regulator::{ExperientialBehavioralRegulator, ContextEvent, FeedbackEvent};
 use crate::memory_engine::bdh_memory::BdhMemory;
@@ -197,7 +199,7 @@ impl RetrospectiveLearningSystem {
             };
 
             // Apply enhanced learning with higher learning rate for false negatives
-            let enhanced_learning_rate = self.false_negative_learning_rate * temporal_weight * missed_threat.consequence_severity;
+            let _enhanced_learning_rate = self.false_negative_learning_rate * temporal_weight * missed_threat.consequence_severity;
             
             // Create corrective context event to improve EQ
             let corrective_context = ContextEvent {

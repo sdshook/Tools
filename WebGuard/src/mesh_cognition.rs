@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use serde::{Serialize, Deserialize};
@@ -9,42 +11,6 @@ use crate::memory_engine::psi_index::{PsiIndex, PsiEntry};
 use crate::memory_engine::valence::ValenceController;
 use crate::retrospective_learning::{RetrospectiveLearningSystem, ThreatDiscoveryMethod, MissedThreatEvent, RetrospectiveLearningStats, FalsePositiveEvent};
 use crate::eq_iq_regulator::ExperientialBehavioralRegulator;
-
-/// Cognitive knowledge export structure for WebGuard-to-WebGuard sharing
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CognitiveKnowledgeExport {
-    pub export_timestamp: u64,
-    pub source_instance_id: String,
-    pub psi_semantic_patterns: Vec<PsiEntry>,
-    pub hebbian_synaptic_connections: Vec<HebbianConnectionExport>,
-    pub mesh_intelligence_stats: MeshIntelligenceStats,
-    pub eq_iq_balance_profile: EqIqBalanceProfile,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HebbianConnectionExport {
-    pub source_pattern: [f32; EMBED_DIM],
-    pub target_pattern: [f32; EMBED_DIM],
-    pub synaptic_weight: f32,
-    pub activation_frequency: u32,
-    pub valence_association: f32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MeshIntelligenceStats {
-    pub total_services: usize,
-    pub cross_service_learning_events: u64,
-    pub mesh_learning_rate: f32,
-    pub collective_threat_detection_accuracy: f32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EqIqBalanceProfile {
-    pub eq_weight: f32,
-    pub iq_weight: f32,
-    pub empathic_accuracy: f32,
-    pub analytical_precision: f32,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WebServiceType {
@@ -563,151 +529,6 @@ impl HostMeshCognition {
 
         Ok(())
     }
-
-    /// Export cognitive knowledge for sharing with other WebGuard instances
-    /// This leverages the PSI/BHSM/CMNN architecture for native knowledge transfer
-    pub fn export_cognitive_knowledge(&self, instance_id: String) -> Result<CognitiveKnowledgeExport, Box<dyn std::error::Error>> {
-        let current_time = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        // Export PSI semantic patterns
-        let psi_patterns = if let Ok(psi) = self.shared_psi.try_lock() {
-            psi.export_high_quality_patterns(0.3) // Export patterns with confidence > 0.3
-        } else {
-            Vec::new()
-        };
-
-        // Export Hebbian synaptic connections from all services
-        let mut hebbian_connections = Vec::new();
-        let mut total_cross_service_events = 0u64;
-        let mut collective_accuracy = 0.0f32;
-
-        for service in self.services.values() {
-            if let Ok(bdh) = service.bdh_memory.try_lock() {
-                let connections = bdh.export_synaptic_connections(0.2); // Export connections with weight > 0.2
-                hebbian_connections.extend(connections);
-                total_cross_service_events += bdh.get_learning_event_count();
-                collective_accuracy += bdh.get_accuracy_score();
-            }
-        }
-
-        if !self.services.is_empty() {
-            collective_accuracy /= self.services.len() as f32;
-        }
-
-        // Export mesh intelligence stats
-        let mesh_stats = MeshIntelligenceStats {
-            total_services: self.services.len(),
-            cross_service_learning_events: total_cross_service_events,
-            mesh_learning_rate: self.mesh_learning_rate,
-            collective_threat_detection_accuracy: collective_accuracy,
-        };
-
-        // Export EQ/IQ balance profile
-        let eq_iq_profile = if let Ok(eq_iq) = self.eq_iq_regulator.try_lock() {
-            let balance = eq_iq.get_balance_info();
-            EqIqBalanceProfile {
-                eq_weight: balance.eq_weight,
-                iq_weight: balance.iq_weight,
-                empathic_accuracy: eq_iq.get_empathic_accuracy(),
-                analytical_precision: eq_iq.get_analytical_precision(),
-            }
-        } else {
-            EqIqBalanceProfile {
-                eq_weight: 0.5,
-                iq_weight: 0.5,
-                empathic_accuracy: 0.5,
-                analytical_precision: 0.5,
-            }
-        };
-
-        Ok(CognitiveKnowledgeExport {
-            export_timestamp: current_time,
-            source_instance_id: instance_id,
-            psi_semantic_patterns: psi_patterns,
-            hebbian_synaptic_connections: hebbian_connections,
-            mesh_intelligence_stats: mesh_stats,
-            eq_iq_balance_profile: eq_iq_profile,
-        })
-    }
-
-    /// Import cognitive knowledge from another WebGuard instance
-    /// This integrates learned patterns into the existing PSI/BHSM/CMNN architecture
-    pub fn import_cognitive_knowledge(&mut self, knowledge: CognitiveKnowledgeExport) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Importing cognitive knowledge from instance: {}", knowledge.source_instance_id);
-
-        // Import PSI semantic patterns
-        let psi_pattern_count = knowledge.psi_semantic_patterns.len();
-        if let Ok(mut psi) = self.shared_psi.try_lock() {
-            for pattern in knowledge.psi_semantic_patterns {
-                // Only import high-quality patterns to prevent knowledge degradation
-                if pattern.valence.abs() > 0.3 && pattern.uses > 2 {
-                    psi.add(pattern);
-                }
-            }
-        }
-
-        // Import Hebbian synaptic connections into service memories
-        if !self.services.is_empty() {
-            let service_count = self.services.len();
-            let connections_per_service = knowledge.hebbian_synaptic_connections.len() / service_count.max(1);
-            
-            for (i, service) in self.services.values().enumerate() {
-                if let Ok(mut bdh) = service.bdh_memory.try_lock() {
-                    let start_idx = i * connections_per_service;
-                    let end_idx = ((i + 1) * connections_per_service).min(knowledge.hebbian_synaptic_connections.len());
-                    
-                    for connection in &knowledge.hebbian_synaptic_connections[start_idx..end_idx] {
-                        // Only import strong synaptic connections
-                        if connection.synaptic_weight.abs() > 0.3 {
-                            bdh.import_synaptic_connection(
-                                &connection.source_pattern,
-                                &connection.target_pattern,
-                                connection.synaptic_weight,
-                                connection.valence_association
-                            )?;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Adapt mesh learning rate based on imported intelligence
-        let imported_accuracy = knowledge.mesh_intelligence_stats.collective_threat_detection_accuracy;
-        let current_accuracy = if !self.services.is_empty() {
-            let mut total_accuracy = 0.0f32;
-            for service in self.services.values() {
-                if let Ok(bdh) = service.bdh_memory.try_lock() {
-                    total_accuracy += bdh.get_accuracy_score();
-                }
-            }
-            total_accuracy / self.services.len() as f32
-        } else {
-            0.5
-        };
-        
-        if imported_accuracy > current_accuracy {
-            // If imported knowledge is more accurate, adapt our learning rate
-            self.mesh_learning_rate = (self.mesh_learning_rate + knowledge.mesh_intelligence_stats.mesh_learning_rate) / 2.0;
-        }
-
-        // Import EQ/IQ balance adjustments
-        if let Ok(mut eq_iq) = self.eq_iq_regulator.try_lock() {
-            eq_iq.adapt_from_external_profile(
-                knowledge.eq_iq_balance_profile.eq_weight,
-                knowledge.eq_iq_balance_profile.iq_weight,
-                knowledge.eq_iq_balance_profile.empathic_accuracy
-            )?;
-        }
-
-        info!("Successfully imported {} PSI patterns and {} Hebbian connections", 
-              psi_pattern_count, 
-              knowledge.hebbian_synaptic_connections.len());
-
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -722,34 +543,4 @@ pub struct MemoryStats {
 pub struct EqIqBalance {
     pub eq_weight: f32,
     pub iq_weight: f32,
-}
-
-// Helper function to detect web server type from process information
-pub fn detect_service_type(process_name: &str, command_line: &str) -> WebServiceType {
-    let process_lower = process_name.to_lowercase();
-    let cmd_lower = command_line.to_lowercase();
-    
-    // Detect Apache processes
-    if process_lower.contains("httpd") || process_lower.contains("apache") || 
-       cmd_lower.contains("httpd") || cmd_lower.contains("apache") {
-        WebServiceType::Apache
-    }
-    // Detect NGINX processes
-    else if process_lower.contains("nginx") || cmd_lower.contains("nginx") {
-        WebServiceType::Nginx
-    }
-    // Detect IIS processes (w3wp.exe, iisexpress.exe, etc.)
-    else if process_lower.contains("w3wp") || process_lower.contains("iis") ||
-            cmd_lower.contains("w3wp") || cmd_lower.contains("iis") {
-        WebServiceType::IIS
-    }
-    // Detect Node.js processes
-    else if process_lower.contains("node") || cmd_lower.contains("node") ||
-            process_lower.contains("nodejs") || cmd_lower.contains("nodejs") {
-        WebServiceType::NodeJS
-    }
-    // Default to generic
-    else {
-        WebServiceType::Generic
-    }
 }

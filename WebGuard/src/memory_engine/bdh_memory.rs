@@ -1,8 +1,9 @@
+//! BDH (Bidirectional Hebbian) Memory System
+//! Core component of RHLS (Reinforced Hebbian Learning System) that works with
+//! PSI (Persistent Semantic Index) to enable experiential learning.
+//! CMNN provides synaptic signal inputs with behavioral reward adjustments.
 
-/// BDH (Bidirectional Hebbian) Memory System
-/// Core component of RHLS (Reinforced Hebbian Learning System) that works with
-/// PSI (Persistent Semantic Index) to enable experiential learning.
-/// CMNN provides synaptic signal inputs with behavioral reward adjustments.
+#![allow(dead_code)]
 
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
@@ -299,34 +300,6 @@ impl BdhMemory {
         }
     }
     
-    fn create_hebbian_connections_legacy(&mut self, new_trace_id: &str, new_vec: &[f32; EMBED_DIM], _valence: f32) {
-        
-        // Create connections with existing traces that are sufficiently similar
-        for existing_trace in &self.traces {
-            let similarity = cosine_sim(&existing_trace.vec, new_vec);
-            
-            if similarity > self.activation_threshold {
-                // Create bidirectional connections
-                let forward_conn = HebbianConnection {
-                    source_id: existing_trace.id.clone(),
-                    target_id: new_trace_id.to_string(),
-                    weight: similarity * self.hebbian_learning_rate,
-                    last_update: 0.0,
-                };
-                
-                let backward_conn = HebbianConnection {
-                    source_id: new_trace_id.to_string(),
-                    target_id: existing_trace.id.clone(),
-                    weight: similarity * self.hebbian_learning_rate,
-                    last_update: 0.0,
-                };
-                
-                self.hebbian_connections.push(forward_conn);
-                self.hebbian_connections.push(backward_conn);
-            }
-        }
-    }
-
     pub fn promote_candidates(&self, threshold: f32) -> Vec<&MemoryTrace> {
         self.traces.iter().filter(|t| t.cum_reward.abs() >= threshold).collect()
     }
@@ -577,70 +550,6 @@ impl BdhMemory {
         // Simple accuracy approximation based on valence distribution
         let balance = (positive_valence_count as f32) / (total_traces as f32);
         1.0 - (balance - 0.5).abs() * 2.0 // Higher score for balanced valence
-    }
-
-    /// Export synaptic connections for knowledge sharing
-    pub fn export_synaptic_connections(&self, min_weight_threshold: f32) -> Vec<crate::mesh_cognition::HebbianConnectionExport> {
-        let mut exports = Vec::new();
-        
-        for connection in &self.hebbian_connections {
-            if connection.weight.abs() > min_weight_threshold {
-                // Find source and target traces
-                if let (Some(source_trace), Some(target_trace)) = (
-                    self.traces.iter().find(|t| t.id == connection.source_id),
-                    self.traces.iter().find(|t| t.id == connection.target_id)
-                ) {
-                    exports.push(crate::mesh_cognition::HebbianConnectionExport {
-                        source_pattern: source_trace.vec,
-                        target_pattern: target_trace.vec,
-                        synaptic_weight: connection.weight,
-                        activation_frequency: source_trace.uses + target_trace.uses,
-                        valence_association: (source_trace.valence + target_trace.valence) / 2.0,
-                    });
-                }
-            }
-        }
-        
-        exports
-    }
-
-    /// Import synaptic connection from another WebGuard instance
-    pub fn import_synaptic_connection(
-        &mut self, 
-        source_pattern: &[f32; EMBED_DIM], 
-        target_pattern: &[f32; EMBED_DIM], 
-        synaptic_weight: f32,
-        valence_association: f32
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Create or find traces for the patterns
-        let source_id = self.find_or_create_trace(source_pattern, valence_association * 0.5)?;
-        let target_id = self.find_or_create_trace(target_pattern, valence_association * 0.5)?;
-        
-        // Create the Hebbian connection
-        let connection = HebbianConnection {
-            source_id: source_id.clone(),
-            target_id: target_id.clone(),
-            weight: synaptic_weight * 0.7, // Reduce imported weight to prevent overwhelming local learning
-            last_update: valence_association,
-        };
-        
-        self.hebbian_connections.push(connection);
-        Ok(())
-    }
-
-    /// Helper method to find existing trace or create new one
-    fn find_or_create_trace(&mut self, pattern: &[f32; EMBED_DIM], valence: f32) -> Result<String, Box<dyn std::error::Error>> {
-        // Check if similar trace already exists
-        let similar_traces = self.retrieve_similar(pattern, 1);
-        if let Some((existing_trace, similarity)) = similar_traces.first() {
-            if *similarity > 0.8 {
-                return Ok(existing_trace.id.clone());
-            }
-        }
-        
-        // Create new trace
-        let trace_id = self.add_trace(*pattern, valence);
-        Ok(trace_id)
     }
     
     pub fn get_strongest_connections(&self, limit: usize) -> Vec<&HebbianConnection> {
@@ -1043,7 +952,7 @@ impl BdhMemory {
         action_taken: bool,
         was_correct: bool
     ) {
-        if let Some(trace) = self.traces.iter_mut().find(|t| t.id == trace_id) {
+        if let Some(_trace) = self.traces.iter_mut().find(|t| t.id == trace_id) {
             // Calculate outcome-based reward
             let accuracy_reward = 1.0 - (actual_outcome - predicted_outcome).abs();
             let action_reward = if action_taken && was_correct { 0.5 } else if !action_taken && !was_correct { 0.3 } else { -0.2 };

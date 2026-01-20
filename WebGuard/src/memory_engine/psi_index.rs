@@ -1,7 +1,8 @@
+//! PSI (Persistent Semantic Index) - Memory cache for BDH that avoids context window constraints
+//! and enables experiential learning in RHLS (Reinforced Hebbian Learning System)
+//! where CMNN provides synaptic signal inputs with behavioral reward adjustments.
 
-/// PSI (Persistent Semantic Index) - Memory cache for BDH that avoids context window constraints
-/// and enables experiential learning in RHLS (Reinforced Hebbian Learning System)
-/// where CMNN provides synaptic signal inputs with behavioral reward adjustments.
+#![allow(dead_code)]
 
 use serde::{Serialize, Deserialize};
 

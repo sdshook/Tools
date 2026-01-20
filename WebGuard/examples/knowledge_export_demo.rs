@@ -1,6 +1,4 @@
-use std::fs;
 use webguard::mesh_cognition::HostMeshCognition;
-use webguard::memory_engine::bdh_memory::BdhMemory;
 
 /// Demonstrates how to export learned knowledge from WebGuard
 /// for use in other security systems
@@ -70,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("javascript:alert(1)", "JavaScript XSS"),
     ];
     
-    for (pattern, description) in validation_patterns {
+    for (_pattern, description) in validation_patterns {
         for _ in 0..10 {  // Learn each pattern 10 times to build confidence
             let features = [0.9f32; 32]; // High confidence threat features
             if let Some(service_memory) = mesh_cognition.get_service_memory(&service_id) {

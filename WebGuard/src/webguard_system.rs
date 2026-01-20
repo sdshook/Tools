@@ -1,10 +1,11 @@
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use crate::adaptive_threshold::{AdaptiveThreshold, ThreatAssessment};
 use crate::retrospective_learning::{RetrospectiveLearningStats, RetrospectiveLearningSystem, MissedThreatEvent as RetroMissedThreatEvent, FalsePositiveEvent as RetroFalsePositiveEvent};
-use crate::eq_iq_regulator::{ExperientialBehavioralRegulator, ContextEvent as EQContextEvent, FeedbackEvent, EQIQBalance, MultiDimensionalEQ};
-use crate::memory_engine::bdh_memory::BdhMemory;
+use crate::eq_iq_regulator::{ExperientialBehavioralRegulator, EQIQBalance, MultiDimensionalEQ};
 use crate::mesh_cognition::{HostMeshCognition, WebServiceType};
 use crate::advanced_feature_extractor::AdvancedFeatureExtractor;
 use crate::embedding_learner::EmbeddingLearner;
@@ -366,7 +367,7 @@ impl WebGuardSystem {
         }
         
         // Apply mesh aggression influence
-        score *= (1.0 + cognitive_analysis.mesh_aggression * 0.1);
+        score *= 1.0 + cognitive_analysis.mesh_aggression * 0.1;
         
         score.min(1.0)
     }
@@ -387,14 +388,6 @@ impl WebGuardSystem {
         
         confidence.min(1.0)
     }
-
-    /// Extract attack types from cognitive analysis
-    fn extract_attack_types_cognitive(&self, cognitive_analysis: &CognitiveAnalysisResult) -> Vec<String> {
-        cognitive_analysis.learned_patterns.clone()
-    }
-
-
-
 
 
     fn create_request_context(&self, request: &str) -> RequestContext {
@@ -418,29 +411,6 @@ impl WebGuardSystem {
             user_agent: "unknown".to_string(),
             source_ip: "127.0.0.1".to_string(),
             timestamp: std::time::SystemTime::now(),
-        }
-    }
-
-    fn get_memory_influence(&mut self, request: &str) -> f32 {
-        // Extract features from request for memory lookup
-        let features = self.feature_extractor.extract_features(request);
-        let mut mesh = self.mesh_cognition.lock().unwrap();
-        
-        // Check for similar patterns in service memory
-        if let Some(service_memory) = mesh.get_service_memory(&self.service_id) {
-            if let Ok(bdh) = service_memory.try_lock() {
-                if features.len() >= 32 {
-                    let mut array = [0.0f32; 32];
-                    array.copy_from_slice(&features[..32]);
-                    bdh.max_similarity(&array)
-                } else {
-                    0.0
-                }
-            } else {
-                0.0
-            }
-        } else {
-            0.0
         }
     }
 
@@ -530,7 +500,7 @@ impl WebGuardSystem {
         } else {
             // Legacy BDH-based learning
             let features = self.feature_extractor.extract_features(request);
-            let mut mesh = self.mesh_cognition.lock().unwrap();
+            let mesh = self.mesh_cognition.lock().unwrap();
             
             if let Some(service_memory) = mesh.get_service_memory(&self.service_id) {
                 if let Ok(mut bdh) = service_memory.try_lock() {
@@ -580,7 +550,7 @@ impl WebGuardSystem {
         } else {
             // Legacy BDH-based error learning
             let features = self.feature_extractor.extract_features(request);
-            let mut mesh = self.mesh_cognition.lock().unwrap();
+            let mesh = self.mesh_cognition.lock().unwrap();
             
             if let Some(service_memory) = mesh.get_service_memory(&self.service_id) {
                 if let Ok(mut bdh) = service_memory.try_lock() {
@@ -618,7 +588,7 @@ impl WebGuardSystem {
     }
 
     /// Import knowledge into cognitive mesh
-    pub fn import_knowledge(&mut self, knowledge_json: &str) -> Result<(), String> {
+    pub fn import_knowledge(&mut self, _knowledge_json: &str) -> Result<(), String> {
         if self.config.enable_knowledge_sharing {
             // Simplified import - in practice would deserialize and apply mesh state
             Ok(())
@@ -641,7 +611,7 @@ impl WebGuardSystem {
         // Extract features and store in cognitive mesh memory
         let features = self.feature_extractor.extract_features(request);
         let threat_value = result.threat_score;
-        let mut mesh = self.mesh_cognition.lock().unwrap();
+        let mesh = self.mesh_cognition.lock().unwrap();
         
         // Store in service memory
         if let Some(service_memory) = mesh.get_service_memory(&self.service_id) {
@@ -744,7 +714,7 @@ impl WebGuardSystem {
         }
     }
 
-    pub fn process_context_event(&mut self, context: &ContextEvent) {
+    pub fn process_context_event(&mut self, _context: &ContextEvent) {
         if self.config.enable_eq_iq_regulation {
             // Process context event through EQ/IQ regulator
             // This would update the emotional/analytical balance

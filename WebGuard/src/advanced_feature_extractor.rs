@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use regex::Regex;
 
 /// Advanced feature extraction for sophisticated threat detection
@@ -7,7 +9,6 @@ pub struct AdvancedFeatureExtractor {
     xss_patterns: Vec<Regex>,
     path_traversal_patterns: Vec<Regex>,
     command_injection_patterns: Vec<Regex>,
-    encoding_patterns: Vec<Regex>,
 }
 
 impl AdvancedFeatureExtractor {
@@ -17,7 +18,6 @@ impl AdvancedFeatureExtractor {
             xss_patterns: Self::build_xss_patterns(),
             path_traversal_patterns: Self::build_path_traversal_patterns(),
             command_injection_patterns: Self::build_command_injection_patterns(),
-            encoding_patterns: Self::build_encoding_patterns(),
         }
     }
 
@@ -122,15 +122,6 @@ impl AdvancedFeatureExtractor {
             Regex::new(r"(?i)\b(cat|ls|dir|type|echo|whoami|id|pwd|uname)\b").unwrap(),
             Regex::new(r"(?i)\b(wget|curl|nc|netcat|telnet|ssh)\b").unwrap(),
             Regex::new(r"(?i)\b(powershell|cmd|bash|sh|zsh)\b").unwrap(),
-        ]
-    }
-
-    fn build_encoding_patterns() -> Vec<Regex> {
-        vec![
-            Regex::new(r"%[0-9a-fA-F]{2}").unwrap(),
-            Regex::new(r"\\x[0-9a-fA-F]{2}").unwrap(),
-            Regex::new(r"\\u[0-9a-fA-F]{4}").unwrap(),
-            Regex::new(r"&#x?[0-9a-fA-F]+;").unwrap(),
         ]
     }
 

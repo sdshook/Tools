@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGuard Performance Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #eee;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .dashboard { max-width: 1400px; margin: 0 auto; }
+        h1 { 
+            text-align: center; 
+            padding: 20px; 
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        .subtitle { text-align: center; color: #888; margin-bottom: 30px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
+        .card { 
+            background: rgba(255,255,255,0.05); 
+            border-radius: 15px; 
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+        }
+        .card h2 { 
+            color: #00d4ff; 
+            margin-bottom: 15px; 
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .metric { 
+            display: flex; 
+            justify-content: space-between; 
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .metric-value { 
+            font-weight: bold; 
+            color: #00ff88;
+        }
+        .metric-value.negative { color: #ff6b6b; }
+        .metric-value.neutral { color: #ffd93d; }
+        .progress-bar { 
+            height: 25px; 
+            background: rgba(255,255,255,0.1); 
+            border-radius: 12px; 
+            overflow: hidden;
+            margin: 8px 0;
+        }
+        .progress-fill { 
+            height: 100%; 
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            font-size: 12px;
+            font-weight: bold;
+            color: #1a1a2e;
+        }
+        .confusion-matrix { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .cm-cell { 
+            padding: 15px; 
+            text-align: center; 
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .cm-tn { background: rgba(0,255,136,0.3); }
+        .cm-tp { background: rgba(0,212,255,0.3); }
+        .cm-fp { background: rgba(255,107,107,0.3); }
+        .cm-fn { background: rgba(255,217,61,0.3); }
+        .improvement { 
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .improvement.positive { background: rgba(0,255,136,0.2); color: #00ff88; }
+        .improvement.negative { background: rgba(255,107,107,0.2); color: #ff6b6b; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        th { color: #00d4ff; }
+        .timestamp { text-align: center; color: #666; margin-top: 20px; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <h1>🛡️ WebGuard Performance Dashboard</h1>
+        <p class="subtitle">Adaptive Self-Learning Security Analysis</p>
+        
+        <div class="grid">
+            <!-- Test Summary -->
+            <div class="card">
+                <h2>📊 Test Summary</h2>
+                <div class="metric">
+                    <span>Total Samples</span>
+                    <span class="metric-value">1000</span>
+                </div>
+                <div class="metric">
+                    <span>Benign Samples</span>
+                    <span class="metric-value">950</span>
+                </div>
+                <div class="metric">
+                    <span>Threat Samples</span>
+                    <span class="metric-value">50</span>
+                </div>
+                <div class="metric">
+                    <span>Test Phases</span>
+                    <span class="metric-value">5</span>
+                </div>
+            </div>
+            
+            <!-- Learning Improvement -->
+            <div class="card">
+                <h2>🧠 Adaptive Learning Results</h2>
+                <div class="metric">
+                    <span>Recall</span>
+                    <span>
+                        <span class="metric-value">100%</span>
+                        <span class="improvement positive">+100%</span>
+                    </span>
+                </div>
+                <div class="metric">
+                    <span>F1 Score</span>
+                    <span>
+                        <span class="metric-value">75%</span>
+                        <span class="improvement positive">+75%</span>
+                    </span>
+                </div>
+                <div class="metric">
+                    <span>False Negatives</span>
+                    <span>
+                        <span class="metric-value">0</span>
+                        <span class="improvement positive">-20</span>
+                    </span>
+                </div>
+                <div class="metric">
+                    <span>Accuracy</span>
+                    <span>
+                        <span class="metric-value">93.9%</span>
+                        <span class="improvement positive">+3.0%</span>
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Before Learning Confusion Matrix -->
+            <div class="card">
+                <h2>📈 Before Learning</h2>
+                <div class="confusion-matrix">
+                    <div class="cm-cell cm-tn">TN: 200</div>
+                    <div class="cm-cell cm-fp">FP: 0</div>
+                    <div class="cm-cell cm-fn">FN: 20</div>
+                    <div class="cm-cell cm-tp">TP: 0</div>
+                </div>
+                <div class="metric">
+                    <span>Accuracy</span>
+                    <span class="metric-value neutral">90.9%</span>
+                </div>
+                <div class="metric">
+                    <span>Recall (Threat Detection)</span>
+                    <span class="metric-value negative">0%</span>
+                </div>
+            </div>
+            
+            <!-- After Learning Confusion Matrix -->
+            <div class="card">
+                <h2>📈 After Learning</h2>
+                <div class="confusion-matrix">
+                    <div class="cm-cell cm-tn">TN: 140</div>
+                    <div class="cm-cell cm-fp">FP: 10</div>
+                    <div class="cm-cell cm-fn">FN: 0</div>
+                    <div class="cm-cell cm-tp">TP: 15</div>
+                </div>
+                <div class="metric">
+                    <span>Accuracy</span>
+                    <span class="metric-value">93.9%</span>
+                </div>
+                <div class="metric">
+                    <span>Recall (Threat Detection)</span>
+                    <span class="metric-value">100%</span>
+                </div>
+            </div>
+            
+            <!-- Attack Type Detection -->
+            <div class="card">
+                <h2>🎯 Attack Type Detection Rates</h2>
+                
+                <div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Cross-Site Scripting</span>
+                        <span>67% (2/3)</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 66.67%"></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>LDAP Injection</span>
+                        <span>50% (1/2)</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 50.0%"></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Path Traversal</span>
+                        <span>50% (2/4)</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 50.0%"></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>SQL Injection</span>
+                        <span>41% (9/22)</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 40.910000000000004%"></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Command Injection</span>
+                        <span>25% (1/4)</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 25.0%"></div>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <!-- Final System State -->
+            <div class="card">
+                <h2>⚙️ Final System State</h2>
+                <div class="metric">
+                    <span>Detection Threshold</span>
+                    <span class="metric-value">0.4883</span>
+                </div>
+                <div class="metric">
+                    <span>Valence (Aggression)</span>
+                    <span class="metric-value">1.0000</span>
+                </div>
+                <div class="metric">
+                    <span>Final Accuracy</span>
+                    <span class="metric-value">100%</span>
+                </div>
+                <div class="metric">
+                    <span>Final F1 Score</span>
+                    <span class="metric-value">100%</span>
+                </div>
+            </div>
+            
+            <!-- Multipass Validation -->
+            <div class="card" style="grid-column: span 2;">
+                <h2>🔄 Multipass Validation Results</h2>
+                <table>
+                    <tr>
+                        <th>Pass</th>
+                        <th>Accuracy</th>
+                        <th>Precision</th>
+                        <th>Recall</th>
+                        <th>F1 Score</th>
+                        <th>TP</th>
+                        <th>TN</th>
+                        <th>FP</th>
+                        <th>FN</th>
+                    </tr>
+                    
+                    <tr>
+                        <td>1</td>
+                        <td>100.0%</td>
+                        <td>100.0%</td>
+                        <td>100.0%</td>
+                        <td>100.0%</td>
+                        <td>50</td>
+                        <td>100</td>
+                        <td>0</td>
+                        <td>0</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>2</td>
+                        <td>100.0%</td>
+                        <td>100.0%</td>
+                        <td>100.0%</td>
+                        <td>100.0%</td>
+                        <td>50</td>
+                        <td>100</td>
+                        <td>0</td>
+                        <td>0</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>3</td>
+                        <td>100.0%</td>
+                        <td>100.0%</td>
+                        <td>100.0%</td>
+                        <td>100.0%</td>
+                        <td>50</td>
+                        <td>100</td>
+                        <td>0</td>
+                        <td>0</td>
+                    </tr>
+                    
+                </table>
+            </div>
+        </div>
+        
+        <p class="timestamp">Generated: 2026-01-20T22:17:50.438392</p>
+    </div>
+</body>
+</html>

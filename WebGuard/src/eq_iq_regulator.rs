@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use tracing::{debug, info};
 
@@ -204,7 +206,7 @@ impl ExperientialBehavioralRegulator {
     }
 
     /// Calculate empathic accuracy in distinguishing intent
-    fn calculate_empathic_accuracy(&self, context: &ContextEvent, history: &[ContextEvent]) -> f32 {
+    fn calculate_empathic_accuracy(&self, context: &ContextEvent, _history: &[ContextEvent]) -> f32 {
         // This would ideally correlate with actual threat detection accuracy
         // For now, use context stability as a proxy
         let stability_factor = context.context_stability;
@@ -742,34 +744,6 @@ impl ExperientialBehavioralRegulator {
         }
         
         Ok(())
-    }
-
-    /// Calculate context stability from context event
-    fn calculate_context_stability(&self, context_event: &ContextEvent) -> f32 {
-        if self.context_history.len() < 2 {
-            return 0.5;
-        }
-
-        // Calculate stability based on similarity to recent contexts
-        let recent_contexts = &self.context_history[self.context_history.len().saturating_sub(5)..];
-        let mut similarity_sum = 0.0;
-        let mut count = 0;
-
-        for prev_context in recent_contexts {
-            // Calculate similarity based on threat level and response appropriateness
-            let threat_similarity = 1.0 - (prev_context.threat_level - context_event.threat_level).abs();
-            let response_similarity = 1.0 - (prev_context.response_appropriateness - context_event.response_appropriateness).abs();
-            let overall_similarity = (threat_similarity + response_similarity) / 2.0;
-            
-            similarity_sum += overall_similarity;
-            count += 1;
-        }
-
-        if count > 0 {
-            similarity_sum / count as f32
-        } else {
-            0.5
-        }
     }
 }
 

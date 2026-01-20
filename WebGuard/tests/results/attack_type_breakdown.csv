@@ -1,0 +1,6 @@
+attack_type,detected,missed,total,detection_rate
+SQL Injection,9,13,22,0.4091
+Command Injection,1,3,4,0.2500
+LDAP Injection,1,1,2,0.5000
+Path Traversal,2,2,4,0.5000
+Cross-Site Scripting,2,1,3,0.6667

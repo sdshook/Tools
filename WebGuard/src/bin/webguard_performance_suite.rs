@@ -98,6 +98,7 @@ struct TestScenario {
     name: String,
     request_data: String,
     expected_threat: bool,
+    #[allow(dead_code)]
     threat_type: String,
     iterations: usize,
 }
@@ -168,7 +169,7 @@ fn run_test_scenario(
         1234
     );
     
-    for iteration in 0..scenario.iterations {
+    for _iteration in 0..scenario.iterations {
         // Get memory count before processing
         let memory_before = if let Some(memory) = mesh_cognition.get_service_memory(&service_id) {
             if let Ok(bdh) = memory.try_lock() {
@@ -392,7 +393,7 @@ fn save_results_to_csv(results: &PerformanceResults) {
     fs::write("tests/results/performance_metrics.csv", csv_content).unwrap();
 }
 
-fn generate_performance_visualizations(results: &PerformanceResults) {
+fn generate_performance_visualizations(_results: &PerformanceResults) {
     // Create Python script for advanced visualizations
     let python_script = r#"
 import matplotlib.pyplot as plt

@@ -29,9 +29,6 @@ const NGRAM_SIZES: [usize; 3] = [2, 3, 4];
 /// Skip-gram max distance (for co-occurrence patterns)
 const SKIPGRAM_MAX_DIST: usize = 8;
 
-/// Contrastive margin - minimum separation between classes
-const CONTRASTIVE_MARGIN: f32 = 0.5;
-
 /// Learning rate for pattern embedding updates
 const PATTERN_LEARNING_RATE: f32 = 0.1;
 

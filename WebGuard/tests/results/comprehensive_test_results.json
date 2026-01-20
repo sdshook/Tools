@@ -1,0 +1,478 @@
+{
+  "test_name": "WebGuard Comprehensive Adaptive Learning Test",
+  "timestamp": "2026-01-20T22:17:50.438392",
+  "data_summary": {
+    "total_samples": 1000,
+    "benign_samples": 950,
+    "threat_samples": 50
+  },
+  "phases": [
+    {
+      "name": "Benign Baseline Training",
+      "samples": 500,
+      "memory_traces_after": 500
+    },
+    {
+      "name": "Initial Detection (Pre-Threat Learning)",
+      "metrics": {
+        "true_positives": 0,
+        "true_negatives": 200,
+        "false_positives": 0,
+        "false_negatives": 20,
+        "accuracy": 0.9090909090909091,
+        "precision": 0,
+        "recall": 0.0,
+        "f1_score": 0,
+        "threshold": 0.4005647830530566,
+        "valence": 1.0,
+        "experience_count": 500
+      },
+      "details": [
+        {
+          "description": "Normal web request #75",
+          "is_threat": false,
+          "predicted": false,
+          "score": -4.8849813083506894e-17,
+          "correct": true
+        },
+        {
+          "description": "Normal web request #728",
+          "is_threat": false,
+          "predicted": false,
+          "score": 0.0,
+          "correct": true
+        },
+        {
+          "description": "Normal web request #738",
+          "is_threat": false,
+          "predicted": false,
+          "score": -4.8849813083506894e-17,
+          "correct": true
+        },
+        {
+          "description": "Normal web request #307",
+          "is_threat": false,
+          "predicted": false,
+          "score": 0.010153846153846156,
+          "correct": true
+        },
+        {
+          "description": "Normal web request #913",
+          "is_threat": false,
+          "predicted": false,
+          "score": 0.0,
+          "correct": true
+        },
+        {
+          "description": "Normal web request #762",
+          "is_threat": false,
+          "predicted": false,
+          "score": 0.0,
+          "correct": true
+        },
+        {
+          "description": "Normal web request #908",
+          "is_threat": false,
+          "predicted": false,
+          "score": 0.0,
+          "correct": true
+        },
+        {
+          "description": "Normal web request #654",
+          "is_threat": false,
+          "predicted": false,
+          "score": 0.0,
+          "correct": true
+        },
+        {
+          "description": "Normal web request #754",
+          "is_threat": false,
+          "predicted": false,
+          "score": 0.0,
+          "correct": true
+        },
+        {
+          "description": "Normal web request #223",
+          "is_threat": false,
+          "predicted": false,
+          "score": 0.0,
+          "correct": true
+        }
+      ]
+    },
+    {
+      "name": "Threat Pattern Learning",
+      "samples": 15,
+      "threat_types_learned": [
+        "LDAP Injection",
+        "SQL Injection",
+        "Path Traversal",
+        "Cross-Site Scripting",
+        "Command Injection"
+      ]
+    },
+    {
+      "name": "Post-Learning Detection",
+      "metrics": {
+        "true_positives": 15,
+        "true_negatives": 140,
+        "false_positives": 10,
+        "false_negatives": 0,
+        "accuracy": 0.9393939393939394,
+        "precision": 0.6,
+        "recall": 1.0,
+        "f1_score": 0.7499999999999999,
+        "threshold": 0.4882862353880865,
+        "valence": 1.0,
+        "experience_count": 515
+      },
+      "details": [
+        {
+          "description": "Normal web request #907",
+          "attack_type": null,
+          "is_threat": false,
+          "predicted": true,
+          "score": 0.4843638406930255,
+          "correct": false
+        },
+        {
+          "description": "Normal web request #520",
+          "attack_type": null,
+          "is_threat": false,
+          "predicted": true,
+          "score": 0.460963820993189,
+          "correct": false
+        },
+        {
+          "description": "Normal web request #769",
+          "attack_type": null,
+          "is_threat": false,
+          "predicted": true,
+          "score": 0.46240801313021784,
+          "correct": false
+        },
+        {
+          "description": "Normal web request #94",
+          "attack_type": null,
+          "is_threat": false,
+          "predicted": true,
+          "score": 0.462064468135258,
+          "correct": false
+        },
+        {
+          "description": "Normal web request #822",
+          "attack_type": null,
+          "is_threat": false,
+          "predicted": true,
+          "score": 0.4581429387360448,
+          "correct": false
+        },
+        {
+          "description": "Normal web request #922",
+          "attack_type": null,
+          "is_threat": false,
+          "predicted": true,
+          "score": 0.45659515853761223,
+          "correct": false
+        },
+        {
+          "description": "Normal web request #522",
+          "attack_type": null,
+          "is_threat": false,
+          "predicted": true,
+          "score": 0.45504737833917963,
+          "correct": false
+        },
+        {
+          "description": "Normal web request #71",
+          "attack_type": null,
+          "is_threat": false,
+          "predicted": false,
+          "score": 0.4554506569114416,
+          "correct": true
+        },
+        {
+          "description": "SQL Injection variation #34",
+          "attack_type": "SQL Injection",
+          "is_threat": true,
+          "predicted": true,
+          "score": 0.49547781717837924,
+          "correct": true
+        },
+        {
+          "description": "Normal web request #389",
+          "attack_type": null,
+          "is_threat": false,
+          "predicted": false,
+          "score": 0.45620119416202703,
+          "correct": true
+        }
+      ]
+    },
+    {
+      "name": "Final Multipass Validation",
+      "passes": [
+        {
+          "true_positives": 50,
+          "true_negatives": 100,
+          "false_positives": 0,
+          "false_negatives": 0,
+          "accuracy": 1.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1_score": 1.0,
+          "threshold": 0.4882862353880865,
+          "valence": 1.0,
+          "experience_count": 515
+        },
+        {
+          "true_positives": 50,
+          "true_negatives": 100,
+          "false_positives": 0,
+          "false_negatives": 0,
+          "accuracy": 1.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1_score": 1.0,
+          "threshold": 0.4882862353880865,
+          "valence": 1.0,
+          "experience_count": 515
+        },
+        {
+          "true_positives": 50,
+          "true_negatives": 100,
+          "false_positives": 0,
+          "false_negatives": 0,
+          "accuracy": 1.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1_score": 1.0,
+          "threshold": 0.4882862353880865,
+          "valence": 1.0,
+          "experience_count": 515
+        }
+      ]
+    }
+  ],
+  "learning_progression": [
+    {
+      "phase": "benign_training",
+      "samples_processed": 100,
+      "memory_traces": 100,
+      "threshold": 0.6,
+      "valence": 0.5
+    },
+    {
+      "phase": "benign_training",
+      "samples_processed": 200,
+      "memory_traces": 200,
+      "threshold": 0.6,
+      "valence": 0.5
+    },
+    {
+      "phase": "benign_training",
+      "samples_processed": 300,
+      "memory_traces": 300,
+      "threshold": 0.6,
+      "valence": 0.5
+    },
+    {
+      "phase": "benign_training",
+      "samples_processed": 400,
+      "memory_traces": 400,
+      "threshold": 0.6,
+      "valence": 0.5
+    },
+    {
+      "phase": "benign_training",
+      "samples_processed": 500,
+      "memory_traces": 500,
+      "threshold": 0.6,
+      "valence": 0.5
+    },
+    {
+      "phase": "initial_detection",
+      "samples_processed": 220,
+      "metrics": {
+        "true_positives": 0,
+        "true_negatives": 200,
+        "false_positives": 0,
+        "false_negatives": 20,
+        "accuracy": 0.9090909090909091,
+        "precision": 0,
+        "recall": 0.0,
+        "f1_score": 0,
+        "threshold": 0.4005647830530566,
+        "valence": 1.0,
+        "experience_count": 500
+      },
+      "threshold": 0.4005647830530566,
+      "valence": 1.0
+    },
+    {
+      "phase": "post_learning_detection",
+      "samples_processed": 165,
+      "metrics": {
+        "true_positives": 15,
+        "true_negatives": 140,
+        "false_positives": 10,
+        "false_negatives": 0,
+        "accuracy": 0.9393939393939394,
+        "precision": 0.6,
+        "recall": 1.0,
+        "f1_score": 0.7499999999999999,
+        "threshold": 0.4882862353880865,
+        "valence": 1.0,
+        "experience_count": 515
+      },
+      "threshold": 0.4882862353880865,
+      "valence": 1.0
+    },
+    {
+      "phase": "multipass_validation_1",
+      "samples_processed": 150,
+      "metrics": {
+        "true_positives": 50,
+        "true_negatives": 100,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "accuracy": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "threshold": 0.4882862353880865,
+        "valence": 1.0,
+        "experience_count": 515
+      },
+      "threshold": 0.4882862353880865,
+      "valence": 1.0
+    },
+    {
+      "phase": "multipass_validation_2",
+      "samples_processed": 150,
+      "metrics": {
+        "true_positives": 50,
+        "true_negatives": 100,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "accuracy": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "threshold": 0.4882862353880865,
+        "valence": 1.0,
+        "experience_count": 515
+      },
+      "threshold": 0.4882862353880865,
+      "valence": 1.0
+    },
+    {
+      "phase": "multipass_validation_3",
+      "samples_processed": 150,
+      "metrics": {
+        "true_positives": 50,
+        "true_negatives": 100,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "accuracy": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "threshold": 0.4882862353880865,
+        "valence": 1.0,
+        "experience_count": 515
+      },
+      "threshold": 0.4882862353880865,
+      "valence": 1.0
+    }
+  ],
+  "attack_type_performance": {
+    "SQL Injection": {
+      "tp": 9,
+      "fn": 13
+    },
+    "Command Injection": {
+      "tp": 1,
+      "fn": 3
+    },
+    "LDAP Injection": {
+      "tp": 1,
+      "fn": 1
+    },
+    "Path Traversal": {
+      "tp": 2,
+      "fn": 2
+    },
+    "Cross-Site Scripting": {
+      "tp": 2,
+      "fn": 1
+    }
+  },
+  "attack_type_breakdown": {
+    "SQL Injection": {
+      "detected": 9,
+      "missed": 13,
+      "total": 22,
+      "detection_rate": 0.4090909090909091
+    },
+    "Command Injection": {
+      "detected": 1,
+      "missed": 3,
+      "total": 4,
+      "detection_rate": 0.25
+    },
+    "LDAP Injection": {
+      "detected": 1,
+      "missed": 1,
+      "total": 2,
+      "detection_rate": 0.5
+    },
+    "Path Traversal": {
+      "detected": 2,
+      "missed": 2,
+      "total": 4,
+      "detection_rate": 0.5
+    },
+    "Cross-Site Scripting": {
+      "detected": 2,
+      "missed": 1,
+      "total": 3,
+      "detection_rate": 0.6666666666666666
+    }
+  },
+  "learning_demonstration": {
+    "pre_learning": {
+      "true_positives": 0,
+      "true_negatives": 200,
+      "false_positives": 0,
+      "false_negatives": 20,
+      "accuracy": 0.9090909090909091,
+      "precision": 0,
+      "recall": 0.0,
+      "f1_score": 0,
+      "threshold": 0.4005647830530566,
+      "valence": 1.0,
+      "experience_count": 500
+    },
+    "post_learning": {
+      "true_positives": 15,
+      "true_negatives": 140,
+      "false_positives": 10,
+      "false_negatives": 0,
+      "accuracy": 0.9393939393939394,
+      "precision": 0.6,
+      "recall": 1.0,
+      "f1_score": 0.7499999999999999,
+      "threshold": 0.4882862353880865,
+      "valence": 1.0,
+      "experience_count": 515
+    },
+    "improvements": {
+      "accuracy_change": 0.030303030303030387,
+      "precision_change": 0.6,
+      "recall_change": 1.0,
+      "f1_change": 0.7499999999999999,
+      "fn_reduction": 20
+    }
+  }
+}

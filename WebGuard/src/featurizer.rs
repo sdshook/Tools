@@ -104,37 +104,37 @@ pub fn featurize_from_telemetry_enhanced(telemetry: &Value, cfg: &Config, tempor
     let system_calls = telemetry.get("system_calls").and_then(|x| x.as_i64()).unwrap_or(0) as f32;
 
     // Populate feature vector
-    v[0] = (wrc.min(50.0) / 50.0);
-    v[1] = (mpr.min(10.0) / 10.0);
-    v[2] = (nth.min(10.0) / 10.0);
+    v[0] = wrc.min(50.0) / 50.0;
+    v[1] = mpr.min(10.0) / 10.0;
+    v[2] = nth.min(10.0) / 10.0;
     v[3] = addr_entropy;
-    v[4] = (endpoints.min(20.0) / 20.0);
-    v[5] = (mod_unusual.min(20.0) / 20.0);
-    v[6] = (op_vm_write.min(20.0) / 20.0);
-    v[7] = (ptrace.min(10.0) / 10.0);
-    v[8] = (pvwrite.min(20.0) / 20.0);
+    v[4] = endpoints.min(20.0) / 20.0;
+    v[5] = mod_unusual.min(20.0) / 20.0;
+    v[6] = op_vm_write.min(20.0) / 20.0;
+    v[7] = ptrace.min(10.0) / 10.0;
+    v[8] = pvwrite.min(20.0) / 20.0;
     v[9] = serialized_score;
     v[10] = payload_entropy;
-    v[11] = (legacy_payload_size.min(200000.0) / 200000.0);
+    v[11] = legacy_payload_size.min(200000.0) / 200000.0;
     v[12] = admin_flag;
     v[13] = endpoint_rarity;
 
     // New comprehensive features
-    v[14] = (network_connections.min(50.0) / 50.0);
-    v[15] = (file_operations.min(100.0) / 100.0);
-    v[16] = (memory_usage.min(100.0) / 100.0);
-    v[17] = (cpu_usage.min(100.0) / 100.0);
-    v[18] = (payload_size.min(10000.0) / 10000.0);
-    v[19] = (entropy.min(10.0) / 10.0);
-    v[20] = (suspicious_patterns.min(20.0) / 20.0);
+    v[14] = network_connections.min(50.0) / 50.0;
+    v[15] = file_operations.min(100.0) / 100.0;
+    v[16] = memory_usage.min(100.0) / 100.0;
+    v[17] = cpu_usage.min(100.0) / 100.0;
+    v[18] = payload_size.min(10000.0) / 10000.0;
+    v[19] = entropy.min(10.0) / 10.0;
+    v[20] = suspicious_patterns.min(20.0) / 20.0;
     v[21] = process_risk_score;
-    v[22] = (stack_violations.min(10.0) / 10.0);
-    v[23] = (heap_allocations.min(2000.0) / 2000.0);
-    v[24] = (memory_violations.min(10.0) / 10.0);
-    v[25] = (system_calls.min(50.0) / 50.0);
+    v[22] = stack_violations.min(10.0) / 10.0;
+    v[23] = heap_allocations.min(2000.0) / 2000.0;
+    v[24] = memory_violations.min(10.0) / 10.0;
+    v[25] = system_calls.min(50.0) / 50.0;
 
     // PID-based features (normalized)
-    v[26] = ((pid % 1000.0) / 1000.0);
+    v[26] = (pid % 1000.0) / 1000.0;
     v[27] = if pid > 2000.0 { 1.0 } else { 0.0 }; // High PID indicator
 
     // Enhanced temporal and behavioral features
