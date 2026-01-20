@@ -1,6 +1,6 @@
 [
   {
-    "attack_type": "SQL Injection",
+    "attack_type": "Path Traversal",
     "samples_tested": 10,
     "detected": 10,
     "missed": 0,
@@ -14,7 +14,7 @@
     "detection_rate": 1.0
   },
   {
-    "attack_type": "Cross-Site Scripting",
+    "attack_type": "SQL Injection",
     "samples_tested": 10,
     "detected": 10,
     "missed": 0,
@@ -28,7 +28,7 @@
     "detection_rate": 1.0
   },
   {
-    "attack_type": "Path Traversal",
+    "attack_type": "Cross-Site Scripting",
     "samples_tested": 10,
     "detected": 10,
     "missed": 0,
@@ -37,8 +37,8 @@
   {
     "attack_type": "Web Service Exploit",
     "samples_tested": 31,
-    "detected": 31,
-    "missed": 0,
-    "detection_rate": 1.0
+    "detected": 29,
+    "missed": 2,
+    "detection_rate": 0.9354839
   }
 ]
