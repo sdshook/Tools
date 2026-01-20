@@ -159,16 +159,7 @@ def generate_dashboard(data, output_dir):
                 label=f'Traditional Context Window (~{context_window_limit} patterns)')
     ax6.fill_between(iterations, context_window_limit, alpha=0.1, color='#e74c3c')
     
-    # Add annotation showing the advantage
-    if len(patterns_learned) > 0:
-        final_patterns = patterns_learned[-1]
-        advantage = final_patterns - context_window_limit
-        if advantage > 0:
-            ax6.annotate(f'+{advantage} patterns\naccessible', 
-                        xy=(iterations[-1], final_patterns),
-                        xytext=(-60, 10), textcoords='offset points', fontsize=10,
-                        arrowprops=dict(arrowstyle='->', color='#27ae60'),
-                        color='#27ae60', fontweight='bold')
+
     
     ax6.set_xlabel('Iteration', fontsize=11)
     ax6.set_ylabel('Patterns Accessible', fontsize=11)
