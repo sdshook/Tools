@@ -231,7 +231,8 @@ impl EmbeddingLearner {
     
     /// Learn from a prediction error (FP or FN) with contrastive update
     /// THIS IS THE KEY FUNCTION FOR IMPROVEMENT OVER PASSES
-    /// FN is weighted MORE heavily than FP (security principle)
+    /// FN is weighted MORE heavily than FP (security principle: FN = breach)
+    /// Learning rate adapts based on experience (more stable over time)
     pub fn learn_from_error(&mut self, request: &str, predicted_threat: bool, actual_threat: bool) {
         if predicted_threat == actual_threat {
             return;  // No error
@@ -239,28 +240,37 @@ impl EmbeddingLearner {
         
         let embedding = self.embed(request);
         
+        // Adaptive learning rate: starts higher, decreases with experience
+        // This prevents early instability while ensuring continued learning
+        let experience = (self.threat_experiences + self.benign_experiences) as f32;
+        let experience_factor = 1.0 / (1.0 + experience / 100.0);  // Decreases over time
+        
         if actual_threat && !predicted_threat {
-            // FALSE NEGATIVE: Missed a threat - CRITICAL (higher learning rate)
-            let fn_lr = 0.15;  // More aggressive for FN
+            // FALSE NEGATIVE: Missed a threat - CRITICAL SECURITY FAILURE
+            // Base rate 0.2, decreases to ~0.1 with experience
+            let fn_lr = 0.20 * (0.5 + experience_factor * 0.5);
             
-            // Move threat prototype toward this embedding
+            // 1. Move threat prototype toward this missed threat
             for i in 0..EMBED_DIM {
                 self.threat_prototype[i] = self.threat_prototype[i] * (1.0 - fn_lr) 
                                          + embedding[i] * fn_lr;
             }
-            // Also move benign prototype away (contrastive)
+            
+            // 2. Move benign prototype AWAY from this threat (contrastive)
             for i in 0..EMBED_DIM {
                 let direction = self.benign_prototype[i] - embedding[i];
                 self.benign_prototype[i] += direction * fn_lr * 0.5;
             }
-            self.threat_experiences += 1;
             
-            // Update char embeddings more aggressively for FN
+            // 3. Update char embeddings to make this threat more detectable
             self.update_char_embeddings(request, &embedding, true, fn_lr);
             
+            self.threat_experiences += 1;
+            
         } else if !actual_threat && predicted_threat {
-            // FALSE POSITIVE: Incorrectly flagged benign (lower learning rate)
-            let fp_lr = 0.08;  // Less aggressive for FP
+            // FALSE POSITIVE: Incorrectly flagged benign
+            // Base rate 0.08, decreases to ~0.04 with experience
+            let fp_lr = 0.08 * (0.5 + experience_factor * 0.5);
             
             // Move benign prototype toward this embedding
             for i in 0..EMBED_DIM {
