@@ -108,20 +108,20 @@ def generate_dashboard(data, output_dir):
     ax3.set_title('Multipass Adaptive Learning (F1 Score)', fontweight='bold', fontsize=13)
     ax3.grid(True, alpha=0.3)
     
-    # Row 3: Classification Confusion Evolution
+    # Row 3: Classification Results Evolution (multiline graph)
     ax4 = fig.add_subplot(gs[2, :2])
     
     # Only plot multipass data for cleaner visualization
     mp_prog = progression[progression['phase'].str.contains('Multipass', na=False)]
     if len(mp_prog) > 0:
-        ax4.stackplot(mp_prog['iteration'], 
-                      mp_prog['true_positives'], 
-                      mp_prog['true_negatives'],
-                      mp_prog['false_positives'],
-                      mp_prog['false_negatives'],
-                      labels=['True Positives', 'True Negatives', 'False Positives', 'False Negatives'],
-                      colors=['#27ae60', '#3498db', '#e74c3c', '#9b59b6'],
-                      alpha=0.8)
+        ax4.plot(mp_prog['iteration'], mp_prog['true_positives'], 'o-', linewidth=2, 
+                 markersize=6, color='#27ae60', label='True Positives')
+        ax4.plot(mp_prog['iteration'], mp_prog['true_negatives'], 's-', linewidth=2, 
+                 markersize=6, color='#3498db', label='True Negatives')
+        ax4.plot(mp_prog['iteration'], mp_prog['false_positives'], '^-', linewidth=2, 
+                 markersize=6, color='#e74c3c', label='False Positives')
+        ax4.plot(mp_prog['iteration'], mp_prog['false_negatives'], 'd-', linewidth=2, 
+                 markersize=6, color='#9b59b6', label='False Negatives')
     ax4.set_xlabel('Iteration', fontsize=11)
     ax4.set_ylabel('Count', fontsize=11)
     ax4.set_title('Classification Results During Multipass Learning', fontweight='bold', fontsize=13)
@@ -141,8 +141,8 @@ def generate_dashboard(data, output_dir):
     ax5.set_ylim(0, 105)
     ax5.grid(True, alpha=0.3)
     
-    # Row 4: Cumulative Reward
-    ax6 = fig.add_subplot(gs[3, :2])
+    # Row 4: Cumulative Reward (full width)
+    ax6 = fig.add_subplot(gs[3, :])
     ax6.plot(progression['iteration'], progression['cumulative_reward'], linewidth=2, color='#f39c12')
     ax6.fill_between(progression['iteration'], progression['cumulative_reward'], alpha=0.3, color='#f39c12')
     ax6.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
@@ -150,19 +150,6 @@ def generate_dashboard(data, output_dir):
     ax6.set_ylabel('Cumulative Reward', fontsize=11)
     ax6.set_title('Reward System Performance', fontweight='bold', fontsize=13)
     ax6.grid(True, alpha=0.3)
-    
-    # Row 4: Attack Detection Rate Summary
-    ax7 = fig.add_subplot(gs[3, 2:])
-    detection_rates = [a['detection_rate'] * 100 for a in attacks]
-    attack_short = [a['attack_type'][:15] for a in attacks]
-    colors_attack = ['#27ae60' if r >= 80 else '#f39c12' if r >= 50 else '#e74c3c' for r in detection_rates]
-    bars = ax7.barh(attack_short, detection_rates, color=colors_attack, edgecolor='white')
-    ax7.set_xlabel('Detection Rate (%)', fontsize=11)
-    ax7.set_title('Final Attack Detection Rates', fontweight='bold', fontsize=13)
-    ax7.set_xlim(0, 110)
-    for bar, rate in zip(bars, detection_rates):
-        ax7.text(rate + 2, bar.get_y() + bar.get_height()/2, f'{rate:.0f}%', va='center', fontsize=10)
-    ax7.grid(True, alpha=0.3, axis='x')
     
     # Row 5: Summary Boxes
     ax8 = fig.add_subplot(gs[4, :2])
