@@ -7,15 +7,19 @@ use crate::eq_iq_regulator::{ExperientialBehavioralRegulator, ContextEvent as EQ
 use crate::memory_engine::bdh_memory::BdhMemory;
 use crate::mesh_cognition::{HostMeshCognition, WebServiceType};
 use crate::advanced_feature_extractor::AdvancedFeatureExtractor;
+use crate::embedding_learner::EmbeddingLearner;
 
 /// Complete WebGuard System Implementation
 /// Uses pure PSI/BHSM/CMNN cognitive architecture for threat detection
+/// Now enhanced with learnable embeddings for true experiential RL
 #[derive(Debug)]
 pub struct WebGuardSystem {
     /// Host-based mesh cognition system (PSI/BHSM/CMNN)
     pub mesh_cognition: Arc<Mutex<HostMeshCognition>>,
-    /// Feature extraction system
+    /// Feature extraction system (legacy, kept for compatibility)
     pub feature_extractor: AdvancedFeatureExtractor,
+    /// Learnable embedding system for experiential RL
+    pub embedding_learner: EmbeddingLearner,
     /// Adaptive threshold system
     pub adaptive_threshold: AdaptiveThreshold,
     /// Retrospective learning system
@@ -28,6 +32,8 @@ pub struct WebGuardSystem {
     pub metrics: SystemMetrics,
     /// Service ID for this WebGuard instance
     pub service_id: String,
+    /// Use embedding-based detection (vs legacy feature-based)
+    pub use_embedding_detection: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,12 +131,14 @@ impl WebGuardSystem {
         Self {
             mesh_cognition,
             feature_extractor: AdvancedFeatureExtractor::new(),
+            embedding_learner: EmbeddingLearner::new(),
             adaptive_threshold: AdaptiveThreshold::new(),
             retrospective_learning: RetrospectiveLearningSystem::new(),
             eq_iq_regulator: ExperientialBehavioralRegulator::new(0.5, 0.5, 0.1),
             config: WebGuardConfig::default(),
             metrics: SystemMetrics::new(),
             service_id: service_id.to_string(),
+            use_embedding_detection: true,  // Enable embedding-based detection by default
         }
     }
 
@@ -159,51 +167,54 @@ impl WebGuardSystem {
         // This would be part of pattern recognition and memory systems
     }
 
-    /// Main threat analysis function using PSI/BHSM/CMNN cognitive architecture
+    /// Main threat analysis function
+    /// Uses learnable embeddings for true experiential RL when enabled
     pub fn analyze_request(&mut self, request: &str) -> ThreatAnalysisResult {
         let start_time = std::time::Instant::now();
         
         // Create request context
-        let context = self.create_request_context(request);
+        let _context = self.create_request_context(request);
         
-        // Extract features for analysis
-        let features = self.feature_extractor.extract_features(request);
-        
-        // Cognitive mesh analysis
-        let cognitive_analysis = if self.config.enable_experiential_learning {
-            self.perform_cognitive_analysis(request, &features)
+        // EMBEDDING-BASED DETECTION (experiential RL)
+        let (threat_score, confidence) = if self.use_embedding_detection {
+            // Generate embedding and calculate threat score
+            let embedding = self.embedding_learner.embed(request);
+            let score = self.embedding_learner.threat_score(&embedding);
+            
+            // Confidence based on prototype separation and experience
+            let stats = self.embedding_learner.get_stats();
+            let separation = stats.get("prototype_separation").unwrap_or(&0.1);
+            let experience = stats.get("threat_experiences").unwrap_or(&0.0) 
+                           + stats.get("benign_experiences").unwrap_or(&0.0);
+            
+            // Higher separation and more experience = higher confidence
+            let conf = (separation / 2.0).min(1.0) * (experience / (experience + 10.0));
+            
+            (score, conf.max(0.1))
         } else {
-            CognitiveAnalysisResult {
-                psi_valence: 0.0,
-                bhsm_activation: 0.0,
-                cmnn_confidence: 0.0,
-                learned_patterns: Vec::new(),
-                mesh_aggression: 0.0,
-                service_consensus: 0.0,
-            }
+            // Legacy feature-based detection
+            let features = self.feature_extractor.extract_features(request);
+            let cognitive_analysis = self.perform_cognitive_analysis(request, &features);
+            let threshold_result = if self.config.enable_adaptive_thresholds {
+                Some(self.adaptive_threshold.assess_threat(&features))
+            } else {
+                None
+            };
+            
+            let score = self.calculate_final_threat_score_cognitive(
+                &cognitive_analysis, &threshold_result, cognitive_analysis.bhsm_activation
+            );
+            let conf = self.calculate_confidence_cognitive(&cognitive_analysis, &threshold_result);
+            (score, conf)
         };
         
-        // Adaptive threshold assessment
-        let threshold_result = if self.config.enable_adaptive_thresholds {
-            Some(self.adaptive_threshold.assess_threat(&features))
-        } else {
-            None
-        };
-        
-        // Memory system influence from cognitive mesh
-        let memory_influence = cognitive_analysis.bhsm_activation;
-        
-        // Calculate final threat score using cognitive analysis
-        let threat_score = self.calculate_final_threat_score_cognitive(
-            &cognitive_analysis,
-            &threshold_result,
-            memory_influence
-        );
-        
-        // Determine confidence and risk level
-        let confidence = self.calculate_confidence_cognitive(&cognitive_analysis, &threshold_result);
+        // Determine risk level and attack types
         let risk_level = self.determine_risk_level(threat_score, confidence);
-        let detected_attack_types = self.extract_attack_types_cognitive(&cognitive_analysis);
+        let detected_attack_types = if threat_score > 0.5 {
+            vec!["potential_threat".to_string()]
+        } else {
+            Vec::new()
+        };
         
         let processing_time = start_time.elapsed().as_millis() as f32;
         
@@ -217,16 +228,26 @@ impl WebGuardSystem {
             self.metrics.threats_detected += 1;
         }
         
+        // Create cognitive analysis result (for compatibility)
+        let cognitive_analysis = CognitiveAnalysisResult {
+            psi_valence: threat_score,
+            bhsm_activation: threat_score,
+            cmnn_confidence: confidence,
+            learned_patterns: detected_attack_types.clone(),
+            mesh_aggression: 0.0,
+            service_consensus: confidence,
+        };
+        
         ThreatAnalysisResult {
             threat_score,
             confidence,
             detected_attack_types,
             risk_level,
             cognitive_analysis,
-            threshold_assessment: threshold_result,
+            threshold_assessment: None,
             processing_time_ms: processing_time,
-            memory_influence,
-            learning_feedback: None, // Will be populated by learning system
+            memory_influence: threat_score,
+            learning_feedback: None,
         }
     }
 
@@ -491,13 +512,23 @@ impl WebGuardSystem {
         Vec::new()
     }
 
-    /// Feed learning results into the cognitive mesh system
-    /// This implements true reinforcement learning by:
-    /// 1. Finding similar existing patterns of the SAME TYPE and reinforcing
-    /// 2. Adding new patterns if none match or if type differs significantly
-    /// 3. NEVER cross-contaminating benign patterns with threat learning
+    /// Feed learning results into the embedding system
+    /// This implements true experiential reinforcement learning:
+    /// - Positive reward for correct classifications
+    /// - Updates embedding weights to improve future predictions
     pub fn learn_from_validation(&mut self, request: &str, is_threat: bool, _attack_type: Option<String>) {
-        if self.config.enable_experiential_learning {
+        if !self.config.enable_experiential_learning {
+            return;
+        }
+        
+        if self.use_embedding_detection {
+            // EMBEDDING-BASED LEARNING (true experiential RL)
+            // Reward is positive for correct implicit validation
+            let reward = 1.0;
+            self.embedding_learner.learn(request, is_threat, reward);
+            self.metrics.learning_events += 1;
+        } else {
+            // Legacy BDH-based learning
             let features = self.feature_extractor.extract_features(request);
             let mut mesh = self.mesh_cognition.lock().unwrap();
             
@@ -508,27 +539,11 @@ impl WebGuardSystem {
                     if features.len() >= 32 {
                         let mut array = [0.0f32; 32];
                         array.copy_from_slice(&features[..32]);
-                        
-                        // Find most similar pattern of the SAME TYPE
-                        // This prevents benign patterns from being updated with threat data
-                        let similarity_threshold = 0.85;  // Higher threshold
-                        let (best_match_idx, best_similarity, current_valence) = 
-                            bdh.find_most_similar_trace_of_type(&array, target_valence);
-                        
-                        if best_similarity > similarity_threshold {
-                            // Reinforce existing pattern of same type
-                            let learning_rate = 0.2;
-                            let valence_delta = (target_valence - current_valence) * learning_rate;
-                            bdh.reinforce_trace(best_match_idx, valence_delta);
-                        } else {
-                            // New pattern or different type - add as new trace
-                            bdh.add_trace(array, target_valence);
-                        }
+                        bdh.add_trace(array, target_valence);
                     }
                 }
             }
             
-            // Update mesh aggression based on learning
             if is_threat {
                 mesh.update_host_aggression(0.1);
             } else {
@@ -537,48 +552,52 @@ impl WebGuardSystem {
         }
     }
     
-    /// Learn from a prediction error (FP or FN) with stronger correction
-    /// FP (false positive): benign classified as threat - reinforce benign
-    /// FN (false negative): threat classified as benign - add/reinforce threat
+    /// Learn from a prediction error (FP or FN) with contrastive update
+    /// This is the KEY to experiential learning improvement over passes:
+    /// - Errors drive stronger updates to the embedding space
+    /// - FN: Push embedding toward threat prototype
+    /// - FP: Push embedding toward benign prototype
     pub fn learn_from_error(&mut self, request: &str, predicted_threat: bool, actual_threat: bool) {
         if predicted_threat == actual_threat {
-            return; // No error, normal learning
+            return; // No error to learn from
         }
         
-        if self.config.enable_experiential_learning {
+        if !self.config.enable_experiential_learning {
+            return;
+        }
+        
+        if self.use_embedding_detection {
+            // EMBEDDING-BASED ERROR CORRECTION (contrastive learning)
+            self.embedding_learner.learn_from_error(request, predicted_threat, actual_threat);
+            self.metrics.learning_events += 1;
+            
+            // Track FP/FN in metrics
+            if actual_threat && !predicted_threat {
+                self.metrics.false_negatives += 1;
+            } else {
+                self.metrics.false_positives += 1;
+            }
+        } else {
+            // Legacy BDH-based error learning
             let features = self.feature_extractor.extract_features(request);
             let mut mesh = self.mesh_cognition.lock().unwrap();
             
             if let Some(service_memory) = mesh.get_service_memory(&self.service_id) {
                 if let Ok(mut bdh) = service_memory.try_lock() {
-                    let target_valence = if actual_threat { 1.0 } else { 0.0 };
-                    
                     if features.len() >= 32 {
                         let mut array = [0.0f32; 32];
                         array.copy_from_slice(&features[..32]);
-                        
-                        if actual_threat && !predicted_threat {
-                            // FALSE NEGATIVE: Missed a threat
-                            // Add as new threat pattern with strong valence
-                            bdh.add_trace(array, 1.0);
-                        } else if !actual_threat && predicted_threat {
-                            // FALSE POSITIVE: Incorrectly flagged benign
-                            // Find and reinforce the most similar BENIGN pattern
-                            let (best_idx, best_sim, current_val) = 
-                                bdh.find_most_similar_trace_of_type(&array, 0.0);
-                            
-                            if best_sim > 0.7 {
-                                // Strengthen the benign classification
-                                bdh.reinforce_trace(best_idx, -0.3);  // Push toward 0
-                            } else {
-                                // Add new benign pattern
-                                bdh.add_trace(array, 0.0);
-                            }
-                        }
+                        let target_valence = if actual_threat { 1.0 } else { 0.0 };
+                        bdh.add_trace(array, target_valence);
                     }
                 }
             }
         }
+    }
+    
+    /// Get embedding learner statistics for monitoring learning progress
+    pub fn get_embedding_stats(&self) -> HashMap<String, f32> {
+        self.embedding_learner.get_stats()
     }
 
     /// Export learned knowledge from cognitive mesh

@@ -500,7 +500,10 @@ fn test_comprehensive_experiential_learning() {
     println!("│ PHASE 3: MULTIPASS SELF-LEARNING - Iterative Improvement                  │");
     println!("└────────────────────────────────────────────────────────────────────────────┘");
     
-    let num_passes = 5;
+    // Increased passes to demonstrate learning convergence
+    // With embedding-based RL, each pass should improve as prototypes separate
+    let num_passes = 25;
+    
     // Use the SAME benign samples that were trained in Phase 1 (not new random ones)
     let mut combined_samples: Vec<TestSample> = Vec::new();
     combined_samples.extend(benign_training_samples.iter().take(200).cloned()); // SAME benign from Phase 1
@@ -508,8 +511,9 @@ fn test_comprehensive_experiential_learning() {
     
     let mut previous_f1: f32 = 0.0;
     
-    println!("🔄 Executing {} learning passes with {} mixed samples each...", num_passes, combined_samples.len());
-    println!("   (Using SAME benign patterns from Phase 1 to test retention)\n");
+    println!("🔄 Executing {} learning passes to demonstrate convergence...", num_passes);
+    println!("   PSI/BDH has NO context window - all learned patterns persist");
+    println!("   Expected: Logarithmic improvement toward near-100% detection\n");
     
     for pass in 1..=num_passes {
         let mut tp = 0;

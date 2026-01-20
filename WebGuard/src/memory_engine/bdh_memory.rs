@@ -395,32 +395,72 @@ impl BdhMemory {
         }
     }
     
-    /// Differential similarity using reinforcement learning principles:
-    /// Returns threat_similarity - benign_similarity, creating a contrastive signal
-    /// that rewards similarity to threats and suppresses similarity to benign patterns.
+    /// Experiential learning using ATTACK FEATURE DISTANCE
+    /// Key insight: Only features 1-25 (attack indicators) matter for threat detection
+    /// Benign requests have near-zero attack features; threats have elevated attack features
     pub fn differential_threat_similarity(&self, q: &[f32; EMBED_DIM]) -> f32 {
-        // Calculate maximum similarity to threat patterns (valence > 0.5)
-        let threat_sim = self.traces.iter()
+        // Sum of attack-indicator features (1-25) in the query
+        let query_attack_sum: f32 = q[1..26].iter().sum();
+        
+        // PHASE 1 LOGIC: If query has NO attack indicators, it's benign
+        if query_attack_sum < 0.1 {
+            return 0.0;  // Clearly benign - no attack signatures
+        }
+        
+        // Query has some attack indicators - need to compare with learned patterns
+        // Find the minimum ATTACK DISTANCE to each pattern type
+        // Distance = sum of squared differences in attack features only
+        
+        let min_threat_dist = self.traces.iter()
             .filter(|t| t.valence > 0.5)
-            .map(|t| cosine_sim(&t.vec, q))
-            .fold(0.0f32, |a, b| a.max(b));
+            .map(|t| {
+                // Euclidean distance on attack features only (1-25)
+                let dist: f32 = (1..26).map(|i| (q[i] - t.vec[i]).powi(2)).sum();
+                dist.sqrt()
+            })
+            .fold(f32::INFINITY, |a, b| a.min(b));
         
-        // Calculate maximum similarity to benign patterns (valence <= 0.5)
-        let benign_sim = self.traces.iter()
+        let min_benign_dist = self.traces.iter()
             .filter(|t| t.valence <= 0.5)
-            .map(|t| cosine_sim(&t.vec, q))
-            .fold(0.0f32, |a, b| a.max(b));
+            .map(|t| {
+                let dist: f32 = (1..26).map(|i| (q[i] - t.vec[i]).powi(2)).sum();
+                dist.sqrt()
+            })
+            .fold(f32::INFINITY, |a, b| a.min(b));
         
-        // Key insight: If benign_sim > threat_sim, this is likely a benign pattern
-        // The suppression should be strong enough to override any incidental threat similarity
+        // Handle edge cases
+        if min_threat_dist == f32::INFINITY && min_benign_dist == f32::INFINITY {
+            // No patterns learned - use attack intensity as indicator
+            return (query_attack_sum / 2.0).min(1.0);
+        }
         
-        // Differential: threat similarity minus benign similarity
-        // Using 1.0 factor ensures benign patterns fully suppress if they match better
-        // This implements proper RL: learned benign patterns = negative reward for threat classification
-        let differential = threat_sim - benign_sim;
+        if min_threat_dist == f32::INFINITY {
+            // Only benign patterns learned
+            return if min_benign_dist < 0.5 { 0.1 } else { 0.4 };
+        }
         
-        // Clamp to [0, 1] range - negative means more benign than threat
-        differential.max(0.0).min(1.0)
+        if min_benign_dist == f32::INFINITY {
+            // Only threat patterns learned  
+            return if min_threat_dist < 0.5 { 0.9 } else { 0.5 };
+        }
+        
+        // EXPERIENTIAL DECISION: Closer distance = more similar
+        // Use ratio of distances: closer to threat = higher threat score
+        // Add small epsilon to avoid division by zero
+        let threat_proximity = 1.0 / (min_threat_dist + 0.1);
+        let benign_proximity = 1.0 / (min_benign_dist + 0.1);
+        
+        // Threat score = threat_proximity / (threat_proximity + benign_proximity)
+        let threat_score = threat_proximity / (threat_proximity + benign_proximity);
+        
+        // Scale to emphasize the decision - make scores more decisive
+        if threat_score > 0.5 {
+            // Lean threat - boost
+            return (0.5 + (threat_score - 0.5) * 1.5).min(1.0);
+        } else {
+            // Lean benign - reduce
+            return (threat_score * 0.8).max(0.0);
+        }
     }
     
     /// Weighted threat similarity incorporating cumulative reward history
