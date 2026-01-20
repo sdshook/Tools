@@ -21,96 +21,202 @@ def load_data(results_dir):
 
 def generate_dashboard(data, output_dir):
     print("📊 Generating dashboard...")
-    fig = plt.figure(figsize=(20, 16))
-    fig.suptitle('WebGuard Experiential Learning Dashboard', fontsize=20, fontweight='bold', y=0.98)
-    gs = fig.add_gridspec(4, 4, hspace=0.35, wspace=0.3)
+    fig = plt.figure(figsize=(20, 18))
+    fig.suptitle('WebGuard Adaptive Experiential Learning Dashboard', fontsize=20, fontweight='bold', y=0.98)
+    gs = fig.add_gridspec(5, 4, hspace=0.4, wspace=0.3)
     
     results = data['results']
     progression = data['progression']
     multipass = data['multipass']
     attacks = data['attacks']
     
+    # Row 1: Learning Progression by Phase (improved)
     ax1 = fig.add_subplot(gs[0, :])
-    colors = {'Benign Training': '#3498db', 'Threat Introduction': '#e74c3c'}
-    for phase in progression['phase'].unique():
-        if 'Multipass' in str(phase):
-            colors[phase] = '#2ecc71'
-    for i, row in progression.iterrows():
-        color = colors.get(row['phase'], '#2ecc71')
-        ax1.bar(row['iteration'], row['accuracy'], color=color, alpha=0.7, width=0.8)
-    ax1.set_xlabel('Iteration')
-    ax1.set_ylabel('Accuracy')
-    ax1.set_title('Learning Progression by Phase', fontweight='bold')
+    
+    # Separate phases for clear visualization
+    benign = progression[progression['phase'].str.contains('Benign', na=False)]
+    threat = progression[progression['phase'].str.contains('Threat', na=False)]
+    multi = progression[progression['phase'].str.contains('Multipass', na=False)]
+    
+    # Plot F1 score (more meaningful than accuracy for imbalanced data)
+    ax1.plot(benign['iteration'], benign['f1_score'], 'o-', linewidth=2, markersize=8, 
+             color='#3498db', label='Phase 1: Benign Training')
+    if len(threat) > 0:
+        ax1.plot(threat['iteration'], threat['f1_score'], 's-', linewidth=2, markersize=12, 
+                 color='#e74c3c', label='Phase 2: Threat Introduction')
+    ax1.plot(multi['iteration'], multi['f1_score'], '^-', linewidth=2, markersize=6, 
+             color='#2ecc71', label='Phase 3: Adaptive Learning')
+    
+    # Add phase boundary lines
+    if len(benign) > 0 and len(threat) > 0:
+        ax1.axvline(x=benign['iteration'].max() + 0.5, color='gray', linestyle='--', alpha=0.5)
+    if len(threat) > 0 and len(multi) > 0:
+        ax1.axvline(x=threat['iteration'].max() + 0.5, color='gray', linestyle='--', alpha=0.5)
+    
+    ax1.set_xlabel('Iteration', fontsize=11)
+    ax1.set_ylabel('F1 Score', fontsize=11)
+    ax1.set_title('Learning Progression by Phase (F1 Score)', fontweight='bold', fontsize=13)
     ax1.set_ylim(0, 1)
-    legend_patches = [mpatches.Patch(color='#3498db', label='Benign Training'),
-                     mpatches.Patch(color='#e74c3c', label='Threat Introduction'),
-                     mpatches.Patch(color='#2ecc71', label='Multipass Learning')]
-    ax1.legend(handles=legend_patches, loc='upper right')
+    ax1.legend(loc='lower right', fontsize=10)
+    ax1.grid(True, alpha=0.3)
     
+    # Row 2: Attack Type Detection - Before vs After Learning
     ax2 = fig.add_subplot(gs[1, :2])
-    attack_names = [a['attack_type'] for a in attacks]
-    detection_rates = [a['detection_rate'] * 100 for a in attacks]
-    colors_attack = plt.cm.RdYlGn([r/100 for r in detection_rates])
-    bars = ax2.barh(attack_names, detection_rates, color=colors_attack)
-    ax2.set_xlabel('Detection Rate (%)')
-    ax2.set_title('Attack Type Detection Performance', fontweight='bold')
-    ax2.set_xlim(0, 110)
-    for bar, rate in zip(bars, detection_rates):
-        ax2.text(rate + 2, bar.get_y() + bar.get_height()/2, f'{rate:.0f}%', va='center')
+    attack_names = [a['attack_type'].replace(' ', '\n') for a in attacks]
+    detected = [a['detected'] for a in attacks]
+    total = [a['samples_tested'] for a in attacks]
+    missed = [a['missed'] for a in attacks]
     
+    x = np.arange(len(attack_names))
+    width = 0.35
+    
+    bars1 = ax2.bar(x - width/2, detected, width, label='Detected', color='#2ecc71', edgecolor='darkgreen')
+    bars2 = ax2.bar(x + width/2, missed, width, label='Missed', color='#e74c3c', edgecolor='darkred')
+    
+    # Add detection rate labels
+    for i, (d, t) in enumerate(zip(detected, total)):
+        rate = (d / t * 100) if t > 0 else 0
+        ax2.annotate(f'{rate:.0f}%', xy=(x[i], d + 0.3), ha='center', fontsize=9, fontweight='bold')
+    
+    ax2.set_xlabel('Attack Type', fontsize=11)
+    ax2.set_ylabel('Count', fontsize=11)
+    ax2.set_title('Attack Type Detection (After Adaptive Learning)', fontweight='bold', fontsize=13)
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(attack_names, fontsize=9)
+    ax2.legend(loc='upper right')
+    ax2.grid(True, alpha=0.3, axis='y')
+    
+    # Row 2: Multipass F1 Progression
     ax3 = fig.add_subplot(gs[1, 2:])
-    ax3.plot(multipass['pass_number'], multipass['f1_score'], 'o-', linewidth=2, markersize=10, color='#9b59b6')
-    ax3.fill_between(multipass['pass_number'], multipass['f1_score'], alpha=0.3, color='#9b59b6')
-    ax3.set_xlabel('Learning Pass')
-    ax3.set_ylabel('F1 Score')
-    ax3.set_title('Multipass Self-Learning Progression', fontweight='bold')
+    ax3.plot(multipass['pass_number'], multipass['f1_score'], 'o-', linewidth=3, markersize=10, 
+             color='#9b59b6', markerfacecolor='white', markeredgewidth=2)
+    ax3.fill_between(multipass['pass_number'], multipass['f1_score'], alpha=0.2, color='#9b59b6')
     
+    # Add start and end annotations
+    if len(multipass) > 0:
+        ax3.annotate(f'Start: {multipass["f1_score"].iloc[0]:.3f}', 
+                     xy=(multipass['pass_number'].iloc[0], multipass['f1_score'].iloc[0]),
+                     xytext=(10, 10), textcoords='offset points', fontsize=10,
+                     arrowprops=dict(arrowstyle='->', color='gray'))
+        ax3.annotate(f'End: {multipass["f1_score"].iloc[-1]:.3f}', 
+                     xy=(multipass['pass_number'].iloc[-1], multipass['f1_score'].iloc[-1]),
+                     xytext=(-40, 10), textcoords='offset points', fontsize=10,
+                     arrowprops=dict(arrowstyle='->', color='gray'))
+    
+    ax3.set_xlabel('Learning Pass', fontsize=11)
+    ax3.set_ylabel('F1 Score', fontsize=11)
+    ax3.set_title('Multipass Adaptive Learning (F1 Score)', fontweight='bold', fontsize=13)
+    ax3.grid(True, alpha=0.3)
+    
+    # Row 3: Classification Confusion Evolution
     ax4 = fig.add_subplot(gs[2, :2])
-    ax4.plot(progression['iteration'], progression['true_positives'], 'g-', linewidth=2, label='True Pos', marker='o', markersize=4)
-    ax4.plot(progression['iteration'], progression['true_negatives'], 'b-', linewidth=2, label='True Neg', marker='s', markersize=4)
-    ax4.plot(progression['iteration'], progression['false_positives'], 'r-', linewidth=2, label='False Pos', marker='^', markersize=4)
-    ax4.plot(progression['iteration'], progression['false_negatives'], 'm-', linewidth=2, label='False Neg', marker='d', markersize=4)
-    ax4.set_xlabel('Iteration')
-    ax4.set_ylabel('Count')
-    ax4.set_title('Classification Results Over Time', fontweight='bold')
-    ax4.legend(loc='upper right', fontsize=8)
     
+    # Only plot multipass data for cleaner visualization
+    mp_prog = progression[progression['phase'].str.contains('Multipass', na=False)]
+    if len(mp_prog) > 0:
+        ax4.stackplot(mp_prog['iteration'], 
+                      mp_prog['true_positives'], 
+                      mp_prog['true_negatives'],
+                      mp_prog['false_positives'],
+                      mp_prog['false_negatives'],
+                      labels=['True Positives', 'True Negatives', 'False Positives', 'False Negatives'],
+                      colors=['#27ae60', '#3498db', '#e74c3c', '#9b59b6'],
+                      alpha=0.8)
+    ax4.set_xlabel('Iteration', fontsize=11)
+    ax4.set_ylabel('Count', fontsize=11)
+    ax4.set_title('Classification Results During Multipass Learning', fontweight='bold', fontsize=13)
+    ax4.legend(loc='upper right', fontsize=9)
+    ax4.grid(True, alpha=0.3)
+    
+    # Row 3: Precision vs Recall Trade-off
     ax5 = fig.add_subplot(gs[2, 2:])
-    ax5.plot(progression['iteration'], progression['cumulative_reward'], linewidth=2, color='#f39c12')
-    ax5.fill_between(progression['iteration'], progression['cumulative_reward'], alpha=0.3, color='#f39c12')
-    ax5.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
-    ax5.set_xlabel('Iteration')
-    ax5.set_ylabel('Cumulative Reward')
-    ax5.set_title('Reward System Performance', fontweight='bold')
+    ax5.plot(multipass['pass_number'], multipass['precision']*100, 'o-', linewidth=2, 
+             markersize=8, color='#e74c3c', label='Precision')
+    ax5.plot(multipass['pass_number'], multipass['recall']*100, 's-', linewidth=2, 
+             markersize=8, color='#2ecc71', label='Recall')
+    ax5.set_xlabel('Learning Pass', fontsize=11)
+    ax5.set_ylabel('Score (%)', fontsize=11)
+    ax5.set_title('Precision vs Recall (Security Trade-off)', fontweight='bold', fontsize=13)
+    ax5.legend(loc='lower right')
+    ax5.set_ylim(0, 105)
+    ax5.grid(True, alpha=0.3)
     
+    # Row 4: Cumulative Reward
     ax6 = fig.add_subplot(gs[3, :2])
-    ax6.axis('off')
-    summary = f"""
-    FINAL RESULTS SUMMARY
-    ─────────────────────────────────────
-    Total Samples:      {results['total_samples_processed']:,}
-    Patterns Learned:   {results['patterns_learned']}
-    Final Accuracy:     {results['final_accuracy']*100:.1f}%
-    Final Precision:    {results['final_precision']*100:.1f}%
-    Final Recall:       {results['final_recall']*100:.1f}%
-    Final F1 Score:     {results['final_f1_score']:.3f}
-    """
-    ax6.text(0.1, 0.5, summary, transform=ax6.transAxes, fontsize=12, verticalalignment='center',
-             fontfamily='monospace', bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+    ax6.plot(progression['iteration'], progression['cumulative_reward'], linewidth=2, color='#f39c12')
+    ax6.fill_between(progression['iteration'], progression['cumulative_reward'], alpha=0.3, color='#f39c12')
+    ax6.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
+    ax6.set_xlabel('Iteration', fontsize=11)
+    ax6.set_ylabel('Cumulative Reward', fontsize=11)
+    ax6.set_title('Reward System Performance', fontweight='bold', fontsize=13)
+    ax6.grid(True, alpha=0.3)
     
+    # Row 4: Attack Detection Rate Summary
     ax7 = fig.add_subplot(gs[3, 2:])
-    ax7.axis('off')
-    rm = results['reward_metrics']
-    reward = f"""
-    REWARD SYSTEM ANALYSIS
-    ─────────────────────────────────────
-    Cumulative Reward:  {rm['total_rewards']:.2f}
-    Positive Rewards:   {rm['positive_rewards']}
-    Negative Rewards:   {rm['negative_rewards']}
-    Reward Efficiency:  {rm['reward_efficiency']*100:.1f}%
+    detection_rates = [a['detection_rate'] * 100 for a in attacks]
+    attack_short = [a['attack_type'][:15] for a in attacks]
+    colors_attack = ['#27ae60' if r >= 80 else '#f39c12' if r >= 50 else '#e74c3c' for r in detection_rates]
+    bars = ax7.barh(attack_short, detection_rates, color=colors_attack, edgecolor='white')
+    ax7.set_xlabel('Detection Rate (%)', fontsize=11)
+    ax7.set_title('Final Attack Detection Rates', fontweight='bold', fontsize=13)
+    ax7.set_xlim(0, 110)
+    for bar, rate in zip(bars, detection_rates):
+        ax7.text(rate + 2, bar.get_y() + bar.get_height()/2, f'{rate:.0f}%', va='center', fontsize=10)
+    ax7.grid(True, alpha=0.3, axis='x')
+    
+    # Row 5: Summary Boxes
+    ax8 = fig.add_subplot(gs[4, :2])
+    ax8.axis('off')
+    
+    # Calculate improvement
+    if len(multipass) > 1:
+        f1_start = multipass['f1_score'].iloc[0]
+        f1_end = multipass['f1_score'].iloc[-1]
+        improvement = (f1_end - f1_start) * 100
+        rel_improvement = ((f1_end - f1_start) / f1_start * 100) if f1_start > 0 else 0
+    else:
+        improvement = 0
+        rel_improvement = 0
+    
+    summary = f"""
+    ╔══════════════════════════════════════════════╗
+    ║         ADAPTIVE LEARNING RESULTS            ║
+    ╠══════════════════════════════════════════════╣
+    ║  Total Samples:      {results['total_samples_processed']:>6,}                ║
+    ║  Patterns Learned:   {results['patterns_learned']:>6}                ║
+    ║  ────────────────────────────────────────    ║
+    ║  Final Accuracy:     {results['final_accuracy']*100:>6.1f}%               ║
+    ║  Final Precision:    {results['final_precision']*100:>6.1f}%               ║
+    ║  Final Recall:       {results['final_recall']*100:>6.1f}%               ║
+    ║  Final F1 Score:     {results['final_f1_score']:>6.3f}                ║
+    ║  ────────────────────────────────────────    ║
+    ║  F1 Improvement:    {improvement:>+6.1f}% ({rel_improvement:>+.0f}% rel)    ║
+    ╚══════════════════════════════════════════════╝
     """
-    ax7.text(0.1, 0.5, reward, transform=ax7.transAxes, fontsize=12, verticalalignment='center',
-             fontfamily='monospace', bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
+    ax8.text(0.05, 0.5, summary, transform=ax8.transAxes, fontsize=11, verticalalignment='center',
+             fontfamily='monospace', bbox=dict(boxstyle='round', facecolor='#ecf0f1', alpha=0.9))
+    
+    ax9 = fig.add_subplot(gs[4, 2:])
+    ax9.axis('off')
+    rm = results['reward_metrics']
+    
+    # Calculate average detection rate
+    avg_detection = np.mean([a['detection_rate'] for a in attacks]) * 100
+    
+    reward = f"""
+    ╔══════════════════════════════════════════════╗
+    ║           SYSTEM PERFORMANCE                 ║
+    ╠══════════════════════════════════════════════╣
+    ║  Cumulative Reward:  {rm['total_rewards']:>10.2f}            ║
+    ║  Positive Rewards:   {rm['positive_rewards']:>10}            ║
+    ║  Negative Rewards:   {rm['negative_rewards']:>10}            ║
+    ║  Reward Efficiency:  {rm['reward_efficiency']*100:>10.1f}%           ║
+    ║  ────────────────────────────────────────    ║
+    ║  Avg Attack Detection: {avg_detection:>7.1f}%             ║
+    ╚══════════════════════════════════════════════╝
+    """
+    ax9.text(0.05, 0.5, reward, transform=ax9.transAxes, fontsize=11, verticalalignment='center',
+             fontfamily='monospace', bbox=dict(boxstyle='round', facecolor='#fef9e7', alpha=0.9))
     
     plt.savefig(output_dir / "experiential_learning_dashboard.png", dpi=150, bbox_inches='tight', facecolor='white')
     plt.close()

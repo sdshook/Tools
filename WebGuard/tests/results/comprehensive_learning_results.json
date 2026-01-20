@@ -1,24 +1,10 @@
 {
   "test_name": "WebGuard Comprehensive Experiential Learning Test",
-  "test_timestamp": "2026-01-20T20:16:13.443182112+00:00",
+  "test_timestamp": "2026-01-20T20:20:32.846662548+00:00",
   "benign_training_samples": 500,
   "benign_training_accuracy": 0.986,
   "baseline_false_positive_rate": 0.014,
   "threat_samples_by_type": [
-    {
-      "attack_type": "Cross-Site Scripting",
-      "samples_tested": 10,
-      "detected": 10,
-      "missed": 0,
-      "detection_rate": 1.0
-    },
-    {
-      "attack_type": "Web Service Exploit",
-      "samples_tested": 10,
-      "detected": 8,
-      "missed": 2,
-      "detection_rate": 0.8
-    },
     {
       "attack_type": "SQL Injection",
       "samples_tested": 10,
@@ -34,7 +20,21 @@
       "detection_rate": 1.0
     },
     {
+      "attack_type": "Web Service Exploit",
+      "samples_tested": 10,
+      "detected": 8,
+      "missed": 2,
+      "detection_rate": 0.8
+    },
+    {
       "attack_type": "Path Traversal",
+      "samples_tested": 10,
+      "detected": 10,
+      "missed": 0,
+      "detection_rate": 1.0
+    },
+    {
+      "attack_type": "Cross-Site Scripting",
       "samples_tested": 10,
       "detected": 10,
       "missed": 0,

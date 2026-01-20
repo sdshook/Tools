@@ -1,6 +1,6 @@
 # WebGuard Experiential Learning Report
 
-Generated: 2026-01-20 20:16:32
+Generated: 2026-01-20 20:20:41
 
 ## Summary
 
@@ -17,11 +17,11 @@ Generated: 2026-01-20 20:16:32
 
 | Attack Type | Detected | Missed | Rate |
 |-------------|----------|--------|------|
-| Cross-Site Scripting | 10 | 0 | 100% |
-| Web Service Exploit | 8 | 2 | 80% |
 | SQL Injection | 10 | 0 | 100% |
 | Command Injection | 10 | 0 | 100% |
+| Web Service Exploit | 8 | 2 | 80% |
 | Path Traversal | 10 | 0 | 100% |
+| Cross-Site Scripting | 10 | 0 | 100% |
 | LDAP Injection | 5 | 0 | 100% |
 
 ## Multipass Learning
