@@ -803,7 +803,7 @@ The system fuses seven key components that have rarely been integrated:
 | **Adaptation** | Requires retraining | Continuous, experiential |
 | **Defense** | Detect → Alert | Detect → Learn → Adapt |
 | **Memory** | Model drift prone | Persistent consolidation |
-| **Platform** | Vendor-specific | Cross-process (multiple processes of same web server type) |
+| **Platform** | Vendor-specific | Cross-service (multiple web servers by port assignment) |
 | **Feedback** | Often ignored | Integrated as reinforcement |
 | **False Negatives** | Manual analysis | Automated retrospective learning |
 | **Intelligence** | Single-mode analysis | IQ-biased (accuracy-focused) for security |
@@ -818,11 +818,11 @@ The system fuses seven key components that have rarely been integrated:
 - System develops defensive "instincts" organically through experience
 - Builds context-independent knowledge for responding to novel threats
 
-### 2. **Host-Based Cross-Process Learning**
-- **Multi-Process Architecture**: Individual BDH memory per web server process on the same host
-- **Collaborative Defense**: Attack patterns learned by one web server process (e.g., IIS w3wp.exe PID 1001) immediately inform other processes of the same type (w3wp.exe PIDs 1002-1006)
-- **Shared Intelligence**: Consolidated PSI memory accessible to all web server processes on the host
-- **Transfer Learning**: Cross-process knowledge sharing through mesh cognition, not retraining
+### 2. **Host-Based Cross-Service Learning**
+- **Multi-Service Architecture**: Individual BDH memory per web server/port on the same host
+- **Collaborative Defense**: Attack patterns learned by one web server (e.g., nginx on port 8080) immediately inform other servers (Apache on 8081, Node on 3000, IIS on 8082)
+- **Shared Intelligence**: Consolidated PSI memory accessible to all monitored web services on the host
+- **Transfer Learning**: Cross-service knowledge sharing through mesh cognition, not retraining
 
 ### 3. **EQ/IQ Behavioral Regulation**
 - **Dual Intelligence System**: Balances emotional intelligence (empathy, social awareness) with analytical intelligence (pattern recognition, logic)
@@ -943,20 +943,20 @@ The combination requires:
 
 ### **Multi-Service Collaborative Defense**
 
-WebGuard implements a novel **host-based mesh cognition** system adapted from the BHSM Cognitive Mesh Neural Network (CMNN). Unlike network-based mesh systems, this architecture focuses on **collaborative learning between multiple processes of the same web server type within a single host**. For example, multiple IIS w3wp.exe processes serving different applications share collective intelligence:
+WebGuard implements a novel **host-based mesh cognition** system adapted from the BHSM Cognitive Mesh Neural Network (CMNN). Unlike network-based mesh systems, this architecture focuses on **collaborative learning between multiple web servers monitored by port assignment within a single host**. For example, multiple web servers (nginx, Apache, IIS, Node.js) serving different applications share collective intelligence:
 
 ```
-┌─────────────────── IIS Web Server Host ───────────────────┐
+┌─────────────────── Web Server Host ───────────────────────┐
 │                                                            │
-│  ┌─w3wp.exe─┐  ┌─w3wp.exe─┐  ┌─w3wp.exe─┐  ┌─w3wp.exe─┐  │
-│  │PID: 1001 │  │PID: 1002 │  │PID: 1003 │  │PID: 1004 │  │
+│  ┌──nginx───┐  ┌──Apache──┐  ┌───IIS────┐  ┌──Node.js─┐  │
+│  │Port:8080 │  │Port:8081 │  │Port:8082 │  │Port:3000 │  │
 │  │ECommerce │  │User      │  │Admin     │  │API       │  │
 │  │BDH Memory│◄─┤Portal    │◄─┤Dashboard │◄─┤Gateway   │  │
 │  └──────────┘  │BDH Memory│  │BDH Memory│  │BDH Memory│  │
 │       │        └──────────┘  └──────────┘  └──────────┘  │
 │       │             │             │             │        │
-│  ┌─w3wp.exe─┐  ┌─w3wp.exe─┐       │             │        │
-│  │PID: 1005 │  │PID: 1006 │       │             │        │
+│  ┌──nginx───┐  ┌──Apache──┐       │             │        │
+│  │Port:8083 │  │Port:8084 │       │             │        │
 │  │Auth      │  │Payment   │       │             │        │
 │  │Service   │◄─┤Service   │◄──────┼─────────────┘        │
 │  │BDH Memory│  │BDH Memory│       │                      │
@@ -977,17 +977,17 @@ WebGuard implements a novel **host-based mesh cognition** system adapted from th
 ```
 
 ### **Key Benefits:**
-- **Immediate Cross-Process Protection**: Attack learned on one web server process instantly protects other processes of the same type
+- **Immediate Cross-Service Protection**: Attack learned on one web server (e.g., nginx:8080) instantly protects other servers (Apache:8081, Node:3000, IIS:8082)
 - **Host-Standalone Operation**: No network dependencies, pure endpoint protection
-- **Collective Intelligence**: All processes benefit from any process's defensive experience
-- **Resource Efficiency**: Shared long-term memory, distributed short-term learning
-- **Coordinated MTD**: Moving Target Defense strategies across all host processes
+- **Collective Intelligence**: All monitored services benefit from any service's defensive experience
+- **Resource Efficiency**: Shared long-term memory (PSI), distributed short-term learning (BDH per service)
+- **Mixed Server Environments**: Supports nginx, Apache, IIS, Node.js, and any HTTP server
 
 ### **Reinforced Hebbian Learning Flow:**
-1. **Pattern Detection**: IIS w3wp.exe process (PID 1001) serving ECommerce app detects deserialization attack → creates memory trace with negative valence
+1. **Pattern Detection**: nginx on port 8080 serving ECommerce app detects SQL injection attack → creates memory trace with negative valence
 2. **Hebbian Connection Formation**: New trace forms bidirectional connections with similar existing patterns
 3. **Reinforcement Modulation**: Negative reward strengthens connections to defensive responses, weakens connections to permissive responses
-4. **Cross-Process Propagation**: Pattern propagates to other IIS w3wp.exe processes (PIDs 1002-1006) serving User Portal, Admin Dashboard, API Gateway, Auth Service, and Payment Service with dampened Hebbian weights
+4. **Cross-Service Propagation**: Pattern propagates to other web servers (Apache:8081, IIS:8082, Node:3000) via shared PSI with dampened Hebbian weights
 5. **Synaptic Strengthening**: Repeated co-activation of attack pattern + defensive response strengthens their Hebbian connection
 6. **Enhanced Retrieval**: Future similar attacks benefit from strengthened Hebbian connections for faster, more accurate recognition
 
