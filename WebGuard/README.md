@@ -433,16 +433,6 @@ Before semantic analysis, WebGuard applies **deterministic normalization** to ha
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Why Not Use a MicroGPT for Normalization?**
-
-| Aspect | MicroGPT Approach | Our Deterministic Normalizer |
-|--------|-------------------|------------------------------|
-| Determinism | ❌ Stochastic (temperature) | ✅ Same input → same output always |
-| Pre-trained knowledge | ❌ Encodes attack patterns | ✅ Just decoding rules |
-| Attack surface | ❌ Prompt injection risk | ✅ No prompts, no injection |
-| Latency | ❌ 10-100ms | ✅ <1ms |
-| Harvard compliance | ⚠️ Questionable | ✅ Pure semantic transformation |
-
 **Normalization Pipeline:**
 
 ```
