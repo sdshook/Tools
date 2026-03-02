@@ -368,71 +368,69 @@ impl BdhMemory {
         }
     }
     
-    /// Experiential learning using ATTACK FEATURE DISTANCE
-    /// Key insight: Only features 1-25 (attack indicators) matter for threat detection
-    /// Benign requests have near-zero attack features; threats have elevated attack features
+    /// Pure experiential threat similarity - NO hard-coded feature interpretation
+    /// 
+    /// SELF-LEARNING: Uses ALL features equally. The system learns which features
+    /// matter through experience, not through pre-defined assumptions about which
+    /// features indicate attacks.
     pub fn differential_threat_similarity(&self, q: &[f32; EMBED_DIM]) -> f32 {
-        // Sum of attack-indicator features (1-25) in the query
-        let query_attack_sum: f32 = q[1..26].iter().sum();
-        
-        // PHASE 1 LOGIC: If query has NO attack indicators, it's benign
-        if query_attack_sum < 0.1 {
-            return 0.0;  // Clearly benign - no attack signatures
+        if self.traces.is_empty() {
+            // No experience yet - return neutral (slightly suspicious for security)
+            return 0.3;
         }
         
-        // Query has some attack indicators - need to compare with learned patterns
-        // Find the minimum ATTACK DISTANCE to each pattern type
-        // Distance = sum of squared differences in attack features only
-        
+        // Calculate distance to threat patterns (valence > 0.5)
         let min_threat_dist = self.traces.iter()
             .filter(|t| t.valence > 0.5)
             .map(|t| {
-                // Euclidean distance on attack features only (1-25)
-                let dist: f32 = (1..26).map(|i| (q[i] - t.vec[i]).powi(2)).sum();
+                // Full Euclidean distance on ALL features (no assumptions)
+                let dist: f32 = (0..EMBED_DIM).map(|i| (q[i] - t.vec[i]).powi(2)).sum();
                 dist.sqrt()
             })
             .fold(f32::INFINITY, |a, b| a.min(b));
         
+        // Calculate distance to benign patterns (valence <= 0.5)
         let min_benign_dist = self.traces.iter()
             .filter(|t| t.valence <= 0.5)
             .map(|t| {
-                let dist: f32 = (1..26).map(|i| (q[i] - t.vec[i]).powi(2)).sum();
+                let dist: f32 = (0..EMBED_DIM).map(|i| (q[i] - t.vec[i]).powi(2)).sum();
                 dist.sqrt()
             })
             .fold(f32::INFINITY, |a, b| a.min(b));
         
-        // Handle edge cases
+        // Handle edge cases - SECURITY-FIRST: Unknown patterns are suspicious
         if min_threat_dist == f32::INFINITY && min_benign_dist == f32::INFINITY {
-            // No patterns learned - use attack intensity as indicator
-            return (query_attack_sum / 2.0).min(1.0);
+            // No patterns learned at all - suspicious (security-first)
+            return 0.4;
         }
         
         if min_threat_dist == f32::INFINITY {
-            // Only benign patterns learned
-            return if min_benign_dist < 0.5 { 0.1 } else { 0.4 };
+            // Only benign patterns learned - closer to benign = lower threat
+            return if min_benign_dist < 0.5 { 0.15 } else { 0.35 };
         }
         
         if min_benign_dist == f32::INFINITY {
-            // Only threat patterns learned  
-            return if min_threat_dist < 0.5 { 0.9 } else { 0.5 };
+            // Only threat patterns learned - closer to threat = higher threat
+            return if min_threat_dist < 0.5 { 0.85 } else { 0.5 };
         }
         
-        // EXPERIENTIAL DECISION: Closer distance = more similar
-        // Use ratio of distances: closer to threat = higher threat score
-        // Add small epsilon to avoid division by zero
+        // EXPERIENTIAL DECISION: Purely based on relative distances
         let threat_proximity = 1.0 / (min_threat_dist + 0.1);
         let benign_proximity = 1.0 / (min_benign_dist + 0.1);
         
-        // Threat score = threat_proximity / (threat_proximity + benign_proximity)
-        let threat_score = threat_proximity / (threat_proximity + benign_proximity);
+        // Threat score based on proximity ratio
+        let raw_score = threat_proximity / (threat_proximity + benign_proximity);
         
-        // Scale to emphasize the decision - make scores more decisive
-        if threat_score > 0.5 {
-            // Lean threat - boost
-            return (0.5 + (threat_score - 0.5) * 1.5).min(1.0);
+        // Apply security-first bias: slightly boost uncertain scores toward suspicion
+        if raw_score > 0.4 && raw_score < 0.6 {
+            // Uncertain region - lean toward suspicion
+            (raw_score + 0.1).min(0.65)
+        } else if raw_score > 0.5 {
+            // Likely threat - amplify
+            (0.5 + (raw_score - 0.5) * 1.3).min(1.0)
         } else {
-            // Lean benign - reduce
-            return (threat_score * 0.8).max(0.0);
+            // Likely benign - keep as is
+            raw_score
         }
     }
     
@@ -859,23 +857,25 @@ impl BdhMemory {
         let similar_traces = self.retrieve_similar(anomaly_embedding, context_limit * 2);
         
         for (trace, similarity) in similar_traces.iter().take(context_limit) {
-            // EQ/IQ regulated relevance calculation
+            // SECURITY-FIRST: Negative experiences (threats) should have AMPLIFIED relevance
+            // "Fear" of threats is appropriate and should inform decisions
             let analytical_relevance = similarity * (1.0 + trace.cum_reward.abs() * 0.1);
             let emotional_relevance = if trace.valence < 0.0 {
-                // Negative experiences need EQ regulation to prevent fear-based paralysis
-                trace.valence.abs() * eq_iq_balance.eq * 0.5  // Reduced impact of negative experiences
+                // SECURITY-FIRST: Negative experiences (threats) get AMPLIFIED relevance
+                // The system SHOULD "fear" similar patterns to known threats
+                trace.valence.abs() * eq_iq_balance.iq * 1.5  // AMPLIFIED threat relevance
             } else {
                 trace.valence * eq_iq_balance.eq
             };
             
-            // Balanced relevance score prevents experiential paralysis
+            // Combined relevance - threat signals are prioritized
             let regulated_relevance = analytical_relevance * eq_iq_balance.iq + 
                                     emotional_relevance * eq_iq_balance.eq;
             
-            // Ensure negative experiences don't prevent necessary actions
+            // SECURITY-FIRST: Negative experiences INCREASE action confidence (block/alert)
             let action_confidence = if trace.valence < 0.0 {
-                // For negative experiences, boost confidence if analytical assessment is strong
-                regulated_relevance * (1.0 + eq_iq_balance.iq * 0.3)
+                // Threat patterns boost confidence - we SHOULD act on threat similarities
+                regulated_relevance * (1.5 + eq_iq_balance.iq * 0.5)  // AMPLIFIED threat response
             } else {
                 regulated_relevance
             };
@@ -884,10 +884,10 @@ impl BdhMemory {
                 memory_id: trace.id.clone(),
                 similarity: *similarity,
                 valence: trace.valence,
-                experience_type: "BDH_Regulated".to_string(),
+                experience_type: "BDH_SecurityFirst".to_string(),
                 relevance_score: action_confidence,
                 eq_iq_regulated: true,
-                fear_mitigation_applied: trace.valence < 0.0,
+                fear_mitigation_applied: false,  // No fear mitigation - threat awareness is good
             });
         }
         
@@ -927,16 +927,22 @@ impl BdhMemory {
         // Calculate EQ/IQ balanced valence
         let eq_iq_balance = self.eq_iq_regulator.calculate_eq_iq_balance(&context, &feedback);
         
-        // Regulate valence to prevent fear-based paralysis
-        let base_valence = if is_threat { -anomaly_score } else { anomaly_score * 0.5 };
-        let regulated_valence = base_valence * eq_iq_balance.balance;
+        // SECURITY-FIRST: Threats should have STRONG negative valence
+        // No "fear mitigation" - the system SHOULD remember and act on threat patterns
+        let base_valence = if is_threat { 
+            // Strong negative valence for threats - scale with anomaly score
+            -anomaly_score * 1.5  // AMPLIFIED threat signal
+        } else { 
+            anomaly_score * 0.3  // Moderate positive for benign
+        };
         
-        // Ensure negative experiences don't prevent future threat detection
-        let final_valence = if regulated_valence < 0.0 {
-            // Apply fear mitigation - negative experiences shouldn't paralyze the system
-            regulated_valence * (0.7 + eq_iq_balance.iq * 0.3)  // IQ component reduces fear impact
+        // Apply EQ/IQ balance, but maintain threat signal strength
+        let final_valence = if base_valence < 0.0 {
+            // For threats: preserve strong negative valence
+            // Higher IQ (accuracy focus) = stronger threat retention
+            base_valence * (0.8 + eq_iq_balance.iq * 0.4)  // AMPLIFIED threat memory
         } else {
-            regulated_valence
+            base_valence * eq_iq_balance.balance
         };
 
         // Add the regulated trace
@@ -977,13 +983,18 @@ impl BdhMemory {
 
             let eq_iq_balance = self.eq_iq_regulator.calculate_eq_iq_balance(&context, &feedback);
             
-            // Regulated reward update
+            // SECURITY-FIRST: Failed to act on threat = STRONG negative learning signal
+            // No "fear mitigation" - the system MUST learn from missed threats
             let total_reward = (accuracy_reward + action_reward) * eq_iq_balance.balance;
             
-            // Apply fear mitigation for negative outcomes
-            let final_reward = if total_reward < 0.0 && !action_taken {
-                // If we didn't act and it was wrong, don't create excessive fear
-                total_reward * (0.6 + eq_iq_balance.iq * 0.4)  // IQ reduces fear impact
+            // SECURITY-FIRST: AMPLIFY learning from false negatives (missed threats)
+            let final_reward = if total_reward < 0.0 && !action_taken && actual_outcome > 0.5 {
+                // Missed a real threat - this is a CRITICAL learning moment
+                // AMPLIFY the negative signal to ensure the system learns
+                total_reward * (1.5 + eq_iq_balance.iq * 0.5)  // AMPLIFIED false negative penalty
+            } else if total_reward > 0.0 && action_taken && actual_outcome < 0.3 {
+                // False positive - learn but less aggressively
+                total_reward * 0.7  // Reduced false positive impact
             } else {
                 total_reward
             };

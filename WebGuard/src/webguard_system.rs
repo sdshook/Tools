@@ -11,15 +11,18 @@ use crate::advanced_feature_extractor::AdvancedFeatureExtractor;
 use crate::embedding_learner::EmbeddingLearner;
 
 /// Complete WebGuard System Implementation
-/// Uses pure PSI/BHSM/CMNN cognitive architecture for threat detection
-/// Now enhanced with learnable embeddings for true experiential RL
+/// 
+/// SELF-LEARNING ARCHITECTURE: The system learns entirely through experience.
+/// - NO hard-coded attack patterns, signatures, whitelists, or blacklists
+/// - Threat detection is learned through reinforcement feedback
+/// - Uses embedding-based representation for true experiential learning
 #[derive(Debug)]
 pub struct WebGuardSystem {
     /// Host-based mesh cognition system (PSI/BHSM/CMNN)
     pub mesh_cognition: Arc<Mutex<HostMeshCognition>>,
-    /// Feature extraction system (legacy, kept for compatibility)
+    /// Statistical feature extraction (for raw metrics only, NO attack patterns)
     pub feature_extractor: AdvancedFeatureExtractor,
-    /// Learnable embedding system for experiential RL
+    /// PRIMARY: Learnable embedding system for experiential RL - this is the CORE
     pub embedding_learner: EmbeddingLearner,
     /// Adaptive threshold system
     pub adaptive_threshold: AdaptiveThreshold,
@@ -33,8 +36,6 @@ pub struct WebGuardSystem {
     pub metrics: SystemMetrics,
     /// Service ID for this WebGuard instance
     pub service_id: String,
-    /// Use embedding-based detection (vs legacy feature-based)
-    pub use_embedding_detection: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,6 +118,8 @@ impl Default for ContextEvent {
 }
 
 impl WebGuardSystem {
+    /// Create a new WebGuard system with ZERO pre-programmed threat knowledge.
+    /// The system must learn what constitutes a threat through reinforcement.
     pub fn new() -> Self {
         let mesh_cognition = Arc::new(Mutex::new(HostMeshCognition::new(
             0.6,  // mesh_learning_rate
@@ -131,15 +134,14 @@ impl WebGuardSystem {
         
         Self {
             mesh_cognition,
-            feature_extractor: AdvancedFeatureExtractor::new(),
-            embedding_learner: EmbeddingLearner::new(),
+            feature_extractor: AdvancedFeatureExtractor::new(),  // Pure statistical only
+            embedding_learner: EmbeddingLearner::new(),  // PRIMARY detection mechanism
             adaptive_threshold: AdaptiveThreshold::new(),
             retrospective_learning: RetrospectiveLearningSystem::new(),
             eq_iq_regulator: ExperientialBehavioralRegulator::new(0.5, 0.5, 0.1),
             config: WebGuardConfig::default(),
             metrics: SystemMetrics::new(),
             service_id: service_id.to_string(),
-            use_embedding_detection: true,  // Enable embedding-based detection by default
         }
     }
 
@@ -169,44 +171,33 @@ impl WebGuardSystem {
     }
 
     /// Main threat analysis function
-    /// Uses learnable embeddings for true experiential RL when enabled
+    /// 
+    /// SELF-LEARNING: Uses ONLY embedding-based detection.
+    /// The system has NO pre-programmed knowledge of what attacks look like.
+    /// All threat understanding comes from reinforcement learning.
     pub fn analyze_request(&mut self, request: &str) -> ThreatAnalysisResult {
         let start_time = std::time::Instant::now();
         
         // Create request context
         let _context = self.create_request_context(request);
         
-        // EMBEDDING-BASED DETECTION (experiential RL)
-        let (threat_score, confidence) = if self.use_embedding_detection {
-            // Generate embedding and calculate threat score
-            let embedding = self.embedding_learner.embed(request);
-            let score = self.embedding_learner.threat_score(&embedding);
-            
-            // Confidence based on prototype separation and experience
-            let stats = self.embedding_learner.get_stats();
-            let separation = stats.get("prototype_separation").unwrap_or(&0.1);
-            let experience = stats.get("threat_experiences").unwrap_or(&0.0) 
-                           + stats.get("benign_experiences").unwrap_or(&0.0);
-            
-            // Higher separation and more experience = higher confidence
-            let conf = (separation / 2.0).min(1.0) * (experience / (experience + 10.0));
-            
-            (score, conf.max(0.1))
+        // PURE EMBEDDING-BASED DETECTION (self-learning)
+        // Generate embedding from raw request - no pattern matching
+        let embedding = self.embedding_learner.embed(request);
+        let threat_score = self.embedding_learner.threat_score(&embedding);
+        
+        // Confidence based on prototype separation and experience
+        let stats = self.embedding_learner.get_stats();
+        let separation = *stats.get("prototype_separation").unwrap_or(&0.1);
+        let experience = *stats.get("threat_experiences").unwrap_or(&0.0) 
+                       + *stats.get("benign_experiences").unwrap_or(&0.0);
+        
+        // Higher separation and more experience = higher confidence
+        // With no experience, confidence is low (system hasn't learned yet)
+        let confidence = if experience < 1.0 {
+            0.1  // Low confidence when system hasn't learned
         } else {
-            // Legacy feature-based detection
-            let features = self.feature_extractor.extract_features(request);
-            let cognitive_analysis = self.perform_cognitive_analysis(request, &features);
-            let threshold_result = if self.config.enable_adaptive_thresholds {
-                Some(self.adaptive_threshold.assess_threat(&features))
-            } else {
-                None
-            };
-            
-            let score = self.calculate_final_threat_score_cognitive(
-                &cognitive_analysis, &threshold_result, cognitive_analysis.bhsm_activation
-            );
-            let conf = self.calculate_confidence_cognitive(&cognitive_analysis, &threshold_result);
-            (score, conf)
+            (separation / 2.0).min(1.0) * (experience / (experience + 10.0)).max(0.1)
         };
         
         // Determine risk level and attack types
@@ -491,29 +482,14 @@ impl WebGuardSystem {
             return;
         }
         
-        if self.use_embedding_detection {
-            // EMBEDDING-BASED LEARNING (true experiential RL)
-            // Reward is positive for correct implicit validation
-            let reward = 1.0;
-            self.embedding_learner.learn(request, is_threat, reward);
-            self.metrics.learning_events += 1;
-        } else {
-            // Legacy BDH-based learning
-            let features = self.feature_extractor.extract_features(request);
-            let mesh = self.mesh_cognition.lock().unwrap();
-            
-            if let Some(service_memory) = mesh.get_service_memory(&self.service_id) {
-                if let Ok(mut bdh) = service_memory.try_lock() {
-                    let target_valence = if is_threat { 1.0 } else { 0.0 };
-                    
-                    if features.len() >= 32 {
-                        let mut array = [0.0f32; 32];
-                        array.copy_from_slice(&features[..32]);
-                        bdh.add_trace(array, target_valence);
-                    }
-                }
-            }
-            
+        // SELF-LEARNING: Use embedding-based learning exclusively
+        // Reward is positive for correct implicit validation
+        let reward = 1.0;
+        self.embedding_learner.learn(request, is_threat, reward);
+        self.metrics.learning_events += 1;
+        
+        // Update host aggression based on threat detection
+        if let Ok(mesh) = self.mesh_cognition.lock() {
             if is_threat {
                 mesh.update_host_aggression(0.1);
             } else {
@@ -523,10 +499,10 @@ impl WebGuardSystem {
     }
     
     /// Learn from a prediction error (FP or FN) with contrastive update
-    /// This is the KEY to experiential learning improvement over passes:
-    /// - Errors drive stronger updates to the embedding space
-    /// - FN: Push embedding toward threat prototype
-    /// - FP: Push embedding toward benign prototype
+    /// 
+    /// CRITICAL FOR SELF-LEARNING: Errors drive stronger updates to the embedding space
+    /// - FN (missed threat): Push embedding toward threat prototype - HEAVILY weighted
+    /// - FP (false alarm): Push embedding toward benign prototype - lightly weighted
     pub fn learn_from_error(&mut self, request: &str, predicted_threat: bool, actual_threat: bool) {
         if predicted_threat == actual_threat {
             return; // No error to learn from
@@ -536,32 +512,15 @@ impl WebGuardSystem {
             return;
         }
         
-        if self.use_embedding_detection {
-            // EMBEDDING-BASED ERROR CORRECTION (contrastive learning)
-            self.embedding_learner.learn_from_error(request, predicted_threat, actual_threat);
-            self.metrics.learning_events += 1;
-            
-            // Track FP/FN in metrics
-            if actual_threat && !predicted_threat {
-                self.metrics.false_negatives += 1;
-            } else {
-                self.metrics.false_positives += 1;
-            }
+        // SELF-LEARNING: Embedding-based error correction (contrastive learning)
+        self.embedding_learner.learn_from_error(request, predicted_threat, actual_threat);
+        self.metrics.learning_events += 1;
+        
+        // Track FP/FN in metrics
+        if actual_threat && !predicted_threat {
+            self.metrics.false_negatives += 1;
         } else {
-            // Legacy BDH-based error learning
-            let features = self.feature_extractor.extract_features(request);
-            let mesh = self.mesh_cognition.lock().unwrap();
-            
-            if let Some(service_memory) = mesh.get_service_memory(&self.service_id) {
-                if let Ok(mut bdh) = service_memory.try_lock() {
-                    if features.len() >= 32 {
-                        let mut array = [0.0f32; 32];
-                        array.copy_from_slice(&features[..32]);
-                        let target_valence = if actual_threat { 1.0 } else { 0.0 };
-                        bdh.add_trace(array, target_valence);
-                    }
-                }
-            }
+            self.metrics.false_positives += 1;
         }
     }
     
@@ -630,67 +589,77 @@ impl WebGuardSystem {
         // Store result in memory system
     }
 
+    /// Report a missed threat (false negative) for retrospective learning
+    /// 
+    /// CRITICAL: This is how the system learns from its mistakes.
+    /// Missed threats trigger aggressive learning updates.
     pub fn add_missed_threat(&mut self, event: MissedThreatEvent) {
         if self.config.enable_retrospective_learning {
-            // Convert timestamp to f64
+            // SELF-LEARNING: Learn from the error using embedding system
+            self.embedding_learner.learn_from_error(&event.original_input, false, true);
+            
+            // Also record in retrospective learning for analysis
             let timestamp = event.timestamp.duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default().as_secs_f64();
             
-            // Extract features from the original input
-            let features = self.feature_extractor.extract_features(&event.original_input);
+            // Use embedding as feature vector (converted to vec)
+            let embedding = self.embedding_learner.embed(&event.original_input);
+            let feature_vector: Vec<f32> = embedding.iter().take(32).cloned().collect();
             
-            // Create context event
             let context_event = crate::eq_iq_regulator::ContextEvent {
                 timestamp,
-                context_stability: 0.5, // Default value
+                context_stability: 0.5,
                 threat_level: event.severity,
-                response_appropriateness: 0.5, // Default value
+                response_appropriateness: 0.5,
             };
             
-            // Convert to retrospective learning event format
             let retro_event = RetroMissedThreatEvent {
                 original_timestamp: timestamp,
-                discovery_timestamp: timestamp + 3600.0, // Assume discovered 1 hour later
+                discovery_timestamp: timestamp + 3600.0,
                 original_threat_score: event.original_score,
                 actual_threat_level: event.severity,
-                feature_vector: features.to_vec(),
+                feature_vector,
                 original_context: context_event,
                 discovery_method: crate::retrospective_learning::ThreatDiscoveryMethod::SecurityAudit,
                 consequence_severity: event.severity,
             };
             self.retrospective_learning.add_missed_threat(retro_event);
             self.metrics.learning_events += 1;
+            self.metrics.false_negatives += 1;
         }
     }
 
+    /// Report a false positive for retrospective learning
     pub fn add_false_positive(&mut self, event: FalsePositiveEvent) {
         if self.config.enable_retrospective_learning {
-            // Convert timestamp to f64
+            // SELF-LEARNING: Learn from the error using embedding system
+            self.embedding_learner.learn_from_error(&event.original_input, true, false);
+            
             let timestamp = event.timestamp.duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default().as_secs_f64();
             
-            // Extract features from the original input
-            let features = self.feature_extractor.extract_features(&event.original_input);
+            // Use embedding as feature vector
+            let embedding = self.embedding_learner.embed(&event.original_input);
+            let feature_vector: Vec<f32> = embedding.iter().take(32).cloned().collect();
             
-            // Create context event
             let context_event = crate::eq_iq_regulator::ContextEvent {
                 timestamp,
-                context_stability: 0.5, // Default value
-                threat_level: 0.1, // Low threat level for false positive
-                response_appropriateness: 0.3, // Lower appropriateness for false positive
+                context_stability: 0.5,
+                threat_level: 0.1,
+                response_appropriateness: 0.3,
             };
             
-            // Convert to retrospective learning event format
             let retro_event = RetroFalsePositiveEvent {
                 timestamp,
                 original_threat_score: event.original_score,
-                actual_threat_level: 0.1, // Low actual threat for false positive
-                feature_vector: features.to_vec(),
+                actual_threat_level: 0.1,
+                feature_vector,
                 context: context_event,
-                impact_severity: 0.5, // Default impact severity
+                impact_severity: 0.5,
             };
             self.retrospective_learning.add_false_positive(retro_event);
             self.metrics.learning_events += 1;
+            self.metrics.false_positives += 1;
         }
     }
 

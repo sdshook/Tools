@@ -17,6 +17,9 @@ tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
+# Configuration file parsing
+toml = "0.8"
+
 # Logging and tracing
 tracing = "0.1"
 tracing-subscriber = "0.3"
@@ -39,12 +42,23 @@ base64 = "0.21"
 # Advanced feature extraction
 regex = "1.10"
 urlencoding = "2.1"
+lazy_static = "1.4"
+
+# HTTP proxy mode
+hyper = { version = "0.14", features = ["full"] }
+
+# Compression for persistence
+flate2 = "1.0"
+
+# File glob patterns for audit mode
+glob = "0.3"
 
 [dev-dependencies]
 # Testing and development dependencies
 plotters = "0.3"
 csv = "1.3"
 chrono = "0.4"
+tempfile = "3.10"
 
 # Additional dependencies for comprehensive testing
 
@@ -59,30 +73,6 @@ path = "src/bin/webguard_performance_suite.rs"
 [[bin]]
 name = "webguard_diagnostic"
 path = "src/bin/webguard_diagnostic.rs"
-
-# [[bin]]
-# name = "webguard_enhanced_diagnostic"
-# path = "src/bin/webguard_enhanced_diagnostic.rs"
-
-# [[bin]]
-# name = "debug_feature_extraction"
-# path = "src/bin/debug_feature_extraction.rs"
-
-[[bin]]
-name = "knowledge_export_demo"
-path = "examples/knowledge_export_demo.rs"
-
-[[bin]]
-name = "webguard_knowledge_sharing_demo"
-path = "examples/webguard_knowledge_sharing_demo.rs"
-
-[[bin]]
-name = "knowledge_transfer_utility"
-path = "examples/knowledge_transfer_utility.rs"
-
-# [[bin]]
-# name = "comprehensive_multipass_test"
-# path = "tests/scripts/comprehensive_multipass_test.rs"
 
 
 

@@ -77,14 +77,10 @@ pub fn featurize_from_telemetry_enhanced(telemetry: &Value, cfg: &Config, tempor
         .map(|arr| arr.len())
         .unwrap_or(0) as f32;
 
-    // Process name analysis
+    // Process name analysis - SELF-LEARNING: No hard-coded risk scores
+    // Instead, compute statistical features from process name
     let process_name = telemetry.get("process_name").and_then(|x| x.as_str()).unwrap_or("");
-    let process_risk_score = match process_name {
-        "java" | "python" | "php" | "node" => 0.3,
-        "apache" | "nginx" | "iis" => 0.2,
-        "vulnerable_app" | "browser" | "media_player" => 0.8,
-        _ => 0.1,
-    };
+    let process_name_length = (process_name.len() as f32 / 20.0).min(1.0);  // Normalized length
 
     // Application-layer payload fields (legacy)
     let payload = telemetry.get("request_body").and_then(|x| x.as_str()).unwrap_or("");
@@ -119,7 +115,7 @@ pub fn featurize_from_telemetry_enhanced(telemetry: &Value, cfg: &Config, tempor
     v[12] = admin_flag;
     v[13] = endpoint_rarity;
 
-    // New comprehensive features
+    // New comprehensive features - ALL raw statistics, NO risk interpretations
     v[14] = network_connections.min(50.0) / 50.0;
     v[15] = file_operations.min(100.0) / 100.0;
     v[16] = memory_usage.min(100.0) / 100.0;
@@ -127,7 +123,7 @@ pub fn featurize_from_telemetry_enhanced(telemetry: &Value, cfg: &Config, tempor
     v[18] = payload_size.min(10000.0) / 10000.0;
     v[19] = entropy.min(10.0) / 10.0;
     v[20] = suspicious_patterns.min(20.0) / 20.0;
-    v[21] = process_risk_score;
+    v[21] = process_name_length;  // Statistical feature, not risk score
     v[22] = stack_violations.min(10.0) / 10.0;
     v[23] = heap_allocations.min(2000.0) / 2000.0;
     v[24] = memory_violations.min(10.0) / 10.0;

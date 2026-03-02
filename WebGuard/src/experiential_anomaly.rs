@@ -416,6 +416,11 @@ impl ExperientialAnomalyDetector {
             valence: final_valence,
             uses: 1,
             tags,
+            last_activation: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs_f64())
+                .unwrap_or(0.0),
+            cumulative_reward: 0.0,
         }
     }
     

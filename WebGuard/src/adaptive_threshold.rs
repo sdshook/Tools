@@ -271,29 +271,35 @@ impl AdaptiveThreshold {
     }
 
     /// Dynamically adjust thresholds based on performance feedback
+    /// SECURITY-FIRST: False negatives (missed threats) drive MUCH larger adjustments than false positives
     fn adjust_thresholds(&mut self, assessment: &ThreatAssessment, actual_threat: bool) {
         let learning_rate = self.adjustment_params.learning_rate;
         let current_threshold = assessment.adjusted_threshold;
         
         let adjustment = match (assessment.threat_detected, actual_threat) {
             (true, false) => {
-                // False positive - increase threshold with balanced learning rate
-                let fp_adjustment = learning_rate * 0.8; // Increased from 0.3 for balance
-                // Apply regularization to prevent overcorrection
-                fp_adjustment * (1.0 - self.performance_history.false_positive_rate * 0.3)
+                // False positive - increase threshold CAUTIOUSLY
+                // User experience matters, but not as much as security
+                let fp_adjustment = learning_rate * 0.3; // REDUCED: conservative FP correction
+                // Heavy regularization to prevent threshold creep that misses threats
+                fp_adjustment * (1.0 - self.performance_history.false_positive_rate * 0.5).max(0.1)
             },
             (false, true) => {
-                // False negative - decrease threshold with moderated aggression
+                // FALSE NEGATIVE - CRITICAL SECURITY EVENT
+                // Missing a threat is unacceptable - aggressive threshold reduction
                 let confidence_gap = current_threshold - assessment.base_similarity;
-                let fn_adjustment = -learning_rate * (0.8 + confidence_gap * 1.0); // Reduced aggression
-                fn_adjustment.max(-0.10) // Reduced cap from 15% to 10% per false negative
+                // Much more aggressive FN adjustment (3x base + gap-proportional)
+                let fn_adjustment = -learning_rate * (1.5 + confidence_gap * 2.5);
+                fn_adjustment.max(-0.25) // Allow up to 25% reduction per missed threat
             },
             _ => {
-                // Correct prediction - small adjustment toward optimal
+                // Correct prediction - asymmetric adjustment toward optimal
                 let optimal_threshold = if actual_threat {
-                    assessment.base_similarity * 0.9 // Slightly below similarity for threats
+                    // For correctly detected threats, keep threshold well below the similarity
+                    assessment.base_similarity * 0.75 // More aggressive - ensure detection margin
                 } else {
-                    assessment.base_similarity * 1.1 // Slightly above similarity for non-threats
+                    // For correctly passed benign, small upward drift is OK
+                    assessment.base_similarity * 1.05 // Conservative - don't raise threshold much
                 };
                 (optimal_threshold - current_threshold) * learning_rate * 0.1
             }

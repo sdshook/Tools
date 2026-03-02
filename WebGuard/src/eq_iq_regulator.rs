@@ -647,6 +647,8 @@ impl ExperientialBehavioralRegulator {
     }
 
     /// Apply feedback for learning
+    /// SECURITY-FIRST: False negatives trigger MUCH stronger IQ (accuracy) adjustments
+    /// than false positives trigger EQ (empathy) adjustments
     pub fn apply_feedback(&mut self, feedback_event: FeedbackEvent) -> Result<(), Box<dyn std::error::Error>> {
         // Add to feedback history
         self.feedback_history.push(feedback_event.clone());
@@ -656,33 +658,46 @@ impl ExperientialBehavioralRegulator {
             self.feedback_history.remove(0);
         }
 
-        // Adapt learning rate based on feedback
+        // Adapt learning rate based on feedback - asymmetric for security
         if feedback_event.accuracy > 0.8 {
             self.learning_rate = (self.learning_rate * 0.95).max(0.001);
         } else {
-            self.learning_rate = (self.learning_rate * 1.05).min(0.1);
+            // Poor accuracy - learn faster, especially for missed threats
+            let learning_boost = if feedback_event.predicted_threat < feedback_event.actual_threat {
+                1.15  // Missed threat: faster learning
+            } else {
+                1.03  // False positive: moderate learning increase
+            };
+            self.learning_rate = (self.learning_rate * learning_boost).min(0.1);
         }
 
-        // Adjust EQ/IQ balance based on prediction error
+        // Adjust EQ/IQ balance based on prediction error - ASYMMETRIC for security
         let prediction_error = (feedback_event.predicted_threat - feedback_event.actual_threat).abs();
         
         if prediction_error > 0.3 {
-            // High error - adjust balance
             if feedback_event.predicted_threat > feedback_event.actual_threat {
-                // False positive - increase EQ for empathy
-                self.base_alpha = (self.base_alpha * 1.1).min(1.0);
-                self.base_beta = (self.base_beta * 0.9).max(0.1);
+                // False positive - CAUTIOUSLY increase EQ
+                // Small adjustment - we don't want to reduce threat sensitivity much
+                self.base_alpha = (self.base_alpha * 1.03).min(0.6);  // Cap EQ at 0.6
+                self.base_beta = (self.base_beta * 0.97).max(0.4);   // Floor IQ at 0.4
             } else {
-                // False negative - increase IQ for accuracy
-                self.base_beta = (self.base_beta * 1.1).min(1.0);
-                self.base_alpha = (self.base_alpha * 0.9).max(0.1);
+                // FALSE NEGATIVE - AGGRESSIVELY increase IQ (accuracy)
+                // Missing threats is unacceptable - strong adjustment toward detection
+                self.base_beta = (self.base_beta * 1.25).min(0.8);   // Strong IQ boost, cap at 0.8
+                self.base_alpha = (self.base_alpha * 0.8).max(0.2);  // Reduce EQ, floor at 0.2
             }
         }
 
-        // Normalize
+        // Normalize - but maintain security-first bias
         let total = self.base_alpha + self.base_beta;
         self.base_alpha /= total;
         self.base_beta /= total;
+        
+        // Enforce minimum IQ (accuracy) for security systems
+        if self.base_beta < 0.45 {
+            self.base_beta = 0.45;
+            self.base_alpha = 0.55;
+        }
 
         Ok(())
     }

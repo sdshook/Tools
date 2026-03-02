@@ -111,13 +111,15 @@ impl RetrospectiveLearningSystem {
             missed_threat_history: VecDeque::new(),
             false_positive_history: VecDeque::new(),
             max_history_size: 1000,
-            false_negative_learning_rate: 1.2, // Reduced from 2.0 for balance
-            false_positive_learning_rate: 1.0, // Balanced learning for false positives
+            // SECURITY-FIRST: False negatives (missed threats) are FAR more costly than false positives
+            // FN learning rate is 6x higher than FP - missing a threat is unacceptable
+            false_negative_learning_rate: 3.0, // HIGH: Learn aggressively from missed threats
+            false_positive_learning_rate: 0.5, // MODERATE: Learn cautiously from false alarms
             temporal_decay_factor: 0.95,
             similarity_threshold: 0.7,
             learning_stats: RetrospectiveLearningStats::default(),
-            regularization_factor: 0.1, // Prevent overfitting
-            max_adjustment_magnitude: 0.3, // Cap extreme adjustments
+            regularization_factor: 0.05, // Lower regularization for faster threat learning
+            max_adjustment_magnitude: 0.5, // Allow larger adjustments for security
         }
     }
 
@@ -455,10 +457,13 @@ mod tests {
         assert_eq!(system.missed_threat_history.len(), 0);
         assert_eq!(system.false_positive_history.len(), 0);
         assert_eq!(system.max_history_size, 1000);
-        assert_eq!(system.false_negative_learning_rate, 1.2);
-        assert_eq!(system.false_positive_learning_rate, 1.0);
-        assert_eq!(system.regularization_factor, 0.1);
-        assert_eq!(system.max_adjustment_magnitude, 0.3);
+        // Security-first: FN learning rate >> FP learning rate
+        assert_eq!(system.false_negative_learning_rate, 3.0);
+        assert_eq!(system.false_positive_learning_rate, 0.5);
+        assert!(system.false_negative_learning_rate > system.false_positive_learning_rate * 5.0,
+            "FN learning rate should be significantly higher than FP for security");
+        assert_eq!(system.regularization_factor, 0.05);
+        assert_eq!(system.max_adjustment_magnitude, 0.5);
     }
 
     #[test]

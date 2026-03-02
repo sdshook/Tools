@@ -1,536 +1,356 @@
 #![allow(dead_code)]
 
-use regex::Regex;
+//! Pure Statistical Feature Extractor for Self-Learning WebGuard
+//! 
+//! DESIGN PRINCIPLE: NO hard-coded attack patterns, signatures, whitelists, or blacklists.
+//! This extractor produces ONLY raw statistical features that the learning system
+//! uses to develop its own understanding of threats through reinforcement.
 
-/// Advanced feature extraction for sophisticated threat detection
-#[derive(Debug)]
+use std::collections::{HashMap, HashSet};
+
+/// Character class distribution for statistical analysis
+#[derive(Debug, Clone, Default)]
+pub struct CharacterDistribution {
+    pub alpha_ratio: f32,
+    pub digit_ratio: f32,
+    pub special_ratio: f32,
+    pub whitespace_ratio: f32,
+    pub uppercase_ratio: f32,
+    pub printable_ratio: f32,
+    pub punctuation_ratio: f32,
+    pub unique_char_ratio: f32,
+}
+
+/// Pure statistical feature extractor - NO predefined attack patterns
+#[derive(Debug, Clone)]
 pub struct AdvancedFeatureExtractor {
-    sql_patterns: Vec<Regex>,
-    xss_patterns: Vec<Regex>,
-    path_traversal_patterns: Vec<Regex>,
-    command_injection_patterns: Vec<Regex>,
+    _placeholder: (),
 }
 
 impl AdvancedFeatureExtractor {
     pub fn new() -> Self {
-        Self {
-            sql_patterns: Self::build_sql_patterns(),
-            xss_patterns: Self::build_xss_patterns(),
-            path_traversal_patterns: Self::build_path_traversal_patterns(),
-            command_injection_patterns: Self::build_command_injection_patterns(),
-        }
+        Self { _placeholder: () }
     }
 
-    /// Extract comprehensive features for threat detection
+    /// Extract PURE STATISTICAL features - NO attack pattern matching
     pub fn extract_features(&self, request_data: &str) -> [f32; 32] {
         let mut features = [0.0; 32];
+        let bytes = request_data.as_bytes();
         
-        // Normalize input for analysis
-        let normalized = request_data.to_lowercase();
-        let decoded = self.decode_common_encodings(request_data);
+        // SIZE/LENGTH METRICS (0-3)
+        features[0] = (request_data.len() as f32 / 2000.0).min(1.0);
+        features[1] = (request_data.lines().count() as f32 / 50.0).min(1.0);
+        features[2] = self.avg_line_length(request_data);
+        features[3] = self.max_line_length(request_data);
         
-        // Feature 0: Request length (normalized)
-        features[0] = (request_data.len() as f32 / 1000.0).min(1.0);
+        // ENTROPY MEASUREMENTS (4-7)
+        features[4] = self.calculate_entropy(bytes);
+        features[5] = self.calculate_bigram_entropy(request_data);
+        features[6] = self.calculate_positional_entropy(request_data);
+        features[7] = self.calculate_entropy_variance(request_data);
         
-        // Features 1-5: SQL Injection Detection
-        features[1] = self.detect_sql_injection_basic(&normalized);
-        features[2] = self.detect_sql_injection_advanced(&decoded);
-        features[3] = self.detect_sql_union_attacks(&normalized);
-        features[4] = self.detect_sql_blind_injection(&normalized);
-        features[5] = self.detect_sql_time_based(&normalized);
+        // CHARACTER CLASS DISTRIBUTIONS (8-15)
+        let char_dist = self.character_class_distribution(request_data);
+        features[8] = char_dist.alpha_ratio;
+        features[9] = char_dist.digit_ratio;
+        features[10] = char_dist.special_ratio;
+        features[11] = char_dist.whitespace_ratio;
+        features[12] = char_dist.uppercase_ratio;
+        features[13] = char_dist.printable_ratio;
+        features[14] = char_dist.punctuation_ratio;
+        features[15] = char_dist.unique_char_ratio;
         
-        // Features 6-10: XSS Detection
-        features[6] = self.detect_xss_basic(&normalized);
-        features[7] = self.detect_xss_advanced(&decoded);
-        features[8] = self.detect_xss_event_handlers(&normalized);
-        features[9] = self.detect_xss_encoded(&request_data);
-        features[10] = self.detect_dom_xss(&normalized);
+        // STRUCTURAL METRICS (16-23)
+        features[16] = self.nesting_depth(request_data);
+        features[17] = self.repetition_score(request_data);
+        features[18] = self.token_diversity(request_data);
+        features[19] = self.delimiter_density(request_data);
+        features[20] = self.quote_balance(request_data);
+        features[21] = self.bracket_balance(request_data);
+        features[22] = self.consecutive_special_ratio(request_data);
+        features[23] = self.word_length_variance(request_data);
         
-        // Features 11-15: Path Traversal & File Inclusion
-        features[11] = self.detect_path_traversal(&normalized);
-        features[12] = self.detect_file_inclusion(&normalized);
-        features[13] = self.detect_directory_listing(&normalized);
-        features[14] = self.detect_file_upload_bypass(&normalized);
-        features[15] = self.detect_null_byte_injection(&request_data);
+        // ENCODING STATISTICS (24-27)
+        features[24] = self.percent_encoding_density(request_data);
+        features[25] = self.hex_sequence_density(request_data);
+        features[26] = self.base64_likelihood(request_data);
+        features[27] = self.non_ascii_ratio(bytes);
         
-        // Features 16-20: Command Injection
-        features[16] = self.detect_command_injection(&normalized);
-        features[17] = self.detect_shell_metacharacters(&request_data);
-        features[18] = self.detect_system_commands(&normalized);
-        features[19] = self.detect_powershell_commands(&normalized);
-        features[20] = self.detect_bash_commands(&normalized);
-        
-        // Features 21-25: Encoding & Obfuscation
-        features[21] = self.detect_url_encoding(&request_data);
-        features[22] = self.detect_hex_encoding(&request_data);
-        features[23] = self.detect_base64_encoding(&request_data);
-        features[24] = self.detect_unicode_encoding(&request_data);
-        features[25] = self.detect_double_encoding(&request_data);
-        
-        // Features 26-30: Statistical Analysis
-        features[26] = self.calculate_entropy(&request_data.as_bytes());
-        features[27] = self.calculate_character_diversity(request_data);
-        features[28] = self.calculate_suspicious_ratio(request_data);
-        features[29] = self.detect_legitimate_patterns(request_data);
-        features[30] = self.calculate_payload_complexity(request_data);
-        
-        // Feature 31: Overall threat score
-        features[31] = self.calculate_composite_threat_score(&features[0..31]);
+        // DERIVED FEATURES (28-31)
+        features[28] = (features[4] * features[10]).min(1.0);
+        features[29] = (features[0] * features[16]).min(1.0);
+        features[30] = self.structural_anomaly_score(&features);
+        features[31] = self.statistical_complexity(&features);
         
         features
     }
 
-    fn build_sql_patterns() -> Vec<Regex> {
-        vec![
-            Regex::new(r"(?i)\b(union|select|insert|update|delete|drop|create|alter|exec|execute)\b").unwrap(),
-            Regex::new(r"(?i)\b(or|and)\s+\d+\s*=\s*\d+").unwrap(),
-            Regex::new(r"(?i)'.*?(\bor\b|\band\b).*?'").unwrap(),
-            Regex::new(r"(?i)\b(waitfor|delay|sleep|benchmark)\b").unwrap(),
-            Regex::new(r"(?i)\b(information_schema|sysobjects|syscolumns)\b").unwrap(),
-            Regex::new(r"(?i)(\bxp_|\bsp_)").unwrap(),
-            Regex::new(r"(?i)\b(load_file|into\s+outfile|into\s+dumpfile)\b").unwrap(),
-        ]
+    fn avg_line_length(&self, s: &str) -> f32 {
+        let lines: Vec<&str> = s.lines().collect();
+        if lines.is_empty() { return 0.0; }
+        let total: usize = lines.iter().map(|l| l.len()).sum();
+        ((total as f32 / lines.len() as f32) / 200.0).min(1.0)
+    }
+    
+    fn max_line_length(&self, s: &str) -> f32 {
+        let max = s.lines().map(|l| l.len()).max().unwrap_or(0);
+        (max as f32 / 500.0).min(1.0)
     }
 
-    fn build_xss_patterns() -> Vec<Regex> {
-        vec![
-            Regex::new(r"(?i)<script[^>]*>").unwrap(),
-            Regex::new(r"(?i)javascript:").unwrap(),
-            Regex::new(r"(?i)on\w+\s*=").unwrap(),
-            Regex::new(r"(?i)<iframe[^>]*>").unwrap(),
-            Regex::new(r"(?i)<object[^>]*>").unwrap(),
-            Regex::new(r"(?i)<embed[^>]*>").unwrap(),
-            Regex::new(r"(?i)expression\s*\(").unwrap(),
-            Regex::new(r"(?i)vbscript:").unwrap(),
-        ]
-    }
-
-    fn build_path_traversal_patterns() -> Vec<Regex> {
-        vec![
-            Regex::new(r"\.\.[\\/]").unwrap(),
-            Regex::new(r"(?i)[\\/]etc[\\/]passwd").unwrap(),
-            Regex::new(r"(?i)[\\/]windows[\\/]system32").unwrap(),
-            Regex::new(r"(?i)[\\/]boot\.ini").unwrap(),
-            Regex::new(r"%2e%2e%2f").unwrap(),
-            Regex::new(r"(?i)file://").unwrap(),
-        ]
-    }
-
-    fn build_command_injection_patterns() -> Vec<Regex> {
-        vec![
-            Regex::new(r"[;&|`$()]").unwrap(),
-            Regex::new(r"(?i)\b(cat|ls|dir|type|echo|whoami|id|pwd|uname)\b").unwrap(),
-            Regex::new(r"(?i)\b(wget|curl|nc|netcat|telnet|ssh)\b").unwrap(),
-            Regex::new(r"(?i)\b(powershell|cmd|bash|sh|zsh)\b").unwrap(),
-        ]
-    }
-
-    // SQL Injection Detection Methods
-    fn detect_sql_injection_basic(&self, input: &str) -> f32 {
-        let mut score: f32 = 0.0;
-        
-        // Check for basic SQL injection patterns
-        if input.contains("' or '1'='1") || input.contains("\" or \"1\"=\"1") {
-            score += 0.9;
-        }
-        
-        if input.contains("' or 1=1") || input.contains("\" or 1=1") {
-            score += 0.8;
-        }
-        
-        // Check for SQL keywords with quotes
-        for pattern in &self.sql_patterns[0..3] {
-            if pattern.is_match(input) {
-                score += 0.3;
-            }
-        }
-        
-        score.min(1.0)
-    }
-
-    fn detect_sql_injection_advanced(&self, input: &str) -> f32 {
-        let mut score: f32 = 0.0;
-        
-        // Advanced SQL injection patterns
-        for pattern in &self.sql_patterns {
-            if pattern.is_match(input) {
-                score += 0.2;
-            }
-        }
-        
-        // Check for SQL functions and system tables
-        if input.contains("information_schema") || input.contains("sysobjects") {
-            score += 0.4;
-        }
-        
-        // Check for SQL comments
-        if input.contains("--") || input.contains("/*") || input.contains("#") {
-            score += 0.2;
-        }
-        
-        score.min(1.0)
-    }
-
-    fn detect_sql_union_attacks(&self, input: &str) -> f32 {
-        if input.contains("union") && (input.contains("select") || input.contains("all")) {
-            0.9
-        } else {
-            0.0
-        }
-    }
-
-    fn detect_sql_blind_injection(&self, input: &str) -> f32 {
-        let mut score: f32 = 0.0;
-        
-        // Blind SQL injection patterns
-        if input.contains("and") && input.contains("substring") {
-            score += 0.6;
-        }
-        
-        if input.contains("ascii") && input.contains("substr") {
-            score += 0.7;
-        }
-        
-        if input.contains("length") && input.contains("database") {
-            score += 0.5;
-        }
-        
-        score.min(1.0)
-    }
-
-    fn detect_sql_time_based(&self, input: &str) -> f32 {
-        if input.contains("waitfor") || input.contains("delay") || 
-           input.contains("sleep") || input.contains("benchmark") {
-            0.8
-        } else {
-            0.0
-        }
-    }
-
-    // XSS Detection Methods
-    fn detect_xss_basic(&self, input: &str) -> f32 {
-        let mut score: f32 = 0.0;
-        
-        for pattern in &self.xss_patterns {
-            if pattern.is_match(input) {
-                score += 0.3;
-            }
-        }
-        
-        score.min(1.0)
-    }
-
-    fn detect_xss_advanced(&self, input: &str) -> f32 {
-        let mut score: f32 = 0.0;
-        
-        // Check for advanced XSS patterns
-        if input.contains("javascript:") || input.contains("vbscript:") {
-            score += 0.8;
-        }
-        
-        if input.contains("expression(") {
-            score += 0.7;
-        }
-        
-        // Check for data URIs
-        if input.contains("data:") && (input.contains("javascript") || input.contains("base64")) {
-            score += 0.6;
-        }
-        
-        score.min(1.0)
-    }
-
-    fn detect_xss_event_handlers(&self, input: &str) -> f32 {
-        let events = ["onload", "onclick", "onmouseover", "onerror", "onsubmit", "onfocus"];
-        let mut score: f32 = 0.0;
-        
-        for event in &events {
-            if input.contains(event) {
-                score += 0.2;
-            }
-        }
-        
-        score.min(1.0)
-    }
-
-    fn detect_xss_encoded(&self, input: &str) -> f32 {
-        // Check for encoded XSS attempts
-        if input.contains("%3Cscript") || input.contains("&lt;script") {
-            0.8
-        } else if input.contains("&#x") && input.contains("script") {
-            0.7
-        } else {
-            0.0
-        }
-    }
-
-    fn detect_dom_xss(&self, input: &str) -> f32 {
-        let dom_sinks = ["innerHTML", "outerHTML", "document.write", "eval", "setTimeout"];
-        let mut score: f32 = 0.0;
-        
-        for sink in &dom_sinks {
-            if input.contains(sink) {
-                score += 0.3;
-            }
-        }
-        
-        score.min(1.0)
-    }
-
-    // Path Traversal Detection Methods
-    fn detect_path_traversal(&self, input: &str) -> f32 {
-        let mut score: f32 = 0.0;
-        
-        for pattern in &self.path_traversal_patterns {
-            if pattern.is_match(input) {
-                score += 0.3;
-            }
-        }
-        
-        score.min(1.0)
-    }
-
-    fn detect_file_inclusion(&self, input: &str) -> f32 {
-        if input.contains("include") || input.contains("require") {
-            if input.contains("http://") || input.contains("https://") || input.contains("ftp://") {
-                0.9
-            } else {
-                0.4
-            }
-        } else {
-            0.0
-        }
-    }
-
-    fn detect_directory_listing(&self, input: &str) -> f32 {
-        if input.contains("/etc/") || input.contains("/var/") || input.contains("/usr/") ||
-           input.contains("c:\\") || input.contains("\\windows\\") {
-            0.6
-        } else {
-            0.0
-        }
-    }
-
-    fn detect_file_upload_bypass(&self, input: &str) -> f32 {
-        if input.contains(".php") || input.contains(".asp") || input.contains(".jsp") {
-            if input.contains("null") || input.contains("%00") {
-                0.8
-            } else {
-                0.3
-            }
-        } else {
-            0.0
-        }
-    }
-
-    fn detect_null_byte_injection(&self, input: &str) -> f32 {
-        if input.contains("%00") || input.contains("\\0") || input.contains("\0") {
-            0.9
-        } else {
-            0.0
-        }
-    }
-
-    // Command Injection Detection Methods
-    fn detect_command_injection(&self, input: &str) -> f32 {
-        let mut score: f32 = 0.0;
-        
-        for pattern in &self.command_injection_patterns {
-            if pattern.is_match(input) {
-                score += 0.2;
-            }
-        }
-        
-        score.min(1.0)
-    }
-
-    fn detect_shell_metacharacters(&self, input: &str) -> f32 {
-        let metacharacters = [';', '|', '&', '`', '$', '(', ')', '{', '}'];
-        let count = metacharacters.iter().filter(|&&c| input.contains(c)).count();
-        (count as f32 / metacharacters.len() as f32).min(1.0)
-    }
-
-    fn detect_system_commands(&self, input: &str) -> f32 {
-        let commands = ["cat", "ls", "dir", "type", "echo", "whoami", "id", "pwd", "uname"];
-        let mut score: f32 = 0.0;
-        
-        for cmd in &commands {
-            if input.contains(cmd) {
-                score += 0.1;
-            }
-        }
-        
-        score.min(1.0)
-    }
-
-    fn detect_powershell_commands(&self, input: &str) -> f32 {
-        if input.contains("powershell") || input.contains("invoke-expression") || 
-           input.contains("iex") || input.contains("get-process") {
-            0.8
-        } else {
-            0.0
-        }
-    }
-
-    fn detect_bash_commands(&self, input: &str) -> f32 {
-        if input.contains("/bin/bash") || input.contains("/bin/sh") || 
-           input.contains("bash -c") || input.contains("sh -c") {
-            0.8
-        } else {
-            0.0
-        }
-    }
-
-    // Encoding Detection Methods
-    fn detect_url_encoding(&self, input: &str) -> f32 {
-        let url_encoded_count = input.matches('%').count();
-        (url_encoded_count as f32 / 10.0).min(1.0)
-    }
-
-    fn detect_hex_encoding(&self, input: &str) -> f32 {
-        let hex_count = input.matches("\\x").count();
-        (hex_count as f32 / 5.0).min(1.0)
-    }
-
-    fn detect_base64_encoding(&self, input: &str) -> f32 {
-        // Simple base64 detection heuristic
-        let base64_chars = input.chars().filter(|c| c.is_alphanumeric() || *c == '+' || *c == '/' || *c == '=').count();
-        if base64_chars > input.len() * 3 / 4 && input.len() > 10 {
-            0.7
-        } else {
-            0.0
-        }
-    }
-
-    fn detect_unicode_encoding(&self, input: &str) -> f32 {
-        let unicode_count = input.matches("\\u").count() + input.matches("&#").count();
-        (unicode_count as f32 / 5.0).min(1.0)
-    }
-
-    fn detect_double_encoding(&self, input: &str) -> f32 {
-        if input.contains("%25") {
-            0.8
-        } else {
-            0.0
-        }
-    }
-
-    // Statistical Analysis Methods
-    fn calculate_entropy(&self, data: &[u8]) -> f32 {
+    fn calculate_entropy(&self, bytes: &[u8]) -> f32 {
+        if bytes.is_empty() { return 0.0; }
         let mut counts = [0u32; 256];
-        for &byte in data {
-            counts[byte as usize] += 1;
-        }
+        for &b in bytes { counts[b as usize] += 1; }
         
-        let len = data.len() as f32;
-        let mut entropy = 0.0;
-        
+        let len = bytes.len() as f32;
+        let mut entropy = 0.0f32;
         for &count in &counts {
             if count > 0 {
                 let p = count as f32 / len;
                 entropy -= p * p.log2();
             }
         }
-        
         (entropy / 8.0).min(1.0)
     }
-
-    fn calculate_character_diversity(&self, input: &str) -> f32 {
-        let unique_chars: std::collections::HashSet<char> = input.chars().collect();
-        (unique_chars.len() as f32 / input.len() as f32).min(1.0)
+    
+    fn calculate_bigram_entropy(&self, s: &str) -> f32 {
+        if s.len() < 2 { return 0.0; }
+        let bytes = s.as_bytes();
+        let mut bigram_counts: HashMap<(u8, u8), u32> = HashMap::new();
+        
+        for i in 0..bytes.len()-1 {
+            *bigram_counts.entry((bytes[i], bytes[i+1])).or_insert(0) += 1;
+        }
+        
+        let total = (bytes.len() - 1) as f32;
+        let mut entropy = 0.0f32;
+        for &count in bigram_counts.values() {
+            let p = count as f32 / total;
+            entropy -= p * p.log2();
+        }
+        (entropy / 16.0).min(1.0)
+    }
+    
+    fn calculate_positional_entropy(&self, s: &str) -> f32 {
+        if s.len() < 4 { return 0.0; }
+        let chunk_size = s.len() / 4;
+        let mut entropies = Vec::new();
+        
+        for i in 0..4 {
+            let start = i * chunk_size;
+            let end = if i == 3 { s.len() } else { (i + 1) * chunk_size };
+            let chunk = &s.as_bytes()[start..end];
+            entropies.push(self.calculate_entropy(chunk));
+        }
+        
+        entropies.iter().sum::<f32>() / 4.0
+    }
+    
+    fn calculate_entropy_variance(&self, s: &str) -> f32 {
+        if s.len() < 20 { return 0.0; }
+        let chunk_size = s.len() / 5;
+        let mut entropies = Vec::new();
+        
+        for i in 0..5 {
+            let start = i * chunk_size;
+            let end = if i == 4 { s.len() } else { (i + 1) * chunk_size };
+            let chunk = &s.as_bytes()[start..end];
+            entropies.push(self.calculate_entropy(chunk));
+        }
+        
+        let mean = entropies.iter().sum::<f32>() / 5.0;
+        let variance = entropies.iter().map(|e| (e - mean).powi(2)).sum::<f32>() / 5.0;
+        (variance * 10.0).min(1.0)
     }
 
-    fn calculate_suspicious_ratio(&self, input: &str) -> f32 {
-        let suspicious_chars = ['<', '>', '\'', '"', ';', '|', '&', '`', '$'];
-        let suspicious_count = input.chars().filter(|c| suspicious_chars.contains(c)).count();
-        (suspicious_count as f32 / input.len() as f32).min(1.0)
+    fn character_class_distribution(&self, s: &str) -> CharacterDistribution {
+        if s.is_empty() { return CharacterDistribution::default(); }
+        
+        let len = s.len() as f32;
+        let mut alpha = 0u32;
+        let mut digit = 0u32;
+        let mut special = 0u32;
+        let mut whitespace = 0u32;
+        let mut uppercase = 0u32;
+        let mut printable = 0u32;
+        let mut punctuation = 0u32;
+        let mut unique_chars: HashSet<char> = HashSet::new();
+        
+        for c in s.chars() {
+            unique_chars.insert(c);
+            if c.is_alphabetic() { alpha += 1; }
+            if c.is_numeric() { digit += 1; }
+            if c.is_whitespace() { whitespace += 1; }
+            if c.is_uppercase() { uppercase += 1; }
+            if c.is_ascii_punctuation() { punctuation += 1; }
+            if c.is_ascii_graphic() || c.is_whitespace() { printable += 1; }
+            if !c.is_alphanumeric() && !c.is_whitespace() { special += 1; }
+        }
+        
+        CharacterDistribution {
+            alpha_ratio: alpha as f32 / len,
+            digit_ratio: digit as f32 / len,
+            special_ratio: special as f32 / len,
+            whitespace_ratio: whitespace as f32 / len,
+            uppercase_ratio: if alpha > 0 { uppercase as f32 / alpha as f32 } else { 0.0 },
+            printable_ratio: printable as f32 / len,
+            punctuation_ratio: punctuation as f32 / len,
+            unique_char_ratio: (unique_chars.len() as f32 / len).min(1.0),
+        }
     }
 
-    fn detect_legitimate_patterns(&self, input: &str) -> f32 {
-        let mut score: f32 = 0.0;
+    fn nesting_depth(&self, s: &str) -> f32 {
+        let mut max_depth = 0i32;
+        let mut current_depth = 0i32;
         
-        // HTTP methods
-        if input.contains("GET") || input.contains("POST") || input.contains("PUT") || input.contains("DELETE") {
-            score += 0.3;
+        for c in s.chars() {
+            match c {
+                '(' | '[' | '{' | '<' => {
+                    current_depth += 1;
+                    max_depth = max_depth.max(current_depth);
+                }
+                ')' | ']' | '}' | '>' => {
+                    current_depth = (current_depth - 1).max(0);
+                }
+                _ => {}
+            }
+        }
+        (max_depth as f32 / 10.0).min(1.0)
+    }
+    
+    fn repetition_score(&self, s: &str) -> f32 {
+        if s.len() < 6 { return 0.0; }
+        let mut repeat_count = 0;
+        let bytes = s.as_bytes();
+        
+        for i in 0..bytes.len().saturating_sub(5) {
+            let pattern = &bytes[i..i+3];
+            if bytes[i+3..].windows(3).any(|w| w == pattern) {
+                repeat_count += 1;
+            }
+        }
+        (repeat_count as f32 / (s.len() as f32 / 3.0)).min(1.0)
+    }
+    
+    fn token_diversity(&self, s: &str) -> f32 {
+        let tokens: Vec<&str> = s.split(|c: char| !c.is_alphanumeric())
+            .filter(|t| !t.is_empty()).collect();
+        if tokens.is_empty() { return 0.0; }
+        
+        let unique: HashSet<&str> = tokens.iter().cloned().collect();
+        unique.len() as f32 / tokens.len() as f32
+    }
+    
+    fn delimiter_density(&self, s: &str) -> f32 {
+        if s.is_empty() { return 0.0; }
+        let delimiters = s.chars().filter(|&c| 
+            c == '&' || c == '=' || c == '?' || c == ';' || c == ',' || c == '/'
+        ).count();
+        (delimiters as f32 / s.len() as f32 * 10.0).min(1.0)
+    }
+    
+    fn quote_balance(&self, s: &str) -> f32 {
+        let single = s.chars().filter(|&c| c == '\'').count();
+        let double = s.chars().filter(|&c| c == '"').count();
+        let single_balanced = single % 2 == 0;
+        let double_balanced = double % 2 == 0;
+        
+        if single_balanced && double_balanced { 1.0 }
+        else if single_balanced || double_balanced { 0.5 }
+        else { 0.0 }
+    }
+    
+    fn bracket_balance(&self, s: &str) -> f32 {
+        let mut paren = 0i32;
+        let mut square = 0i32;
+        let mut curly = 0i32;
+        
+        for c in s.chars() {
+            match c {
+                '(' => paren += 1, ')' => paren -= 1,
+                '[' => square += 1, ']' => square -= 1,
+                '{' => curly += 1, '}' => curly -= 1,
+                _ => {}
+            }
         }
         
-        // HTTP headers
-        if input.contains("HTTP/1.1") || input.contains("Content-Type") || input.contains("User-Agent") {
-            score += 0.2;
-        }
+        let imbalance = paren.abs() + square.abs() + curly.abs();
+        (1.0 - (imbalance as f32 / 10.0)).max(0.0)
+    }
+    
+    fn consecutive_special_ratio(&self, s: &str) -> f32 {
+        if s.len() < 2 { return 0.0; }
+        let mut consecutive = 0;
+        let mut prev_special = false;
         
-        // Common legitimate paths
-        if input.contains("/api/") || input.contains("/static/") || input.contains("/assets/") {
-            score += 0.2;
+        for c in s.chars() {
+            let is_special = !c.is_alphanumeric() && !c.is_whitespace();
+            if is_special && prev_special { consecutive += 1; }
+            prev_special = is_special;
         }
+        (consecutive as f32 / s.len() as f32 * 5.0).min(1.0)
+    }
+    
+    fn word_length_variance(&self, s: &str) -> f32 {
+        let words: Vec<&str> = s.split_whitespace().collect();
+        if words.len() < 2 { return 0.0; }
         
-        // JSON/XML patterns
-        if (input.contains("{") && input.contains("}")) || (input.contains("<") && input.contains(">") && !input.contains("script")) {
-            score += 0.1;
-        }
+        let lengths: Vec<f32> = words.iter().map(|w| w.len() as f32).collect();
+        let mean = lengths.iter().sum::<f32>() / lengths.len() as f32;
+        let variance = lengths.iter().map(|l| (l - mean).powi(2)).sum::<f32>() / lengths.len() as f32;
+        (variance / 50.0).min(1.0)
+    }
+
+    fn percent_encoding_density(&self, s: &str) -> f32 {
+        let percent_count = s.matches('%').count();
+        (percent_count as f32 / (s.len() as f32 + 1.0) * 10.0).min(1.0)
+    }
+    
+    fn hex_sequence_density(&self, s: &str) -> f32 {
+        let hex_patterns = s.matches("0x").count() + s.matches("\\x").count();
+        (hex_patterns as f32 / (s.len() as f32 / 10.0 + 1.0)).min(1.0)
+    }
+    
+    fn base64_likelihood(&self, s: &str) -> f32 {
+        if s.len() < 8 { return 0.0; }
         
+        let base64_chars = s.chars().filter(|c| 
+            c.is_ascii_alphanumeric() || *c == '+' || *c == '/' || *c == '='
+        ).count();
+        
+        let ratio = base64_chars as f32 / s.len() as f32;
+        let has_padding = s.ends_with('=') || s.ends_with("==");
+        let proper_length = s.len() % 4 == 0;
+        
+        let mut score = ratio * 0.5;
+        if has_padding { score += 0.25; }
+        if proper_length { score += 0.25; }
         score.min(1.0)
     }
-
-    fn calculate_payload_complexity(&self, input: &str) -> f32 {
-        let mut complexity = 0.0;
-        
-        // Length factor
-        complexity += (input.len() as f32 / 1000.0).min(0.3);
-        
-        // Special character density
-        let special_chars = input.chars().filter(|c| !c.is_alphanumeric() && !c.is_whitespace()).count();
-        complexity += (special_chars as f32 / input.len() as f32).min(0.4);
-        
-        // Nested structures
-        let nesting_score = (input.matches('(').count() + input.matches('[').count() + input.matches('{').count()) as f32;
-        complexity += (nesting_score / 10.0).min(0.3);
-        
-        complexity.min(1.0)
+    
+    fn non_ascii_ratio(&self, bytes: &[u8]) -> f32 {
+        if bytes.is_empty() { return 0.0; }
+        let non_ascii = bytes.iter().filter(|&&b| b > 127).count();
+        (non_ascii as f32 / bytes.len() as f32).min(1.0)
     }
 
-    fn calculate_composite_threat_score(&self, features: &[f32]) -> f32 {
-        // Use maximum-based scoring to avoid diluting strong signals
-        let sql_score = features[1..6].iter().fold(0.0f32, |acc, &x| acc.max(x));
-        let xss_score = features[6..11].iter().fold(0.0f32, |acc, &x| acc.max(x));
-        let path_score = features[11..16].iter().fold(0.0f32, |acc, &x| acc.max(x));
-        let cmd_score = features[16..21].iter().fold(0.0f32, |acc, &x| acc.max(x));
-        let encoding_score = features[21..26].iter().fold(0.0f32, |acc, &x| acc.max(x));
-        
-        // Take the maximum threat score across categories, with slight boost for multiple categories
-        let max_category_score = sql_score.max(xss_score).max(path_score).max(cmd_score).max(encoding_score);
-        
-        // Add small bonus for multiple threat types detected
-        let category_count = [sql_score, xss_score, path_score, cmd_score, encoding_score]
-            .iter()
-            .filter(|&&score| score > 0.1)
-            .count() as f32;
-        
-        let multi_threat_bonus = if category_count > 1.0 { 0.1 * (category_count - 1.0) } else { 0.0 };
-        
-        (max_category_score + multi_threat_bonus).min(1.0)
+    fn structural_anomaly_score(&self, features: &[f32]) -> f32 {
+        let nesting = features[16];
+        let imbalance = 1.0 - features[21];
+        let consecutive_special = features[22];
+        ((nesting + imbalance + consecutive_special) / 3.0).min(1.0)
     }
-
-    fn decode_common_encodings(&self, input: &str) -> String {
-        let mut decoded = input.to_string();
-        
-        // URL decode
-        decoded = urlencoding::decode(&decoded).unwrap_or_else(|_| std::borrow::Cow::Borrowed(&decoded)).to_string();
-        
-        // HTML entity decode (basic)
-        decoded = decoded.replace("&lt;", "<")
-                        .replace("&gt;", ">")
-                        .replace("&amp;", "&")
-                        .replace("&quot;", "\"")
-                        .replace("&#x27;", "'")
-                        .replace("&#x2F;", "/");
-        
-        decoded
+    
+    fn statistical_complexity(&self, features: &[f32]) -> f32 {
+        let entropy_complexity = features[4] * 0.3;
+        let structural_complexity = features[16] * 0.2;
+        let char_diversity = features[15] * 0.2;
+        let encoding_density = (features[24] + features[25]) * 0.15;
+        let length_factor = features[0] * 0.15;
+        (entropy_complexity + structural_complexity + char_diversity + encoding_density + length_factor).min(1.0)
     }
 }
 
 impl Default for AdvancedFeatureExtractor {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }

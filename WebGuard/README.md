@@ -6,10 +6,733 @@
 
 This project introduces a novel adaptive cybersecurity web service protection agent that combines neuromorphic computing principles with reinforcement learning to create autonomous, locally-learning endpoint protection. The system, implemented as both a Cognitive Mesh Neural Network (CMNN) and Endpoint Protection Platform (EPP), represents a first-of-its-kind architecture for real-time, self-adaptive defense.
 
+---
+
+## Operational Modes
+
+WebGuard supports multiple operational modes for different deployment scenarios:
+
+### Quick Start
+
+```bash
+# Run as HTTP reverse proxy (inline protection)
+webguard --mode proxy --listen 0.0.0.0:8080 --backend 127.0.0.1:80
+
+# Monitor nginx logs in real-time
+webguard --mode tail --log /var/log/nginx/access.log
+
+# Audit historical Apache logs
+webguard --mode audit --log /var/log/apache2/access.log --report audit.json
+
+# Run in simulation mode (testing/demo)
+webguard --mode simulate
+
+# Use configuration file
+webguard --config /etc/webguard/config.toml
+```
+
+### Mode Comparison
+
+| Mode | Description | Use Case | Learning |
+|------|-------------|----------|----------|
+| **proxy** | HTTP reverse proxy with inline analysis | Production protection | Real-time |
+| **tail** | Real-time log file monitoring | Passive monitoring | Real-time |
+| **audit** | Batch log analysis | Forensics, compliance | Optional |
+| **simulate** | Simulated telemetry | Testing, demos | Real-time |
+
+### Proxy Mode (Inline Protection)
+
+Operates as a reverse proxy, analyzing all HTTP requests before forwarding to the backend.
+
+#### Single Port Proxy
+
+```bash
+# Basic single proxy
+webguard --mode proxy --listen 0.0.0.0:8080 --backend 127.0.0.1:80
+
+# Enable blocking mode (default: monitor only)
+webguard --mode proxy --listen 0.0.0.0:8080 --backend 127.0.0.1:80 --blocking
+```
+
+#### Multi-Port Proxy with Collective Immunity
+
+**This is the recommended deployment for mixed web server environments.** All proxy mappings share the same PSI (Persistent Semantic Index), enabling **collective immunity** - a threat detected on ANY port immediately protects ALL other ports!
+
+```bash
+# Multiple proxies with collective immunity
+webguard --mode proxy \
+    -p nginx:8080:127.0.0.1:80 \
+    -p apache:8081:127.0.0.1:81 \
+    -p nodejs:3000:127.0.0.1:3001 \
+    -p admin:9000:127.0.0.1:9001 \
+    --blocking
+
+# Format: -p name:listen_port:backend_host:backend_port
+```
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                    MULTI-PORT PROXY WITH COLLECTIVE IMMUNITY                         │
+│                                                                                      │
+│   Client Requests                                                                   │
+│        │                                                                            │
+│        ▼                                                                            │
+│   ┌────────────────────────────────────────────────────────────────────────────┐   │
+│   │                         WEBGUARD PROXY CLUSTER                              │   │
+│   │                                                                              │   │
+│   │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │   │
+│   │   │  :8080       │  │  :8081       │  │  :3000       │  │  :9000       │   │   │
+│   │   │  nginx       │  │  apache      │  │  nodejs      │  │  admin       │   │   │
+│   │   └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘   │   │
+│   │          │                 │                 │                 │            │   │
+│   │          └─────────────────┼─────────────────┼─────────────────┘            │   │
+│   │                            │                 │                              │   │
+│   │                            ▼                 ▼                              │   │
+│   │               ╔═════════════════════════════════════════════╗              │   │
+│   │               ║            SHARED PSI INDEX                  ║              │   │
+│   │               ║                                              ║              │   │
+│   │               ║   Threat on nginx:8080                       ║              │   │
+│   │               ║        ↓                                     ║              │   │
+│   │               ║   Learned → Protects apache, nodejs, admin   ║              │   │
+│   │               ║                                              ║              │   │
+│   │               ╚═════════════════════════════════════════════╝              │   │
+│   │                                                                              │   │
+│   └──────────────────────────────────────────────────────────────────────────────┘   │
+│        │                 │                 │                 │                      │
+│        ▼                 ▼                 ▼                 ▼                      │
+│   ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐                  │
+│   │ nginx    │     │ Apache   │     │ Node.js  │     │ Admin    │                  │
+│   │ :80      │     │ :81      │     │ :3001    │     │ :9001    │                  │
+│   └──────────┘     └──────────┘     └──────────┘     └──────────┘                  │
+│                                                                                      │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Example: How Collective Immunity Works**
+
+1. Attacker sends SQL injection to nginx on port 8080
+2. WebGuard detects threat, learns the pattern
+3. Pattern is stored in shared PSI
+4. Same attacker (or different attacker) tries same attack on Apache port 8081
+5. **Attack is BLOCKED immediately** - Apache proxy queries the shared PSI and finds the threat pattern learned from nginx!
+
+#### Multi-Port Config File
+
+For complex deployments, use a TOML config file:
+
+```toml
+# /etc/webguard/webguard.toml
+mode = "proxy"
+
+[proxy]
+blocking_mode = true
+block_threshold = 0.7
+timeout_secs = 30
+
+[[proxy.mappings]]
+name = "nginx_main"
+listen_addr = "0.0.0.0:8080"
+backend_addr = "127.0.0.1:80"
+server_type = "nginx"
+
+[[proxy.mappings]]
+name = "apache_legacy"
+listen_addr = "0.0.0.0:8081"
+backend_addr = "127.0.0.1:81"
+server_type = "apache"
+
+[[proxy.mappings]]
+name = "api_server"
+listen_addr = "0.0.0.0:3000"
+backend_addr = "127.0.0.1:3001"
+server_type = "nodejs"
+
+[[proxy.mappings]]
+name = "admin_panel"
+listen_addr = "0.0.0.0:9000"
+backend_addr = "127.0.0.1:9001"
+server_type = "generic"
+```
+
+Run with:
+```bash
+webguard --config /etc/webguard/webguard.toml
+```
+
+### Tail Mode (Real-time Monitoring)
+
+Monitors web server log files in real-time, analyzing new entries as they appear:
+
+```bash
+# Monitor single log file
+webguard --mode tail --log /var/log/nginx/access.log
+
+# Monitor multiple log files
+webguard --mode tail --log /var/log/nginx/access.log --log /var/log/nginx/error.log
+
+# Specify log format
+webguard --mode tail --log /var/log/apache2/access.log --format apache
+
+# Auto-detect format (default)
+webguard --mode tail --log /var/log/nginx/access.log --format auto
+```
+
+**Supported Log Formats:**
+- `nginx` - nginx combined format
+- `apache` - Apache combined format
+- `json` - JSON logs (one object per line)
+- `auto` - Auto-detect format (default)
+
+### Audit Mode (Forensic Analysis)
+
+Batch-analyzes historical log files to identify threats and generate reports:
+
+```bash
+# Basic audit with JSON report
+webguard --mode audit --log /var/log/nginx/access.log.1 --report audit.json
+
+# Audit with HTML report
+webguard --mode audit --log /var/log/apache2/access.log --report audit.html --report-format html
+
+# Audit multiple files with glob pattern
+webguard --mode audit --log "/var/log/nginx/access.log*" --report audit.json
+
+# Enable learning from audit (update threat knowledge)
+webguard --mode audit --log /var/log/nginx/access.log --learn --report audit.json
+
+# Filter by time range
+webguard --mode audit --log /var/log/nginx/access.log \
+  --time-start 2024-01-01T00:00:00Z \
+  --time-end 2024-01-31T23:59:59Z \
+  --report january_audit.json
+```
+
+**Report Formats:**
+- `json` - Detailed JSON report (default)
+- `csv` - CSV export of threats
+- `html` - Interactive HTML report
+- `markdown` - Markdown report
+
+**Example Audit Report Output:**
+```
+WebGuard Audit Report
+Generated: 2024-01-15T10:30:00Z
+
+Summary:
+  - Total Requests: 1,234,567
+  - Confirmed Threats: 42
+  - Likely Threats: 156
+  - Suspicious: 1,203
+  - Unique IPs: 8,432
+
+Top Threats:
+| Time | IP | Request | Score |
+|------|----|---------| ------|
+| 2024-01-14 15:23:45 | 192.168.1.100 | GET /admin?id=1' OR 1=1-- | 0.95 |
+| 2024-01-14 16:01:12 | 10.0.0.50 | POST /login (sqlmap) | 0.92 |
+
+Recommendations:
+- CRITICAL: 42 confirmed threats detected. Immediate investigation required.
+- Consider blocking IP 192.168.1.100 (23 threats, 456 total requests)
+```
+
+### Configuration File
+
+For complex deployments, use a TOML configuration file:
+
+```toml
+# /etc/webguard/config.toml
+
+# Operational mode
+mode = "tail"
+
+# Logging level
+log_level = "info"
+
+# Proxy mode configuration
+[proxy]
+listen_addr = "0.0.0.0:8080"
+backend_addr = "127.0.0.1:80"
+blocking_mode = true
+block_threshold = 0.7
+timeout_secs = 30
+
+# Tail mode configuration
+[tail]
+log_paths = ["/var/log/nginx/access.log", "/var/log/nginx/error.log"]
+format = "auto"
+follow_rotation = true
+poll_interval_ms = 100
+
+# Audit mode configuration
+[audit]
+log_paths = ["/var/log/nginx/access.log.1"]
+report_path = "./webguard_audit_report.json"
+report_format = "json"
+min_threat_score = 0.3
+learn_from_audit = false
+
+# Persistence configuration
+[persistence]
+enabled = true
+data_dir = "/var/lib/webguard"
+auto_save_interval_secs = 300
+load_on_startup = true
+compress = true
+
+# Server types to register
+server_types = ["nginx", "apache"]
+
+# Metrics endpoint
+metrics_enabled = true
+metrics_addr = "127.0.0.1:9090"
+```
+
+### Persistence
+
+WebGuard automatically saves and loads its learned state:
+
+```bash
+# Specify data directory
+webguard --mode tail --log /var/log/nginx/access.log --data-dir /var/lib/webguard
+
+# Disable persistence
+webguard --mode proxy --no-persist
+
+# State is automatically saved every 5 minutes and on shutdown
+# State includes:
+#   - PSI index (long-term memory)
+#   - Hebbian connections
+#   - Threat/benign prototypes
+#   - Host aggression level
+```
+
+---
+
+## Solving the Von Neumann Problem: Harvard Architecture for Security
+
+### The Fundamental Problem
+
+Traditional Von Neumann architecture stores **code and data in the same memory space**, making them indistinguishable. This architectural flaw is the root cause of virtually all injection attacks:
+
+| Attack Type | Von Neumann Exploitation |
+|-------------|-------------------------|
+| **SQL Injection** | Data becomes database instructions |
+| **XSS** | Data becomes executable JavaScript |
+| **Command Injection** | Data becomes shell commands |
+| **Buffer Overflow** | Data becomes machine instructions |
+| **Deserialization** | Data becomes object instantiation |
+
+**The core question**: How do we determine what data *means* without potentially *executing* it?
+
+### The Harvard Solution
+
+WebGuard implements a **Harvard Architecture** approach to security—physically and logically separating **semantic analysis** (understanding meaning) from **execution** (taking action):
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                      HARVARD ARCHITECTURE FOR SECURITY                         ║
+║                      (Semantic-Execution Separation)                           ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║                                                                                ║
+║   ┌─────────────────────────────────────────────────────────────────────────┐ ║
+║   │                        SEMANTIC LAYER                                    │ ║
+║   │                  (Harvard "Data Memory" Analog)                          │ ║
+║   │                                                                          │ ║
+║   │   ┌─────────────┐    ┌──────────────┐    ┌─────────────────┐           │ ║
+║   │   │   N-gram    │    │ Statistical  │    │   Semantic      │           │ ║
+║   │   │  Embedding  │ →  │  Features    │ →  │   Memory        │           │ ║
+║   │   │  Learner    │    │ (Entropy,    │    │  (Learned       │           │ ║
+║   │   │             │    │  Structure)  │    │   Patterns)     │           │ ║
+║   │   └─────────────┘    └──────────────┘    └─────────────────┘           │ ║
+║   │                                                                          │ ║
+║   │   INVARIANTS:                                                            │ ║
+║   │   • Analyzes MEANING without execution                                   │ ║
+║   │   • Pure functions - no side effects                                     │ ║
+║   │   • CANNOT trigger system actions                                        │ ║
+║   │   • Output: SemanticVerdict ONLY                                         │ ║
+║   │                                                                          │ ║
+║   └─────────────────────────────────────────────────────────────────────────┘ ║
+║                                      │                                         ║
+║                                      │ SemanticVerdict                         ║
+║                                      │ (threat_score, confidence,              ║
+║                                      │  semantic_class, analysis_hash)         ║
+║                                      ▼                                         ║
+║   ══════════════════════════════════════════════════════════════════════════  ║
+║                            HARVARD BOUNDARY                                    ║
+║              No raw data crosses this line — only semantic verdicts            ║
+║   ══════════════════════════════════════════════════════════════════════════  ║
+║                                      │                                         ║
+║                                      ▼                                         ║
+║   ┌─────────────────────────────────────────────────────────────────────────┐ ║
+║   │                       EXECUTION LAYER                                    │ ║
+║   │                (Harvard "Instruction Memory" Analog)                     │ ║
+║   │                                                                          │ ║
+║   │   ┌─────────────┐    ┌──────────────┐    ┌─────────────────┐           │ ║
+║   │   │   Policy    │    │  Actuators   │    │  Web Server     │           │ ║
+║   │   │  (Verdict → │ →  │ (Throttle,   │ →  │  (nginx, IIS)   │           │ ║
+║   │   │   Action)   │    │  Isolate,    │    │                 │           │ ║
+║   │   │             │    │  Restart)    │    │                 │           │ ║
+║   │   └─────────────┘    └──────────────┘    └─────────────────┘           │ ║
+║   │                                                                          │ ║
+║   │   INVARIANTS:                                                            │ ║
+║   │   • Acts on verdicts, NEVER on raw data                                  │ ║
+║   │   • CANNOT analyze request content                                       │ ║
+║   │   • Input: SemanticVerdict ONLY                                          │ ║
+║   │   • Output: System actions                                               │ ║
+║   │                                                                          │ ║
+║   └─────────────────────────────────────────────────────────────────────────┘ ║
+║                                                                                ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+```
+
+### Why This Solves Von Neumann
+
+| Von Neumann Problem | Harvard Solution |
+|---------------------|------------------|
+| Data can become code | Data stays in semantic layer, only verdicts cross boundary |
+| Cannot know meaning without execution | Semantic analysis extracts meaning via statistics, not execution |
+| Malicious input corrupts processing | Semantic layer is pure—cannot be influenced by content |
+| Single memory space for code/data | Logical separation enforced by type system |
+
+### The SemanticVerdict Bridge
+
+The **only** data that crosses the Harvard boundary is the `SemanticVerdict`:
+
+```rust
+pub struct SemanticVerdict {
+    pub threat_score: f32,        // Learned semantic threat level [0.0, 1.0]
+    pub confidence: f32,          // Analysis confidence [0.0, 1.0]
+    pub semantic_class: SemanticClass,  // Threat | Benign | Unknown | Anomalous
+    pub analysis_hash: u64,       // Proof of semantic processing
+    pub experience_basis: usize,  // Training examples informing verdict
+}
+```
+
+**Critical property**: The `SemanticVerdict` contains **NO raw request data**—only derived semantic properties. The execution layer physically cannot access the original input.
+
+### Deterministic Semantic Normalizer
+
+Before semantic analysis, WebGuard applies **deterministic normalization** to handle encoding obfuscation—a critical capability that traditional pattern-matching cannot achieve:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    THE OBFUSCATION PROBLEM                       │
+│                                                                  │
+│   All of these are semantically IDENTICAL:                       │
+│                                                                  │
+│     ' OR 1=1--                     (raw)                        │
+│     %27%20OR%201%3D1--             (URL encoded)                │
+│     &#x27; OR 1=1--                (HTML entity)                │
+│     %2527%2520OR%25201%253D1--     (double encoded)             │
+│     '/**/OR/**/1=1--               (comment injection)          │
+│                                                                  │
+│   Without normalization: 5 different patterns to learn          │
+│   With normalization: 1 canonical pattern                       │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Why Not Use a MicroGPT for Normalization?**
+
+| Aspect | MicroGPT Approach | Our Deterministic Normalizer |
+|--------|-------------------|------------------------------|
+| Determinism | ❌ Stochastic (temperature) | ✅ Same input → same output always |
+| Pre-trained knowledge | ❌ Encodes attack patterns | ✅ Just decoding rules |
+| Attack surface | ❌ Prompt injection risk | ✅ No prompts, no injection |
+| Latency | ❌ 10-100ms | ✅ <1ms |
+| Harvard compliance | ⚠️ Questionable | ✅ Pure semantic transformation |
+
+**Normalization Pipeline:**
+
+```
+Raw Bytes
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 1: Multi-Encoding Decode (iterative until stable)        │
+│  • URL decode: %27 → '                                          │
+│  • HTML entities: &lt; → <, &#x27; → '                          │
+│  • Unicode escapes: \u0027 → '                                  │
+│  • Handles double/triple encoding automatically                  │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 2: Syntax Normalization                                   │
+│  • Collapse whitespace: "a    b" → "a b"                        │
+│  • Remove null bytes and control characters                      │
+│  • Normalize quote variants: ' ' ` → '                          │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 3: Case Normalization (Context-Aware)                     │
+│  • SQL keywords: SELECT → select                                 │
+│  • HTML tags: <SCRIPT> → <script>                               │
+│  • Preserves case in string literals                             │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+Canonical Form → N-gram Embedding → Semantic Analysis
+```
+
+### True Self-Learning (No Predefined Patterns)
+
+Unlike signature-based systems, WebGuard has **ZERO hard-coded attack patterns**:
+
+| What We DON'T Have | What We DO Have |
+|-------------------|-----------------|
+| ❌ SQL injection regex | ✅ N-gram frequency analysis |
+| ❌ XSS pattern matching | ✅ Character class distributions |
+| ❌ Whitelists of "safe" paths | ✅ Structural entropy metrics |
+| ❌ Blacklists of "bad" keywords | ✅ Learned threat/benign prototypes |
+
+The system learns what constitutes a threat **entirely through reinforcement feedback**—it starts with zero knowledge and develops understanding through experience.
+
+### Combined Architecture Benefits
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    COMPLETE SEMANTIC PROCESSING PIPELINE                     │
+│                                                                              │
+│   Raw Request                                                                │
+│        │                                                                     │
+│        ▼                                                                     │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  SEMANTIC NORMALIZER (Deterministic)                                 │   │
+│   │  • Decodes all encoding layers                                       │   │
+│   │  • Produces canonical form                                           │   │
+│   │  • 100% deterministic, <1ms latency                                  │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│        │                                                                     │
+│        ▼                                                                     │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  N-GRAM EMBEDDING (Self-Learning)                                    │   │
+│   │  • Extracts patterns from normalized input                           │   │
+│   │  • No predefined attack signatures                                   │   │
+│   │  • Learns through reinforcement                                      │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│        │                                                                     │
+│        ▼                                                                     │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  SEMANTIC MEMORY (Hebbian + Contrastive)                             │   │
+│   │  • Compares to learned threat/benign prototypes                      │   │
+│   │  • Experience-weighted similarity                                    │   │
+│   │  • Produces SemanticVerdict                                          │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│        │                                                                     │
+│        ▼                                                                     │
+│   SemanticVerdict (threat_score, confidence, semantic_class)                │
+│                                                                              │
+│   ════════════════════ HARVARD BOUNDARY ════════════════════════════════   │
+│                                                                              │
+│   Policy → Actuators → System Actions                                       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Benefits of This Architecture:**
+
+1. **Obfuscation Resistant**: Encoding tricks don't evade detection
+2. **Self-Learning**: No predefined attack patterns to maintain
+3. **Deterministic**: Reproducible security decisions
+4. **Harvard Compliant**: Clean separation of semantic analysis from execution
+5. **Low Latency**: Normalization adds <1ms overhead
+6. **No Attack Surface**: Unlike GPT, no prompt injection risk
+
+---
+
+## Collective Immunity: One Process Learns, ALL Processes Protect
+
+WebGuard implements **collective immunity** through the PSI (Persistent Semantic Index) with memory-on-memory one-shot learning. When one web server process detects a threat, ALL other processes on the host can immediately recognize it.
+
+### How It Works
+
+```
+TIME T1: Process A (nginx worker 1001) detects SQL injection
+══════════════════════════════════════════════════════════════
+
+┌─────────────────┐     Malicious Request
+│   nginx_1001    │◄────"SELECT * FROM users WHERE id=1 OR 1=1--"
+│  (Process A)    │
+│                 │     1. Semantic analysis → embedding
+│  BDH Memory:    │     2. Classify as THREAT (valence: 0.85)
+│  [threat_vec]   │     3. Store in local BDH memory
+│  valence: 0.85  │     4. Cross-service learning triggered
+└────────┬────────┘
+         │
+         │ cross_service_learning() - IMMEDIATE propagation
+         │
+         ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│   nginx_1002    │  │   nginx_1003    │  │   nginx_1004    │
+│  (Process B)    │  │  (Process C)    │  │  (Process D)    │
+│  [threat_vec]   │  │  [threat_vec]   │  │  [threat_vec]   │
+│  valence: 0.68  │  │  valence: 0.68  │  │  valence: 0.68  │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+      ✓ Protected       ✓ Protected         ✓ Protected
+
+
+TIME T2: Consolidation to shared PSI with one_shot_learn()
+══════════════════════════════════════════════════════════════
+
+┌─────────────────┐                    ┌──────────────────────────────┐
+│   nginx_1001    │───consolidate───►  │      SHARED PSI INDEX        │
+│  High-quality   │                    │                              │
+│  threat pattern │                    │  one_shot_learn() creates:   │
+└─────────────────┘                    │  • Hebbian connections to    │
+                                       │    similar threat patterns   │
+                                       │  • Memory-on-memory updates  │
+                                       │                              │
+                                       │  ┌───────┐─0.8─┌───────┐    │
+                                       │  │ SQL   │←───→│  XSS  │    │
+                                       │  │ Inj.  │     │ Threat│    │
+                                       │  └───────┘     └───────┘    │
+                                       │      │              │        │
+                                       │      └──────┬───────┘        │
+                                       │    Hebbian Connections       │
+                                       └──────────────────────────────┘
+
+
+TIME T3: NEW process queries PSI - COLLECTIVE IMMUNITY!
+══════════════════════════════════════════════════════════════
+
+┌─────────────────┐                    ┌──────────────────────────────┐
+│   nginx_2001    │                    │      SHARED PSI INDEX        │
+│  (NEW Process)  │                    │                              │
+│                 │───query───────────►│  search_with_associations()  │
+│  Empty BDH!     │                    │  returns: SQL injection      │
+│  Never saw the  │◄──THREAT FOUND!───│  similarity: 0.92            │
+│  attack before  │                    │  valence: 0.85 (THREAT)      │
+│                 │                    │                              │
+│  Action: BLOCK  │                    │  + Associated threats via    │
+└─────────────────┘                    │    spreading activation      │
+                                       └──────────────────────────────┘
+
+Result: New process BLOCKS the attack without ever having seen it!
+```
+
+### Key Capabilities
+
+| Feature | Method | Description |
+|---------|--------|-------------|
+| **Immediate Cross-Process** | `cross_service_learning()` | Threat propagates to sibling processes instantly |
+| **One-Shot Learning** | `one_shot_learn()` | Single example creates associations with similar memories |
+| **Memory-on-Memory** | `reinforce_with_propagation()` | Reinforcing A also strengthens connected B, C |
+| **Associative Retrieval** | `search_with_associations()` | Query returns related threats via spreading activation |
+| **Collective Query** | `query_collective_memory()` | Search ALL process memories + shared PSI |
+
+### Security-First Propagation
+
+Threat patterns propagate **asymmetrically** to prioritize security:
+
+| Pattern Type | Propagation Strength | Rationale |
+|--------------|---------------------|-----------|
+| **Threat** | 2x multiplier | Missing threats is unacceptable |
+| **Benign** | 0.5x multiplier | False positives are less critical |
+
+**Cross-Contamination Prevention**: Threat reinforcement does NOT propagate to benign patterns and vice versa—this prevents a benign pattern from accidentally "diluting" threat detection.
+
+### Server-Agnostic Protection: nginx, Apache, IIS, Node.js
+
+Collective immunity works **across different web server types** on the same host. The neuromorphic architecture doesn't care which server detected the threat:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    MIXED WEB SERVER ENVIRONMENT                                  │
+│                                                                                  │
+│    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│    │    nginx     │  │    Apache    │  │     IIS      │  │   Node.js    │      │
+│    │   :8080      │  │    :80       │  │    :443      │  │   :3000      │      │
+│    │  ecommerce   │  │    blog      │  │    admin     │  │     api      │      │
+│    └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
+│           │                 │                 │                 │               │
+│           │    SQL injection detected by nginx:8080             │               │
+│           │    "SELECT * FROM users WHERE id=1 OR 1=1--"        │               │
+│           │                 │                 │                 │               │
+│           ▼                 ▼                 ▼                 ▼               │
+│    ┌─────────────────────────────────────────────────────────────────────┐     │
+│    │                     SEMANTIC EMBEDDING                               │     │
+│    │                                                                      │     │
+│    │   The embedding captures MEANING, not server-specific format:       │     │
+│    │   • N-gram patterns: "OR 1", "1=1", "--"                            │     │
+│    │   • Structural features: entropy, character distribution            │     │
+│    │   • Positional features: parameter boundary patterns                │     │
+│    │                                                                      │     │
+│    │   SAME attack → SAME embedding regardless of server type!           │     │
+│    │                                                                      │     │
+│    └─────────────────────────────────────────────────────────────────────┘     │
+│                                    │                                            │
+│                                    ▼                                            │
+│    ╔═════════════════════════════════════════════════════════════════════╗     │
+│    ║                        SHARED PSI INDEX                              ║     │
+│    ║                                                                      ║     │
+│    ║   Threat learned by nginx → protects Apache, IIS, Node.js          ║     │
+│    ║   Threat learned by Apache → protects nginx, IIS, Node.js          ║     │
+│    ║   Threat learned by IIS → protects nginx, Apache, Node.js          ║     │
+│    ║                                                                      ║     │
+│    ║   Protection is "coincidental" - emerges from architecture:         ║     │
+│    ║   • Semantic embeddings are server-agnostic                         ║     │
+│    ║   • Memory is shared, not siloed by server type                    ║     │
+│    ║   • Learning propagates uniformly to ALL services                  ║     │
+│    ║                                                                      ║     │
+│    ╚═════════════════════════════════════════════════════════════════════╝     │
+│                                    │                                            │
+│                                    ▼                                            │
+│    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│    │    nginx     │  │    Apache    │  │     IIS      │  │   Node.js    │      │
+│    │  ✓ PROTECTED │  │  ✓ PROTECTED │  │  ✓ PROTECTED │  │  ✓ PROTECTED │      │
+│    └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘      │
+│                                                                                  │
+│                    ONE SERVER LEARNS → ALL SERVERS PROTECT                      │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Why This Works:**
+
+| What Matters (Semantic) | What Doesn't Matter (Server-Specific) |
+|-------------------------|---------------------------------------|
+| N-gram patterns ("OR 1=1") | nginx vs Apache vs IIS |
+| Structural entropy | Port number |
+| Character distributions | Service configuration |
+| Threat/benign valence | Request routing path |
+| Obfuscation-normalized content | Web server version |
+
+**Traditional EDR vs WebGuard:**
+
+```
+Traditional EDR:                       WebGuard (Neuromorphic):
+─────────────────                      ────────────────────────
+nginx rules → protects nginx only      ANY server detects threat
+Apache rules → protects Apache only              │
+IIS rules → protects IIS only                    ▼
+                                       SEMANTIC EMBEDDING (server-agnostic)
+                                                 │
+                                                 ▼
+                                            Shared PSI
+                                                 │
+                                                 ▼
+                                       ALL servers protected
+```
+
+### Self-Learning Compliance
+
+All collective immunity mechanisms are **fully self-learning**:
+
+- ✅ No predefined threat signatures
+- ✅ Connections form through experience (Hebbian learning)
+- ✅ Valences are learned, not hard-coded
+- ✅ Propagation strengths adapt through reinforcement
+- ✅ Server-agnostic protection emerges from architecture (not coded explicitly)
+
+---
+
 ## Core Innovation
 
 ### The Unique Combination
-The system fuses six key components that have rarely been integrated:
+The system fuses seven key components that have rarely been integrated:
 - **True Bidirectional Hebbian Learning**: "Neurons that fire together, wire together" - explicit connection weights between memory traces that strengthen with co-activation and reward
 - **Reinforcement-Modulated Plasticity**: Reward/punishment signals directly modulate Hebbian learning rates and connection strengths in real-time
 - **Persistent Semantic Index (PSI)**: Long-term memory structure storing reinforced associations across unlimited time horizons
@@ -63,14 +786,14 @@ The system fuses six key components that have rarely been integrated:
    - **Unsupervised Anomaly Detection**: Isolation Forest algorithm identifies anomalous patterns without requiring labeled training data
    - **Experiential Contributor**: Anomaly detection results contribute to cognitive model as experiential learning data
    - **PSI Semantic Integration**: Anomaly patterns are semantically encoded in PSI for long-term memory consolidation
-   - **BDH Memory Enhancement**: Experiential context from anomalies enriches Hebbian memory with fear mitigation capabilities
-   - **EQ/IQ Regulation**: Emotional-analytical balance prevents fear-based decision paralysis from negative experiences
-   - **Fear Mitigation System**: Prevents negative anomaly experiences from causing system paralysis while maintaining learning
-   - **Adaptive Threshold Management**: Dynamic anomaly thresholds based on experiential learning and cognitive feedback
-   - **Security-First Approach**: Configured to prefer false positives over false negatives for maximum protection
+   - **BDH Memory Enhancement**: Experiential context from anomalies enriches Hebbian memory with threat pattern amplification
+   - **EQ/IQ Regulation**: IQ-biased (accuracy-focused) for security systems - threat detection prioritized over user convenience
+   - **Threat Pattern Amplification**: Negative (threat) experiences are AMPLIFIED in memory, not mitigated - appropriate "fear" of threats
+   - **Adaptive Threshold Management**: Dynamic anomaly thresholds with asymmetric adjustments favoring threat detection
+   - **Security-First Approach**: False negatives (missed threats) are far more costly than false positives - asymmetric learning rates enforce this
 
 6. **Adaptive Defense**:
-   - ValenceController adjusts aggression based on reward history and EQ/IQ balance
+   - ValenceController INCREASES aggression when threats are detected (security ratchet effect)
    - Produces actuations that modify the runtime environment:
      - Process respawn/reseed
      - Seccomp/job object changes
@@ -93,10 +816,10 @@ The system fuses six key components that have rarely been integrated:
 | **Platform** | Vendor-specific | Cross-process (multiple processes of same web server type) |
 | **Feedback** | Often ignored | Integrated as reinforcement |
 | **False Negatives** | Manual analysis | Automated retrospective learning |
-| **Intelligence** | Single-mode analysis | Dual EQ/IQ balanced reasoning |
-| **Mistake Learning** | Limited/manual | Enhanced 2.0x learning rate |
+| **Intelligence** | Single-mode analysis | IQ-biased (accuracy-focused) for security |
+| **Mistake Learning** | Limited/manual | Asymmetric: FN 6x stronger than FP learning |
 | **Anomaly Detection** | Supervised/threshold-based | Unsupervised Isolation Forest with experiential learning |
-| **Fear Management** | No consideration | EQ/IQ regulated fear mitigation prevents decision paralysis |
+| **Threat Response** | Equal FP/FN treatment | Security-first: FN >> FP in learning importance |
 
 ## Key Innovations
 

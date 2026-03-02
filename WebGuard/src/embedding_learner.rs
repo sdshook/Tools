@@ -33,10 +33,20 @@ const SKIPGRAM_MAX_DIST: usize = 8;
 const PATTERN_LEARNING_RATE: f32 = 0.1;
 
 /// Learning rate for error corrections (stronger - learn more from mistakes)
-const ERROR_LEARNING_RATE: f32 = 0.3;
+/// SECURITY-FIRST: Errors (especially false negatives) get aggressive learning
+const ERROR_LEARNING_RATE: f32 = 0.5;
 
 /// Threat class weight (to counter class imbalance)
-const THREAT_WEIGHT: f32 = 5.0;
+/// SECURITY-FIRST: Threats weighted 8x higher than benign for reliable detection
+const THREAT_WEIGHT: f32 = 8.0;
+
+/// False negative penalty multiplier - missing threats is CRITICAL
+/// SECURITY-FIRST: FN > FP, but both must be learned effectively
+const FALSE_NEGATIVE_PENALTY: f32 = 3.0;
+
+/// False positive penalty multiplier - blocking benign is less critical but still important
+/// Changed from 1.5 to 2.0 for more effective FP reduction while maintaining security-first
+const FALSE_POSITIVE_PENALTY: f32 = 2.0;
 
 /// Full request memory for BDH-style retrieval
 #[derive(Clone, Debug)]
@@ -384,14 +394,27 @@ impl EmbeddingLearner {
         }
     }
     
-    /// Learn from an error (NEGATIVE REINFORCEMENT - stronger learning)
-    pub fn learn_from_error(&mut self, request: &str, _predicted_threat: bool, actual_threat: bool) {
+    /// Learn from an error (NEGATIVE REINFORCEMENT - ASYMMETRIC learning)
+    /// SECURITY-FIRST: False negatives (missed threats) trigger MUCH stronger learning than false positives
+    pub fn learn_from_error(&mut self, request: &str, predicted_threat: bool, actual_threat: bool) {
         let embedding = self.embed(request);
         
-        // Errors get STRONGER learning (biological: we learn more from mistakes)
-        // False negatives (missed threats) are CRITICAL in security
-        let strength = if actual_threat { 3.0 } else { 1.5 };
-        let lr = ERROR_LEARNING_RATE * strength;
+        // SECURITY-FIRST but EFFECTIVE error learning
+        // - False negatives (missed threats) = CRITICAL - higher penalty
+        // - False positives (false alarms) = IMPORTANT - must also learn effectively
+        // - Ratio is 3:2 (1.5:1) not 6.67:1 as before
+        let (strength, lr) = if actual_threat && !predicted_threat {
+            // FALSE NEGATIVE: Missed a real threat
+            // Strong learning to ensure similar patterns are caught
+            (FALSE_NEGATIVE_PENALTY, ERROR_LEARNING_RATE * FALSE_NEGATIVE_PENALTY)
+        } else if !actual_threat && predicted_threat {
+            // FALSE POSITIVE: Blocked benign traffic
+            // Also learn effectively - removed the 0.5 multiplier that was suppressing FP learning
+            (FALSE_POSITIVE_PENALTY, ERROR_LEARNING_RATE * FALSE_POSITIVE_PENALTY)
+        } else {
+            // Shouldn't happen (called on errors) but handle gracefully
+            (1.0, ERROR_LEARNING_RATE)
+        };
         
         // 1. Strong update to n-gram associations
         self.update_ngram_associations(request, actual_threat, strength);
@@ -399,10 +422,10 @@ impl EmbeddingLearner {
         // 2. Strong contrastive update
         self.contrastive_update(request, actual_threat, lr);
         
-        // 3. Update prototype
+        // 3. Update prototype - more aggressive for threats
         self.update_prototype(&embedding, actual_threat);
         
-        // 4. Store corrected classification in memory
+        // 4. Store corrected classification in memory with high confidence
         self.add_to_memory(embedding, actual_threat, strength);
         
         // Update counts

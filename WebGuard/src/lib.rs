@@ -1,16 +1,31 @@
+// Core architecture - Harvard semantic/execution separation
+pub mod harvard_architecture;
+
+// Configuration
 pub mod config;
+
+// Semantic Layer (Harvard "Data Memory")
+pub mod semantic_normalizer;  // Pre-processing: deterministic normalization
 pub mod featurizer;
 pub mod advanced_feature_extractor;
-pub mod adaptive_threshold;
+pub mod embedding_learner;
 pub mod memory_engine;
-pub mod mesh_cognition;
+pub mod experiential_anomaly;
+
+// Execution Layer (Harvard "Instruction Memory")  
 pub mod policy;
-pub mod sensors;
 pub mod actuators;
-pub mod evidence;
-pub mod persistence;
+pub mod adaptive_threshold;
+
+// Learning Systems
 pub mod eq_iq_regulator;
 pub mod retrospective_learning;
-pub mod experiential_anomaly;
-pub mod embedding_learner;
+
+// Infrastructure
+pub mod mesh_cognition;
+pub mod sensors;
+pub mod evidence;
+pub mod persistence;
+
+// Main System
 pub mod webguard_system;

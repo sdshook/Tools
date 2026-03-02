@@ -164,8 +164,14 @@ impl HostMeshCognition {
                                     service.service_type.as_str().to_string(),
                                     format!("pid_{}", service.pid),
                                 ],
+                                last_activation: std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_secs_f64())
+                                    .unwrap_or(0.0),
+                                cumulative_reward: trace.cum_reward,
                             };
-                            psi.add(psi_entry);
+                            // Use one_shot_learn for memory-on-memory propagation
+                            psi.one_shot_learn(psi_entry, trace.cum_reward);
                         }
                         info!("Consolidated {} patterns from {} to shared PSI", 
                               candidate_count, source_service_id);
@@ -212,11 +218,15 @@ impl HostMeshCognition {
     pub fn get_host_aggression(&self) -> f32 {
         self.host_valence.lock().unwrap().aggression
     }
+    
+    pub fn set_host_aggression(&mut self, aggression: f32) {
+        self.host_valence.lock().unwrap().aggression = aggression.clamp(0.0, 1.0);
+    }
 
-    pub fn get_active_services(&self) -> Vec<String> {
+    pub fn get_active_services(&self) -> Vec<(String, WebServiceType)> {
         self.services.iter()
             .filter(|(_, service)| service.active)
-            .map(|(id, _)| id.clone())
+            .map(|(id, service)| (id.clone(), service.service_type.clone()))
             .collect()
     }
 
