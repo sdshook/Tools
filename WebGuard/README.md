@@ -896,6 +896,9 @@ python tests/scripts/generate_visualizations.py
 ```
 
 ### Test Results
+
+![WebGuard Evaluation Results](evaluation_results/webguard_evaluation.png)
+
 The latest comprehensive evaluation (138 samples/pass, 10 learning passes) demonstrates:
 
 | Metric | Baseline (Pass 0) | Final (Pass 9) | Improvement |
