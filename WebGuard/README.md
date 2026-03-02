@@ -1450,3 +1450,79 @@ WebGuard/
 └── webguard_data/                      # Runtime persistence directory
 ```
 
+## Future Potential
+
+### Federated Community Memory Network
+
+The BHSM architecture describes a federated learning capability that would enable WebGuard instances to share threat intelligence across a network of peer nodes. This feature is not currently implemented but represents a significant opportunity for enhanced collective defense.
+
+#### Architecture Overview
+
+```
+                    ┌─────────────────┐
+                    │  Mentor Node    │
+                    │  (Pre-warmed    │
+                    │   threat DB)    │
+                    └────────┬────────┘
+                             │ Authenticated
+                             │ PSI Updates
+            ┌────────────────┼────────────────┐
+            │                │                │
+            ▼                ▼                ▼
+    ┌───────────────┐ ┌───────────────┐ ┌───────────────┐
+    │  WebGuard     │ │  WebGuard     │ │  WebGuard     │
+    │  Node A       │◄─►  Node B       │◄─►  Node C       │
+    │  (nginx:80)   │ │  (apache:443) │ │  (IIS:8080)   │
+    └───────────────┘ └───────────────┘ └───────────────┘
+            │                │                │
+            └────────────────┴────────────────┘
+                    Peer PSI Sharing
+```
+
+#### Key Components Required
+
+1. **Peer Discovery & Registration**
+   - Service announcement protocol
+   - Node capability advertisement
+   - Health monitoring and failover
+
+2. **Cryptographic Authentication**
+   - PKI-based trust chain for PSI updates
+   - Signed threat intelligence packages
+   - Replay attack prevention
+
+3. **Trust Hierarchy**
+   - **Mentor Nodes**: Elevated trust, broader threat exposure, can push pre-warmed threat patterns to new nodes
+   - **Peer Nodes**: Equal trust, share one-shot PSI updates after novel threat encounters
+   - **New Nodes**: Receive initial threat library from mentor, eliminating cold-start vulnerability
+
+4. **Network Protocol**
+   - Efficient PSI delta synchronization
+   - Bandwidth-aware update scheduling
+   - Conflict resolution for concurrent updates
+
+#### Security Properties
+
+| Property | Description |
+|----------|-------------|
+| **Cold Start Elimination** | New nodes receive pre-warmed threat models before first deployment |
+| **Network Immunization** | Novel threats propagate as immunity across peers after first contact |
+| **Attack Economics Shift** | Attacker's novelty advantage shrinks to minutes (first contact → network propagation) |
+| **Poison Resistance** | Cryptographic authentication prevents adversarial PSI injection |
+
+#### Threat Model Considerations
+
+- **Compromised Mentor**: A poisoned mentor could propagate false threat models; requires multi-mentor consensus or reputation scoring
+- **Adversarial Drift**: Patient attacker with peer access could attempt gradual PSI shift; mitigated by protected memory and consensus validation
+- **Network Partitioning**: Isolated nodes fall back to local learning; reconnection triggers catch-up synchronization
+
+#### Implementation Complexity
+
+This feature requires careful design of:
+- Distributed systems primitives (consensus, eventual consistency)
+- Cryptographic key management infrastructure
+- Network transport security (mTLS)
+- Bandwidth and latency optimization for real-time threat sharing
+
+The federated architecture fundamentally changes the economics of adversarial attack—a novel payload that evades detection at one node is classified, learned, and propagated across the network within minutes rather than waiting for human analyst intervention.
+

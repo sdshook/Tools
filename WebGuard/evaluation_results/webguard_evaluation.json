@@ -1,6 +1,6 @@
 {
   "evaluation": "WebGuard Self-Learning EDR",
-  "timestamp": "2026-03-02T20:48:49.244295325+00:00",
+  "timestamp": "2026-03-02T21:51:37.716185681+00:00",
   "threshold": 0.5,
 
   "multipass_learning": [
@@ -137,25 +137,25 @@
   ],
 
   "collective_immunity": {
-    "iis_eval": {
-      "accuracy": 1.0000,
-      "recall": 1.0000,
-      "true_positives": 63,
-      "false_negatives": 0
-    },
     "apache_eval": {
       "accuracy": 1.0000,
       "recall": 1.0000,
       "true_positives": 63,
       "false_negatives": 0
     },
-    "nginx_eval": {
+    "iis_eval": {
       "accuracy": 1.0000,
       "recall": 1.0000,
       "true_positives": 63,
       "false_negatives": 0
     },
     "node_eval": {
+      "accuracy": 1.0000,
+      "recall": 1.0000,
+      "true_positives": 63,
+      "false_negatives": 0
+    },
+    "nginx_eval": {
       "accuracy": 1.0000,
       "recall": 1.0000,
       "true_positives": 63,

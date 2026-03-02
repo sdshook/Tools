@@ -1,5 +1,10 @@
 /// Valence Controller for adaptive aggression management
-/// SECURITY-FIRST: Detecting threats should INCREASE sensitivity (aggression)
+/// 
+/// BHSM Integration:
+/// - SECURITY-FIRST: Detecting threats should INCREASE sensitivity (aggression)
+/// - High-confidence misclassifications trigger stronger penalties
+/// - The ValenceController penalizes high-confidence predictions that produce poor outcomes
+/// 
 /// The system should become MORE vigilant when threats are encountered, not less
 
 #[derive(Debug)]
@@ -8,6 +13,12 @@ pub struct ValenceController {
     pub aggression: f32, // 0.0 conservative -> 1.0 aggressive (more sensitive)
     pub threat_count: usize, // Track recent threat detections
     pub benign_count: usize, // Track recent benign classifications
+    /// BHSM: Track high-confidence misclassifications
+    high_conf_fn_count: usize, // High-confidence false negatives
+    high_conf_fp_count: usize, // High-confidence false positives
+    total_high_conf: usize,    // Total high-confidence predictions
+    /// Confidence penalty based on high-confidence errors
+    pub confidence_penalty: f32,
 }
 
 impl ValenceController {
@@ -17,6 +28,10 @@ impl ValenceController {
             aggression: init_aggr,
             threat_count: 0,
             benign_count: 0,
+            high_conf_fn_count: 0,
+            high_conf_fp_count: 0,
+            total_high_conf: 0,
+            confidence_penalty: 0.0,
         } 
     }
 
@@ -35,6 +50,58 @@ impl ValenceController {
         }
         
         self.adjust();
+    }
+    
+    /// BHSM: Record a high-confidence prediction outcome
+    /// This penalizes high-confidence predictions that produce poor outcomes
+    pub fn record_high_confidence_outcome(
+        &mut self, 
+        confidence: f32, 
+        was_false_negative: bool, 
+        was_false_positive: bool
+    ) {
+        // Only track if this was a high-confidence prediction
+        if confidence < 0.7 {
+            return;
+        }
+        
+        self.total_high_conf += 1;
+        
+        if was_false_negative {
+            self.high_conf_fn_count += 1;
+            // FN with high confidence = very bad, boost aggression significantly
+            self.aggression = (self.aggression + 0.15).min(0.95);
+        } else if was_false_positive {
+            self.high_conf_fp_count += 1;
+            // FP with high confidence = bad but less critical
+            // Small aggression reduction to avoid being too aggressive
+            self.aggression = (self.aggression - 0.02).max(0.3);
+        }
+        
+        // Update confidence penalty based on high-confidence error rate
+        self.update_confidence_penalty();
+    }
+    
+    /// Update the confidence penalty based on high-confidence error history
+    fn update_confidence_penalty(&mut self) {
+        if self.total_high_conf == 0 {
+            self.confidence_penalty = 0.0;
+            return;
+        }
+        
+        // FN errors are weighted 3x more than FP errors
+        let weighted_errors = (self.high_conf_fn_count as f32 * 3.0) 
+                            + (self.high_conf_fp_count as f32);
+        let error_rate = weighted_errors / (self.total_high_conf as f32 * 3.0);
+        
+        // Penalty scales with error rate (max 30%)
+        self.confidence_penalty = (error_rate * 0.3).min(0.3);
+    }
+    
+    /// Get adjusted confidence after applying penalty
+    /// BHSM: High-confidence predictions are penalized if we've been wrong before
+    pub fn adjust_confidence(&self, raw_confidence: f32) -> f32 {
+        raw_confidence * (1.0 - self.confidence_penalty)
     }
 
     /// Adjust aggression based on recent experience
@@ -71,8 +138,25 @@ impl ValenceController {
         if total == 0 { 0.5 } else { self.threat_count as f32 / total as f32 }
     }
     
+    /// Get high-confidence error rate
+    pub fn get_high_conf_error_rate(&self) -> f32 {
+        if self.total_high_conf == 0 {
+            0.0
+        } else {
+            (self.high_conf_fn_count + self.high_conf_fp_count) as f32 / self.total_high_conf as f32
+        }
+    }
+    
     /// Force increase aggression (e.g., after confirmed false negative)
     pub fn boost_aggression(&mut self, amount: f32) {
         self.aggression = (self.aggression + amount).min(0.95);
+    }
+    
+    /// Reset high-confidence tracking (e.g., after model update)
+    pub fn reset_high_conf_tracking(&mut self) {
+        self.high_conf_fn_count = 0;
+        self.high_conf_fp_count = 0;
+        self.total_high_conf = 0;
+        self.confidence_penalty = 0.0;
     }
 }

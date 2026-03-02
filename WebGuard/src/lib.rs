@@ -13,8 +13,11 @@ pub mod embedding_learner;
 pub mod memory_engine;
 pub mod experiential_anomaly;
 
+// Cognitive Layer - BHSM
+pub mod self_model;  // Metacognitive monitoring: coherence, confidence, arrogance
+
 // Execution Layer (Harvard "Instruction Memory")  
-pub mod policy;
+pub mod policy;  // RISC 3-action constraint: Detect, Allow, Block
 pub mod actuators;
 pub mod adaptive_threshold;
 

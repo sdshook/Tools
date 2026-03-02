@@ -9,6 +9,7 @@ use crate::eq_iq_regulator::{ExperientialBehavioralRegulator, EQIQBalance, Multi
 use crate::mesh_cognition::{HostMeshCognition, WebServiceType};
 use crate::advanced_feature_extractor::AdvancedFeatureExtractor;
 use crate::embedding_learner::EmbeddingLearner;
+use crate::self_model::{SelfModelNode, PredictionOutcome, MetacognitiveState};
 
 /// Complete WebGuard System Implementation
 /// 
@@ -16,6 +17,11 @@ use crate::embedding_learner::EmbeddingLearner;
 /// - NO hard-coded attack patterns, signatures, whitelists, or blacklists
 /// - Threat detection is learned through reinforcement feedback
 /// - Uses embedding-based representation for true experiential learning
+/// 
+/// BHSM COGNITIVE LAYER:
+/// - Self-Model Node for metacognitive monitoring (coherence, confidence, arrogance)
+/// - Pre-execution classification (BCM)
+/// - RISC 3-action constraint (Detect, Allow, Block)
 #[derive(Debug)]
 pub struct WebGuardSystem {
     /// Host-based mesh cognition system (PSI/BHSM/CMNN)
@@ -30,6 +36,8 @@ pub struct WebGuardSystem {
     pub retrospective_learning: RetrospectiveLearningSystem,
     /// EQ/IQ regulation system
     pub eq_iq_regulator: ExperientialBehavioralRegulator,
+    /// BHSM Self-Model Node: metacognitive monitoring
+    pub self_model: SelfModelNode,
     /// System configuration
     pub config: WebGuardConfig,
     /// Performance metrics
@@ -139,6 +147,7 @@ impl WebGuardSystem {
             adaptive_threshold: AdaptiveThreshold::new(),
             retrospective_learning: RetrospectiveLearningSystem::new(),
             eq_iq_regulator: ExperientialBehavioralRegulator::new(0.5, 0.5, 0.1),
+            self_model: SelfModelNode::new(),  // BHSM metacognitive monitoring
             config: WebGuardConfig::default(),
             metrics: SystemMetrics::new(),
             service_id: service_id.to_string(),
@@ -175,6 +184,10 @@ impl WebGuardSystem {
     /// SELF-LEARNING: Uses ONLY embedding-based detection.
     /// The system has NO pre-programmed knowledge of what attacks look like.
     /// All threat understanding comes from reinforcement learning.
+    /// 
+    /// BHSM INTEGRATION:
+    /// - Self-Model Node applies arrogance penalty to confidence scores
+    /// - High arrogance triggers scrutiny requirement
     pub fn analyze_request(&mut self, request: &str) -> ThreatAnalysisResult {
         let start_time = std::time::Instant::now();
         
@@ -194,19 +207,31 @@ impl WebGuardSystem {
         
         // Higher separation and more experience = higher confidence
         // With no experience, confidence is low (system hasn't learned yet)
-        let confidence = if experience < 1.0 {
+        let raw_confidence = if experience < 1.0 {
             0.1  // Low confidence when system hasn't learned
         } else {
             (separation / 2.0).min(1.0) * (experience / (experience + 10.0)).max(0.1)
         };
         
+        // BHSM: Apply Self-Model arrogance penalty to confidence
+        // High-confidence predictions that were previously wrong get penalized
+        let confidence = self.self_model.adjust_confidence(raw_confidence);
+        
+        // BHSM: Check if scrutiny is required (high arrogance + high confidence)
+        let requires_scrutiny = self.self_model.requires_scrutiny(raw_confidence);
+        
         // Determine risk level and attack types
         let risk_level = self.determine_risk_level(threat_score, confidence);
-        let detected_attack_types = if threat_score > 0.5 {
+        let mut detected_attack_types = if threat_score > 0.5 {
             vec!["potential_threat".to_string()]
         } else {
             Vec::new()
         };
+        
+        // Add scrutiny flag if needed
+        if requires_scrutiny {
+            detected_attack_types.push("scrutiny_required".to_string());
+        }
         
         let processing_time = start_time.elapsed().as_millis() as f32;
         
@@ -220,14 +245,17 @@ impl WebGuardSystem {
             self.metrics.threats_detected += 1;
         }
         
-        // Create cognitive analysis result (for compatibility)
+        // Get metacognitive state for cognitive analysis
+        let meta_state = self.self_model.get_state();
+        
+        // Create cognitive analysis result with metacognitive metrics
         let cognitive_analysis = CognitiveAnalysisResult {
             psi_valence: threat_score,
             bhsm_activation: threat_score,
             cmnn_confidence: confidence,
             learned_patterns: detected_attack_types.clone(),
-            mesh_aggression: 0.0,
-            service_consensus: confidence,
+            mesh_aggression: meta_state.arrogance,  // Use arrogance as aggression indicator
+            service_consensus: meta_state.coherence, // Use coherence as consensus
         };
         
         ThreatAnalysisResult {
@@ -239,7 +267,10 @@ impl WebGuardSystem {
             threshold_assessment: None,
             processing_time_ms: processing_time,
             memory_influence: threat_score,
-            learning_feedback: None,
+            learning_feedback: Some(format!(
+                "meta: coherence={:.2}, arrogance={:.2}, calibration={:.2}",
+                meta_state.coherence, meta_state.arrogance, meta_state.confidence_calibration
+            )),
         }
     }
 
@@ -503,9 +534,27 @@ impl WebGuardSystem {
     /// CRITICAL FOR SELF-LEARNING: Errors drive stronger updates to the embedding space
     /// - FN (missed threat): Push embedding toward threat prototype - HEAVILY weighted
     /// - FP (false alarm): Push embedding toward benign prototype - lightly weighted
+    /// 
+    /// BHSM: Records prediction outcome for Self-Model metacognitive learning
     pub fn learn_from_error(&mut self, request: &str, predicted_threat: bool, actual_threat: bool) {
-        if predicted_threat == actual_threat {
-            return; // No error to learn from
+        // Get the prediction's confidence before determining if error
+        let embedding = self.embedding_learner.embed(request);
+        let threat_score = self.embedding_learner.threat_score(&embedding);
+        let confidence = self.self_model.adjust_confidence(threat_score.max(1.0 - threat_score));
+        
+        // BHSM: Record prediction outcome for Self-Model (both correct and incorrect)
+        let was_correct = predicted_threat == actual_threat;
+        let outcome = PredictionOutcome {
+            confidence,
+            predicted_threat: threat_score,
+            was_correct,
+            was_false_negative: !predicted_threat && actual_threat,
+            was_false_positive: predicted_threat && !actual_threat,
+        };
+        self.self_model.record_outcome(outcome);
+        
+        if was_correct {
+            return; // No error to learn from (but still recorded for metacognition)
         }
         
         if !self.config.enable_experiential_learning {
@@ -522,6 +571,31 @@ impl WebGuardSystem {
         } else {
             self.metrics.false_positives += 1;
         }
+    }
+    
+    /// Record a correct prediction for metacognitive learning
+    /// This allows the Self-Model to track accuracy and calibration
+    pub fn record_correct_prediction(&mut self, request: &str, is_threat: bool) {
+        let embedding = self.embedding_learner.embed(request);
+        let threat_score = self.embedding_learner.threat_score(&embedding);
+        let confidence = self.self_model.adjust_confidence(threat_score.max(1.0 - threat_score));
+        
+        let outcome = PredictionOutcome {
+            confidence,
+            predicted_threat: threat_score,
+            was_correct: true,
+            was_false_negative: false,
+            was_false_positive: false,
+        };
+        self.self_model.record_outcome(outcome);
+        
+        // Also reinforce the correct classification
+        self.embedding_learner.learn(request, is_threat, 1.0);
+    }
+    
+    /// Get current metacognitive state from Self-Model Node
+    pub fn get_metacognitive_state(&self) -> MetacognitiveState {
+        self.self_model.get_state()
     }
     
     /// Get embedding learner statistics for monitoring learning progress

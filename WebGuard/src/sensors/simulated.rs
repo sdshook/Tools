@@ -112,18 +112,23 @@ pub async fn start_multi_service_simulator(mesh: Arc<Mutex<HostMeshCognition>>) 
                 };
                 
                 // Policy decision using host aggression
+                // BHSM RISC 3-action constraint: Detect, Allow, Block
                 let host_aggression = m.get_host_aggression();
-                let action = policy::choose_action(top_sim, avg_valence, host_aggression, 
-                                                 cfg.beta, cfg.gamma, cfg.eps_explore);
+                let blocking_enabled = true;  // Simulation mode uses blocking
+                let block_threshold = 0.7;    // Default threshold
+                let action = policy::choose_action(
+                    top_sim, 
+                    avg_valence, 
+                    host_aggression, 
+                    blocking_enabled,
+                    block_threshold
+                );
                 
                 let _pid = telemetry["pid"].as_i64().unwrap() as i32;
                 let action_str = match action {
-                    policy::Action::Log => "log",
-                    policy::Action::Notify => "notify", 
-                    policy::Action::Throttle => "throttle",
-                    policy::Action::Isolate => "isolate",
-                    policy::Action::Restart => "restart",
-                    policy::Action::SnapshotAndKill => "snapshot",
+                    policy::Action::Detect => "detect",
+                    policy::Action::Allow => "allow", 
+                    policy::Action::Block => "block",
                 };
                 
                 // Get Hebbian learning stats

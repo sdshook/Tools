@@ -214,21 +214,21 @@ impl TailAnalyzer {
                     };
                     
                     let host_aggression = m.get_host_aggression();
+                    // BHSM RISC 3-action constraint: Detect, Allow, Block
                     let action = policy::choose_action(
                         top_sim,
                         avg_valence.max(threat_score),
                         host_aggression,
-                        self.app_config.beta,
-                        self.app_config.gamma,
-                        self.app_config.eps_explore,
+                        false,  // tail mode: monitoring only, no blocking
+                        0.7,    // block threshold (not used in detect mode)
                     );
                     
                     (top_sim, avg_valence, action)
                 } else {
-                    (0.0, threat_score, policy::Action::Log)
+                    (0.0, threat_score, policy::Action::Detect)
                 }
             } else {
-                (0.0, threat_score, policy::Action::Log)
+                (0.0, threat_score, policy::Action::Detect)
             }
         };
         
