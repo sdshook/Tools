@@ -29,7 +29,6 @@ pub mod retrospective_learning;
 pub mod mesh_cognition;
 pub mod sensors;
 pub mod evidence;
-pub mod persistence;
 
 // Logging
 pub mod detection_logger;

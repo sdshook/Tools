@@ -161,6 +161,107 @@ struct PatternStats {
     ips: Vec<String>,
 }
 
+/// Attack pattern types for clustering
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+enum AttackPatternType {
+    SqlInjection,
+    CrossSiteScripting,
+    PathTraversal,
+    CommandInjection,
+    LdapInjection,
+    XPathInjection,
+    SensitiveFileAccess,
+    Reconnaissance,
+    BruteForce,
+    Malformed,
+    Other(String),
+}
+
+impl AttackPatternType {
+    fn as_str(&self) -> &str {
+        match self {
+            AttackPatternType::SqlInjection => "SQL Injection",
+            AttackPatternType::CrossSiteScripting => "Cross-Site Scripting (XSS)",
+            AttackPatternType::PathTraversal => "Path Traversal",
+            AttackPatternType::CommandInjection => "Command Injection",
+            AttackPatternType::LdapInjection => "LDAP Injection",
+            AttackPatternType::XPathInjection => "XPath Injection",
+            AttackPatternType::SensitiveFileAccess => "Sensitive File Access",
+            AttackPatternType::Reconnaissance => "Reconnaissance/Scanning",
+            AttackPatternType::BruteForce => "Brute Force Attempt",
+            AttackPatternType::Malformed => "Malformed Request",
+            AttackPatternType::Other(s) => s.as_str(),
+        }
+    }
+    
+    /// Detect pattern type from request characteristics
+    fn detect_from_request(request: &str, indicators: &[String]) -> Option<Self> {
+        let request_lower = request.to_lowercase();
+        
+        // SQL Injection indicators
+        if indicators.iter().any(|i| i.contains("SQL")) 
+           || request_lower.contains("union select")
+           || request_lower.contains("' or '")
+           || request_lower.contains("1=1")
+           || request_lower.contains("--") {
+            return Some(AttackPatternType::SqlInjection);
+        }
+        
+        // XSS indicators
+        if indicators.iter().any(|i| i.contains("script") || i.contains("HTML"))
+           || request_lower.contains("<script")
+           || request_lower.contains("javascript:")
+           || request_lower.contains("onerror=") {
+            return Some(AttackPatternType::CrossSiteScripting);
+        }
+        
+        // Path traversal
+        if indicators.iter().any(|i| i.contains("traversal"))
+           || request.contains("..")
+           || request.contains("%2e%2e")
+           || request.contains("%252e") {
+            return Some(AttackPatternType::PathTraversal);
+        }
+        
+        // Command injection
+        if request.contains("|") && (request.contains("cat") || request.contains("ls") || request.contains("id"))
+           || request.contains(";") && request_lower.contains("bash")
+           || request.contains("$(") || request.contains("`") {
+            return Some(AttackPatternType::CommandInjection);
+        }
+        
+        // LDAP injection
+        if request.contains(")(") || request.contains("*)") || request_lower.contains("ldap") {
+            return Some(AttackPatternType::LdapInjection);
+        }
+        
+        // Sensitive file access
+        if request.contains("/etc/passwd")
+           || request.contains("/etc/shadow")
+           || request.contains(".htaccess")
+           || request.contains("web.config")
+           || request.contains(".env") {
+            return Some(AttackPatternType::SensitiveFileAccess);
+        }
+        
+        // Reconnaissance
+        if request.contains("/robots.txt")
+           || request.contains("/.git")
+           || request.contains("/admin")
+           || request.contains("/backup")
+           || request.contains("/phpinfo") {
+            return Some(AttackPatternType::Reconnaissance);
+        }
+        
+        // Malformed
+        if indicators.iter().any(|i| i.contains("encoding") || i.contains("Malformed")) {
+            return Some(AttackPatternType::Malformed);
+        }
+        
+        None
+    }
+}
+
 impl AuditEngine {
     /// Create a new audit engine
     pub fn new(config: AuditConfig, psi: Arc<Mutex<PsiIndex>>) -> Self {
@@ -455,6 +556,22 @@ impl AuditEngine {
             ));
         }
         
+        // Generate attack pattern clustering
+        let attack_patterns = self.cluster_attack_patterns();
+        
+        // Add pattern-specific recommendations
+        for pattern in &attack_patterns {
+            if pattern.occurrence_count >= 5 {
+                recommendations.push(format!(
+                    "Detected {} instances of {} attacks from {} source IPs",
+                    pattern.occurrence_count, pattern.pattern_type, pattern.source_ips.len()
+                ));
+            }
+        }
+        
+        // Generate threat timeline
+        let threat_timeline = self.build_threat_timeline();
+        
         AuditReport {
             metadata: ReportMetadata {
                 generated_at: Utc::now(),
@@ -470,10 +587,194 @@ impl AuditEngine {
             summary,
             top_threats,
             suspicious_ips,
-            attack_patterns: vec![], // TODO: Pattern clustering
-            threat_timeline: vec![], // TODO: Timeline aggregation
+            attack_patterns,
+            threat_timeline,
             recommendations,
         }
+    }
+    
+    /// Cluster detected threats by attack pattern type
+    fn cluster_attack_patterns(&self) -> Vec<PatternSummary> {
+        let mut pattern_clusters: HashMap<String, PatternStats> = HashMap::new();
+        
+        for result in &self.results {
+            if result.classification == ThreatClassification::ConfirmedThreat
+               || result.classification == ThreatClassification::LikelyThreat {
+                
+                let request_str = result.entry.to_analysis_string();
+                let pattern_type = AttackPatternType::detect_from_request(
+                    &request_str, 
+                    &result.anomaly_indicators
+                ).unwrap_or(AttackPatternType::Other("Unknown".to_string()));
+                
+                let pattern_key = pattern_type.as_str().to_string();
+                
+                let stats = pattern_clusters.entry(pattern_key).or_insert(PatternStats {
+                    count: 0,
+                    examples: Vec::new(),
+                    ips: Vec::new(),
+                });
+                
+                stats.count += 1;
+                
+                // Store up to 5 examples per pattern type
+                if stats.examples.len() < 5 {
+                    stats.examples.push(result.entry.uri.clone());
+                }
+                
+                // Track unique IPs
+                if !stats.ips.contains(&result.entry.remote_addr) {
+                    stats.ips.push(result.entry.remote_addr.clone());
+                }
+            }
+        }
+        
+        // Convert to PatternSummary and sort by occurrence count
+        let mut patterns: Vec<PatternSummary> = pattern_clusters.into_iter()
+            .map(|(pattern_type, stats)| PatternSummary {
+                pattern_type,
+                occurrence_count: stats.count,
+                example_requests: stats.examples,
+                source_ips: stats.ips,
+            })
+            .collect();
+        
+        patterns.sort_by(|a, b| b.occurrence_count.cmp(&a.occurrence_count));
+        patterns
+    }
+    
+    /// Build a timeline of threat activity aggregated by time intervals
+    fn build_threat_timeline(&self) -> Vec<TimelineEntry> {
+        if self.results.is_empty() {
+            return vec![];
+        }
+        
+        // Determine time range and interval
+        let first_ts = self.results.first().map(|r| r.entry.timestamp).unwrap();
+        let last_ts = self.results.last().map(|r| r.entry.timestamp).unwrap();
+        let duration = last_ts.signed_duration_since(first_ts);
+        
+        // Choose interval based on duration
+        let interval_secs = if duration.num_hours() < 1 {
+            300 // 5 minute intervals for < 1 hour
+        } else if duration.num_hours() < 24 {
+            3600 // 1 hour intervals for < 24 hours
+        } else {
+            86400 // 1 day intervals for longer periods
+        };
+        
+        let mut timeline: HashMap<i64, (usize, Vec<f32>)> = HashMap::new();
+        
+        for result in &self.results {
+            if result.classification == ThreatClassification::ConfirmedThreat
+               || result.classification == ThreatClassification::LikelyThreat
+               || result.classification == ThreatClassification::Suspicious {
+                
+                // Round timestamp to interval
+                let ts_secs = result.entry.timestamp.timestamp();
+                let bucket = (ts_secs / interval_secs) * interval_secs;
+                
+                let entry = timeline.entry(bucket).or_insert((0, Vec::new()));
+                entry.0 += 1;
+                entry.1.push(result.threat_score);
+            }
+        }
+        
+        // Convert to TimelineEntry and sort by time
+        let mut entries: Vec<TimelineEntry> = timeline.into_iter()
+            .map(|(ts, (count, scores))| {
+                let avg_score = if scores.is_empty() {
+                    0.0
+                } else {
+                    scores.iter().sum::<f32>() / scores.len() as f32
+                };
+                TimelineEntry {
+                    timestamp: DateTime::from_timestamp(ts, 0).unwrap_or(Utc::now()),
+                    threat_count: count,
+                    avg_threat_score: avg_score,
+                }
+            })
+            .collect();
+        
+        entries.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        entries
+    }
+    
+    /// Learn from audit results - feed high-confidence threats back to PSI
+    /// 
+    /// This allows WebGuard to improve its threat detection by learning from
+    /// confirmed threats found during audit analysis.
+    pub fn learn_from_audit(&mut self) -> (usize, usize) {
+        use crate::memory_engine::psi_index::PsiEntry;
+        
+        let mut threats_learned = 0;
+        let mut benign_learned = 0;
+        
+        for result in &self.results {
+            // Only learn from high-confidence classifications
+            if result.confidence < 0.6 {
+                continue;
+            }
+            
+            let request_str = result.entry.to_analysis_string();
+            let normalized = self.normalizer.normalize(request_str.as_bytes());
+            let normalized_str = String::from_utf8_lossy(&normalized);
+            let embedding = self.embedding_learner.embed(&normalized_str);
+            
+            // Convert embedding to fixed-size array
+            let mut arr = [0.0f32; 32];
+            for i in 0..embedding.len().min(32) {
+                arr[i] = embedding[i];
+            }
+            
+            match result.classification {
+                ThreatClassification::ConfirmedThreat | ThreatClassification::LikelyThreat => {
+                    // Learn as threat
+                    if let Ok(mut psi) = self.psi.lock() {
+                        let id = format!("audit_threat_{}", threats_learned);
+                        let entry = PsiEntry {
+                            id,
+                            vec: arr,
+                            valence: result.threat_score.max(0.7), // Ensure high valence for threats
+                            uses: 1,
+                            tags: vec![
+                                "audit".to_string(),
+                                format!("{:?}", result.classification),
+                                result.entry.uri.clone(),
+                            ],
+                            last_activation: chrono::Utc::now().timestamp() as f64,
+                            cumulative_reward: result.threat_score,
+                        };
+                        // Use one_shot_learn for memory-on-memory propagation
+                        psi.one_shot_learn(entry, result.threat_score);
+                        threats_learned += 1;
+                    }
+                }
+                ThreatClassification::Benign => {
+                    // Learn as benign (negative example)
+                    if let Ok(mut psi) = self.psi.lock() {
+                        let id = format!("audit_benign_{}", benign_learned);
+                        let entry = PsiEntry {
+                            id,
+                            vec: arr,
+                            valence: 0.1, // Low valence for benign
+                            uses: 1,
+                            tags: vec!["audit".to_string(), "benign".to_string()],
+                            last_activation: chrono::Utc::now().timestamp() as f64,
+                            cumulative_reward: -0.1, // Negative reward for benign (to differentiate)
+                        };
+                        psi.one_shot_learn(entry, -0.1);
+                        benign_learned += 1;
+                    }
+                }
+                _ => {} // Skip uncertain classifications
+            }
+        }
+        
+        info!("Learned from audit: {} threats, {} benign samples added to PSI", 
+              threats_learned, benign_learned);
+        
+        (threats_learned, benign_learned)
     }
     
     /// Export report to file
@@ -670,10 +971,30 @@ pub async fn run_audit_mode(
     engine.export_report(&report, &config.report_path, &config.report_format)?;
     info!("Report saved to: {:?}", config.report_path);
     
+    // Report attack patterns found
+    if !report.attack_patterns.is_empty() {
+        info!("Attack Patterns Detected:");
+        for pattern in &report.attack_patterns {
+            info!("  - {}: {} occurrences from {} IPs", 
+                  pattern.pattern_type, pattern.occurrence_count, pattern.source_ips.len());
+        }
+    }
+    
+    // Report timeline summary
+    if !report.threat_timeline.is_empty() {
+        let peak = report.threat_timeline.iter()
+            .max_by_key(|e| e.threat_count)
+            .unwrap();
+        info!("Threat Timeline: {} intervals, peak activity at {} ({} threats)",
+              report.threat_timeline.len(), peak.timestamp.format("%Y-%m-%d %H:%M"), peak.threat_count);
+    }
+    
     // Optionally learn from audit
     if config.learn_from_audit {
         info!("Learning from audit results...");
-        // TODO: Feed high-confidence results back to PSI
+        let (threats_learned, benign_learned) = engine.learn_from_audit();
+        info!("Learned {} threats and {} benign samples from audit", 
+              threats_learned, benign_learned);
     }
     
     Ok(())

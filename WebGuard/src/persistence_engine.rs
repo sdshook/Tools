@@ -277,13 +277,43 @@ impl PersistenceEngine {
             PersistedPsi { entries: vec![], connections: vec![] }
         };
         
+        // Compute learning stats from mesh state
+        let memory_stats = mesh.get_memory_stats();
+        let mut total_threats = 0u64;
+        let mut total_false_positives = 0u64;
+        let mut total_false_negatives = 0u64;
+        
+        // Count threats and learning events from retrospective learning
+        if let Some(retro_stats) = mesh.get_retrospective_learning_stats() {
+            total_false_negatives = retro_stats.total_missed_threats_processed as u64;
+            total_false_positives = retro_stats.total_false_positives_processed as u64;
+        }
+        
+        // Count threats from BDH memory valences
+        for service in services.values() {
+            for trace in &service.traces {
+                if trace.valence >= 0.5 {
+                    total_threats += 1;
+                }
+            }
+        }
+        
+        let stats = LearningStats {
+            total_traces_learned: memory_stats.total_traces as u64,
+            total_threats_detected: total_threats,
+            total_false_positives,
+            total_false_negatives,
+            total_connections_formed: memory_stats.total_connections as u64,
+            uptime_seconds: 0, // Would need to track startup time separately
+        };
+        
         let state = PersistedState {
             version: PersistedState::CURRENT_VERSION,
             saved_at: chrono::Utc::now().to_rfc3339(),
             psi: psi_state,
             services,
             host_aggression: mesh.get_host_aggression(),
-            stats: LearningStats::default(), // TODO: Track actual stats
+            stats,
         };
         
         // Serialize

@@ -8,7 +8,7 @@
 //! - **proxy**: HTTP reverse proxy with inline threat analysis
 //! - **tail**: Real-time log file monitoring
 //! - **audit**: Batch log analysis for forensic investigation
-//! - **simulate**: Simulated telemetry for testing (default)
+//! - **demo**: Demo mode with simulated telemetry (for testing only)
 //!
 //! ## Usage
 //!
@@ -54,7 +54,6 @@ mod retrospective_learning;
 mod mesh_cognition;
 mod sensors;
 mod evidence;
-mod persistence;
 mod persistence_engine;
 
 // Operational Modes
@@ -157,20 +156,33 @@ async fn main() -> Result<()> {
             }
         }
         
-        OperationalMode::Simulate => {
-            info!("Starting Simulation Mode...");
-            run_simulation_mode(mesh.clone(), app_config).await?;
+        OperationalMode::Demo => {
+            info!("╔═══════════════════════════════════════════════════════════════════╗");
+            info!("║  WARNING: Demo mode uses SIMULATED telemetry - NOT FOR PRODUCTION ║");
+            info!("╚═══════════════════════════════════════════════════════════════════╝");
+            run_demo_mode(mesh.clone(), app_config, runtime_config.persistence).await?;
         }
     }
 
     Ok(())
 }
 
-/// Run the original simulation mode (for testing/demo)
-async fn run_simulation_mode(
+/// Run demo mode with simulated telemetry (FOR TESTING/DEMONSTRATION ONLY)
+/// 
+/// This mode generates synthetic web server telemetry to demonstrate
+/// WebGuard's learning capabilities. It does NOT connect to real web servers.
+/// 
+/// For production use, select one of:
+/// - `proxy`: Inline HTTP proxy protection
+/// - `tail`: Real-time log monitoring
+/// - `audit`: Batch log analysis
+async fn run_demo_mode(
     mesh: Arc<Mutex<HostMeshCognition>>,
-    cfg: config::Config,
+    _cfg: config::Config,
+    persistence_config: webguard::runtime_config::PersistenceConfig,
 ) -> Result<()> {
+    info!("Demo mode: Registering simulated IIS w3wp.exe processes...");
+    
     // Register multiple IIS w3wp.exe processes for demonstration
     {
         let mut m = mesh.lock().unwrap();
@@ -181,7 +193,7 @@ async fn run_simulation_mode(
         let w3wp5_id = m.register_service(WebServiceType::IIS, 1005); // Auth Service
         let w3wp6_id = m.register_service(WebServiceType::IIS, 1006); // Payment Service
         
-        info!("Registered IIS w3wp processes: {}, {}, {}, {}, {}, {}", 
+        info!("Demo: Registered simulated IIS processes: {}, {}, {}, {}, {}, {}", 
               w3wp1_id, w3wp2_id, w3wp3_id, w3wp4_id, w3wp5_id, w3wp6_id);
     }
 
@@ -215,16 +227,27 @@ async fn run_simulation_mode(
                         }
                     }
                     
-                    info!("Host Status - Aggression: {:.3} | Services: {:?} | Hebbian: [{}]", 
+                    info!("[DEMO] Host Status - Aggression: {:.3} | Services: {:?} | Hebbian: [{}]", 
                           aggression, stats, hebbian_summary.join(", "));
                 }
             }
         });
     }
 
-    // Main loop
+    // Persistence engine for periodic saves
+    let persistence_engine = PersistenceEngine::new(persistence_config.clone());
+
+    // Main loop with proper persistence
     loop {
-        persistence::persist()?;
         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        
+        // Save state periodically using real persistence engine
+        if persistence_config.enabled {
+            if let Ok(m) = mesh.lock() {
+                if let Err(e) = persistence_engine.save(&m) {
+                    error!("Failed to persist state: {}", e);
+                }
+            }
+        }
     }
 }

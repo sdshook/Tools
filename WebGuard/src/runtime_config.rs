@@ -1,10 +1,10 @@
 //! Runtime Configuration for WebGuard Operational Modes
 //!
 //! WebGuard supports multiple operational modes:
-//! - **Proxy**: HTTP reverse proxy with inline request analysis
-//! - **Tail**: Real-time log file monitoring
-//! - **Audit**: Batch log analysis for forensic investigation
-//! - **Simulate**: Simulated telemetry for testing/demo
+//! - **Proxy**: HTTP reverse proxy with inline request analysis (PRODUCTION)
+//! - **Tail**: Real-time log file monitoring (PRODUCTION)
+//! - **Audit**: Batch log analysis for forensic investigation (PRODUCTION)
+//! - **Demo**: Simulated telemetry for testing/demonstration (NOT FOR PRODUCTION)
 //!
 //! Configuration can be provided via:
 //! - Command-line arguments
@@ -18,19 +18,22 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OperationalMode {
-    /// HTTP reverse proxy - inline analysis of live traffic
+    /// HTTP reverse proxy - inline analysis of live traffic (PRODUCTION)
     Proxy,
-    /// Log tail - real-time monitoring of log files
+    /// Log tail - real-time monitoring of log files (PRODUCTION)
     Tail,
-    /// Log audit - batch analysis of historical logs
+    /// Log audit - batch analysis of historical logs (PRODUCTION)
     Audit,
-    /// Simulated - fake telemetry for testing
-    Simulate,
+    /// Demo mode - simulated telemetry for testing/demonstration ONLY
+    /// WARNING: This mode generates fake data and should NEVER be used in production
+    Demo,
 }
 
 impl Default for OperationalMode {
     fn default() -> Self {
-        OperationalMode::Simulate
+        // Default to proxy mode for production readiness
+        // Users must explicitly choose demo mode
+        OperationalMode::Proxy
     }
 }
 
@@ -42,8 +45,8 @@ impl std::str::FromStr for OperationalMode {
             "proxy" => Ok(OperationalMode::Proxy),
             "tail" => Ok(OperationalMode::Tail),
             "audit" => Ok(OperationalMode::Audit),
-            "simulate" | "sim" | "demo" => Ok(OperationalMode::Simulate),
-            _ => Err(format!("Unknown mode: {}. Valid modes: proxy, tail, audit, simulate", s)),
+            "demo" | "simulate" | "sim" | "test" => Ok(OperationalMode::Demo),
+            _ => Err(format!("Unknown mode: {}. Valid modes: proxy, tail, audit, demo", s)),
         }
     }
 }
@@ -380,7 +383,7 @@ pub struct RuntimeConfig {
 impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
-            mode: OperationalMode::Simulate,
+            mode: OperationalMode::Proxy, // Production-ready default
             proxy: ProxyConfig::default(),
             tail: TailConfig::default(),
             audit: AuditConfig::default(),
@@ -591,8 +594,13 @@ Neuromorphic Defense with Biological Immunity Architecture
 USAGE:
     webguard [OPTIONS]
 
-MODES:
-    --mode, -m <MODE>     Operational mode: proxy, tail, audit, simulate
+MODES (Production):
+    --mode, -m proxy      HTTP reverse proxy with inline analysis (default)
+    --mode, -m tail       Real-time log file monitoring
+    --mode, -m audit      Batch log analysis for forensics
+
+MODES (Testing Only):
+    --mode, -m demo       Simulated telemetry for testing (NOT FOR PRODUCTION)
 
 PROXY MODE OPTIONS (Single Port):
     --listen <ADDR>       Listen address (e.g., 0.0.0.0:8080)
@@ -689,7 +697,11 @@ mod tests {
         assert_eq!("proxy".parse::<OperationalMode>().unwrap(), OperationalMode::Proxy);
         assert_eq!("tail".parse::<OperationalMode>().unwrap(), OperationalMode::Tail);
         assert_eq!("audit".parse::<OperationalMode>().unwrap(), OperationalMode::Audit);
-        assert_eq!("simulate".parse::<OperationalMode>().unwrap(), OperationalMode::Simulate);
+        // Demo mode accepts multiple aliases for backwards compatibility
+        assert_eq!("demo".parse::<OperationalMode>().unwrap(), OperationalMode::Demo);
+        assert_eq!("simulate".parse::<OperationalMode>().unwrap(), OperationalMode::Demo);
+        assert_eq!("sim".parse::<OperationalMode>().unwrap(), OperationalMode::Demo);
+        assert_eq!("test".parse::<OperationalMode>().unwrap(), OperationalMode::Demo);
     }
     
     #[test]
@@ -702,7 +714,8 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = RuntimeConfig::default();
-        assert_eq!(config.mode, OperationalMode::Simulate);
+        // Default should be production-ready proxy mode
+        assert_eq!(config.mode, OperationalMode::Proxy);
         assert!(config.persistence.enabled);
     }
 }

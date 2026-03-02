@@ -1,10 +1,15 @@
 //! Operational Modes for WebGuard
 //!
 //! Each mode provides a different way to integrate WebGuard with web infrastructure:
-//! - `proxy`: HTTP reverse proxy with inline analysis
+//!
+//! ## Production Modes
+//! - `proxy`: HTTP reverse proxy with inline analysis (recommended)
 //! - `tail`: Real-time log file monitoring  
 //! - `audit`: Batch log analysis for forensics
-//! - `simulate`: Simulated telemetry for testing
+//!
+//! ## Testing Only
+//! - `demo`: Simulated telemetry for testing (NOT FOR PRODUCTION)
+//!   Demo mode is implemented in main.rs using sensors::simulated
 
 pub mod proxy;
 pub mod tail;
