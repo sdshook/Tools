@@ -1383,29 +1383,70 @@ GENERAL:
 
 ```
 WebGuard/
-├── Cargo.toml                      # Rust project configuration
-├── README.md                       # This file
+├── Cargo.toml                          # Rust project configuration
+├── README.md                           # This file
 ├── src/
-│   ├── main.rs                     # Entry point and CLI
-│   ├── lib.rs                      # Library exports
-│   ├── modes/                      # Operational modes
-│   │   ├── proxy.rs                # Reverse proxy mode
-│   │   ├── tail.rs                 # Log tail mode
-│   │   └── audit.rs                # Log audit mode
-│   ├── memory_engine/              # Hebbian memory system
-│   │   ├── bdh_memory.rs           # Bidirectional Hebbian memory
-│   │   ├── psi_index.rs            # Persistent Semantic Index
-│   │   └── valence.rs              # Emotional valence system
-│   ├── embedding_learner.rs        # Self-learning threat embeddings
-│   ├── semantic_normalizer.rs      # Request normalization (Harvard arch)
-│   ├── mesh_cognition.rs           # Cross-service learning mesh
-│   ├── log_parser.rs               # Multi-format log parsing
-│   ├── runtime_config.rs           # Configuration management
-│   └── persistence_engine.rs       # State persistence
+│   ├── main.rs                         # Entry point and CLI
+│   ├── lib.rs                          # Library exports
+│   │
+│   ├── modes/                          # Operational modes
+│   │   ├── mod.rs                      # Mode exports
+│   │   ├── proxy.rs                    # Reverse proxy mode (inline protection)
+│   │   ├── tail.rs                     # Log tail mode (real-time monitoring)
+│   │   └── audit.rs                    # Log audit mode (forensic analysis)
+│   │
+│   ├── memory_engine/                  # Hebbian memory system
+│   │   ├── mod.rs                      # Memory engine exports
+│   │   ├── bdh_memory.rs               # Bidirectional Hebbian memory
+│   │   ├── psi_index.rs                # Persistent Semantic Index
+│   │   └── valence.rs                  # Emotional valence system
+│   │
+│   ├── actuators/                      # Defense response actuators
+│   │   ├── mod.rs                      # Actuator exports
+│   │   └── nginx_act.rs                # nginx-specific actuator
+│   │
+│   ├── sensors/                        # Input sensors
+│   │   ├── mod.rs                      # Sensor exports
+│   │   └── simulated.rs                # Simulated telemetry for testing
+│   │
+│   ├── bin/                            # Additional binaries
+│   │   ├── webguard_diagnostic.rs      # Diagnostic tool
+│   │   └── webguard_performance_suite.rs # Performance benchmarks
+│   │
+│   ├── harvard_architecture.rs         # Harvard arch separation
+│   ├── semantic_normalizer.rs          # Request normalization
+│   ├── embedding_learner.rs            # Self-learning threat embeddings
+│   ├── featurizer.rs                   # Feature extraction
+│   ├── advanced_feature_extractor.rs   # Advanced pattern detection
+│   ├── experiential_anomaly.rs         # Isolation Forest anomaly detection
+│   │
+│   ├── mesh_cognition.rs               # Cross-service learning mesh
+│   ├── eq_iq_regulator.rs              # EQ/IQ behavioral regulation
+│   ├── retrospective_learning.rs       # False negative learning
+│   ├── adaptive_threshold.rs           # Dynamic threshold adjustment
+│   │
+│   ├── detection_logger.rs             # Detection/access logging
+│   ├── log_parser.rs                   # Multi-format log parsing
+│   ├── runtime_config.rs               # CLI/config management
+│   ├── config.rs                       # Application configuration
+│   ├── policy.rs                       # Decision policy engine
+│   ├── evidence.rs                     # Evidence collection
+│   ├── persistence.rs                  # Persistence traits
+│   ├── persistence_engine.rs           # State persistence implementation
+│   └── webguard_system.rs              # Main system orchestration
+│
 ├── tests/
-│   └── webguard_evaluation.rs      # Comprehensive evaluation suite
-└── evaluation_results/
-    ├── generate_report.py          # 5-panel report generator
-    └── webguard_evaluation_report.html
+│   └── webguard_evaluation.rs          # Comprehensive evaluation suite
+│
+├── evaluation_results/
+│   ├── webguard_evaluation.png         # Visual evaluation results
+│   ├── webguard_evaluation.json        # Raw evaluation data
+│   ├── webguard_evaluation_report.html # Interactive HTML report
+│   ├── generate_png.py                 # PNG generator script
+│   └── generate_report.py              # HTML report generator
+│
+├── examples/                           # Example configurations
+├── data/                               # Sample data files
+└── webguard_data/                      # Runtime persistence directory
 ```
 
