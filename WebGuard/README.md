@@ -859,6 +859,142 @@ The system fuses seven key components that have rarely been integrated:
 - Model evolves decision boundaries based on operational outcomes
 - Retrospective learning system incorporates post-incident analysis and lessons learned
 
+## BHSM Cognitive Layer
+
+WebGuard implements the Bidirectional Hebbian Memory System (BHSM) cognitive layer, providing metacognitive monitoring and structural safety guarantees derived from neuromorphic security architecture principles.
+
+### RISC 3-Action Execution Constraint
+
+The system enforces a **Reduced Instruction Set Computing (RISC)** constraint at the mechanical layer. Regardless of what the cognitive layer produces, WebGuard can only execute one of exactly three actions:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    RISC 3-ACTION CONSTRAINT                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   ┌──────────┐     ┌──────────┐     ┌──────────┐               │
+│   │  DETECT  │     │  ALLOW   │     │  BLOCK   │               │
+│   │          │     │          │     │          │               │
+│   │ Log +    │     │ Forward  │     │ Return   │               │
+│   │ Allow    │     │ to       │     │ 403      │               │
+│   │ (monitor)│     │ Backend  │     │ Forbidden│               │
+│   └──────────┘     └──────────┘     └──────────┘               │
+│                                                                  │
+│   Structural boundary: blast radius is LIMITED regardless of    │
+│   classifier accuracy. Even total BCM bypass = bounded outcome. │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Why 3 Actions?**
+- **Structural Safety**: The worst-case outcome of complete upstream classifier failure is still bounded to known, auditable actions
+- **Harvard Architecture Complement**: As a proxy, WebGuard already provides separation between classification and execution—the RISC constraint adds a second layer
+- **No Arbitrary Execution**: Unlike general-purpose systems, a successful injection cannot cause unbounded behavior
+
+```rust
+pub enum Action {
+    Detect,  // Log for analysis, allow request (monitoring mode)
+    Allow,   // Benign classification, forward to backend
+    Block,   // Threat classification, return 403 Forbidden
+}
+```
+
+### Self-Model Node: Metacognitive Monitoring
+
+The Self-Model Node continuously assesses three properties of the system's cognitive state:
+
+| Metric | Range | Description |
+|--------|-------|-------------|
+| **Coherence** | 0.0 - 1.0 | Internal consistency of reasoning across predictions |
+| **Confidence Calibration** | 0.0 - 2.0 | Ratio of actual accuracy to stated confidence |
+| **Arrogance** | 0.0 - 1.0 | Overconfidence detection (high confidence + poor outcomes) |
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SELF-MODEL NODE                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   Prediction History ──►  ┌─────────────────┐                   │
+│                           │  Coherence      │ ─► Consistency    │
+│   Outcome Tracking   ──►  │  Tracking       │    Score          │
+│                           └─────────────────┘                   │
+│                                                                  │
+│   High-Conf Predictions ► ┌─────────────────┐                   │
+│                           │  Calibration    │ ─► Accuracy vs    │
+│   Actual Outcomes    ──►  │  Calculator     │    Confidence     │
+│                           └─────────────────┘                   │
+│                                                                  │
+│   High-Conf Errors   ──►  ┌─────────────────┐                   │
+│   (especially FN)         │  Arrogance      │ ─► Confidence     │
+│                           │  Detector       │    Penalty        │
+│                           └─────────────────┘                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Scrutiny Requirement**: When arrogance exceeds threshold AND confidence is high, the system flags predictions for additional scrutiny—preventing overconfident misclassifications from bypassing review.
+
+### Arrogance Penalty Framework
+
+The ValenceController penalizes high-confidence predictions that produce poor outcomes:
+
+```
+Arrogance Calculation:
+─────────────────────
+                    (FN_count × 3.0) + FP_count
+  arrogance = ────────────────────────────────────
+              high_confidence_predictions × 3.0
+
+  confidence_penalty = arrogance × 0.3  (max 30% reduction)
+
+  adjusted_confidence = raw_confidence × (1.0 - confidence_penalty)
+```
+
+**Key Properties:**
+- **FN Weighted 3x**: False negatives (missed threats) with high confidence are penalized three times more heavily than false positives
+- **Security Ratchet**: High-confidence FN triggers aggressive boost to system aggression
+- **Automatic Calibration**: Confidence scores self-adjust based on actual prediction accuracy
+
+### Confidence Self-Calibration
+
+The system tracks the relationship between stated confidence and actual outcomes:
+
+```
+                    actual_accuracy_at_high_confidence
+  calibration = ──────────────────────────────────────
+                 average_stated_confidence_when_high
+
+  If calibration < 1.0: System is overconfident (penalties apply)
+  If calibration > 1.0: System is underconfident (could be more decisive)
+  If calibration ≈ 1.0: Well-calibrated predictions
+```
+
+**Feedback Loop:**
+1. System makes prediction with confidence score
+2. Outcome is recorded (correct, FN, or FP)
+3. Self-Model updates coherence, calibration, arrogance
+4. Future confidence scores are adjusted by arrogance penalty
+5. High arrogance + high confidence triggers scrutiny flag
+
+### Integration Points
+
+The cognitive layer integrates with existing systems:
+
+| Component | Integration |
+|-----------|-------------|
+| `WebGuardSystem.analyze_request()` | Applies arrogance penalty to confidence scores |
+| `WebGuardSystem.learn_from_error()` | Records outcomes to Self-Model for metacognitive learning |
+| `ThreatAnalysisResult.learning_feedback` | Reports metacognitive state (coherence, arrogance, calibration) |
+| `CognitiveAnalysisResult.mesh_aggression` | Reflects arrogance level |
+| `CognitiveAnalysisResult.service_consensus` | Reflects coherence level |
+
+### When Cognitive Layer Activates
+
+The metacognitive monitoring shows measurable impact in:
+
+1. **Long-running deployments**: Arrogance detection accumulates history over many predictions
+2. **Adversarial scenarios**: High-confidence mistakes trigger penalty mechanisms
+3. **Drift detection**: Calibration degradation indicates model staleness
+4. **Production feedback loops**: Real operator corrections feed Self-Model learning
+
 ## Implementation Details
 
 ### Current Features
@@ -1424,12 +1560,13 @@ WebGuard/
 │   ├── eq_iq_regulator.rs              # EQ/IQ behavioral regulation
 │   ├── retrospective_learning.rs       # False negative learning
 │   ├── adaptive_threshold.rs           # Dynamic threshold adjustment
+│   ├── self_model.rs                   # BHSM Self-Model Node (metacognitive monitoring)
 │   │
 │   ├── detection_logger.rs             # Detection/access logging
 │   ├── log_parser.rs                   # Multi-format log parsing
 │   ├── runtime_config.rs               # CLI/config management
 │   ├── config.rs                       # Application configuration
-│   ├── policy.rs                       # Decision policy engine
+│   ├── policy.rs                       # RISC 3-action constraint (Detect/Allow/Block)
 │   ├── evidence.rs                     # Evidence collection
 │   ├── persistence.rs                  # Persistence traits
 │   ├── persistence_engine.rs           # State persistence implementation
