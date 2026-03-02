@@ -1216,33 +1216,151 @@ The system transforms endpoint protection from static, signature-based defense t
 
 ---
 
-## Project Setup Status
+## Building and Running
 
-### Current Directory Structure
-The project has been set up with the following structure based on analysis of the provided files:
+### Prerequisites
+
+- **Rust toolchain** (1.70+): Install from https://rustup.rs/
+  ```bash
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  ```
+
+### Build
+
+```bash
+cd WebGuard
+cargo build --release
+```
+
+This produces a standalone binary: `target/release/webguard` (~5MB)
+
+### Run
+
+**Proxy Mode** (inline protection with optional blocking):
+```bash
+# Single server
+./target/release/webguard --mode proxy --listen 0.0.0.0:8080 --backend 127.0.0.1:80
+
+# Multiple servers with collective immunity
+./target/release/webguard --mode proxy \
+    -p nginx:8080:127.0.0.1:80 \
+    -p apache:8081:127.0.0.1:81 \
+    -p api:3000:127.0.0.1:3001 \
+    --blocking
+```
+
+**Tail Mode** (real-time log monitoring):
+```bash
+./target/release/webguard --mode tail \
+    -l /var/log/nginx/access.log \
+    -l /var/log/apache2/access.log \
+    --format auto
+```
+
+**Audit Mode** (analyze historical logs):
+```bash
+./target/release/webguard --mode audit \
+    --log "/var/log/nginx/access.log*" \
+    --report audit.html \
+    --learn
+```
+
+### Install as System Service
+
+```bash
+# Copy binary
+sudo cp target/release/webguard /usr/local/bin/
+sudo chmod +x /usr/local/bin/webguard
+
+# Create systemd service
+sudo tee /etc/systemd/system/webguard.service << 'EOF'
+[Unit]
+Description=WebGuard Self-Learning Web EDR
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/webguard --mode proxy \
+    -p web:8080:127.0.0.1:80 \
+    --blocking \
+    --data-dir /var/lib/webguard
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable webguard
+sudo systemctl start webguard
+sudo systemctl status webguard
+```
+
+### Run Evaluation Tests
+
+```bash
+cargo test --test webguard_evaluation -- --nocapture
+```
+
+View the interactive report: `evaluation_results/webguard_evaluation_report.html`
+
+### Command Reference
+
+```
+webguard --help
+
+MODES:
+    --mode proxy    Reverse proxy with inline threat detection
+    --mode tail     Real-time log file monitoring
+    --mode audit    Historical log analysis and reporting
+
+PROXY OPTIONS:
+    --listen <ADDR>       Listen address (e.g., 0.0.0.0:8080)
+    --backend <ADDR>      Backend server (e.g., 127.0.0.1:80)
+    -p <name:listen:host:port>  Multi-port proxy mapping
+    --blocking            Block detected threats (default: monitor only)
+
+TAIL/AUDIT OPTIONS:
+    -l, --log <PATH>      Log file path (repeatable)
+    -f, --format <FMT>    Log format: nginx, apache, json, auto
+    -r, --report <PATH>   Output report path (audit mode)
+    --learn               Update threat knowledge from audit
+
+GENERAL:
+    --data-dir <PATH>     Persistence directory
+    --no-persist          Disable state persistence
+    -c, --config <PATH>   Load TOML configuration file
+```
+
+## Project Structure
 
 ```
 WebGuard/
 ├── Cargo.toml                      # Rust project configuration
 ├── README.md                       # This file
 ├── src/
-│   ├── actuators/                  # Defense actuators module
+│   ├── main.rs                     # Entry point and CLI
+│   ├── lib.rs                      # Library exports
+│   ├── modes/                      # Operational modes
+│   │   ├── proxy.rs                # Reverse proxy mode
+│   │   ├── tail.rs                 # Log tail mode
+│   │   └── audit.rs                # Log audit mode
 │   ├── memory_engine/              # Hebbian memory system
-│   ├── sensors/                    # Behavioral sensors module
-│   ├── eq_iq_regulator.rs         # EQ/IQ behavioral regulation system
-│   ├── retrospective_learning.rs  # False negative learning system
-│   ├── experiential_anomaly.rs    # Isolation Forest experiential learning
-│   ├── mesh_cognition.rs          # Host-based mesh cognition
-│   ├── featurizer.rs              # Feature extraction and vectorization
-│   ├── policy.rs                  # Decision policy engine
-│   └── main.rs                    # Main application entry point
-├── tests/                         # Comprehensive test suite
-│   ├── README.md                  # Testing documentation
-│   ├── run_tests.sh              # Test runner script
-│   ├── scripts/                  # Test scripts and programs
-│   ├── results/                  # Test execution results
-│   ├── documentation/            # Test reports and analysis
-│   └── visualizations/           # Generated charts and graphs
-└── tools/                         # Development and testing tools
+│   │   ├── bdh_memory.rs           # Bidirectional Hebbian memory
+│   │   ├── psi_index.rs            # Persistent Semantic Index
+│   │   └── valence.rs              # Emotional valence system
+│   ├── embedding_learner.rs        # Self-learning threat embeddings
+│   ├── semantic_normalizer.rs      # Request normalization (Harvard arch)
+│   ├── mesh_cognition.rs           # Cross-service learning mesh
+│   ├── log_parser.rs               # Multi-format log parsing
+│   ├── runtime_config.rs           # Configuration management
+│   └── persistence_engine.rs       # State persistence
+├── tests/
+│   └── webguard_evaluation.rs      # Comprehensive evaluation suite
+└── evaluation_results/
+    ├── generate_report.py          # 5-panel report generator
+    └── webguard_evaluation_report.html
 ```
 
