@@ -261,6 +261,70 @@ impl Default for ReportFormat {
     }
 }
 
+/// Output log format for detection and access logs
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OutputLogFormat {
+    /// Plain text format (human readable)
+    Plain,
+    /// JSON format (machine readable, SIEM-friendly)
+    Json,
+    /// Syslog format (RFC 5424)
+    Syslog,
+}
+
+impl Default for OutputLogFormat {
+    fn default() -> Self {
+        OutputLogFormat::Plain
+    }
+}
+
+impl std::str::FromStr for OutputLogFormat {
+    type Err = String;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "plain" | "text" | "txt" => Ok(OutputLogFormat::Plain),
+            "json" => Ok(OutputLogFormat::Json),
+            "syslog" | "rfc5424" => Ok(OutputLogFormat::Syslog),
+            _ => Err(format!("Unknown output log format: {}. Valid formats: plain, json, syslog", s)),
+        }
+    }
+}
+
+/// Logging configuration for WebGuard output
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggingConfig {
+    /// Path to detection log file (threats only) - None = disabled
+    pub detection_log: Option<PathBuf>,
+    /// Path to access log file (all requests) - None = disabled
+    pub access_log: Option<PathBuf>,
+    /// Output format for log files
+    pub output_format: OutputLogFormat,
+    /// Also log to stdout (in addition to files)
+    pub log_to_stdout: bool,
+    /// Include request body snippet in logs (up to N bytes, 0 = disabled)
+    pub include_body_bytes: usize,
+    /// Syslog facility (when using syslog format)
+    pub syslog_facility: String,
+    /// Syslog app name
+    pub syslog_app_name: String,
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            detection_log: None,
+            access_log: None,
+            output_format: OutputLogFormat::Plain,
+            log_to_stdout: true,
+            include_body_bytes: 0,
+            syslog_facility: "local0".to_string(),
+            syslog_app_name: "webguard".to_string(),
+        }
+    }
+}
+
 /// Persistence configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistenceConfig {
@@ -301,6 +365,8 @@ pub struct RuntimeConfig {
     pub audit: AuditConfig,
     /// Persistence settings
     pub persistence: PersistenceConfig,
+    /// Logging/output settings
+    pub logging: LoggingConfig,
     /// Web server types to register (for multi-server environments)
     pub server_types: Vec<String>,
     /// Logging level
@@ -319,6 +385,7 @@ impl Default for RuntimeConfig {
             tail: TailConfig::default(),
             audit: AuditConfig::default(),
             persistence: PersistenceConfig::default(),
+            logging: LoggingConfig::default(),
             server_types: vec!["nginx".to_string()],
             log_level: "info".to_string(),
             metrics_enabled: false,
@@ -444,6 +511,28 @@ impl RuntimeConfig {
                         i += 1;
                     }
                 }
+                // Logging options
+                "--detection-log" => {
+                    if i + 1 < args.len() {
+                        config.logging.detection_log = Some(PathBuf::from(&args[i + 1]));
+                        i += 1;
+                    }
+                }
+                "--access-log" => {
+                    if i + 1 < args.len() {
+                        config.logging.access_log = Some(PathBuf::from(&args[i + 1]));
+                        i += 1;
+                    }
+                }
+                "--log-format" => {
+                    if i + 1 < args.len() {
+                        config.logging.output_format = args[i + 1].parse().unwrap_or_default();
+                        i += 1;
+                    }
+                }
+                "--no-stdout" => {
+                    config.logging.log_to_stdout = false;
+                }
                 "--help" | "-h" => {
                     Self::print_help();
                     std::process::exit(0);
@@ -527,6 +616,12 @@ AUDIT MODE OPTIONS:
     --format, -f <FMT>    Log format: nginx, apache, json, auto
     --learn               Learn from audit (update threat knowledge)
 
+LOGGING OPTIONS:
+    --detection-log <PATH>  Log file for threats/detections only
+    --access-log <PATH>     Log file for all requests with scores
+    --log-format <FMT>      Output format: plain, json, syslog (default: plain)
+    --no-stdout             Disable console output (log to files only)
+
 GENERAL OPTIONS:
     --config, -c <PATH>   Load configuration from TOML file
     --data-dir <PATH>     Persistence data directory
@@ -558,6 +653,18 @@ EXAMPLES:
 
     # Run with config file
     webguard --config /etc/webguard/config.toml
+
+    # Log detections to file in JSON format (SIEM integration)
+    webguard --mode proxy -p web:8080:127.0.0.1:80 \
+        --detection-log /var/log/webguard/detections.log \
+        --log-format json
+
+    # Full access logging with syslog format
+    webguard --mode proxy -p web:8080:127.0.0.1:80 \
+        --detection-log /var/log/webguard/threats.log \
+        --access-log /var/log/webguard/access.log \
+        --log-format syslog \
+        --no-stdout
 
 COLLECTIVE IMMUNITY:
     When running multiple proxy mappings, all share the same learning:

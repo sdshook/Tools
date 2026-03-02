@@ -16,11 +16,12 @@ use hyper::client::HttpConnector;
 use hyper::service::{make_service_fn, service_fn};
 use tracing::{info, warn, error, debug};
 
-use crate::runtime_config::{ProxyConfig, ProxyMapping};
+use webguard::runtime_config::{ProxyConfig, ProxyMapping, LoggingConfig};
 use crate::semantic_normalizer::SemanticNormalizer;
 use crate::embedding_learner::EmbeddingLearner;
 use crate::mesh_cognition::{HostMeshCognition, WebServiceType};
 use crate::config::Config;
+use webguard::detection_logger::{DetectionLogger, LogEntry, Severity};
 
 /// Proxy state shared across request handlers
 struct ProxyState {
@@ -36,6 +37,8 @@ struct ProxyState {
     stats: Mutex<ProxyStats>,
     /// Service ID for this proxy mapping (for collective immunity)
     service_id: String,
+    /// Detection logger for file output
+    logger: Option<DetectionLogger>,
 }
 
 /// Proxy statistics
@@ -53,6 +56,7 @@ impl ProxyState {
         mapping: ProxyMapping,
         mesh: Arc<Mutex<HostMeshCognition>>,
         service_id: String,
+        logger: Option<DetectionLogger>,
     ) -> Self {
         Self {
             app_config: Config::load_default(),
@@ -64,6 +68,7 @@ impl ProxyState {
             config,
             mapping,
             service_id,
+            logger,
         }
     }
     
@@ -204,12 +209,34 @@ async fn handle_request(
         }
     }
     
+    // Extract user agent for logging
+    let user_agent = req.headers()
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    
     // Block if threshold exceeded
     if should_block {
         warn!(
             "BLOCKED: {} {} {} - threat_score={:.3}, similarity={:.3}",
             client_addr, method, uri, threat_score, similarity
         );
+        
+        // Log to detection file
+        if let Some(ref logger) = state.logger {
+            let entry = DetectionLogger::create_entry(
+                &state.mapping.name,
+                &client_addr.ip().to_string(),
+                method.as_str(),
+                uri.path(),
+                threat_score,
+                true,
+                Some("threshold_exceeded".to_string()),
+                user_agent.clone(),
+                Some(403),
+            );
+            logger.log_detection(&entry);
+        }
         
         return Ok(Response::builder()
             .status(StatusCode::FORBIDDEN)
@@ -225,6 +252,22 @@ async fn handle_request(
             "SUSPICIOUS (allowed): {} {} {} - threat_score={:.3}",
             client_addr, method, uri, threat_score
         );
+        
+        // Log to detection file (suspicious)
+        if let Some(ref logger) = state.logger {
+            let entry = DetectionLogger::create_entry(
+                &state.mapping.name,
+                &client_addr.ip().to_string(),
+                method.as_str(),
+                uri.path(),
+                threat_score,
+                false,
+                Some("suspicious".to_string()),
+                user_agent.clone(),
+                None, // response status not known yet
+            );
+            logger.log_detection(&entry);
+        }
     } else {
         debug!(
             "ALLOWED: {} {} {} - threat_score={:.3}",
@@ -283,6 +326,24 @@ async fn handle_request(
         stats.total_latency_ms += latency;
     }
     
+    // Log to access file (all requests)
+    if let Some(ref logger) = state.logger {
+        if logger.access_logging_enabled() {
+            let entry = DetectionLogger::create_entry(
+                &state.mapping.name,
+                &client_addr.ip().to_string(),
+                method.as_str(),
+                uri.path(),
+                threat_score,
+                false,
+                None,
+                user_agent,
+                Some(status),
+            );
+            logger.log_access(&entry);
+        }
+    }
+    
     // Learn from the request/response
     let mut feature_arr = [0.0f32; 32];
     let normalized = state.normalizer.normalize(uri_string.as_bytes());
@@ -321,6 +382,7 @@ async fn run_single_proxy(
     mapping: ProxyMapping,
     mesh: Arc<Mutex<HostMeshCognition>>,
     service_id: String,
+    logger: Option<DetectionLogger>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let addr: SocketAddr = mapping.listen_addr.parse()?;
     
@@ -329,6 +391,7 @@ async fn run_single_proxy(
         mapping.clone(),
         mesh,
         service_id.clone(),
+        logger,
     ));
     
     // Stats reporting task for this proxy
@@ -384,12 +447,31 @@ async fn run_single_proxy(
 pub async fn run_proxy_mode(
     config: ProxyConfig,
     mesh: Arc<Mutex<HostMeshCognition>>,
+    logging_config: LoggingConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting WebGuard Multi-Port Proxy Mode");
     info!("Blocking mode: {}", config.blocking_mode);
     if config.blocking_mode {
         info!("Block threshold: {}", config.block_threshold);
     }
+    
+    // Initialize detection logger
+    let logger = match DetectionLogger::new(logging_config.clone()) {
+        Ok(l) => {
+            if l.detection_logging_enabled() {
+                info!("Detection logging enabled: {:?}", logging_config.detection_log);
+            }
+            if l.access_logging_enabled() {
+                info!("Access logging enabled: {:?}", logging_config.access_log);
+            }
+            info!("Log format: {:?}", logging_config.output_format);
+            Some(l)
+        }
+        Err(e) => {
+            error!("Failed to initialize detection logger: {}", e);
+            None
+        }
+    };
     
     // Register a service for each proxy mapping
     let service_ids: Vec<String> = {
@@ -418,9 +500,10 @@ pub async fn run_proxy_mode(
         let config_clone = config.clone();
         let mapping_clone = mapping.clone();
         let mesh_clone = mesh.clone();
+        let logger_clone = logger.clone();
         
         let handle = tokio::spawn(async move {
-            if let Err(e) = run_single_proxy(config_clone, mapping_clone, mesh_clone, service_id).await {
+            if let Err(e) = run_single_proxy(config_clone, mapping_clone, mesh_clone, service_id, logger_clone).await {
                 error!("Proxy error: {}", e);
             }
         });

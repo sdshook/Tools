@@ -47,6 +47,9 @@ lazy_static = "1.4"
 # HTTP proxy mode
 hyper = { version = "0.14", features = ["full"] }
 
+# Hostname detection for syslog
+hostname = "0.3"
+
 # Compression for persistence
 flate2 = "1.0"
 

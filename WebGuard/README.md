@@ -1328,10 +1328,52 @@ TAIL/AUDIT OPTIONS:
     -r, --report <PATH>   Output report path (audit mode)
     --learn               Update threat knowledge from audit
 
+LOGGING OPTIONS:
+    --detection-log <PATH>  Log file for threats/detections only
+    --access-log <PATH>     Log file for all requests with threat scores
+    --log-format <FMT>      Output format: plain, json, syslog (default: plain)
+    --no-stdout             Disable console output (log to files only)
+
 GENERAL:
     --data-dir <PATH>     Persistence directory
     --no-persist          Disable state persistence
     -c, --config <PATH>   Load TOML configuration file
+```
+
+### Logging Examples
+
+**JSON format for SIEM integration:**
+```bash
+./target/release/webguard --mode proxy -p web:8080:127.0.0.1:80 \
+    --detection-log /var/log/webguard/detections.json \
+    --log-format json \
+    --blocking
+```
+
+**Full access logging with syslog format:**
+```bash
+./target/release/webguard --mode proxy -p web:8080:127.0.0.1:80 \
+    --detection-log /var/log/webguard/threats.log \
+    --access-log /var/log/webguard/access.log \
+    --log-format syslog \
+    --no-stdout
+```
+
+**Log Output Formats:**
+
+*Plain text (default):*
+```
+2024-01-15T10:30:00Z [HIGH] nginx 192.168.1.100 GET /admin?id=1' OR '1'='1 score=0.850 reason=sqli status=403
+```
+
+*JSON (SIEM-friendly):*
+```json
+{"timestamp":"2024-01-15T10:30:00Z","event_type":"detection","severity":"high","service":"nginx","client_ip":"192.168.1.100","method":"GET","uri":"/admin","threat_score":0.85,"blocked":true,"detection_reason":"threshold_exceeded"}
+```
+
+*Syslog (RFC 5424):*
+```
+<131>1 2024-01-15T10:30:00Z hostname webguard 12345 BLOCKED [webguard@0 service="nginx" score="0.850" blocked="true" method="GET" uri="/admin"] 192.168.1.100 GET /admin score=0.850
 ```
 
 ## Project Structure

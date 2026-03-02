@@ -31,7 +31,6 @@ mod harvard_architecture;
 
 // Configuration
 mod config;
-mod runtime_config;
 
 // Semantic Layer (Harvard "Data Memory")
 mod semantic_normalizer;  // Pre-processing: deterministic normalization
@@ -64,7 +63,7 @@ mod modes;
 use anyhow::Result;
 use tracing::{info, error};
 use crate::mesh_cognition::{HostMeshCognition, WebServiceType};
-use crate::runtime_config::{RuntimeConfig, OperationalMode};
+use webguard::runtime_config::{RuntimeConfig, OperationalMode};
 use crate::persistence_engine::PersistenceEngine;
 use std::sync::{Arc, Mutex};
 
@@ -125,7 +124,11 @@ async fn main() -> Result<()> {
     match runtime_config.mode {
         OperationalMode::Proxy => {
             info!("Starting HTTP Proxy Mode...");
-            if let Err(e) = modes::run_proxy_mode(runtime_config.proxy, mesh.clone()).await {
+            if let Err(e) = modes::run_proxy_mode(
+                runtime_config.proxy, 
+                mesh.clone(),
+                runtime_config.logging.clone(),
+            ).await {
                 error!("Proxy mode error: {}", e);
             }
         }

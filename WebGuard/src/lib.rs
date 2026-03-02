@@ -3,6 +3,7 @@ pub mod harvard_architecture;
 
 // Configuration
 pub mod config;
+pub mod runtime_config;
 
 // Semantic Layer (Harvard "Data Memory")
 pub mod semantic_normalizer;  // Pre-processing: deterministic normalization
@@ -26,6 +27,9 @@ pub mod mesh_cognition;
 pub mod sensors;
 pub mod evidence;
 pub mod persistence;
+
+// Logging
+pub mod detection_logger;
 
 // Main System
 pub mod webguard_system;

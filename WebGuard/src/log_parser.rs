@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use lazy_static::lazy_static;
 
-use crate::runtime_config::LogFormat;
+use webguard::runtime_config::LogFormat;
 
 /// Parsed log entry - unified structure for all log formats
 #[derive(Debug, Clone, Serialize, Deserialize)]

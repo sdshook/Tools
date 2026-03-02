@@ -18,7 +18,7 @@ use flate2::Compression;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn, error};
 
-use crate::runtime_config::PersistenceConfig;
+use webguard::runtime_config::PersistenceConfig;
 use crate::mesh_cognition::HostMeshCognition;
 use crate::memory_engine::bdh_memory::{BdhMemory, MemoryTrace, EMBED_DIM};
 use crate::memory_engine::psi_index::{PsiIndex, PsiEntry, PsiConnection};

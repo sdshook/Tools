@@ -12,7 +12,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{info, warn, error, debug};
 
-use crate::runtime_config::TailConfig;
+use webguard::runtime_config::TailConfig;
 use crate::log_parser::{LogParser, ParsedLogEntry};
 use crate::semantic_normalizer::SemanticNormalizer;
 use crate::embedding_learner::EmbeddingLearner;

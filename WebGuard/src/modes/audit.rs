@@ -12,7 +12,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn, error};
 
-use crate::runtime_config::{AuditConfig, ReportFormat};
+use webguard::runtime_config::{AuditConfig, ReportFormat};
 use crate::log_parser::{LogParser, ParsedLogEntry};
 use crate::semantic_normalizer::SemanticNormalizer;
 use crate::embedding_learner::EmbeddingLearner;
