@@ -112,10 +112,13 @@ Where:
 - `pre_activation` and `post_activation` are cosine similarities between the input embedding and stored trace embeddings (range: 0.0 to 1.0)
 - `reward_signal` is +1.0 for correct classifications, -1.0 for misclassifications, scaled by confidence
 - `η` (learning rate) is 0.015 for weight updates (base rate 0.05 × 0.3 reduction factor to prevent over-fitting)
+- `η_min` (minimum learning rate) is 0.001, preventing complete learning shutdown even when confidence is heavily penalized
 
 **Stability note on confidence scaling**: Scaling rewards by confidence creates two potential regimes: (1) a high-confidence attractor where established patterns become increasingly resistant to update, and (2) a low-confidence trap where degraded confidence suppresses learning. The architecture addresses this through multiple mechanisms: high-valence traces (|valence| > 0.8) receive reduced update magnitude regardless of confidence, preventing runaway reinforcement; the confidence penalty mechanism (Section 3.2) is multiplicative rather than additive, ensuring that even penalized confidence still permits learning; and the minimum learning rate floor (0.001) prevents complete learning shutdown. In practice, the system tends toward the high-confidence attractor for well-established patterns—which is desirable for security, as it makes confirmed threat patterns resistant to adversarial drift.
 
 Positive classification outcomes strengthen connections between co-activated patterns; negative outcomes weaken them. This enables the system to modify its similarity judgments based on operational feedback.
+
+**Role of inter-trace Hebbian connections**: The connections between stored traces primarily influence *learning* rather than *classification*. During classification, the BDH query finds similar traces independently (as shown in the appendix walkthrough). The inter-trace connections become active during learning: when a new pattern is stored, the Hebbian update strengthens connections to traces that were co-activated (high similarity) with the same valence, creating associative clusters. Over time, this biases the stored trace population toward coherent threat/benign clusters rather than randomly distributed points—which improves the discriminative power of the differential similarity metric used in classification. The connections do not directly modulate retrieval weights; they shape the learned representation by influencing which traces persist and how their valences evolve.
 
 **Persistent Semantic Index (PSI)** provides long-term storage with similarity-based retrieval. Entries persist across sessions. When novel patterns are stored, influence propagates to existing memories with cosine similarity above 0.6, with update magnitude proportional to similarity × reward signal. This enables adaptation to new inputs without requiring exact matches.
 
@@ -399,13 +402,15 @@ To illustrate how the components interact, consider classification of an HTTP re
 
 **Step 4: Score Fusion**
 ```
-score = (0.84 × 0.4) + (0.55 × 0.3) + (0.42 × 0.3)
-      = 0.336 + 0.165 + 0.126
-      = 0.627
+statistical_baseline = (0.42 × 0.6) + (0.38 × 0.4) = 0.252 + 0.152 = 0.404
+
+score = (0.84 × 0.4) + (0.55 × 0.3) + (0.404 × 0.3)
+      = 0.336 + 0.165 + 0.121
+      = 0.622
 ```
 
 **Step 5: Action Selection**
-- Score 0.627 > high_threshold (0.5) → **Block**
+- Score 0.622 > block_threshold (0.5) → **Block**
 
 **Step 6: Learning (if feedback confirms)**
 - Add trace to BDH with valence = 0.8
