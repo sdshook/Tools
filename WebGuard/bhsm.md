@@ -41,7 +41,7 @@ This is an application of the principle of least privilege—a well-established 
 
 Traditional computing architectures store code and data in the same memory space, making them indistinguishable at the hardware level. This architectural characteristic underlies virtually all injection attacks: SQL injection (data becomes database instructions), cross-site scripting (data becomes executable code), command injection (data becomes shell commands), and buffer overflows (data becomes machine instructions).
 
-The fundamental challenge for any classification system is determining what input *means* without potentially *executing* it. BHSM addresses this through strict separation between semantic analysis and action execution—analogous to the Harvard architecture's separation of instruction and data memory. The semantic layer analyzes meaning through statistical properties without executing content; only abstract verdicts (not raw input) cross into the execution layer. This ensures that even adversarial input cannot corrupt the decision pathway—the worst case remains selection of an incorrect predefined action, not arbitrary system behavior.
+The fundamental challenge for any classification system is determining what input *means* without potentially *executing* it. BHSM addresses this through strict separation between semantic analysis and action execution—analogous to the Harvard architecture's separation of instruction and data memory. The semantic layer analyzes meaning through statistical properties without executing content; only abstract verdicts (not raw input) cross into the execution layer. This ensures that adversarial input cannot bypass the classification pathway to directly influence system actions—the worst case remains selection of an incorrect predefined action, not arbitrary system behavior.
 
 ---
 
@@ -243,15 +243,16 @@ Web server security provides a suitable initial domain because:
 - Attack categories (injection, traversal, etc.) have distinguishable statistical signatures  
 - Operational feedback is available through incident response outcomes
 
-**Self-learning design**: The system operates autonomously without human-in-the-loop (HOTL) intervention. Learning occurs entirely through experiential feedback derived from operational outcomes, not analyst input.
+**Self-learning design intent**: The architecture is designed for autonomous operation without human-in-the-loop (HOTL) intervention. The rationale is operational: security systems that require analyst labeling for every decision cannot operate at machine speed, and human feedback introduces latency that attackers can exploit. The goal is a system where behavioral adaptation emerges from accumulated operational experience rather than manual curation.
 
-**Automated feedback sources in WebGuard**:
+**Feedback mechanisms** (design intent, partially implemented):
 
-- *Outcome heuristics*: Blocked requests with no subsequent complaint → likely correct; allowed requests followed by incident → likely incorrect
-- *Retrospective correlation*: Automated batch analysis of historical logs against later-confirmed incidents
-- *Pattern reinforcement*: Successful classifications strengthen associated patterns; failures trigger automated reweighting
+- *Outcome heuristics*: Blocked requests with no subsequent complaint → likely correct; allowed requests followed by incident → likely incorrect. **Caveat**: These signals are noisy—users rarely complain about silently dropped requests (false positives go undetected), and "incident detection" requires external capability not provided by BHSM itself.
+- *Retrospective correlation*: Batch analysis of historical logs against later-confirmed incidents. **Status**: Design intent; requires integration with external incident tracking.
 
-The architecture explicitly excludes manual analyst influence on the reinforcement learning process. All behavioral adaptation emerges from the system's accumulated operational experience.
+**Current implementation**: The WebGuard proof-of-concept supports feedback injection via API but does not yet automate feedback collection. The evaluation results (Section 6.3) use explicit labeled feedback, not the heuristic mechanisms described above. Practical deployment would require integration with incident response workflows to close the feedback loop.
+
+**Feedback quality dependency**: Learning quality is directly constrained by feedback reliability. The heuristics above have known failure modes, and their noise characteristics would need measurement in production deployments before strong claims about autonomous learning can be supported.
 
 ### 6.2 Implementation
 
