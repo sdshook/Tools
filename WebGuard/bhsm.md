@@ -15,7 +15,7 @@ The Bidirectional Hebbian Memory System (BHSM) is a neuromorphic architecture fo
 
 ### 1.1 The Deployment Adaptation Gap
 
-Large language models acquire knowledge through training on static corpora [4]. Post-training techniques including retrieval-augmented generation (RAG), adapter fine-tuning (LoRA), and tool use enable forms of post-deployment adaptation. However, these approaches address knowledge retrieval rather than experiential learning—the system retrieves information but does not modify its behavior based on operational outcomes.
+Large language models acquire knowledge through training on static corpora [6]. Post-training techniques including retrieval-augmented generation (RAG), adapter fine-tuning (LoRA), and tool use enable forms of post-deployment adaptation. However, these approaches address knowledge retrieval rather than experiential learning—the system retrieves information but does not modify its behavior based on operational outcomes.
 
 For classification applications in dynamic environments, this creates a gap: the classifier cannot learn from its successes and failures during operation. A threat classifier that misses a novel attack pattern does not improve its detection of similar patterns without explicit retraining or rule updates.
 
@@ -27,7 +27,7 @@ However, retrieval addresses a different problem than experiential learning. RAG
 
 ### 1.3 Inference Variability
 
-Language model inference can exhibit variability across invocations due to several factors: temperature sampling, floating-point non-determinism, and batching effects. At temperature=0, modern LLMs are nearly deterministic, with minor variance from numerical precision.
+Language model inference can exhibit variability across invocations due to several factors: temperature sampling, floating-point non-determinism, and batching effects [3]. At temperature=0, modern LLMs are nearly deterministic, with minor variance from numerical precision.
 
 For classification applications, even minor variability can be problematic when consistent behavior is required. Additionally, systems without rate limiting or session tracking may be vulnerable to retry-based exploitation. While these are partially deployment concerns, an architecture providing deterministic classification given fixed learned state simplifies operational guarantees.
 
@@ -45,25 +45,25 @@ The BHSM architecture draws conceptual motivation from several research directio
 
 ### 2.1 Hebbian Learning Principles
 
-Hebb's foundational work on synaptic plasticity [1] established that connection strengths between neurons modify based on co-activation: "neurons that fire together, wire together." This principle suggests that memory systems can be self-modifying based on experience patterns.
+Hebb's foundational work on synaptic plasticity [4] established that connection strengths between neurons modify based on co-activation: "neurons that fire together, wire together." Kandel's research on the molecular biology of memory [5] further demonstrated how these synaptic changes are consolidated into long-term storage. These biological principles suggest that memory systems can be self-modifying based on experience patterns.
 
-Research on computational implementations of Hebbian learning, including work on bidirectional associative memory and reward-modulated plasticity, motivated the BDH (Bidirectional Hebbian) memory component of BHSM. The specific implementation is original.
+Research on computational implementations of Hebbian learning, including the Dragon Hatchling architecture [1] exploring bidirectional associative memory and reward-modulated plasticity, motivated the Reward-Gated Associative Memory component of BHSM. The specific implementation is original.
 
 ### 2.2 Persistent Memory in Neural Systems
 
-Work on context management and memory persistence in language model deployments motivated the PSI (Persistent Semantic Index) component. The concept of maintaining semantic memory across sessions, with retrieval based on similarity rather than recency, addresses the session isolation problem.
+Work on context management and memory persistence in language model deployments [2] motivated the Persistent Semantic Index component. The concept of maintaining semantic memory across sessions, with retrieval based on similarity rather than recency, addresses the session isolation problem.
 
-BHSM's PSI implementation is original, drawing on general principles of semantic indexing and embedding-based retrieval rather than any specific external architecture.
+BHSM's implementation is original, drawing on general principles of semantic indexing and embedding-based retrieval rather than any specific external architecture.
 
 ### 2.3 World Models and Reinforcement Learning
 
-World model research [2] demonstrates that internal representations enabling prediction can be learned from experience. Reinforcement learning provides mechanisms for outcome-based behavioral modification.
+World model research demonstrates that internal representations enabling prediction can be learned from experience. Reinforcement learning provides mechanisms for outcome-based behavioral modification.
 
-BHSM combines these concepts: the PSI accumulates a domain-specific "world model" (a representation of normal vs. anomalous patterns), while reward-gated updates provide the feedback mechanism for behavioral modification. The integration and specific implementation are original.
+BHSM combines these concepts: the Persistent Semantic Index accumulates a domain-specific "world model" (a representation of normal vs. anomalous patterns), while reward-gated updates provide the feedback mechanism for behavioral modification. The integration and specific implementation are original.
 
 ### 2.4 Memory-Augmented Neural Networks
 
-Research on neural Turing machines [3] and memory-augmented architectures demonstrates that external memory can extend neural network capabilities. BHSM's approach differs in that memory is persistent across sessions and modified during deployment rather than optimized during training.
+Research on memory-augmented architectures demonstrates that external memory can extend neural network capabilities. BHSM's approach differs in that memory is persistent across sessions and modified during deployment rather than optimized during training.
 
 ---
 
@@ -267,13 +267,17 @@ BHSM is best understood as an engineering integration of established techniques�
 
 ## References
 
-1. Hebb, D. O. (1949). *The Organization of Behavior: A Neuropsychological Theory*. Wiley.
+1. Kosowski, A., Uznański, P., Chorowski, J., Stamirowska, Z., & Bartoszkiewicz, M. (2025). The Dragon Hatchling: The Missing Link Between the Transformer and Models of the Brain. arXiv:2509.26507. https://arxiv.org/pdf/2509.26507
 
-2. Ha, D. and Schmidhuber, J. (2018). World Models. arXiv:1803.10122.
+2. Anthropic. (2025). Managing context on the Claude Developer Platform. Anthropic News, September 29, 2025. https://www.anthropic.com/news/context-management
 
-3. Graves, A., Wayne, G., and Danihelka, I. (2014). Neural Turing Machines. arXiv:1410.5401.
+3. He, H. and Thinking Machines Lab. (2025). Defeating Nondeterminism in LLM Inference. Thinking Machines Lab: Connectionism. https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/
 
-4. Vaswani, A., et al. (2017). Attention Is All You Need. *Advances in Neural Information Processing Systems*.
+4. Hebb, D. O. (1949). *The Organization of Behavior: A Neuropsychological Theory*. John Wiley & Sons.
+
+5. Kandel, E. R. (2001). The molecular biology of memory storage: a dialogue between genes and synapses. *Science*, Vol. 294, Issue 5544, pp. 1030-1038.
+
+6. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., and Polosukhin, I. (2017). Attention Is All You Need. *Advances in Neural Information Processing Systems (NIPS)*.
 
 ---
 
