@@ -69,6 +69,20 @@ Research on memory-augmented architectures demonstrates that external memory can
 
 ## 3. Architecture
 
+### 3.0 Feature Extraction Pipeline
+
+Before classification, inputs are projected into a fixed-dimensional embedding space. For HTTP request analysis, the embedding captures statistical properties without encoding predefined attack patterns:
+
+**Dimensional structure (32 features)**:
+- Dimensions 0-3: Length statistics (normalized request length, line count, average/max line length)
+- Dimensions 4-7: Entropy measures (byte entropy, bigram entropy, positional entropy, entropy variance)
+- Dimensions 8-15: Character distribution (alpha, digit, special, whitespace, uppercase, printable, punctuation, unique character ratios)
+- Dimensions 16-23: Structural features (nesting depth, repetition score, token diversity, delimiter density, quote/bracket balance, consecutive special ratio, word length variance)
+- Dimensions 24-27: Encoding indicators (percent-encoding density, hex sequence density, base64 likelihood, non-ASCII ratio)
+- Dimensions 28-31: Derived composites (entropy×special interaction, length×depth interaction, structural anomaly score, statistical complexity)
+
+**Design rationale**: 32 dimensions is deliberately constrained to force the system to learn discriminative patterns from statistical features rather than memorizing specific payloads. The features are purely statistical—no pattern matching for known attack strings. This means the "world model" emerges from learning which statistical profiles correlate with threat/benign outcomes, not from predefined signatures.
+
 BHSM organizes into three layers:
 
 ```
@@ -103,6 +117,25 @@ Positive classification outcomes strengthen connections between co-activated pat
 
 **Persistent Semantic Index (PSI)** provides long-term storage with similarity-based retrieval. Entries persist across sessions. When novel patterns are stored, influence propagates to existing memories with cosine similarity above 0.6, with update magnitude proportional to similarity × reward signal. This enables adaptation to new inputs without requiring exact matches.
 
+**BDH/PSI Interaction During Classification**:
+
+When classifying an input, the system queries both memory components and fuses their outputs:
+
+1. **BDH query**: Compute differential threat similarity—the difference between maximum similarity to threat-labeled traces versus benign-labeled traces. This provides a learned discriminative signal.
+
+2. **PSI query**: Retrieve top-k similar entries and compute valence-weighted average. This provides historical context from consolidated long-term memory.
+
+3. **Fusion**: The final threat score combines both signals:
+   ```
+   score = (psi_valence × 0.4) + (bdh_differential × 0.3) + (statistical_baseline × 0.3)
+   ```
+   
+The 0.4/0.3/0.3 weighting prioritizes PSI (consolidated experience) while incorporating BDH (recent learning) and raw statistical features (fallback when memory is sparse).
+
+**Memory Management**:
+
+Memory growth is bounded. BDH enforces a maximum of 1000 traces. When utilization exceeds 80%, low-quality traces are pruned based on |valence| × use_count. Weak Hebbian connections (weight < 0.01) are also pruned. This prevents unbounded growth while preserving high-confidence learned patterns.
+
 ### 3.2 Cognitive Layer
 
 The cognitive layer implements classification and monitoring:
@@ -113,7 +146,12 @@ The cognitive layer implements classification and monitoring:
 
 **Monitoring** tracks coherence metrics and error rates to detect degradation.
 
-**Shared learning** enables multiple instances to contribute to a common PSI, aggregating experience across deployment instances.
+**Shared learning** enables multiple service instances on the same host to contribute to a common PSI through a mesh architecture:
+
+- Services share access to a thread-safe PSI via `Arc<Mutex<PsiIndex>>`
+- When a service learns a high-confidence pattern (|valence| > cross_service_threshold), it propagates to the shared PSI with dampened learning rate (mesh_learning_rate × 0.5)
+- Conflict resolution: later writes overwrite earlier ones; dampened learning rates prevent single-service dominance
+- Updates are asynchronous—services don't block waiting for propagation
 
 ### 3.3 Mechanical Layer
 
@@ -170,6 +208,14 @@ Web server security provides a suitable initial domain because:
 - Operational feedback is available through incident response outcomes
 
 **Feedback availability caveat**: In production deployments, labeled feedback on every request is rarely available. Most traffic is never confirmed as benign or malicious. The WebGuard evaluation assumes feedback availability that may not reflect operational reality. Section 5.1 notes that without feedback, the system does not learn—feedback sparsity is a practical constraint on achievable adaptation rates.
+
+**Feedback sources in WebGuard** (design intent, not fully implemented):
+
+- *Analyst labeling*: Manual classification of flagged requests provides high-quality but sparse feedback
+- *Outcome heuristics*: Blocked requests with no subsequent complaint → likely correct; allowed requests followed by incident → likely incorrect
+- *Retrospective audit*: Batch analysis of historical logs against later-confirmed incidents
+
+The current implementation supports feedback injection via API but does not automate feedback collection. Practical deployment would require integration with incident response workflows.
 
 ### 6.2 Implementation
 
@@ -240,11 +286,17 @@ Future work should address these gaps with larger-scale evaluation against stand
 
 ### 7.3 Potential Vulnerabilities
 
-**Adversarial drift**: An attacker with sustained access could potentially shift learned patterns through gradual poisoning. Protected memory mechanisms (preventing modification of high-confidence patterns) provide partial mitigation.
+**Adversarial drift**: An attacker with sustained access could potentially shift learned patterns through gradual poisoning. The low learning rate (0.015) and pruning of low-quality traces provide partial mitigation—an attacker would need sustained high-confidence poisoning to shift consolidated patterns. High-valence traces (|valence| > 0.8) receive reduced update magnitude, protecting well-established classifications.
 
 **Feedback dependency**: Learning quality depends on feedback accuracy. Incorrect feedback degrades performance.
 
 **Cold start**: New deployments have no learned patterns and rely on initial feature statistics until sufficient experience accumulates.
+
+### 7.4 Performance Characteristics
+
+**Classification latency**: Feature extraction is O(n) in request size. Memory queries are O(m) in trace count with m ≤ 1000 (bounded). Empirically, classification completes in sub-millisecond time for typical HTTP requests on commodity hardware. Latency scales linearly with memory utilization, not request volume.
+
+**Memory footprint**: Each trace stores a 32-float embedding plus metadata (~200 bytes). Maximum 1000 traces ≈ 200KB for BDH. PSI adds similar overhead. Total memory footprint remains under 1MB even at capacity.
 
 ---
 
@@ -278,6 +330,74 @@ BHSM is best understood as an engineering integration of established techniques�
 5. Kandel, E. R. (2001). The molecular biology of memory storage: a dialogue between genes and synapses. *Science*, Vol. 294, Issue 5544, pp. 1030-1038.
 
 6. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., and Polosukhin, I. (2017). Attention Is All You Need. *Advances in Neural Information Processing Systems (NIPS)*.
+
+---
+
+## Appendix: Classification Example Walkthrough
+
+To illustrate how the components interact, consider classification of an HTTP request containing a SQL injection attempt:
+
+**Input**: `GET /users?id=1' OR '1'='1`
+
+**Step 1: Feature Extraction** (32-dim embedding)
+```
+[0.02,   # length: 25 chars / 2000 = 0.0125 → normalized
+ 0.02,   # line_count: 1 line
+ 0.78,   # avg_line_length: high for single line
+ 0.78,   # max_line_length: same as avg
+ 0.61,   # entropy: moderate (repeated characters reduce it)
+ 0.58,   # bigram_entropy: some repeated bigrams ('1'=)
+ 0.45,   # positional_entropy: clustered special chars
+ 0.22,   # entropy_variance: low variance
+ 0.48,   # alpha_ratio: letters present
+ 0.12,   # digit_ratio: "1" appears multiple times
+ 0.28,   # special_ratio: elevated (quotes, equals, apostrophe)
+ 0.04,   # whitespace_ratio: minimal
+ 0.16,   # uppercase_ratio: GET, OR
+ 0.96,   # printable_ratio: all printable
+ 0.20,   # punctuation_ratio: elevated
+ 0.64,   # unique_char_ratio: repeated chars reduce this
+ 0.0,    # nesting_depth: no nested structures
+ 0.35,   # repetition_score: '1' and '=' repeated
+ 0.45,   # token_diversity: limited token vocabulary
+ 0.12,   # delimiter_density: few delimiters
+ 0.0,    # quote_balance: unbalanced quotes
+ 0.0,    # bracket_balance: no brackets
+ 0.40,   # consecutive_special: '='1' sequence
+ 0.33,   # word_length_variance: mixed lengths
+ 0.08,   # percent_encoding: none
+ 0.0,    # hex_sequences: none
+ 0.0,    # base64_likelihood: not base64
+ 0.0,    # non_ascii: all ASCII
+ 0.17,   # entropy × special interaction
+ 0.0,    # length × depth interaction
+ 0.42,   # structural_anomaly: moderate
+ 0.38]   # statistical_complexity: moderate
+```
+
+**Step 2: BDH Query**
+- Find most similar threat trace: similarity = 0.89 (previous SQL injection)
+- Find most similar benign trace: similarity = 0.34 (normal query string)
+- Differential = 0.89 - 0.34 = 0.55 (threat-leaning)
+
+**Step 3: PSI Query**
+- Top-3 similar entries: valences [0.92, 0.88, 0.71]
+- Weighted average valence = 0.84 (high threat)
+
+**Step 4: Score Fusion**
+```
+score = (0.84 × 0.4) + (0.55 × 0.3) + (0.42 × 0.3)
+      = 0.336 + 0.165 + 0.126
+      = 0.627
+```
+
+**Step 5: Action Selection**
+- Score 0.627 > high_threshold (0.5) → **Block**
+
+**Step 6: Learning (if feedback confirms)**
+- Add trace to BDH with valence = 0.8
+- Strengthen Hebbian connections to similar threat patterns
+- Propagate to shared PSI if |valence| > cross_service_threshold
 
 ---
 
