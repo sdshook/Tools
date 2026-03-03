@@ -99,18 +99,30 @@ impl ExperientialBehavioralRegulator {
     }
 
     /// Calculate context-adaptive α/β parameters based on current threat level
-    /// High threat = favor accuracy (higher β), Low threat = favor empathy (higher α)
+    /// 
+    /// SECURITY-FIRST DESIGN: When threat level is elevated, IQ (accuracy) dominates
+    /// to minimize false negatives. EQ (empathy for benign traffic) only matters
+    /// when threat level is clearly low.
+    /// 
+    /// High threat = strongly favor accuracy (higher β) - can't afford to miss threats
+    /// Low threat = balance shifts toward empathy (higher α) - reduce false positives
     pub fn adaptive_alpha_beta(&self, threat_level: f32) -> (f32, f32) {
         let threat_factor = threat_level.clamp(0.0, 1.0);
         
-        // Adaptive adjustment: high threat shifts toward accuracy (IQ)
+        // ASYMMETRIC adjustment: threat level has STRONGER effect on increasing β
+        // than decreasing α. This ensures we're always biased toward catching threats.
         let threat_adjustment = self.context_sensitivity * threat_factor;
         
-        // Calculate adaptive parameters
-        let alpha = (self.base_alpha - threat_adjustment * 0.4).max(0.1);
-        let beta = (self.base_beta + threat_adjustment * 0.6).min(0.9);
+        // Calculate adaptive parameters with security-first bias
+        // - β (accuracy/IQ) increases rapidly with threat level
+        // - α (empathy/EQ) decreases more slowly to maintain some FP awareness
+        let beta_boost = threat_adjustment * 0.8;  // Strong β increase for threats
+        let alpha_reduction = threat_adjustment * 0.3;  // Gentler α reduction
         
-        // Normalize to ensure α + β ≈ 1.0
+        let alpha = (self.base_alpha - alpha_reduction).max(0.15);  // Floor at 0.15 (some FP awareness)
+        let beta = (self.base_beta + beta_boost).min(0.85);  // Cap at 0.85 (never ignore EQ entirely)
+        
+        // Normalize to ensure α + β = 1.0
         let total = alpha + beta;
         (alpha / total, beta / total)
     }

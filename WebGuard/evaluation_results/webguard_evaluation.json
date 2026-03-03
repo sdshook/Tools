@@ -1,6 +1,6 @@
 {
   "evaluation": "WebGuard Self-Learning EDR",
-  "timestamp": "2026-03-02T22:21:02.849866762+00:00",
+  "timestamp": "2026-03-03T00:35:56.895632965+00:00",
   "threshold": 0.5,
 
   "multipass_learning": [
@@ -19,32 +19,58 @@
     },
     {
       "pass": 1,
-      "accuracy": 0.7754,
-      "precision": 0.6947,
-      "recall": 0.9706,
-      "f1_score": 0.8098,
-      "false_positive_rate": 0.4143,
-      "false_negative_rate": 0.0294,
-      "true_positives": 66,
-      "false_positives": 29,
-      "true_negatives": 41,
-      "false_negatives": 2
+      "accuracy": 0.6957,
+      "precision": 0.6204,
+      "recall": 0.9853,
+      "f1_score": 0.7614,
+      "false_positive_rate": 0.5857,
+      "false_negative_rate": 0.0147,
+      "true_positives": 67,
+      "false_positives": 41,
+      "true_negatives": 29,
+      "false_negatives": 1
     },
     {
       "pass": 2,
-      "accuracy": 0.9855,
-      "precision": 0.9714,
+      "accuracy": 0.9928,
+      "precision": 0.9855,
       "recall": 1.0000,
-      "f1_score": 0.9855,
-      "false_positive_rate": 0.0286,
+      "f1_score": 0.9927,
+      "false_positive_rate": 0.0143,
       "false_negative_rate": 0.0000,
       "true_positives": 68,
-      "false_positives": 2,
-      "true_negatives": 68,
+      "false_positives": 1,
+      "true_negatives": 69,
       "false_negatives": 0
     },
     {
       "pass": 3,
+      "accuracy": 0.9638,
+      "precision": 0.9315,
+      "recall": 1.0000,
+      "f1_score": 0.9645,
+      "false_positive_rate": 0.0714,
+      "false_negative_rate": 0.0000,
+      "true_positives": 68,
+      "false_positives": 5,
+      "true_negatives": 65,
+      "false_negatives": 0
+    },
+    {
+      "pass": 4,
+      "accuracy": 1.0000,
+      "precision": 1.0000,
+      "recall": 1.0000,
+      "f1_score": 1.0000,
+      "false_positive_rate": 0.0000,
+      "false_negative_rate": 0.0000,
+      "true_positives": 68,
+      "false_positives": 0,
+      "true_negatives": 70,
+      "false_negatives": 0
+    },
+    {
+      "pass": 5,
       "accuracy": 0.9928,
       "precision": 0.9855,
       "recall": 1.0000,
@@ -57,20 +83,33 @@
       "false_negatives": 0
     },
     {
-      "pass": 4,
-      "accuracy": 0.9783,
-      "precision": 0.9577,
+      "pass": 6,
+      "accuracy": 0.9928,
+      "precision": 0.9855,
       "recall": 1.0000,
-      "f1_score": 0.9784,
-      "false_positive_rate": 0.0429,
+      "f1_score": 0.9927,
+      "false_positive_rate": 0.0143,
       "false_negative_rate": 0.0000,
       "true_positives": 68,
-      "false_positives": 3,
-      "true_negatives": 67,
+      "false_positives": 1,
+      "true_negatives": 69,
       "false_negatives": 0
     },
     {
-      "pass": 5,
+      "pass": 7,
+      "accuracy": 0.9928,
+      "precision": 0.9855,
+      "recall": 1.0000,
+      "f1_score": 0.9927,
+      "false_positive_rate": 0.0143,
+      "false_negative_rate": 0.0000,
+      "true_positives": 68,
+      "false_positives": 1,
+      "true_negatives": 69,
+      "false_negatives": 0
+    },
+    {
+      "pass": 8,
       "accuracy": 0.9855,
       "precision": 0.9714,
       "recall": 1.0000,
@@ -83,72 +122,21 @@
       "false_negatives": 0
     },
     {
-      "pass": 6,
-      "accuracy": 1.0000,
-      "precision": 1.0000,
-      "recall": 1.0000,
-      "f1_score": 1.0000,
-      "false_positive_rate": 0.0000,
-      "false_negative_rate": 0.0000,
-      "true_positives": 68,
-      "false_positives": 0,
-      "true_negatives": 70,
-      "false_negatives": 0
-    },
-    {
-      "pass": 7,
-      "accuracy": 1.0000,
-      "precision": 1.0000,
-      "recall": 1.0000,
-      "f1_score": 1.0000,
-      "false_positive_rate": 0.0000,
-      "false_negative_rate": 0.0000,
-      "true_positives": 68,
-      "false_positives": 0,
-      "true_negatives": 70,
-      "false_negatives": 0
-    },
-    {
-      "pass": 8,
-      "accuracy": 1.0000,
-      "precision": 1.0000,
-      "recall": 1.0000,
-      "f1_score": 1.0000,
-      "false_positive_rate": 0.0000,
-      "false_negative_rate": 0.0000,
-      "true_positives": 68,
-      "false_positives": 0,
-      "true_negatives": 70,
-      "false_negatives": 0
-    },
-    {
       "pass": 9,
-      "accuracy": 0.9928,
-      "precision": 0.9855,
+      "accuracy": 1.0000,
+      "precision": 1.0000,
       "recall": 1.0000,
-      "f1_score": 0.9927,
-      "false_positive_rate": 0.0143,
+      "f1_score": 1.0000,
+      "false_positive_rate": 0.0000,
       "false_negative_rate": 0.0000,
       "true_positives": 68,
-      "false_positives": 1,
-      "true_negatives": 69,
+      "false_positives": 0,
+      "true_negatives": 70,
       "false_negatives": 0
     }
   ],
 
   "collective_immunity": {
-    "nginx_eval": {
-      "accuracy": 1.0000,
-      "recall": 1.0000,
-      "true_positives": 63,
-      "false_negatives": 0
-    },
-    "node_eval": {
-      "accuracy": 1.0000,
-      "recall": 1.0000,
-      "true_positives": 63,
-      "false_negatives": 0
-    },
     "apache_eval": {
       "accuracy": 1.0000,
       "recall": 1.0000,
@@ -156,6 +144,18 @@
       "false_negatives": 0
     },
     "iis_eval": {
+      "accuracy": 1.0000,
+      "recall": 1.0000,
+      "true_positives": 63,
+      "false_negatives": 0
+    },
+    "nginx_eval": {
+      "accuracy": 1.0000,
+      "recall": 1.0000,
+      "true_positives": 63,
+      "false_negatives": 0
+    },
+    "node_eval": {
       "accuracy": 1.0000,
       "recall": 1.0000,
       "true_positives": 63,

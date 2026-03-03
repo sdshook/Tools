@@ -111,15 +111,27 @@ impl RetrospectiveLearningSystem {
             missed_threat_history: VecDeque::new(),
             false_positive_history: VecDeque::new(),
             max_history_size: 1000,
-            // SECURITY-FIRST: False negatives (missed threats) are FAR more costly than false positives
-            // FN learning rate is 6x higher than FP - missing a threat is unacceptable
-            false_negative_learning_rate: 3.0, // HIGH: Learn aggressively from missed threats
-            false_positive_learning_rate: 0.5, // MODERATE: Learn cautiously from false alarms
+            // SECURITY-FIRST PRINCIPLE: FN >> FP (catastrophic vs inconvenient)
+            // 
+            // A missed threat (FN) can result in:
+            // - Full system compromise
+            // - Data exfiltration  
+            // - Persistent attacker access
+            // - Regulatory/legal consequences
+            //
+            // A false positive (FP) results in:
+            // - User friction
+            // - Support tickets
+            // - Workarounds
+            //
+            // The asymmetry is 10:1 in real-world cost, so learning rates reflect this
+            false_negative_learning_rate: 5.0,  // AGGRESSIVE: Never miss the same threat twice
+            false_positive_learning_rate: 0.3,  // CAUTIOUS: Learn from FP but don't compromise security
             temporal_decay_factor: 0.95,
             similarity_threshold: 0.7,
             learning_stats: RetrospectiveLearningStats::default(),
-            regularization_factor: 0.05, // Lower regularization for faster threat learning
-            max_adjustment_magnitude: 0.5, // Allow larger adjustments for security
+            regularization_factor: 0.02, // Lower regularization for faster threat learning
+            max_adjustment_magnitude: 0.6, // Allow larger upward adjustments for security
         }
     }
 
@@ -315,59 +327,89 @@ impl RetrospectiveLearningSystem {
         similar_false_positives
     }
 
-    /// Calculate balanced threat score adjustment based on both missed threats and false positives
+    /// Calculate SECURITY-FIRST threat score adjustment
+    /// 
+    /// DESIGN PRINCIPLE: False negatives (missed threats) are ALWAYS more costly than false positives.
+    /// A missed attack can compromise the entire system. A false positive causes operational friction.
+    /// 
+    /// This function implements ASYMMETRIC adjustment:
+    /// 1. FN adjustments are applied FIRST and with PRIORITY
+    /// 2. FP adjustments are applied ONLY if they don't undermine FN protections
+    /// 3. When FN and FP patterns conflict, FN WINS
     pub fn calculate_threat_score_adjustment(&self, current_features: &[f32], base_score: f32) -> f32 {
         let similar_threats = self.find_similar_missed_threat_patterns(current_features);
         let similar_false_positives = self.find_similar_false_positive_patterns(current_features);
         
-        // Calculate adjustment from missed threats (increase score)
-        let mut threat_adjustment = 0.0;
-        let mut threat_weight = 0.0;
+        // STEP 1: Calculate FN adjustment (PRIORITY - missed threats must be caught)
+        let mut fn_adjustment: f32 = 0.0;
+        let mut fn_max_similarity: f32 = 0.0;
 
-        for missed_threat in similar_threats.iter().take(5) { // Consider top 5 similar threats
+        for missed_threat in similar_threats.iter().take(5) {
             let similarity = self.calculate_feature_similarity(current_features, &missed_threat.feature_vector);
-            let weight = similarity * missed_threat.consequence_severity;
+            fn_max_similarity = fn_max_similarity.max(similarity);
             
-            // Adjustment should increase threat score for patterns similar to missed threats
-            let adjustment = (missed_threat.actual_threat_level - missed_threat.original_threat_score) * weight * self.false_negative_learning_rate;
-            
-            threat_adjustment += adjustment;
-            threat_weight += weight;
+            // Strong upward adjustment for patterns similar to missed threats
+            // Uses consequence_severity to weight by how bad the miss was
+            let adjustment = similarity * missed_threat.consequence_severity * self.false_negative_learning_rate;
+            fn_adjustment += adjustment;
+        }
+        
+        // Normalize FN adjustment
+        if !similar_threats.is_empty() {
+            fn_adjustment /= similar_threats.len().min(5) as f32;
         }
 
-        // Calculate adjustment from false positives (decrease score)
-        let mut fp_adjustment = 0.0;
-        let mut fp_weight = 0.0;
+        // STEP 2: Calculate FP adjustment (SECONDARY - only if safe)
+        let mut fp_adjustment: f32 = 0.0;
+        let mut fp_max_similarity: f32 = 0.0;
 
-        for false_positive in similar_false_positives.iter().take(5) { // Consider top 5 similar false positives
+        for false_positive in similar_false_positives.iter().take(5) {
             let similarity = self.calculate_feature_similarity(current_features, &false_positive.feature_vector);
-            let weight = similarity * false_positive.impact_severity;
+            fp_max_similarity = fp_max_similarity.max(similarity);
             
-            // Adjustment should decrease threat score for patterns similar to false positives
-            let adjustment = (false_positive.actual_threat_level - false_positive.original_threat_score) * weight * self.false_positive_learning_rate;
-            
+            // Downward adjustment for patterns similar to false positives
+            let adjustment = -similarity * false_positive.impact_severity * self.false_positive_learning_rate;
             fp_adjustment += adjustment;
-            fp_weight += weight;
+        }
+        
+        // Normalize FP adjustment  
+        if !similar_false_positives.is_empty() {
+            fp_adjustment /= similar_false_positives.len().min(5) as f32;
         }
 
-        // Combine adjustments with regularization
-        let total_weight = threat_weight + fp_weight;
-        let combined_adjustment = if total_weight > 0.0 {
-            let raw_adjustment = (threat_adjustment + fp_adjustment) / total_weight;
-            // Apply regularization to prevent extreme adjustments
-            raw_adjustment * (1.0 - self.regularization_factor)
+        // STEP 3: ASYMMETRIC COMBINATION - FN has priority
+        let final_adjustment: f32 = if fn_max_similarity > 0.5 {
+            // Strong FN signal: apply FN adjustment, ignore or heavily discount FP
+            let fn_priority_factor = fn_max_similarity.powf(0.5); // sqrt to boost priority
+            let fp_discount = if fp_max_similarity > fn_max_similarity {
+                // FP is more similar - this is a conflict, FN still wins but FP gets partial credit
+                0.2 * (1.0 - fn_max_similarity)
+            } else {
+                0.0 // FN is more similar, ignore FP entirely
+            };
+            fn_adjustment * fn_priority_factor + fp_adjustment * fp_discount
+        } else if fp_max_similarity > 0.5 {
+            // Strong FP signal, no FN conflict: apply FP adjustment cautiously
+            fp_adjustment * (1.0 - self.regularization_factor)
         } else {
-            0.0
+            // Weak signals from both: combine with FN having 3x weight
+            (fn_adjustment * 3.0 + fp_adjustment) / 4.0
         };
 
-        // Cap the adjustment magnitude
-        let capped_adjustment = combined_adjustment.clamp(-self.max_adjustment_magnitude, self.max_adjustment_magnitude);
+        // Cap the adjustment magnitude (but allow larger upward adjustments for FN)
+        let capped_adjustment = if final_adjustment > 0.0 {
+            // Upward (more restrictive) - allow up to max_adjustment_magnitude
+            final_adjustment.min(self.max_adjustment_magnitude)
+        } else {
+            // Downward (less restrictive) - cap more tightly to prevent FP-driven leniency
+            final_adjustment.max(-self.max_adjustment_magnitude * 0.5)
+        };
         
         let adjusted_score = (base_score + capped_adjustment).clamp(0.0, 1.0);
         
         if capped_adjustment.abs() > 0.05 {
-            info!("Balanced retrospective adjustment: base_score={:.3} -> adjusted_score={:.3} (threat_adj={:.3}, fp_adj={:.3}, final={:.3})",
-                  base_score, adjusted_score, threat_adjustment / threat_weight.max(1.0), fp_adjustment / fp_weight.max(1.0), capped_adjustment);
+            info!("SECURITY-FIRST retrospective adjustment: base_score={:.3} -> adjusted_score={:.3} (fn_adj={:.3}@{:.2}, fp_adj={:.3}@{:.2}, final={:.3})",
+                  base_score, adjusted_score, fn_adjustment, fn_max_similarity, fp_adjustment, fp_max_similarity, capped_adjustment);
         }
 
         adjusted_score
@@ -457,13 +499,13 @@ mod tests {
         assert_eq!(system.missed_threat_history.len(), 0);
         assert_eq!(system.false_positive_history.len(), 0);
         assert_eq!(system.max_history_size, 1000);
-        // Security-first: FN learning rate >> FP learning rate
-        assert_eq!(system.false_negative_learning_rate, 3.0);
-        assert_eq!(system.false_positive_learning_rate, 0.5);
-        assert!(system.false_negative_learning_rate > system.false_positive_learning_rate * 5.0,
-            "FN learning rate should be significantly higher than FP for security");
-        assert_eq!(system.regularization_factor, 0.05);
-        assert_eq!(system.max_adjustment_magnitude, 0.5);
+        // Security-first: FN learning rate >> FP learning rate (updated values)
+        assert_eq!(system.false_negative_learning_rate, 5.0);
+        assert_eq!(system.false_positive_learning_rate, 0.3);
+        assert!(system.false_negative_learning_rate > system.false_positive_learning_rate * 10.0,
+            "FN learning rate should be significantly higher than FP for security (ratio > 10:1)");
+        assert_eq!(system.regularization_factor, 0.02);
+        assert_eq!(system.max_adjustment_magnitude, 0.6);
     }
 
     #[test]

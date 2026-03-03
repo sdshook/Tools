@@ -37,16 +37,19 @@ const PATTERN_LEARNING_RATE: f32 = 0.1;
 const ERROR_LEARNING_RATE: f32 = 0.5;
 
 /// Threat class weight (to counter class imbalance)
-/// SECURITY-FIRST: Threats weighted 8x higher than benign for reliable detection
-const THREAT_WEIGHT: f32 = 8.0;
+/// SECURITY-FIRST: Threats weighted 10x higher than benign for reliable detection
+/// Missing a threat (FN) is catastrophic; blocking benign (FP) is inconvenient
+const THREAT_WEIGHT: f32 = 10.0;
 
-/// False negative penalty multiplier - missing threats is CRITICAL
-/// SECURITY-FIRST: FN > FP, but both must be learned effectively
-const FALSE_NEGATIVE_PENALTY: f32 = 3.0;
+/// False negative penalty multiplier - missing threats is CATASTROPHIC
+/// SECURITY-FIRST PRINCIPLE: FN >> FP (not just FN > FP)
+/// A missed attack can compromise the entire system, steal data, establish persistence
+const FALSE_NEGATIVE_PENALTY: f32 = 5.0;
 
-/// False positive penalty multiplier - blocking benign is less critical but still important
-/// Changed from 1.5 to 2.0 for more effective FP reduction while maintaining security-first
-const FALSE_POSITIVE_PENALTY: f32 = 2.0;
+/// False positive penalty multiplier - blocking benign causes operational friction
+/// Still important to learn from, but NEVER at the expense of missing threats
+/// Kept lower than FN penalty to maintain security-first bias
+const FALSE_POSITIVE_PENALTY: f32 = 1.5;
 
 /// Full request memory for BDH-style retrieval
 #[derive(Clone, Debug)]
