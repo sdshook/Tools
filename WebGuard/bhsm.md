@@ -63,7 +63,7 @@ BHSM combines these concepts: the Persistent Semantic Index accumulates a domain
 
 ### 2.4 Memory-Augmented Neural Networks
 
-Research on memory-augmented architectures demonstrates that external memory can extend neural network capabilities. BHSM's approach differs in that memory is persistent across sessions and modified during deployment rather than optimized during training.
+Research on neural Turing machines and memory-augmented architectures demonstrates that external memory can extend neural network capabilities. BHSM's approach differs in that memory is persistent across sessions and modified during deployment rather than optimized during training. Where memory-augmented networks typically learn read/write controllers during supervised training, BHSM's memory modifications occur through reward-gated updates during operation.
 
 ---
 
@@ -113,6 +113,8 @@ Where:
 - `reward_signal` is +1.0 for correct classifications, -1.0 for misclassifications, scaled by confidence
 - `η` (learning rate) is 0.015 for weight updates (base rate 0.05 × 0.3 reduction factor to prevent over-fitting)
 
+**Stability note on confidence scaling**: Scaling rewards by confidence creates two potential regimes: (1) a high-confidence attractor where established patterns become increasingly resistant to update, and (2) a low-confidence trap where degraded confidence suppresses learning. The architecture addresses this through multiple mechanisms: high-valence traces (|valence| > 0.8) receive reduced update magnitude regardless of confidence, preventing runaway reinforcement; the confidence penalty mechanism (Section 3.2) is multiplicative rather than additive, ensuring that even penalized confidence still permits learning; and the minimum learning rate floor (0.001) prevents complete learning shutdown. In practice, the system tends toward the high-confidence attractor for well-established patterns—which is desirable for security, as it makes confirmed threat patterns resistant to adversarial drift.
+
 Positive classification outcomes strengthen connections between co-activated patterns; negative outcomes weaken them. This enables the system to modify its similarity judgments based on operational feedback.
 
 **Persistent Semantic Index (PSI)** provides long-term storage with similarity-based retrieval. Entries persist across sessions. When novel patterns are stored, influence propagates to existing memories with cosine similarity above 0.6, with update magnitude proportional to similarity × reward signal. This enables adaptation to new inputs without requiring exact matches.
@@ -130,11 +132,15 @@ When classifying an input, the system queries both memory components and fuses t
    score = (psi_valence × 0.4) + (bdh_differential × 0.3) + (statistical_baseline × 0.3)
    ```
    
-The 0.4/0.3/0.3 weighting prioritizes PSI (consolidated experience) while incorporating BDH (recent learning) and raw statistical features (fallback when memory is sparse).
+   Where `statistical_baseline` is derived from the raw embedding features—specifically, a weighted combination of dimensions 30 (structural_anomaly_score) and 31 (statistical_complexity), computed as `(features[30] × 0.6 + features[31] × 0.4)`. This provides a heuristic fallback when memory is sparse and ensures the system can make reasonable classifications even before significant learning has occurred.
+
+The 0.4/0.3/0.3 weighting prioritizes PSI (consolidated experience) while incorporating BDH (recent learning) and statistical features (cold-start fallback).
 
 **Memory Management**:
 
 Memory growth is bounded. BDH enforces a maximum of 1000 traces. When utilization exceeds 80%, low-quality traces are pruned based on |valence| × use_count. Weak Hebbian connections (weight < 0.01) are also pruned. This prevents unbounded growth while preserving high-confidence learned patterns.
+
+**Pruning tradeoff**: This criterion favors frequently-seen, high-confidence patterns, which means rare-but-important patterns (e.g., a novel attack seen once with moderate confidence) are vulnerable to pruning. The cross-service PSI propagation partially mitigates this—patterns exceeding the cross-service threshold are replicated to the shared PSI before BDH pruning can remove them. Additionally, the confidence penalty mechanism slows learning rate for low-confidence traces, giving them more time to accumulate evidence before pruning.
 
 ### 3.2 Cognitive Layer
 
@@ -158,6 +164,13 @@ The cognitive layer implements classification and monitoring:
 The mechanical layer enforces output constraints:
 
 Regardless of cognitive layer computation, system output is restricted to a predefined action set. For the WebGuard implementation, this is {Detect, Allow, Block}. No pathway exists from input to arbitrary output—only to defined actions.
+
+**Action thresholds** (configurable per deployment):
+- score < 0.3 → **Allow** (low threat, permit request)
+- 0.3 ≤ score < 0.5 → **Detect** (moderate threat, log and permit for analysis)
+- score ≥ 0.5 → **Block** (high threat, deny request)
+
+The 0.5 Block threshold reflects a security-first bias: the system errs toward blocking when uncertain. In deployments where availability is critical, this threshold can be raised (e.g., 0.7) at the cost of increased false negatives. The 0.3 Detect threshold ensures that even low-confidence anomalies are logged for retrospective analysis.
 
 This bounds the consequence of any classification error: the worst case is selection of the wrong predefined action, not arbitrary system behavior.
 
@@ -335,7 +348,7 @@ BHSM is best understood as an engineering integration of established techniques�
 
 ## Appendix: Classification Example Walkthrough
 
-To illustrate how the components interact, consider classification of an HTTP request containing a SQL injection attempt:
+To illustrate how the components interact, consider classification of an HTTP request containing a SQL injection attempt. *Note: Embedding values below are approximate for illustration purposes, computed to be representative of the feature extraction logic rather than exact system outputs.*
 
 **Input**: `GET /users?id=1' OR '1'='1`
 
