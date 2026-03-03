@@ -7,7 +7,7 @@
 
 ## Abstract
 
-The Bidirectional Hebbian Memory System (BHSM) is a neuromorphic architecture for adaptive classification that learns from operational experience and develops shared knowledge across distributed instances. The architecture combines persistent memory storage, reward-gated learning, and constrained action spaces to address specific deployment scenarios where continuous adaptation is required. This paper describes the BHSM architecture and presents WebGuard, a web server threat classification system, as a proof-of-concept implementation.
+The Bidirectional Hebbian Memory System (BHSM) is a neuromorphic architecture for adaptive classification that learns from operational experience and develops shared knowledge across co-located service instances. The architecture combines persistent memory storage, reward-gated learning, and constrained action spaces to address specific deployment scenarios where continuous adaptation is required. This paper describes the BHSM architecture and presents WebGuard, a web server threat classification system, as a proof-of-concept implementation.
 
 ---
 
@@ -80,23 +80,28 @@ BHSM organizes into three layers:
 │    Classification logic, confidence calibration, monitoring  │
 ├─────────────────────────────────────────────────────────────┤
 │                    SYNAPTIC LAYER                            │
-│              BDH Memory + PSI (persistent storage)           │
+│    Reward-Gated Associative Memory + Persistent Semantic Index│
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### 3.1 Synaptic Layer
 
-The foundation implements persistent memory with experience-based modification:
+The foundation implements persistent memory with experience-based modification. The component names (BDH, PSI) are internal to BHSM and do not reference external systems.
 
-**BDH Memory** stores traces with embeddings, classification labels (valence), and connection weights. The update rule implements reward-modulated Hebbian learning:
+**Reward-Gated Associative Memory (BDH)** stores traces with embeddings, classification labels (valence), and connection weights. The update rule implements reward-modulated Hebbian learning:
 
 ```
 Δw = η × (pre_activation × post_activation) × reward_signal
 ```
 
+Where:
+- `pre_activation` and `post_activation` are cosine similarities between the input embedding and stored trace embeddings (range: 0.0 to 1.0)
+- `reward_signal` is +1.0 for correct classifications, -1.0 for misclassifications, scaled by confidence
+- `η` (learning rate) is 0.05, reduced by 70% during updates to prevent over-fitting
+
 Positive classification outcomes strengthen connections between co-activated patterns; negative outcomes weaken them. This enables the system to modify its similarity judgments based on operational feedback.
 
-**PSI (Persistent Semantic Index)** provides long-term storage with similarity-based retrieval. Entries persist across sessions. Novel patterns can propagate influence to similar existing memories, enabling adaptation to new inputs without requiring exact matches.
+**Persistent Semantic Index (PSI)** provides long-term storage with similarity-based retrieval. Entries persist across sessions. When novel patterns are stored, influence propagates to existing memories with cosine similarity above 0.6, with update magnitude proportional to similarity × reward signal. This enables adaptation to new inputs without requiring exact matches.
 
 ### 3.2 Cognitive Layer
 
@@ -104,7 +109,7 @@ The cognitive layer implements classification and monitoring:
 
 **Classification** queries memory systems, retrieves similar patterns, and computes scores from stored valences weighted by similarity.
 
-**Confidence calibration** tracks prediction accuracy and adjusts confidence scores when high-confidence predictions produce poor outcomes. This is implemented as a penalty coefficient applied to confidence scores when the error rate among high-confidence predictions exceeds threshold.
+**Confidence calibration** tracks prediction accuracy and adjusts confidence scores when high-confidence predictions produce poor outcomes. This is implemented as a penalty coefficient (0.3) applied to confidence scores when the error rate among predictions with confidence > 0.8 exceeds 20%.
 
 **Monitoring** tracks coherence metrics and error rates to detect degradation.
 
@@ -163,6 +168,8 @@ Web server security provides a suitable initial domain because:
 - HTTP request structure provides natural feature extraction boundaries
 - Attack categories (injection, traversal, etc.) have distinguishable statistical signatures  
 - Operational feedback is available through incident response outcomes
+
+**Feedback availability caveat**: In production deployments, labeled feedback on every request is rarely available. Most traffic is never confirmed as benign or malicious. The WebGuard evaluation assumes feedback availability that may not reflect operational reality. Section 5.1 notes that without feedback, the system does not learn—feedback sparsity is a practical constraint on achievable adaptation rates.
 
 ### 6.2 Implementation
 
