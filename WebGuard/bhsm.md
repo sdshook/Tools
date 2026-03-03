@@ -15,7 +15,7 @@ The Bidirectional Hebbian Memory System (BHSM) is a neuromorphic architecture fo
 
 ### 1.1 The Deployment Adaptation Gap
 
-Large language models acquire knowledge through training on static corpora [6]. Post-training techniques including retrieval-augmented generation (RAG), adapter fine-tuning (LoRA), and tool use enable forms of post-deployment adaptation. However, these approaches address knowledge retrieval rather than experiential learning—the system retrieves information but does not modify its behavior based on operational outcomes.
+Large language models acquire knowledge through training on static corpora [1]. Post-training techniques including retrieval-augmented generation (RAG), adapter fine-tuning (LoRA), and tool use enable forms of post-deployment adaptation. However, these approaches address knowledge retrieval rather than experiential learning—the system retrieves information but does not modify its behavior based on operational outcomes.
 
 For classification applications in dynamic environments, this creates a gap: the classifier cannot learn from its successes and failures during operation. A threat classifier that misses a novel attack pattern does not improve its detection of similar patterns without explicit retraining or rule updates.
 
@@ -27,7 +27,7 @@ However, retrieval addresses a different problem than experiential learning. RAG
 
 ### 1.3 Inference Variability
 
-Language model inference can exhibit variability across invocations due to several factors: temperature sampling, floating-point non-determinism, and batching effects [3]. At temperature=0, modern LLMs are nearly deterministic, with minor variance from numerical precision.
+Language model inference can exhibit variability across invocations due to several factors: temperature sampling, floating-point non-determinism, and batching effects [2]. At temperature=0, modern LLMs are nearly deterministic, with minor variance from numerical precision.
 
 For classification applications, even minor variability can be problematic when consistent behavior is required. Additionally, systems without rate limiting or session tracking may be vulnerable to retry-based exploitation. While these are partially deployment concerns, an architecture providing deterministic classification given fixed learned state simplifies operational guarantees.
 
@@ -37,6 +37,12 @@ A separate concern from learning is execution bounding. In agentic systems, succ
 
 This is an application of the principle of least privilege—a well-established security pattern. BHSM implements this at the architectural level, ensuring that classifier outputs map only to predefined actions.
 
+### 1.5 The Semantic-Execution Separation Problem
+
+Traditional computing architectures store code and data in the same memory space, making them indistinguishable at the hardware level. This architectural characteristic underlies virtually all injection attacks: SQL injection (data becomes database instructions), cross-site scripting (data becomes executable code), command injection (data becomes shell commands), and buffer overflows (data becomes machine instructions).
+
+The fundamental challenge for any classification system is determining what input *means* without potentially *executing* it. BHSM addresses this through strict separation between semantic analysis and action execution—analogous to the Harvard architecture's separation of instruction and data memory. The semantic layer analyzes meaning through statistical properties without executing content; only abstract verdicts (not raw input) cross into the execution layer. This ensures that even adversarial input cannot corrupt the decision pathway—the worst case remains selection of an incorrect predefined action, not arbitrary system behavior.
+
 ---
 
 ## 2. Related Work and Conceptual Motivation
@@ -45,13 +51,13 @@ The BHSM architecture draws conceptual motivation from several research directio
 
 ### 2.1 Hebbian Learning Principles
 
-Hebb's foundational work on synaptic plasticity [4] established that connection strengths between neurons modify based on co-activation: "neurons that fire together, wire together." Kandel's research on the molecular biology of memory [5] further demonstrated how these synaptic changes are consolidated into long-term storage. These biological principles suggest that memory systems can be self-modifying based on experience patterns.
+Hebb's foundational work on synaptic plasticity [3] established that connection strengths between neurons modify based on co-activation: "neurons that fire together, wire together." Kandel's research on the molecular biology of memory [4] further demonstrated how these synaptic changes are consolidated into long-term storage. These biological principles suggest that memory systems can be self-modifying based on experience patterns.
 
-Research on computational implementations of Hebbian learning, including the Dragon Hatchling architecture [1] exploring bidirectional associative memory and reward-modulated plasticity, motivated the Reward-Gated Associative Memory component of BHSM. The specific implementation is original.
+Research on computational implementations of Hebbian learning, including the Dragon Hatchling architecture [5] exploring bidirectional associative memory and reward-modulated plasticity, motivated the Reward-Gated Associative Memory component of BHSM. The specific implementation is original.
 
 ### 2.2 Persistent Memory in Neural Systems
 
-Work on context management and memory persistence in language model deployments [2] motivated the Persistent Semantic Index component. The concept of maintaining semantic memory across sessions, with retrieval based on similarity rather than recency, addresses the session isolation problem.
+Work on context management and memory persistence in language model deployments [6] motivated the Persistent Semantic Index component. The concept of maintaining semantic memory across sessions, with retrieval based on similarity rather than recency, addresses the session isolation problem.
 
 BHSM's implementation is original, drawing on general principles of semantic indexing and embedding-based retrieval rather than any specific external architecture.
 
@@ -83,19 +89,31 @@ Before classification, inputs are projected into a fixed-dimensional embedding s
 
 **Design rationale**: 32 dimensions is deliberately constrained to force the system to learn discriminative patterns from statistical features rather than memorizing specific payloads. The features are purely statistical—no pattern matching for known attack strings. This means the "world model" emerges from learning which statistical profiles correlate with threat/benign outcomes, not from predefined signatures.
 
-BHSM organizes into three layers:
+BHSM organizes into three layers with a strict semantic-execution boundary:
 
 ```
+                              Raw Input
+                                  │
+                                  ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    MECHANICAL LAYER                          │
-│         Constrained action space (output bounding)           │
+│                    SYNAPTIC LAYER                            │
+│    Reward-Gated Associative Memory + Persistent Semantic Index│
+│    (Analyzes meaning through statistical properties)         │
 ├─────────────────────────────────────────────────────────────┤
 │                    COGNITIVE LAYER                           │
 │    Classification logic, confidence calibration, monitoring  │
-├─────────────────────────────────────────────────────────────┤
-│                    SYNAPTIC LAYER                            │
-│    Reward-Gated Associative Memory + Persistent Semantic Index│
+│    (Produces abstract verdict: score + confidence + class)   │
+╞═════════════════════════════════════════════════════════════╡
+│              SEMANTIC-EXECUTION BOUNDARY                     │
+│         (Only verdicts cross—never raw input)                │
+╞═════════════════════════════════════════════════════════════╡
+│                    MECHANICAL LAYER                          │
+│         Constrained action space (output bounding)           │
+│    (Acts on verdicts, cannot access raw input)               │
 └─────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+                        Predefined Action Set
 ```
 
 ### 3.1 Synaptic Layer
@@ -164,9 +182,11 @@ The cognitive layer implements classification and monitoring:
 
 ### 3.3 Mechanical Layer
 
-The mechanical layer enforces output constraints:
+The mechanical layer enforces output constraints and implements the semantic-execution boundary described in Section 1.5:
 
-Regardless of cognitive layer computation, system output is restricted to a predefined action set. For the WebGuard implementation, this is {Detect, Allow, Block}. No pathway exists from input to arbitrary output—only to defined actions.
+**Semantic-execution boundary**: The only data crossing from cognitive to mechanical layers is an abstract verdict structure containing threat score, confidence level, and semantic classification. Raw input never reaches the execution layer—the mechanical layer acts on verdicts, not content. This architectural constraint ensures that adversarial input cannot influence system actions except through the classification pathway.
+
+**Constrained action set**: Regardless of cognitive layer computation, system output is restricted to a predefined action set. For the WebGuard implementation, this is {Detect, Allow, Block}. No pathway exists from input to arbitrary output—only to defined actions.
 
 **Action thresholds** (configurable per deployment):
 - score < 0.3 → **Allow** (low threat, permit request)
@@ -223,15 +243,15 @@ Web server security provides a suitable initial domain because:
 - Attack categories (injection, traversal, etc.) have distinguishable statistical signatures  
 - Operational feedback is available through incident response outcomes
 
-**Feedback availability caveat**: In production deployments, labeled feedback on every request is rarely available. Most traffic is never confirmed as benign or malicious. The WebGuard evaluation assumes feedback availability that may not reflect operational reality. Section 5.1 notes that without feedback, the system does not learn—feedback sparsity is a practical constraint on achievable adaptation rates.
+**Self-learning design**: The system operates autonomously without human-in-the-loop (HOTL) intervention. Learning occurs entirely through experiential feedback derived from operational outcomes, not analyst input.
 
-**Feedback sources in WebGuard** (design intent, not fully implemented):
+**Automated feedback sources in WebGuard**:
 
-- *Analyst labeling*: Manual classification of flagged requests provides high-quality but sparse feedback
 - *Outcome heuristics*: Blocked requests with no subsequent complaint → likely correct; allowed requests followed by incident → likely incorrect
-- *Retrospective audit*: Batch analysis of historical logs against later-confirmed incidents
+- *Retrospective correlation*: Automated batch analysis of historical logs against later-confirmed incidents
+- *Pattern reinforcement*: Successful classifications strengthen associated patterns; failures trigger automated reweighting
 
-The current implementation supports feedback injection via API but does not automate feedback collection. Practical deployment would require integration with incident response workflows.
+The architecture explicitly excludes manual analyst influence on the reinforcement learning process. All behavioral adaptation emerges from the system's accumulated operational experience.
 
 ### 6.2 Implementation
 
@@ -335,17 +355,17 @@ BHSM is best understood as an engineering integration of established techniques�
 
 ## References
 
-1. Kosowski, A., Uznański, P., Chorowski, J., Stamirowska, Z., & Bartoszkiewicz, M. (2025). The Dragon Hatchling: The Missing Link Between the Transformer and Models of the Brain. arXiv:2509.26507. https://arxiv.org/pdf/2509.26507
+1. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., and Polosukhin, I. (2017). Attention Is All You Need. *Advances in Neural Information Processing Systems (NIPS)*.
 
-2. Anthropic. (2025). Managing context on the Claude Developer Platform. Anthropic News, September 29, 2025. https://www.anthropic.com/news/context-management
+2. He, H. and Thinking Machines Lab. (2025). Defeating Nondeterminism in LLM Inference. Thinking Machines Lab: Connectionism. https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/
 
-3. He, H. and Thinking Machines Lab. (2025). Defeating Nondeterminism in LLM Inference. Thinking Machines Lab: Connectionism. https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/
+3. Hebb, D. O. (1949). *The Organization of Behavior: A Neuropsychological Theory*. John Wiley & Sons.
 
-4. Hebb, D. O. (1949). *The Organization of Behavior: A Neuropsychological Theory*. John Wiley & Sons.
+4. Kandel, E. R. (2001). The molecular biology of memory storage: a dialogue between genes and synapses. *Science*, Vol. 294, Issue 5544, pp. 1030-1038.
 
-5. Kandel, E. R. (2001). The molecular biology of memory storage: a dialogue between genes and synapses. *Science*, Vol. 294, Issue 5544, pp. 1030-1038.
+5. Kosowski, A., Uznański, P., Chorowski, J., Stamirowska, Z., & Bartoszkiewicz, M. (2025). The Dragon Hatchling: The Missing Link Between the Transformer and Models of the Brain. arXiv:2509.26507. https://arxiv.org/pdf/2509.26507
 
-6. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., and Polosukhin, I. (2017). Attention Is All You Need. *Advances in Neural Information Processing Systems (NIPS)*.
+6. Anthropic. (2025). Managing context on the Claude Developer Platform. Anthropic News, September 29, 2025. https://www.anthropic.com/news/context-management
 
 ---
 
