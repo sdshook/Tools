@@ -15,7 +15,7 @@ The Bidirectional Hebbian Memory System (BHSM) is a neuromorphic architecture fo
 
 ### 1.1 The Deployment Adaptation Gap
 
-Large language models acquire knowledge through training on static corpora. Post-training techniques including retrieval-augmented generation (RAG), adapter fine-tuning (LoRA), and tool use enable forms of post-deployment adaptation. However, these approaches address knowledge retrieval rather than experiential learning—the system retrieves information but does not modify its behavior based on operational outcomes.
+Large language models acquire knowledge through training on static corpora [4]. Post-training techniques including retrieval-augmented generation (RAG), adapter fine-tuning (LoRA), and tool use enable forms of post-deployment adaptation. However, these approaches address knowledge retrieval rather than experiential learning—the system retrieves information but does not modify its behavior based on operational outcomes.
 
 For classification applications in dynamic environments, this creates a gap: the classifier cannot learn from its successes and failures during operation. A threat classifier that misses a novel attack pattern does not improve its detection of similar patterns without explicit retraining or rule updates.
 
@@ -97,7 +97,7 @@ The foundation implements persistent memory with experience-based modification. 
 Where:
 - `pre_activation` and `post_activation` are cosine similarities between the input embedding and stored trace embeddings (range: 0.0 to 1.0)
 - `reward_signal` is +1.0 for correct classifications, -1.0 for misclassifications, scaled by confidence
-- `η` (learning rate) is 0.05, reduced by 70% during updates to prevent over-fitting
+- `η` (learning rate) is 0.015 for weight updates (base rate 0.05 × 0.3 reduction factor to prevent over-fitting)
 
 Positive classification outcomes strengthen connections between co-activated patterns; negative outcomes weaken them. This enables the system to modify its similarity judgments based on operational feedback.
 
@@ -177,7 +177,7 @@ WebGuard implements all three BHSM layers:
 
 | Layer | Implementation |
 |-------|----------------|
-| Synaptic | BDH Memory (32-dim embeddings), PSI Index |
+| Synaptic | Reward-Gated Associative Memory (32-dim embeddings), Persistent Semantic Index |
 | Cognitive | Threat scoring, confidence calibration (penalty coefficient 0.3), cross-service learning |
 | Mechanical | 3-action constraint: {Detect, Allow, Block} |
 
@@ -222,7 +222,7 @@ These demonstrations are preliminary. Rigorous evaluation would require larger d
 
 The WebGuard proof-of-concept implements core BHSM components:
 
-**Implemented**: BDH Memory, PSI Index, confidence calibration, cross-instance learning, action constraints.
+**Implemented**: Reward-Gated Associative Memory, Persistent Semantic Index, confidence calibration, cross-instance learning, action constraints.
 
 **Not implemented**: Federated learning across hosts, cryptographic authentication for shared updates, cold-start mitigation through pre-trained patterns.
 
