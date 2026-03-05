@@ -2,18 +2,20 @@
 TinyLLaMA + BHSM Integration System
 ==================================
 
-This system demonstrates how BHSM components (CMNN, BDHMemory, PSI) can complement
-TinyLLaMA to overcome context window constraints through experiential memory growth
-and synaptic memory mechanisms.
+This system demonstrates how BHSM components can complement LLMs to overcome 
+context window constraints through experiential memory growth and synaptic 
+memory mechanisms.
 
 Key Innovation: Hybrid architecture where:
-- TinyLLaMA handles language understanding and generation
+- LLM handles language understanding and generation
 - PSI provides persistent semantic memory beyond context window
 - BDH learns from interactions and adapts over time
-- CMNN coordinates between components and provides meta-reasoning
 - Memory bridge translates between LLM and BHSM representations
 
-(c) 2025 - Shane D. Shook, All Rights Reserved
+Note: This module requires the `transformers` library for LLM functionality.
+Install with: pip install transformers
+
+(c) 2025 - Shane D. Shook, PhD, All Rights Reserved
 """
 
 import time
@@ -22,18 +24,33 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from transformers import AutoTokenizer, AutoModelForCausalLM
 from typing import Dict, List, Tuple, Optional, Any
 import json
 import hashlib
 from datetime import datetime
 from collections import deque
-import matplotlib.pyplot as plt
+
+# Optional imports - defer transformers import to allow module inspection without it
+try:
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+    HAS_TRANSFORMERS = True
+except ImportError:
+    HAS_TRANSFORMERS = False
+    AutoTokenizer = None
+    AutoModelForCausalLM = None
+
+# Optional matplotlib for visualization
+try:
+    import matplotlib.pyplot as plt
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
 
 # Import BHSM components
 from BHSM import (
     PSIIndex, BDHMemory, CognitiveMesh, SimEmbedder,
-    l2_norm, sim_cos, EMBED_DIM, DEVICE
+    TextFeatureExtractor, l2_norm, sim_cos, EMBED_DIM, DEVICE,
+    get_shared_psi
 )
 
 # Configuration
@@ -106,14 +123,26 @@ class ExperientialMemorySystem:
     - PSI: Long-term semantic memory for facts, patterns, and experiences
     - BDH: Adaptive learning from successful/unsuccessful interactions
     - Episode buffer: Recent conversation history with reward signals
+    
+    Uses shared PSI for cross-instance learning when available.
     """
     
-    def __init__(self):
-        self.psi = PSIIndex()
-        self.bdh_episodic = BDHMemory("episodic")
-        self.bdh_semantic = BDHMemory("semantic")
+    def __init__(self, use_shared_psi: bool = False, use_text_features: bool = True):
+        """
+        Initialize the experiential memory system.
+        
+        Args:
+            use_shared_psi: If True, use the global shared PSI for cross-instance learning
+            use_text_features: If True, use TextFeatureExtractor for richer embeddings
+        """
+        self.psi = get_shared_psi() if use_shared_psi else PSIIndex()
+        self.bdh_episodic = BDHMemory("episodic", shared_psi=self.psi)
+        self.bdh_semantic = BDHMemory("semantic", shared_psi=self.psi)
         self.episode_buffer = deque(maxlen=100)
         self.memory_stats = {"retrievals": 0, "consolidations": 0, "adaptations": 0}
+        
+        # Use TextFeatureExtractor for richer embeddings, fall back to SimEmbedder
+        self.embedder = TextFeatureExtractor() if use_text_features else SimEmbedder()
         
         # Initialize with foundational knowledge
         self._initialize_foundational_memories()
@@ -128,12 +157,12 @@ class ExperientialMemorySystem:
             ("context", "I can maintain context across long conversations", 0.5)
         ]
         
-        embedder = SimEmbedder()
         for topic, text, valence in foundational_knowledge:
+            embedding = self.embedder.extract(text) if hasattr(self.embedder, 'extract') else self.embedder.embed(text)
             self.psi.add_doc(
                 f"foundation_{topic}",
                 text,
-                embedder.embed(text),
+                embedding,
                 tags=["foundation", topic],
                 valence=valence,
                 protected=True
@@ -157,7 +186,8 @@ class ExperientialMemorySystem:
         self.bdh_episodic.add_or_update(
             memory_entry["id"],
             memory_entry["embedding"],
-            valence=memory_entry["reward"]
+            valence=memory_entry["reward"],
+            label="positive" if memory_entry["reward"] > 0 else "negative" if memory_entry["reward"] < 0 else "unknown"
         )
         
         # Update BDH with reward signal if available
@@ -165,14 +195,14 @@ class ExperientialMemorySystem:
             self.bdh_episodic.reward_gated_update(
                 memory_entry["id"],
                 memory_entry["embedding"],
-                memory_entry["reward"]
+                memory_entry["reward"],
+                confidence=abs(memory_entry["reward"])  # Use reward magnitude as confidence proxy
             )
             self.memory_stats["adaptations"] += 1
     
     def retrieve_relevant_memories(self, query_text: str, k: int = MEMORY_RETRIEVAL_K) -> List[Dict]:
         """Retrieve relevant memories for the current query."""
-        embedder = SimEmbedder()
-        query_embedding = embedder.embed(query_text)
+        query_embedding = self.embedder.extract(query_text) if hasattr(self.embedder, 'extract') else self.embedder.embed(query_text)
         
         # Search PSI for semantic matches
         psi_results = self.psi.search(query_embedding, top_k=k)
