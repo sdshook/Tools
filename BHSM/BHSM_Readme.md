@@ -377,12 +377,7 @@ BHSM/
 ├── BHSM.py                           # Core BHSM implementation
 ├── eq_iq_regulator.py                # EQ/IQ balanced reward system
 ├── tinyllama_bhsm_integration.py     # LLM integration example
-├── BHSM_Readme.md                    # This documentation
-├── tests/
-│   ├── bhsm_cognitive_demo.py        # Cognitive architecture demo
-│   ├── bhsm_llm_integration_demo.py  # LLM integration demo
-│   └── comprehensive_test_suite.py   # Full test suite
-└── test_*.py                         # Unit tests
+└── BHSM_Readme.md                    # This documentation
 ```
 
 ---
