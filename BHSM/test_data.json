@@ -1,0 +1,215 @@
+{
+  "description": "Test data for BHSM experiential learning demonstration",
+  "version": "1.0",
+  "scenarios": {
+    "threat_patterns": [
+      {
+        "id": "sql_injection_1",
+        "input": "GET /users?id=1' OR '1'='1 HTTP/1.1",
+        "label": "threat",
+        "category": "sql_injection",
+        "severity": 0.9
+      },
+      {
+        "id": "sql_injection_2",
+        "input": "POST /login username=admin'-- password=x",
+        "label": "threat",
+        "category": "sql_injection",
+        "severity": 0.85
+      },
+      {
+        "id": "sql_injection_3",
+        "input": "GET /products?category=1 UNION SELECT * FROM users--",
+        "label": "threat",
+        "category": "sql_injection",
+        "severity": 0.95
+      },
+      {
+        "id": "path_traversal_1",
+        "input": "GET /../../etc/passwd HTTP/1.1",
+        "label": "threat",
+        "category": "path_traversal",
+        "severity": 0.8
+      },
+      {
+        "id": "path_traversal_2",
+        "input": "GET /files?name=....//....//etc/shadow",
+        "label": "threat",
+        "category": "path_traversal",
+        "severity": 0.85
+      },
+      {
+        "id": "xss_1",
+        "input": "GET /search?q=<script>alert('XSS')</script>",
+        "label": "threat",
+        "category": "xss",
+        "severity": 0.75
+      },
+      {
+        "id": "xss_2",
+        "input": "POST /comment body=<img src=x onerror=alert(1)>",
+        "label": "threat",
+        "category": "xss",
+        "severity": 0.7
+      },
+      {
+        "id": "command_injection_1",
+        "input": "GET /ping?host=localhost;cat /etc/passwd",
+        "label": "threat",
+        "category": "command_injection",
+        "severity": 0.9
+      },
+      {
+        "id": "command_injection_2",
+        "input": "POST /backup filename=test.txt|rm -rf /",
+        "label": "threat",
+        "category": "command_injection",
+        "severity": 0.95
+      },
+      {
+        "id": "ldap_injection_1",
+        "input": "GET /auth?user=*)(uid=*))(|(uid=*",
+        "label": "threat",
+        "category": "ldap_injection",
+        "severity": 0.8
+      }
+    ],
+    "benign_patterns": [
+      {
+        "id": "normal_get_1",
+        "input": "GET /api/users/123 HTTP/1.1",
+        "label": "benign",
+        "category": "api_request",
+        "severity": 0.0
+      },
+      {
+        "id": "normal_get_2",
+        "input": "GET /products?category=electronics&page=2 HTTP/1.1",
+        "label": "benign",
+        "category": "api_request",
+        "severity": 0.0
+      },
+      {
+        "id": "normal_post_1",
+        "input": "POST /api/login Content-Type: application/json",
+        "label": "benign",
+        "category": "api_request",
+        "severity": 0.0
+      },
+      {
+        "id": "normal_post_2",
+        "input": "POST /api/orders {\"item\": \"laptop\", \"qty\": 1}",
+        "label": "benign",
+        "category": "api_request",
+        "severity": 0.0
+      },
+      {
+        "id": "static_file_1",
+        "input": "GET /static/css/style.css HTTP/1.1",
+        "label": "benign",
+        "category": "static_file",
+        "severity": 0.0
+      },
+      {
+        "id": "static_file_2",
+        "input": "GET /images/logo.png HTTP/1.1",
+        "label": "benign",
+        "category": "static_file",
+        "severity": 0.0
+      },
+      {
+        "id": "health_check_1",
+        "input": "GET /health HTTP/1.1",
+        "label": "benign",
+        "category": "health_check",
+        "severity": 0.0
+      },
+      {
+        "id": "search_query_1",
+        "input": "GET /search?q=machine+learning+tutorial HTTP/1.1",
+        "label": "benign",
+        "category": "search",
+        "severity": 0.0
+      },
+      {
+        "id": "pagination_1",
+        "input": "GET /api/posts?offset=20&limit=10 HTTP/1.1",
+        "label": "benign",
+        "category": "api_request",
+        "severity": 0.0
+      },
+      {
+        "id": "user_profile_1",
+        "input": "GET /users/profile?id=user_12345 HTTP/1.1",
+        "label": "benign",
+        "category": "api_request",
+        "severity": 0.0
+      }
+    ],
+    "ambiguous_patterns": [
+      {
+        "id": "encoded_1",
+        "input": "GET /api/data?param=%3Cscript%3E HTTP/1.1",
+        "label": "suspicious",
+        "category": "encoded",
+        "severity": 0.5
+      },
+      {
+        "id": "unusual_chars_1",
+        "input": "GET /search?q=test'\"<>& HTTP/1.1",
+        "label": "suspicious",
+        "category": "unusual_chars",
+        "severity": 0.4
+      },
+      {
+        "id": "long_param_1",
+        "input": "GET /api/process?data=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "label": "suspicious",
+        "category": "buffer_test",
+        "severity": 0.3
+      },
+      {
+        "id": "nested_encoding_1",
+        "input": "GET /file?name=%252e%252e%252f HTTP/1.1",
+        "label": "suspicious",
+        "category": "double_encoding",
+        "severity": 0.6
+      },
+      {
+        "id": "mixed_case_1",
+        "input": "GET /admin?cmd=SeLeCt HTTP/1.1",
+        "label": "suspicious",
+        "category": "evasion",
+        "severity": 0.55
+      }
+    ]
+  },
+  "multipass_sequences": [
+    {
+      "name": "learning_progression",
+      "description": "Tests learning improvement over multiple passes",
+      "passes": 3,
+      "samples_per_pass": 15
+    },
+    {
+      "name": "adaptation_test",
+      "description": "Tests adaptation to new patterns",
+      "passes": 5,
+      "samples_per_pass": 10
+    }
+  ],
+  "oneshot_tests": [
+    {
+      "name": "immediate_threat",
+      "description": "Test immediate threat detection without prior learning",
+      "input": "GET /admin?exec=system('rm -rf /')",
+      "expected_action": "BLOCK"
+    },
+    {
+      "name": "immediate_benign",
+      "description": "Test benign request handling without prior learning", 
+      "input": "GET /api/status HTTP/1.1",
+      "expected_action": "ALLOW"
+    }
+  ]
+}
