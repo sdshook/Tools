@@ -70,9 +70,9 @@ PRUNE_THRESHOLD = 0.8        # Trigger pruning at 80% utilization
 HIGH_VALENCE_THRESHOLD = 0.8 # High-valence traces get reduced updates
 
 # Score fusion weights (from authoritative spec)
-PSI_WEIGHT = 0.4             # PSI valence weight
-BDH_WEIGHT = 0.3             # BDH differential weight
-BASELINE_WEIGHT = 0.3        # Statistical baseline weight
+PSI_WEIGHT = 0.25            # PSI valence weight (reduced - can be noisy)
+BDH_WEIGHT = 0.50            # BDH differential weight (primary learning signal)
+BASELINE_WEIGHT = 0.25       # Statistical baseline weight
 
 # PSI propagation
 PSI_PROPAGATION_THRESHOLD = 0.6  # Cosine similarity threshold for propagation
@@ -187,10 +187,19 @@ class FeatureExtractor(ABC):
         """
         Compute statistical baseline score from raw features.
         Formula: (structural_anomaly × 0.6) + (statistical_complexity × 0.4)
+        
+        Returns value in [-1, 1] range for score fusion compatibility:
+        - Negative values indicate benign-leaning statistics
+        - Positive values indicate threat-leaning statistics
         """
         anomaly = self.get_structural_anomaly_score(features)
         complexity = self.get_statistical_complexity(features)
-        return anomaly * 0.6 + complexity * 0.4
+        raw_score = anomaly * 0.6 + complexity * 0.4
+        
+        # Map from [0, 1] to [-1, 1] range
+        # 0.5 baseline (neutral) maps to 0.0
+        normalized = (raw_score - 0.5) * 2.0
+        return np.clip(normalized, -1.0, 1.0)
 
 
 class TextFeatureExtractor(FeatureExtractor):
@@ -652,8 +661,9 @@ class BDHMemory:
         """
         Compute differential threat similarity.
         
-        Returns: difference between max threat similarity and max benign similarity.
+        Returns: amplified difference between threat and benign similarity.
         Positive = threat-leaning, Negative = benign-leaning
+        Range: [-1, 1]
         """
         query_norm = l2_norm(query)
         threat_sims = []
@@ -668,10 +678,26 @@ class BDHMemory:
             elif entry["valence"] < -0.1 or entry.get("label") == "benign":
                 benign_sims.append(similarity)
         
-        max_threat = max(threat_sims) if threat_sims else 0.0
-        max_benign = max(benign_sims) if benign_sims else 0.0
+        if not threat_sims and not benign_sims:
+            return 0.0
         
-        return max_threat - max_benign
+        # Use weighted average of top-k similar, not just max
+        k = 3
+        top_threat = sorted(threat_sims, reverse=True)[:k]
+        top_benign = sorted(benign_sims, reverse=True)[:k]
+        
+        avg_threat = np.mean(top_threat) if top_threat else 0.0
+        avg_benign = np.mean(top_benign) if top_benign else 0.0
+        
+        # Compute raw differential
+        raw_diff = avg_threat - avg_benign
+        
+        # Amplify the differential for better discrimination
+        # Use tanh-like amplification to keep in [-1, 1] range
+        amplification_factor = 5.0  # Amplify small differences
+        amplified = np.tanh(raw_diff * amplification_factor)
+        
+        return float(amplified)
     
     def reward_gated_update(self, trace_id: str, state_vec: np.ndarray, 
                            reward: float, context_stability: float = 0.5, 
@@ -1224,6 +1250,11 @@ class BHSMClassifier:
         """
         Update memory based on classification outcome.
         
+        Implements experiential learning:
+        - Content-based trace IDs ensure same patterns strengthen same memories
+        - Stronger learning signal for corrections (mistakes teach more)
+        - Memories added to both BDH (short-term) and PSI (long-term)
+        
         Args:
             input_data: The input that was classified
             was_correct: Whether the classification was correct
@@ -1231,40 +1262,70 @@ class BHSMClassifier:
         """
         features = self.feature_extractor.extract(input_data)
         
-        # Compute reward signal
-        reward = 1.0 if was_correct else -1.0
+        # Compute reward signal - stronger for corrections
+        if was_correct:
+            reward = 0.5  # Modest reinforcement for correct predictions
+        else:
+            reward = 1.0  # Strong learning signal for mistakes
         
         # Get last classification for confidence
-        # (In production, this would be tracked more carefully)
         verdict = self.classify(input_data)
         
         # Record for calibration
         self.confidence_calibrator.record_prediction(verdict.confidence, was_correct)
         
         # Update valence controller
-        self.valence_controller.update(verdict.confidence, reward)
+        valence_reward = reward if was_correct else -reward
+        self.valence_controller.update(verdict.confidence, valence_reward)
         
-        # Update or add trace to BDH
-        trace_id = f"{self.name}_{self.classification_count}"
+        # Create content-based trace ID for deduplication
+        # Same input will update the same trace, strengthening memory
+        import hashlib
+        content_hash = hashlib.md5(str(input_data).encode()).hexdigest()[:12]
+        trace_id = f"{true_label}_{content_hash}"
         
-        # Determine valence from true label
+        # Determine valence from true label (always use ground truth)
         if true_label == "threat":
-            valence = 0.8
+            base_valence = 0.9  # Strong positive valence for threats
         elif true_label == "benign":
-            valence = -0.8
+            base_valence = -0.9  # Strong negative valence for benign
         else:
-            valence = verdict.threat_score * 2 - 1  # Map back to [-1, 1]
+            base_valence = 0.0
         
+        # Check if this pattern exists - if so, strengthen it
+        existing = self.bdh.storage.get(trace_id)
+        if existing:
+            # Strengthen existing memory - move toward ground truth
+            current_valence = existing["valence"]
+            # Stronger correction if we were wrong
+            correction_strength = 0.3 if was_correct else 0.6
+            valence = current_valence + correction_strength * (base_valence - current_valence)
+            valence = np.clip(valence, -1.0, 1.0)
+        else:
+            valence = base_valence
+        
+        # Add/update in BDH memory
         self.bdh.add_or_update(trace_id, features, valence=valence, label=true_label)
         
-        # Apply reward-gated update
+        # Apply reward-gated Hebbian update
+        regulated_reward = self.valence_controller.regulate_reward(reward)
         self.bdh.reward_gated_update(
             trace_id,
             features,
-            reward=self.valence_controller.regulate_reward(reward),
+            reward=regulated_reward,
             predicted_threat=verdict.threat_score,
             actual_threat=1.0 if true_label == "threat" else 0.0,
             confidence=verdict.confidence
+        )
+        
+        # Also add to PSI for long-term semantic memory
+        self.psi.add_doc(
+            trace_id,
+            str(input_data)[:200],  # Truncate for storage
+            features,
+            tags=[true_label, "learned"],
+            valence=valence,
+            protected=False
         )
         
         # Track accuracy

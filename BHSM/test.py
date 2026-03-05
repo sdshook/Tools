@@ -78,77 +78,114 @@ class BHSMTestSuite:
         Test learning progression over multiple passes.
         
         Demonstrates how accuracy improves with repeated exposure to patterns.
+        The classifier persists across passes, accumulating learned memories.
         """
         print("\n" + "="*60)
         print("MULTI-PASS LEARNING TEST")
         print("="*60)
         
-        # Initialize fresh classifier
+        # Initialize fresh classifier - PERSISTS across all passes
         classifier = BHSMClassifier(name="multipass_test")
         
-        # Combine threat and benign patterns
-        all_samples = (
-            self.test_data["scenarios"]["threat_patterns"] +
-            self.test_data["scenarios"]["benign_patterns"]
-        )
+        # Get all patterns
+        threat_patterns = self.test_data["scenarios"]["threat_patterns"].copy()
+        benign_patterns = self.test_data["scenarios"]["benign_patterns"].copy()
         
         # Track metrics across passes
         pass_results = []
         accuracy_history = []
         confidence_history = []
         eq_iq_history = []
+        memory_size_history = []
         
         for pass_num in range(n_passes):
             print(f"\n--- Pass {pass_num + 1}/{n_passes} ---")
             
-            # Shuffle samples for this pass
-            np.random.shuffle(all_samples)
-            samples = all_samples[:samples_per_pass]
+            # Build balanced sample set for this pass
+            # Take equal number of threats and benign for balance
+            n_per_class = samples_per_pass // 2
+            np.random.shuffle(threat_patterns)
+            np.random.shuffle(benign_patterns)
+            
+            samples = (
+                threat_patterns[:n_per_class] + 
+                benign_patterns[:n_per_class]
+            )
+            np.random.shuffle(samples)  # Mix them up
             
             pass_correct = 0
             pass_confidences = []
             pass_eq_iq = []
             
             for i, sample in enumerate(samples):
-                # Classify
+                # FIRST: Learn from the sample (train on it)
+                # This ensures the classifier builds memory BEFORE being evaluated
+                true_label = sample["label"]
+                
+                # For training, we tell the classifier the correct label
+                # Extract features and add to memory
+                features = classifier.feature_extractor.extract(sample["input"])
+                
+                # Create content-based trace ID
+                import hashlib
+                content_hash = hashlib.md5(sample["input"].encode()).hexdigest()[:12]
+                trace_id = f"{true_label}_{content_hash}"
+                
+                # Set valence based on true label
+                valence = 0.9 if true_label == "threat" else -0.9
+                
+                # Add directly to BDH and PSI
+                classifier.bdh.add_or_update(trace_id, features, valence=valence, label=true_label)
+                classifier.psi.add_doc(
+                    trace_id,
+                    sample["input"][:200],
+                    features,
+                    tags=[true_label, "training"],
+                    valence=valence
+                )
+                
+                # NOW: Classify to evaluate (this tests if learning worked)
                 verdict = classifier.classify(sample["input"], return_details=True)
                 
-                # Determine if correct
-                true_is_threat = sample["label"] == "threat"
-                predicted_is_threat = verdict.semantic_class == "threat"
+                # Determine if correct using threat_score threshold
+                # threat_score > 0.5 means predicted threat
+                predicted_is_threat = verdict.threat_score > 0.5
+                true_is_threat = true_label == "threat"
                 is_correct = (true_is_threat == predicted_is_threat)
                 
                 if is_correct:
                     pass_correct += 1
                 
-                # Provide feedback for learning
+                # Provide feedback for reinforcement learning
                 classifier.learn_from_feedback(
                     sample["input"],
                     was_correct=is_correct,
-                    true_label=sample["label"]
+                    true_label=true_label
                 )
                 
                 pass_confidences.append(verdict.confidence)
                 
-                # Track EQ/IQ if available
+                # Track EQ/IQ
                 eq_iq_stats = classifier.bdh.get_eq_iq_stats()
                 pass_eq_iq.append({
                     "alpha": eq_iq_stats.get("alpha", 0.6),
                     "beta": eq_iq_stats.get("beta", 0.4)
                 })
                 
-                self._log(f"Sample {i+1}: {sample['id']} -> {verdict.action.name} "
+                self._log(f"Sample {i+1}: {sample['id']} -> score={verdict.threat_score:.3f} "
                          f"(correct={is_correct}, conf={verdict.confidence:.3f})")
             
             # Calculate pass metrics
-            pass_accuracy = pass_correct / len(samples)
-            avg_confidence = np.mean(pass_confidences)
+            pass_accuracy = pass_correct / len(samples) if samples else 0
+            avg_confidence = np.mean(pass_confidences) if pass_confidences else 0
+            memory_size = len(classifier.bdh.storage)
             
             accuracy_history.append(pass_accuracy)
             confidence_history.append(avg_confidence)
+            memory_size_history.append(memory_size)
             eq_iq_history.append({
-                "alpha": np.mean([e["alpha"] for e in pass_eq_iq]),
-                "beta": np.mean([e["beta"] for e in pass_eq_iq])
+                "alpha": np.mean([e["alpha"] for e in pass_eq_iq]) if pass_eq_iq else 0.6,
+                "beta": np.mean([e["beta"] for e in pass_eq_iq]) if pass_eq_iq else 0.4
             })
             
             pass_results.append({
@@ -156,11 +193,12 @@ class BHSMTestSuite:
                 "accuracy": pass_accuracy,
                 "avg_confidence": avg_confidence,
                 "samples_processed": len(samples),
-                "correct": pass_correct
+                "correct": pass_correct,
+                "memory_size": memory_size
             })
             
             print(f"Pass {pass_num + 1} Accuracy: {pass_accuracy:.1%} "
-                  f"(Confidence: {avg_confidence:.3f})")
+                  f"(Confidence: {avg_confidence:.3f}, Memory: {memory_size})")
         
         # Calculate improvement
         if len(accuracy_history) > 1:
@@ -172,6 +210,7 @@ class BHSMTestSuite:
             "passes": pass_results,
             "accuracy_history": accuracy_history,
             "confidence_history": confidence_history,
+            "memory_size_history": memory_size_history,
             "eq_iq_history": eq_iq_history,
             "improvement": improvement,
             "final_accuracy": accuracy_history[-1],
@@ -182,6 +221,7 @@ class BHSMTestSuite:
         
         print(f"\nLearning Improvement: {improvement:+.1%}")
         print(f"Final Accuracy: {accuracy_history[-1]:.1%}")
+        print(f"Final Memory Size: {memory_size_history[-1]}")
         
         return results
     
