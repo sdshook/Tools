@@ -1,0 +1,180 @@
+[
+  {
+    "name": "Port Scanning Activity",
+    "category": "DENIAL",
+    "severity": "MEDIUM",
+    "description": "Network reconnaissance via systematic port scanning",
+    "feature_profile": {
+      "entropy_range": [0.30, 0.55],
+      "special_char_ratio": [0.05, 0.20],
+      "repetition_range": [0.5, 0.9]
+    },
+    "signature_patterns": [
+      {"pattern": "SYN scan", "weight": 0.85},
+      {"pattern": "port scan", "weight": 0.8},
+      {"pattern": "sequential ports", "weight": 0.75},
+      {"pattern": "ICMP unreachable", "weight": 0.6},
+      {"pattern": "connection refused burst", "weight": 0.7}
+    ],
+    "templates": [
+      "SYN to ports 1-1024 from single source",
+      "rapid connection attempts to multiple ports",
+      "nmap signature detected: -sS scan",
+      "1000 connection attempts in 5 seconds",
+      "sequential port probe: 22,23,25,80,443,8080"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["SYN", "TCP", "UDP", "ICMP"]}
+    ],
+    "base_valence": 0.75
+  },
+  {
+    "name": "Command and Control Communication",
+    "category": "MALWARE",
+    "severity": "CRITICAL",
+    "description": "Network patterns indicating C2 beacon or communication with known C2 infrastructure",
+    "feature_profile": {
+      "entropy_range": [0.50, 0.80],
+      "special_char_ratio": [0.10, 0.30],
+      "repetition_range": [0.3, 0.7]
+    },
+    "signature_patterns": [
+      {"pattern": "beacon interval", "weight": 0.9},
+      {"pattern": "periodic callback", "weight": 0.85},
+      {"pattern": "known C2 IP", "weight": 0.95},
+      {"pattern": "cobalt strike", "weight": 0.95},
+      {"pattern": "DNS beaconing", "weight": 0.9}
+    ],
+    "templates": [
+      "periodic HTTPS POST every 60s to unknown domain",
+      "DNS TXT query pattern matches C2 beacon",
+      "connection to known Cobalt Strike server",
+      "heartbeat pattern: 30s interval to VPS",
+      "encoded payload in HTTP Cookie header"
+    ],
+    "mutations": [
+      {"type": "encoding", "variants": ["url", "hex"]},
+      {"type": "substitution", "targets": ["HTTPS"], "variants": ["HTTP", "DNS"]}
+    ],
+    "base_valence": 0.95
+  },
+  {
+    "name": "DNS Tunneling",
+    "category": "EXPOSURE",
+    "severity": "HIGH",
+    "description": "Data exfiltration or C2 communication via DNS protocol abuse",
+    "feature_profile": {
+      "entropy_range": [0.60, 0.90],
+      "special_char_ratio": [0.15, 0.35],
+      "length_range": [0.4, 0.8]
+    },
+    "signature_patterns": [
+      {"pattern": "long subdomain", "weight": 0.85},
+      {"pattern": "high entropy DNS", "weight": 0.9},
+      {"pattern": "TXT record query", "weight": 0.7},
+      {"pattern": "base64 in hostname", "weight": 0.9},
+      {"pattern": "iodine", "weight": 0.95},
+      {"pattern": "dnscat", "weight": 0.95}
+    ],
+    "templates": [
+      "DNS query: aGVsbG8gd29ybGQ.tunnel.attacker.com",
+      "TXT query for: cmd-output.exfil.malware.net",
+      "unusually long hostname: 150+ characters",
+      "DNS request entropy: 4.8 bits/char",
+      "known DNS tunnel tool signature detected"
+    ],
+    "mutations": [
+      {"type": "encoding", "variants": ["hex", "base32", "base64"]}
+    ],
+    "base_valence": 0.90
+  },
+  {
+    "name": "DDoS Attack Patterns",
+    "category": "DENIAL",
+    "severity": "HIGH",
+    "description": "Distributed denial of service attack signatures and volumetric anomalies",
+    "feature_profile": {
+      "entropy_range": [0.20, 0.45],
+      "special_char_ratio": [0.05, 0.15],
+      "repetition_range": [0.7, 1.0]
+    },
+    "signature_patterns": [
+      {"pattern": "SYN flood", "weight": 0.9},
+      {"pattern": "UDP flood", "weight": 0.9},
+      {"pattern": "amplification", "weight": 0.85},
+      {"pattern": "reflection attack", "weight": 0.85},
+      {"pattern": "packets per second spike", "weight": 0.8}
+    ],
+    "templates": [
+      "SYN flood: 100k pps from spoofed sources",
+      "UDP amplification via NTP monlist",
+      "DNS reflection attack detected",
+      "ICMP flood: 50k pps sustained",
+      "HTTP GET flood to /api/resource"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["SYN", "UDP", "TCP", "ICMP", "HTTP"]}
+    ],
+    "base_valence": 0.88
+  },
+  {
+    "name": "Lateral Movement Indicators",
+    "category": "AUTHENTICATION",
+    "severity": "CRITICAL",
+    "description": "Network patterns indicating internal lateral movement or pivoting",
+    "feature_profile": {
+      "entropy_range": [0.40, 0.65],
+      "special_char_ratio": [0.08, 0.22],
+      "length_range": [0.2, 0.5]
+    },
+    "signature_patterns": [
+      {"pattern": "SMB", "weight": 0.6},
+      {"pattern": "WMI", "weight": 0.7},
+      {"pattern": "PsExec", "weight": 0.9},
+      {"pattern": "RDP internal", "weight": 0.75},
+      {"pattern": "pass-the-hash", "weight": 0.95},
+      {"pattern": "mimikatz", "weight": 0.95}
+    ],
+    "templates": [
+      "SMB connection from workstation to server admin share",
+      "WMI remote execution detected",
+      "PsExec service installation on remote host",
+      "internal RDP chain: A->B->C",
+      "NTLM relay attack signature",
+      "credential harvesting tool detected"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["SMB", "WMI", "RDP", "NTLM"]}
+    ],
+    "base_valence": 0.92
+  },
+  {
+    "name": "ARP Spoofing / Man-in-the-Middle",
+    "category": "INJECTION",
+    "severity": "HIGH",
+    "description": "Layer 2 attacks including ARP spoofing and MITM positioning",
+    "feature_profile": {
+      "entropy_range": [0.25, 0.50],
+      "special_char_ratio": [0.05, 0.20],
+      "repetition_range": [0.4, 0.8]
+    },
+    "signature_patterns": [
+      {"pattern": "ARP spoofing", "weight": 0.95},
+      {"pattern": "duplicate MAC", "weight": 0.85},
+      {"pattern": "gratuitous ARP", "weight": 0.7},
+      {"pattern": "MAC flapping", "weight": 0.8},
+      {"pattern": "ettercap", "weight": 0.95}
+    ],
+    "templates": [
+      "ARP reply: gateway IP now at attacker MAC",
+      "duplicate IP address detected",
+      "gratuitous ARP storm from single source",
+      "MAC address changed for gateway IP",
+      "ARP cache poisoning detected"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["ARP", "MAC", "IP"]}
+    ],
+    "base_valence": 0.88
+  }
+]

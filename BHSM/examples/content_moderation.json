@@ -1,0 +1,180 @@
+[
+  {
+    "name": "Spam Content Patterns",
+    "category": "DENIAL",
+    "severity": "LOW",
+    "description": "Commercial spam and unsolicited advertising patterns",
+    "feature_profile": {
+      "entropy_range": [0.40, 0.65],
+      "special_char_ratio": [0.10, 0.30],
+      "repetition_range": [0.4, 0.8]
+    },
+    "signature_patterns": [
+      {"pattern": "click here", "weight": 0.6},
+      {"pattern": "limited time", "weight": 0.55},
+      {"pattern": "act now", "weight": 0.6},
+      {"pattern": "unsubscribe", "weight": 0.4},
+      {"pattern": "100% free", "weight": 0.7}
+    ],
+    "templates": [
+      "CLICK HERE for amazing deal!!!",
+      "Limited time offer - ACT NOW",
+      "You've been selected as a winner",
+      "Make $$$ from home",
+      "Buy followers cheap - 100% real"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["click", "free", "now", "limited"]},
+      {"type": "substitution", "targets": ["!"], "variants": ["!!!", "!!!!!", "‼️"]}
+    ],
+    "base_valence": 0.70
+  },
+  {
+    "name": "Phishing Content",
+    "category": "EXPOSURE",
+    "severity": "HIGH",
+    "description": "Content attempting to deceive users into revealing credentials or sensitive data",
+    "feature_profile": {
+      "entropy_range": [0.45, 0.70],
+      "special_char_ratio": [0.08, 0.25],
+      "length_range": [0.3, 0.7]
+    },
+    "signature_patterns": [
+      {"pattern": "verify your account", "weight": 0.85},
+      {"pattern": "suspended", "weight": 0.75},
+      {"pattern": "update payment", "weight": 0.8},
+      {"pattern": "unusual activity", "weight": 0.7},
+      {"pattern": "confirm identity", "weight": 0.8}
+    ],
+    "templates": [
+      "Your account has been suspended. Click to verify.",
+      "Unusual login detected - confirm your identity",
+      "Payment failed - update your card information",
+      "Your package is waiting - confirm delivery address",
+      "Security alert: Reset your password immediately"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["account", "verify", "suspended", "security"]},
+      {"type": "encoding", "variants": ["unicode_lookalike"]}
+    ],
+    "base_valence": 0.88
+  },
+  {
+    "name": "Harassment and Targeted Abuse",
+    "category": "CUSTOM",
+    "severity": "HIGH",
+    "description": "Content patterns indicating targeted harassment or coordinated abuse",
+    "feature_profile": {
+      "entropy_range": [0.50, 0.75],
+      "special_char_ratio": [0.15, 0.40],
+      "repetition_range": [0.3, 0.7]
+    },
+    "signature_patterns": [
+      {"pattern": "@mention spam", "weight": 0.8},
+      {"pattern": "coordinated pile-on", "weight": 0.85},
+      {"pattern": "doxxing attempt", "weight": 0.95},
+      {"pattern": "death threat", "weight": 0.98},
+      {"pattern": "brigading", "weight": 0.8}
+    ],
+    "templates": [
+      "mass tagging from multiple new accounts",
+      "identical negative content from 50+ accounts",
+      "posting personal information without consent",
+      "threats of physical harm",
+      "coordinated reporting to suppress content"
+    ],
+    "mutations": [
+      {"type": "encoding", "variants": ["unicode_homoglyph", "leetspeak"]}
+    ],
+    "base_valence": 0.92
+  },
+  {
+    "name": "Misinformation and Fake News",
+    "category": "CUSTOM",
+    "severity": "MEDIUM",
+    "description": "Content patterns associated with deliberate misinformation spread",
+    "feature_profile": {
+      "entropy_range": [0.45, 0.70],
+      "special_char_ratio": [0.08, 0.22],
+      "length_range": [0.3, 0.6]
+    },
+    "signature_patterns": [
+      {"pattern": "share before deleted", "weight": 0.85},
+      {"pattern": "they don't want you to know", "weight": 0.8},
+      {"pattern": "exposed", "weight": 0.5},
+      {"pattern": "cover-up", "weight": 0.6},
+      {"pattern": "breaking: mainstream media silent", "weight": 0.85}
+    ],
+    "templates": [
+      "SHARE before they delete this!!!",
+      "What THEY don't want you to know about...",
+      "Exposed: The truth about [topic]",
+      "MSM won't cover this - spread the word",
+      "Exposed documents prove conspiracy"
+    ],
+    "mutations": [
+      {"type": "case", "targets": ["share", "exposed", "truth"]},
+      {"type": "substitution", "targets": ["!!!"], "variants": ["!!", "!!!!", "‼️‼️"]}
+    ],
+    "base_valence": 0.78
+  },
+  {
+    "name": "Bot-Generated Content",
+    "category": "DENIAL",
+    "severity": "MEDIUM",
+    "description": "Patterns indicating automated or bot-generated content",
+    "feature_profile": {
+      "entropy_range": [0.30, 0.55],
+      "special_char_ratio": [0.05, 0.18],
+      "repetition_range": [0.6, 0.95]
+    },
+    "signature_patterns": [
+      {"pattern": "template response", "weight": 0.75},
+      {"pattern": "timing pattern", "weight": 0.7},
+      {"pattern": "identical phrasing", "weight": 0.85},
+      {"pattern": "unusual posting hours", "weight": 0.6},
+      {"pattern": "no engagement history", "weight": 0.65}
+    ],
+    "templates": [
+      "Great post! Check out my profile",
+      "Thanks for sharing! [generic emoji]",
+      "Posting every 30 seconds for 24 hours",
+      "Identical response on 1000 posts",
+      "New account with perfect grammar, no history"
+    ],
+    "mutations": [
+      {"type": "substitution", "targets": ["!"], "variants": ["!!", ".", "❤️"]}
+    ],
+    "base_valence": 0.72
+  },
+  {
+    "name": "Scam and Fraud Solicitation",
+    "category": "EXPOSURE",
+    "severity": "HIGH",
+    "description": "Content soliciting involvement in scams or fraudulent schemes",
+    "feature_profile": {
+      "entropy_range": [0.50, 0.75],
+      "special_char_ratio": [0.12, 0.30],
+      "length_range": [0.3, 0.6]
+    },
+    "signature_patterns": [
+      {"pattern": "guaranteed returns", "weight": 0.9},
+      {"pattern": "investment opportunity", "weight": 0.65},
+      {"pattern": "double your money", "weight": 0.95},
+      {"pattern": "send crypto", "weight": 0.85},
+      {"pattern": "DM for details", "weight": 0.6}
+    ],
+    "templates": [
+      "Guaranteed 500% returns in 24 hours",
+      "Send 1 ETH, receive 2 back (Elon giveaway)",
+      "Secret investment opportunity - DM me",
+      "I made $10k in one week - ask me how",
+      "Wire transfer needed for inheritance release"
+    ],
+    "mutations": [
+      {"type": "encoding", "variants": ["unicode_currency_symbols"]},
+      {"type": "substitution", "targets": ["$"], "variants": ["💲", "USD", "dollars"]}
+    ],
+    "base_valence": 0.90
+  }
+]

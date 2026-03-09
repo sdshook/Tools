@@ -1,0 +1,73 @@
+{
+  "_comment": "BHSM Custom Curriculum Template - Copy and modify for your use case",
+  "_format_version": "1.0",
+  
+  "name": "Your Threat Category Name",
+  "category": "CUSTOM",
+  "severity": "HIGH",
+  "description": "Description of what this threat category represents",
+  
+  "feature_profile": {
+    "_comment": "Statistical characteristics of this threat in the 32-dim embedding space",
+    "entropy_range": [0.4, 0.7],
+    "special_char_ratio": [0.1, 0.3],
+    "length_range": [0.1, 0.5],
+    "nesting_depth_range": [0.0, 0.3],
+    "repetition_range": [0.0, 0.2],
+    "custom_ranges": {
+      "_comment": "Optional: specify ranges for specific embedding dimensions (0-31)",
+      "30": [0.6, 0.9],
+      "31": [0.5, 0.8]
+    }
+  },
+  
+  "signature_patterns": [
+    {
+      "_comment": "Characteristic patterns/n-grams with detection weights",
+      "pattern": "example_pattern_1",
+      "weight": 0.9
+    },
+    {
+      "pattern": "example_pattern_2", 
+      "weight": 0.8
+    },
+    {
+      "pattern": "suspicious_keyword",
+      "weight": 0.7
+    }
+  ],
+  
+  "templates": [
+    "_comment: Generative templates for synthetic example creation",
+    "template with {variable} placeholder",
+    "another template {var1} and {var2}",
+    "static example string"
+  ],
+  
+  "mutations": [
+    {
+      "_comment": "Case variation mutation",
+      "type": "case",
+      "targets": ["keyword1", "keyword2", "KEYWORD3"]
+    },
+    {
+      "_comment": "Whitespace insertion mutation",
+      "type": "whitespace",
+      "targets": [" ", "\t", "  "]
+    },
+    {
+      "_comment": "Encoding variation mutation",
+      "type": "encoding",
+      "variants": ["url", "unicode", "hex"]
+    },
+    {
+      "_comment": "Pattern substitution mutation",
+      "type": "substitution",
+      "targets": ["original"],
+      "variants": ["replacement1", "replacement2"]
+    }
+  ],
+  
+  "base_valence": 0.9,
+  "_valence_comment": "Threat valence: 0.0-1.0 (higher = more threatening)"
+}

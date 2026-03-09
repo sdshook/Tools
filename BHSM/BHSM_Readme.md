@@ -529,8 +529,40 @@ BHSM/
 ├── threat_educator.py                # Pedagogical knowledge transfer module
 ├── eq_iq_regulator.py                # EQ/IQ balanced reward system
 ├── tinyllama_bhsm_integration.py     # LLM integration example
+├── test_threat_educator.py           # ThreatEducator unit tests
 ├── BHSM_Readme.md                    # This documentation
+├── examples/                         # Curriculum examples for different domains
+│   ├── custom_curriculum_template.json  # Template with documentation
+│   ├── web_security.json             # Web application security threats
+│   ├── log_analysis.json             # Log-based threat detection
+│   ├── network_ids.json              # Network intrusion detection
+│   ├── fraud_detection.json          # Financial fraud patterns
+│   └── content_moderation.json       # Content moderation threats
 └── test/                             # Test outputs and visualizations
+```
+
+### Example Curricula
+
+BHSM provides domain-specific curriculum examples for different use cases:
+
+| File | Domain | Curricula Count | Description |
+|------|--------|-----------------|-------------|
+| `custom_curriculum_template.json` | - | 1 (template) | Documented template showing all fields |
+| `web_security.json` | Web Apps | 5 | SQLi, XSS, SSRF, XXE |
+| `log_analysis.json` | SIEM/Logs | 5 | Log injection, privilege escalation, brute force |
+| `network_ids.json` | Network | 6 | Port scanning, C2, DNS tunneling, DDoS, lateral movement |
+| `fraud_detection.json` | Financial | 5 | Account takeover, payment fraud, money laundering |
+| `content_moderation.json` | Social/Content | 6 | Spam, phishing, harassment, misinformation |
+
+**Usage:**
+```bash
+# Load domain-specific curricula
+python BHSM.py --curriculum examples/web_security.json
+python BHSM.py --curriculum examples/network_ids.json
+
+# Combine multiple domains
+python BHSM.py --curriculum examples/web_security.json \
+               --curriculum examples/log_analysis.json
 ```
 
 ---
