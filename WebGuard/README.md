@@ -18,6 +18,9 @@ WebGuard supports multiple operational modes for different deployment scenarios:
 # Run as HTTP reverse proxy (inline protection)
 webguard --mode proxy --listen 0.0.0.0:8080 --backend 127.0.0.1:80
 
+# Run with threat education (pre-warm PSI for immediate protection)
+webguard --mode proxy --listen 0.0.0.0:8080 --backend 127.0.0.1:80 --educate
+
 # Monitor nginx logs in real-time
 webguard --mode tail --log /var/log/nginx/access.log
 
@@ -1405,7 +1408,57 @@ pub struct ThreatCurriculum {
 3. **PSI Injection**: Entries are added using one-shot learning with Hebbian connections
 4. **Prototype Creation**: A semantic "anchor" entry represents the attack category
 
-#### **Usage**
+#### **CLI Usage**
+
+The simplest way to use the ThreatEducator is via command-line flags:
+
+```bash
+# Enable threat education with built-in curricula
+webguard --mode proxy --listen 0.0.0.0:8080 --backend 127.0.0.1:80 --educate
+
+# Multi-port proxy with collective immunity AND threat education
+webguard --mode proxy \
+    -p nginx:8080:127.0.0.1:80 \
+    -p api:3000:127.0.0.1:3001 \
+    --educate --blocking
+
+# Use custom curriculum files (can be repeated)
+webguard --mode proxy -p web:8080:127.0.0.1:80 \
+    --curriculum /etc/webguard/custom_threats.json \
+    --curriculum /etc/webguard/organization_specific.json
+
+# Disable built-in curricula, use only custom
+webguard --mode proxy -p web:8080:127.0.0.1:80 \
+    --no-builtin-curricula \
+    --curriculum /etc/webguard/custom_threats.json
+
+# Generate more examples per curriculum (default: 10)
+webguard --mode proxy -p web:8080:127.0.0.1:80 \
+    --educate --examples-per-curriculum 25
+
+# Audit mode with pre-warmed threat knowledge
+webguard --mode audit --log /var/log/nginx/access.log --educate
+```
+
+**Startup Output:**
+```
+╔═══════════════════════════════════════════════════════════════════╗
+║           THREAT EDUCATOR - Pre-warming PSI                       ║
+╚═══════════════════════════════════════════════════════════════════╝
+Loading built-in threat curricula...
+  ✓ SQL Injection - 11 entries, prototype: yes
+  ✓ Cross-Site Scripting (XSS) - 11 entries, prototype: yes
+  ✓ Path Traversal - 11 entries, prototype: yes
+  ✓ Command Injection - 11 entries, prototype: yes
+╔═══════════════════════════════════════════════════════════════════╗
+║  Threat Education Complete                                        ║
+║  Curricula taught:   4                                           ║
+║  PSI entries created:   44                                        ║
+║  PSI total entries:    44                                         ║
+╚═══════════════════════════════════════════════════════════════════╝
+```
+
+#### **Programmatic Usage**
 
 ```rust
 use webguard::threat_educator::{ThreatEducator, ThreatCurriculum};
@@ -1574,6 +1627,12 @@ LOGGING OPTIONS:
     --access-log <PATH>     Log file for all requests with threat scores
     --log-format <FMT>      Output format: plain, json, syslog (default: plain)
     --no-stdout             Disable console output (log to files only)
+
+THREAT EDUCATOR OPTIONS (Pre-warm PSI with threat knowledge):
+    --educate               Enable threat education on startup (uses built-in curricula)
+    --curriculum <PATH>     Load custom curriculum from JSON file (repeatable)
+    --no-builtin-curricula  Disable built-in curricula (only use custom)
+    --examples-per-curriculum <N>  Examples to generate per curriculum (default: 10)
 
 GENERAL:
     --data-dir <PATH>     Persistence directory

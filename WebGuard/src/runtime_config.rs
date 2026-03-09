@@ -232,6 +232,30 @@ pub struct AuditConfig {
     pub learn_from_audit: bool,
 }
 
+/// ThreatEducator configuration for pre-warming PSI
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EducatorConfig {
+    /// Enable threat education on startup
+    pub enabled: bool,
+    /// Use built-in curricula (SQL injection, XSS, path traversal, command injection)
+    pub use_builtin: bool,
+    /// Custom curriculum file paths (JSON format)
+    pub curriculum_files: Vec<PathBuf>,
+    /// Number of synthetic examples to generate per curriculum
+    pub examples_per_curriculum: usize,
+}
+
+impl Default for EducatorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            use_builtin: true,
+            curriculum_files: vec![],
+            examples_per_curriculum: 10,
+        }
+    }
+}
+
 impl Default for AuditConfig {
     fn default() -> Self {
         Self {
@@ -370,6 +394,8 @@ pub struct RuntimeConfig {
     pub persistence: PersistenceConfig,
     /// Logging/output settings
     pub logging: LoggingConfig,
+    /// Threat educator settings (pre-warm PSI with threat knowledge)
+    pub educator: EducatorConfig,
     /// Web server types to register (for multi-server environments)
     pub server_types: Vec<String>,
     /// Logging level
@@ -389,6 +415,7 @@ impl Default for RuntimeConfig {
             audit: AuditConfig::default(),
             persistence: PersistenceConfig::default(),
             logging: LoggingConfig::default(),
+            educator: EducatorConfig::default(),
             server_types: vec!["nginx".to_string()],
             log_level: "info".to_string(),
             metrics_enabled: false,
@@ -514,6 +541,28 @@ impl RuntimeConfig {
                         i += 1;
                     }
                 }
+                // Threat Educator options
+                "--educate" => {
+                    config.educator.enabled = true;
+                }
+                "--no-builtin-curricula" => {
+                    config.educator.use_builtin = false;
+                }
+                "--curriculum" | "--curricula" => {
+                    if i + 1 < args.len() {
+                        config.educator.enabled = true;
+                        config.educator.curriculum_files.push(PathBuf::from(&args[i + 1]));
+                        i += 1;
+                    }
+                }
+                "--examples-per-curriculum" => {
+                    if i + 1 < args.len() {
+                        if let Ok(n) = args[i + 1].parse::<usize>() {
+                            config.educator.examples_per_curriculum = n;
+                        }
+                        i += 1;
+                    }
+                }
                 // Logging options
                 "--detection-log" => {
                     if i + 1 < args.len() {
@@ -624,6 +673,12 @@ AUDIT MODE OPTIONS:
     --format, -f <FMT>    Log format: nginx, apache, json, auto
     --learn               Learn from audit (update threat knowledge)
 
+THREAT EDUCATOR OPTIONS (Pre-warm PSI with threat knowledge):
+    --educate             Enable threat education on startup (uses built-in curricula)
+    --curriculum <PATH>   Load custom curriculum from JSON file (can be repeated)
+    --no-builtin-curricula  Disable built-in curricula (only use custom)
+    --examples-per-curriculum <N>  Examples to generate per curriculum (default: 10)
+
 LOGGING OPTIONS:
     --detection-log <PATH>  Log file for threats/detections only
     --access-log <PATH>     Log file for all requests with scores
@@ -640,24 +695,32 @@ EXAMPLES:
     # Single proxy
     webguard --mode proxy --listen 0.0.0.0:8080 --backend 127.0.0.1:80
 
+    # Proxy with threat education (pre-warm PSI before deployment)
+    webguard --mode proxy --listen 0.0.0.0:8080 --backend 127.0.0.1:80 --educate
+
     # Multiple proxies with collective immunity
     webguard --mode proxy \
         -p nginx:8080:127.0.0.1:80 \
         -p apache:8081:127.0.0.1:81 \
         -p api:3000:127.0.0.1:3001 \
         -p admin:9000:127.0.0.1:9001 \
-        --blocking
+        --blocking --educate
 
     # Monitor multiple log files
     webguard --mode tail \
         -l /var/log/nginx/access.log \
         -l /var/log/apache2/access.log
 
-    # Audit historical logs
+    # Audit with pre-warmed threat knowledge
     webguard --mode audit \
         --log "/var/log/nginx/access.log*" \
         --report audit.html --format html \
-        --learn
+        --learn --educate
+
+    # Use custom threat curriculum
+    webguard --mode proxy -p web:8080:127.0.0.1:80 \
+        --curriculum /etc/webguard/my_threats.json \
+        --curriculum /etc/webguard/custom_attacks.json
 
     # Run with config file
     webguard --config /etc/webguard/config.toml

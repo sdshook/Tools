@@ -16,6 +16,9 @@
 //! # Run as HTTP proxy
 //! webguard --mode proxy --listen 0.0.0.0:8080 --backend 127.0.0.1:80
 //!
+//! # Run with threat education (pre-warm PSI before deployment)
+//! webguard --mode proxy --listen 0.0.0.0:8080 --backend 127.0.0.1:80 --educate
+//!
 //! # Monitor nginx logs in real-time
 //! webguard --mode tail --log /var/log/nginx/access.log
 //!
@@ -49,6 +52,7 @@ mod adaptive_threshold;
 // Learning Systems
 mod eq_iq_regulator;
 mod retrospective_learning;
+mod threat_educator;  // Pedagogical knowledge transfer
 
 // Infrastructure
 mod mesh_cognition;
@@ -119,6 +123,15 @@ async fn main() -> Result<()> {
         mesh.clone(),
     );
 
+    // Run threat education if enabled (pre-warm PSI with threat knowledge)
+    if runtime_config.educator.enabled {
+        info!("╔═══════════════════════════════════════════════════════════════════╗");
+        info!("║           THREAT EDUCATOR - Pre-warming PSI                       ║");
+        info!("╚═══════════════════════════════════════════════════════════════════╝");
+        
+        run_threat_education(&runtime_config.educator, mesh.clone());
+    }
+
     // Run the appropriate mode
     match runtime_config.mode {
         OperationalMode::Proxy => {
@@ -165,6 +178,88 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Run threat education to pre-warm PSI with threat knowledge
+/// 
+/// This function loads threat curricula (built-in and/or custom) and teaches
+/// them to PSI before the main operational mode starts. This addresses the
+/// cold-start vulnerability by ensuring threat patterns are known before
+/// the first real request arrives.
+fn run_threat_education(
+    config: &webguard::runtime_config::EducatorConfig,
+    mesh: Arc<Mutex<HostMeshCognition>>,
+) {
+    use crate::threat_educator::ThreatEducator;
+    
+    let mut educator = ThreatEducator::new()
+        .with_examples_per_curriculum(config.examples_per_curriculum);
+    
+    let mut total_curricula = 0;
+    let mut total_entries = 0;
+    
+    // Get shared PSI from mesh
+    let shared_psi = {
+        let mesh_guard = mesh.lock().unwrap();
+        mesh_guard.get_shared_psi()
+    };
+    
+    // Lock PSI for teaching
+    let mut psi = shared_psi.lock().unwrap();
+    
+    // Teach built-in curricula if enabled
+    if config.use_builtin {
+        info!("Loading built-in threat curricula...");
+        let builtin_curricula = ThreatEducator::builtin_curricula();
+        
+        for curriculum in &builtin_curricula {
+            let result = educator.teach(curriculum, &mut psi);
+            info!("  ✓ {} - {} entries, prototype: {}", 
+                  result.curriculum_name, 
+                  result.entries_created,
+                  if result.prototype_injected { "yes" } else { "no" });
+            total_curricula += 1;
+            total_entries += result.entries_created;
+        }
+    }
+    
+    // Load and teach custom curricula
+    for curriculum_path in &config.curriculum_files {
+        info!("Loading custom curriculum: {:?}", curriculum_path);
+        
+        match std::fs::read_to_string(curriculum_path) {
+            Ok(json_content) => {
+                match ThreatEducator::load_curricula_from_json(&json_content) {
+                    Ok(curricula) => {
+                        for curriculum in &curricula {
+                            let result = educator.teach(curriculum, &mut psi);
+                            info!("  ✓ {} - {} entries", 
+                                  result.curriculum_name, 
+                                  result.entries_created);
+                            total_curricula += 1;
+                            total_entries += result.entries_created;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to parse curriculum {:?}: {}", curriculum_path, e);
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to read curriculum file {:?}: {}", curriculum_path, e);
+            }
+        }
+    }
+    
+    let psi_len = psi.len();
+    drop(psi); // Release lock
+    
+    info!("╔═══════════════════════════════════════════════════════════════════╗");
+    info!("║  Threat Education Complete                                        ║");
+    info!("║  Curricula taught: {:>3}                                           ║", total_curricula);
+    info!("║  PSI entries created: {:>4}                                        ║", total_entries);
+    info!("║  PSI total entries: {:>5}                                         ║", psi_len);
+    info!("╚═══════════════════════════════════════════════════════════════════╝");
 }
 
 /// Run demo mode with simulated telemetry (FOR TESTING/DEMONSTRATION ONLY)
