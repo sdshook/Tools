@@ -214,12 +214,27 @@ python BHSM.py --demo
 python BHSM.py --test 200    # 200-event test
 python BHSM.py --test 1000   # 1000-event test
 
+# Threat Education (pre-warm PSI with threat knowledge)
+python BHSM.py --educate                        # Use built-in curricula
+python BHSM.py --educate --test 200             # Educate then test
+python BHSM.py --curriculum custom.json         # Load custom curricula
+python BHSM.py --no-builtin --curriculum my.json  # Custom curricula only
+
 # TinyLLaMA integration demo (requires model download)
 python tinyllama_bhsm_integration.py --mode demo
 
 # Interactive chat with memory enhancement
 python tinyllama_bhsm_integration.py --mode chat --max-turns 20
 ```
+
+### Threat Educator CLI Options
+
+| Option | Description |
+|--------|-------------|
+| `--educate` | Enable threat education with built-in curricula |
+| `--curriculum <PATH>` | Load custom curriculum from JSON file (repeatable) |
+| `--no-builtin` | Disable built-in curricula (only use custom) |
+| `--examples-per-curriculum <N>` | Examples to generate per curriculum (default: 10) |
 
 ---
 
@@ -340,6 +355,142 @@ BHSM is designed as a general-purpose adaptive classification framework. Example
 
 ---
 
+## Threat Educator Module
+
+BHSM includes a **ThreatEducator** module that enables structured, pedagogical knowledge transfer to PSI without requiring operational experience. This complements the existing learning pathways:
+
+| Pathway | Source | Learning Type | Speed |
+|---------|--------|---------------|-------|
+| **Zero-shot** | Environment/Logs | Passive statistical | Slow (needs volume) |
+| **One-shot** | Individual examples | Experiential | Medium (per-example) |
+| **Educator** | Curriculum definitions | Pedagogical | Fast (batch injection) |
+
+### How It Works
+
+The ThreatEducator accepts **curriculum definitions** that describe threat categories declaratively:
+
+```python
+@dataclass
+class ThreatCurriculum:
+    name: str                           # e.g., "SQL Injection"
+    category: ThreatCategory            # Taxonomy classification
+    severity: Severity                  # low, medium, high, critical
+    feature_profile: FeatureProfile     # Statistical characteristics
+    signature_patterns: List[SignaturePattern]  # Characteristic n-grams
+    templates: List[str]                # Generative templates
+    mutations: List[MutationRule]       # Variation rules
+```
+
+### Example Curriculum (JSON)
+
+```json
+{
+  "name": "SQL Injection - Boolean Based",
+  "category": "INJECTION",
+  "severity": "CRITICAL",
+  "feature_profile": {
+    "entropy_range": [0.55, 0.75],
+    "special_char_ratio": [0.15, 0.35]
+  },
+  "signature_patterns": [
+    { "pattern": "' OR", "weight": 0.9 },
+    { "pattern": "1=1", "weight": 0.85 }
+  ],
+  "templates": [
+    "' OR '1'='1",
+    "' UNION SELECT * FROM {table}--"
+  ],
+  "mutations": [
+    { "type": "case", "targets": ["OR", "SELECT", "UNION"] },
+    { "type": "encoding", "variants": ["url", "unicode"] }
+  ]
+}
+```
+
+### Education Process
+
+1. **Synthetic Generation**: Templates and mutations generate realistic variations
+2. **Feature Extraction**: Each example is converted to a 32-dimensional embedding
+3. **PSI Injection**: Entries are added with proper valence and Hebbian connections
+4. **Prototype Creation**: A semantic "anchor" entry represents the category
+
+### CLI Usage
+
+```bash
+# Enable threat education with built-in curricula
+python BHSM.py --educate
+
+# Educate then run learning test
+python BHSM.py --educate --test 200
+
+# Use custom curriculum files (can be repeated)
+python BHSM.py --curriculum /path/to/custom_threats.json
+
+# Disable built-in curricula, use only custom
+python BHSM.py --no-builtin --curriculum /path/to/my_threats.json
+
+# Generate more examples per curriculum
+python BHSM.py --educate --examples-per-curriculum 25
+```
+
+**Startup Output:**
+```
+╔═══════════════════════════════════════════════════════════════════╗
+║           THREAT EDUCATOR - Pre-warming PSI                       ║
+╚═══════════════════════════════════════════════════════════════════╝
+
+Loading built-in threat curricula...
+  ✓ SQL Injection - 11 entries, prototype: yes
+  ✓ Cross-Site Scripting (XSS) - 11 entries, prototype: yes
+  ✓ Path Traversal - 11 entries, prototype: yes
+  ✓ Command Injection - 11 entries, prototype: yes
+
+╔═══════════════════════════════════════════════════════════════════╗
+║  Threat Education Complete                                        ║
+║  Curricula taught:   4                                           ║
+║  PSI entries created:   44                                        ║
+║  PSI total entries:    44                                         ║
+╚═══════════════════════════════════════════════════════════════════╝
+```
+
+### Programmatic Usage
+
+```python
+from threat_educator import ThreatEducator, ThreatCurriculum
+from BHSM import get_shared_psi
+
+# Create educator and get shared PSI
+educator = ThreatEducator(examples_per_curriculum=10)
+psi = get_shared_psi()
+
+# Teach built-in curricula
+results = educator.teach_builtin(psi)
+for result in results:
+    print(f"Taught {result.curriculum_name}: {result.entries_created} entries")
+
+# Or load and teach custom curricula
+custom_curricula = ThreatEducator.load_curricula_from_file("my_threats.json")
+educator.teach_all(custom_curricula, psi)
+```
+
+### Built-in Curricula
+
+BHSM includes pre-defined curricula for common attack categories:
+- **SQL Injection** (boolean, union, time-based patterns)
+- **Cross-Site Scripting** (reflected, stored, DOM variants)
+- **Path Traversal** (LFI, RFI, encoding bypass)
+- **Command Injection** (shell metacharacters, command chaining)
+
+### Design Philosophy
+
+The educator maintains the **"learned, not coded"** principle by:
+- Injecting learnable content (not detection rules)
+- Using existing PSI infrastructure for storage
+- Creating Hebbian associations that evolve with experience
+- Generating traceable knowledge (tagged as `"educated"`)
+
+---
+
 ## Limitations and Considerations
 
 ### Current Implementation Scope
@@ -351,11 +502,11 @@ BHSM is designed as a general-purpose adaptive classification framework. Example
 - Cross-instance learning
 - Action constraints
 - Memory pruning
+- **ThreatEducator** (pedagogical knowledge transfer for cold-start mitigation)
 
 **Not Implemented**:
 - Federated learning across hosts
 - Cryptographic authentication for shared updates
-- Cold-start mitigation through pre-trained patterns
 
 ### Potential Vulnerabilities
 
@@ -366,7 +517,7 @@ BHSM is designed as a general-purpose adaptive classification framework. Example
 
 **Feedback dependency**: Learning quality depends on feedback accuracy. Incorrect feedback degrades performance.
 
-**Cold start**: New deployments rely on statistical baseline until sufficient experience accumulates.
+**Cold start**: New deployments have no learned patterns and rely on statistical baseline until sufficient experience accumulates. **Mitigated by the ThreatEducator module**, which pre-warms PSI with threat curricula before deployment (see Threat Educator section below).
 
 ---
 
@@ -375,9 +526,11 @@ BHSM is designed as a general-purpose adaptive classification framework. Example
 ```
 BHSM/
 ├── BHSM.py                           # Core BHSM implementation
+├── threat_educator.py                # Pedagogical knowledge transfer module
 ├── eq_iq_regulator.py                # EQ/IQ balanced reward system
 ├── tinyllama_bhsm_integration.py     # LLM integration example
-└── BHSM_Readme.md                    # This documentation
+├── BHSM_Readme.md                    # This documentation
+└── test/                             # Test outputs and visualizations
 ```
 
 ---

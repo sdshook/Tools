@@ -2030,6 +2030,67 @@ def interactive_demo():
     print("• Build memory traces for future reference")
     print("• Regulate rewards based on performance")
 
+def run_threat_education(curricula_files: List[str] = None, 
+                         use_builtin: bool = True,
+                         examples_per_curriculum: int = 10) -> None:
+    """
+    Run threat education to pre-warm PSI with threat knowledge.
+    
+    This function loads threat curricula (built-in and/or custom) and teaches
+    them to the shared PSI. This addresses the cold-start vulnerability by
+    ensuring threat patterns are known before operational use.
+    
+    Args:
+        curricula_files: Optional list of custom curriculum JSON files
+        use_builtin: Whether to include built-in curricula (default: True)
+        examples_per_curriculum: Number of examples per curriculum (default: 10)
+    """
+    from threat_educator import ThreatEducator
+    
+    print("╔═══════════════════════════════════════════════════════════════════╗")
+    print("║           THREAT EDUCATOR - Pre-warming PSI                       ║")
+    print("╚═══════════════════════════════════════════════════════════════════╝")
+    
+    educator = ThreatEducator(examples_per_curriculum=examples_per_curriculum)
+    psi = get_shared_psi()
+    
+    total_curricula = 0
+    total_entries = 0
+    
+    # Teach built-in curricula if enabled
+    if use_builtin:
+        print("\nLoading built-in threat curricula...")
+        builtin_curricula = ThreatEducator.builtin_curricula()
+        
+        for curriculum in builtin_curricula:
+            result = educator.teach(curriculum, psi)
+            print(f"  ✓ {result.curriculum_name} - {result.entries_created} entries, "
+                  f"prototype: {'yes' if result.prototype_injected else 'no'}")
+            total_curricula += 1
+            total_entries += result.entries_created
+    
+    # Load and teach custom curricula
+    if curricula_files:
+        for filepath in curricula_files:
+            print(f"\nLoading custom curriculum: {filepath}")
+            try:
+                curricula = ThreatEducator.load_curricula_from_file(filepath)
+                for curriculum in curricula:
+                    result = educator.teach(curriculum, psi)
+                    print(f"  ✓ {result.curriculum_name} - {result.entries_created} entries")
+                    total_curricula += 1
+                    total_entries += result.entries_created
+            except Exception as e:
+                print(f"  ✗ Error loading {filepath}: {e}")
+    
+    print("\n╔═══════════════════════════════════════════════════════════════════╗")
+    print(f"║  Threat Education Complete                                        ║")
+    print(f"║  Curricula taught: {total_curricula:>3}                                           ║")
+    print(f"║  PSI entries created: {total_entries:>4}                                        ║")
+    print(f"║  PSI total entries: {len(psi.docs):>5}                                         ║")
+    print("╚═══════════════════════════════════════════════════════════════════╝")
+
+
 def main():
     """Main function with CLI argument handling."""
     parser = argparse.ArgumentParser(
@@ -2041,6 +2102,12 @@ Examples:
   python BHSM.py --test 200         # Run 200-event learning test
   python BHSM.py --test 1000        # Run 1000-event learning test  
   python BHSM.py --demo             # Run interactive demo
+  
+Threat Educator (pre-warm PSI with threat knowledge):
+  python BHSM.py --educate                        # Use built-in curricula
+  python BHSM.py --educate --test 200             # Educate then test
+  python BHSM.py --curriculum custom.json         # Load custom curricula
+  python BHSM.py --no-builtin --curriculum my.json  # Custom only
         """
     )
     
@@ -2051,7 +2118,26 @@ Examples:
     parser.add_argument('--no-save', action='store_true',
                        help='Skip saving results and visualizations')
     
+    # Threat Educator options
+    parser.add_argument('--educate', action='store_true',
+                       help='Enable threat education (pre-warm PSI with threat knowledge)')
+    parser.add_argument('--curriculum', action='append', metavar='PATH',
+                       help='Load custom curriculum from JSON file (can be repeated)')
+    parser.add_argument('--no-builtin', action='store_true',
+                       help='Disable built-in curricula (only use custom)')
+    parser.add_argument('--examples-per-curriculum', type=int, default=10,
+                       help='Examples to generate per curriculum (default: 10)')
+    
     args = parser.parse_args()
+    
+    # Run threat education if enabled
+    if args.educate or args.curriculum:
+        run_threat_education(
+            curricula_files=args.curriculum,
+            use_builtin=not args.no_builtin,
+            examples_per_curriculum=args.examples_per_curriculum
+        )
+        print()  # Blank line before next operation
     
     if args.demo:
         interactive_demo()
@@ -2066,7 +2152,8 @@ Examples:
         print(f"Final BDH Traces: {results['final_stats']['final_bdh_traces']}")
         print(f"Empathy Adaptation: {results['final_stats']['empathy_adaptation']:.3f}")
         print(f"Arrogance Adaptation: {results['final_stats']['arrogance_adaptation']:.3f}")
-    else:
+    elif not args.educate and not args.curriculum:
+        # Only run component tests if no education was requested
         test_components()
 
 if __name__ == "__main__":
