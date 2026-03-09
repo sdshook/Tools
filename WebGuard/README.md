@@ -1345,6 +1345,108 @@ The system mimics biological learning where **mistakes provide stronger learning
 - **Cross-Process Propagation**: Retrospective learning spreads across all host processes
 - **EQ/IQ Integration**: Missed threats inform optimal EQ/IQ balance for similar future scenarios
 
+### Threat Educator Module
+
+WebGuard includes a **ThreatEducator** module that enables structured, pedagogical knowledge transfer to PSI without requiring operational experience or individual training examples. This complements the existing learning pathways:
+
+| Pathway | Source | Learning Type | Speed |
+|---------|--------|---------------|-------|
+| **Zero-shot** | Environment/Logs | Passive statistical | Slow (needs volume) |
+| **One-shot (Mentor)** | Individual examples | Experiential | Medium (per-example) |
+| **Educator** | Curriculum definitions | Pedagogical | Fast (batch injection) |
+
+#### **How It Works**
+
+The ThreatEducator accepts **curriculum definitions** that describe threat categories declaratively:
+
+```rust
+pub struct ThreatCurriculum {
+    pub name: String,              // e.g., "SQL Injection"
+    pub category: AttackCategory,  // Taxonomy classification
+    pub severity: Severity,        // low, medium, high, critical
+    pub feature_profile: FeatureProfile,  // Statistical characteristics
+    pub signature_patterns: Vec<SignaturePattern>,  // Characteristic n-grams
+    pub templates: Vec<String>,    // Generative templates
+    pub mutations: Vec<MutationRule>,  // Variation rules
+}
+```
+
+#### **Example Curriculum (JSON)**
+
+```json
+{
+  "name": "SQL Injection - Boolean Based",
+  "category": "injection.sql.boolean",
+  "severity": "critical",
+  "feature_profile": {
+    "entropy_range": [0.55, 0.75],
+    "special_char_ratio": [0.15, 0.35],
+    "quote_unbalanced": true
+  },
+  "signature_patterns": [
+    { "ngram": "' OR", "weight": 0.9 },
+    { "ngram": "1=1", "weight": 0.85 }
+  ],
+  "templates": [
+    "' OR {bool_expr} --",
+    "' UNION SELECT * FROM {table}--"
+  ],
+  "mutations": [
+    { "type": "case_variation", "targets": ["OR", "SELECT", "UNION"] },
+    { "type": "encoding", "variants": ["url", "unicode"] }
+  ]
+}
+```
+
+#### **Education Process**
+
+1. **Synthetic Generation**: Templates and mutations generate realistic attack variations
+2. **Feature Extraction**: Each example is converted to a 32-dimensional embedding
+3. **PSI Injection**: Entries are added using one-shot learning with Hebbian connections
+4. **Prototype Creation**: A semantic "anchor" entry represents the attack category
+
+#### **Usage**
+
+```rust
+use webguard::threat_educator::{ThreatEducator, ThreatCurriculum};
+use webguard::memory_engine::psi_index::PsiIndex;
+
+// Create educator and PSI
+let mut educator = ThreatEducator::new();
+let mut psi = PsiIndex::new();
+
+// Teach built-in curricula
+let curricula = ThreatEducator::builtin_curricula();
+for curriculum in &curricula {
+    let result = educator.teach(curriculum, &mut psi);
+    println!("Taught {}: {} entries created", 
+             result.curriculum_name, result.entries_created);
+}
+
+// Or load custom curricula from JSON
+let custom_json = std::fs::read_to_string("my_threats.json")?;
+let custom_curricula = ThreatEducator::load_curricula_from_json(&custom_json)?;
+educator.teach_course(&custom_curricula, &mut psi);
+```
+
+#### **Built-in Curricula**
+
+WebGuard includes pre-defined curricula for common attack categories:
+- **SQL Injection** (boolean, union, time-based)
+- **Cross-Site Scripting** (reflected, stored, DOM)
+- **Path Traversal** (LFI, RFI)
+- **Command Injection**
+
+#### **Design Philosophy**
+
+The educator maintains the **"learned, not coded"** principle by:
+- Injecting learnable content (not detection rules)
+- Using existing PSI one-shot learning infrastructure
+- Creating Hebbian associations that evolve with experience
+- Generating traceable knowledge (tagged as `"educated"`)
+
+All educated entries are tagged for auditability, allowing you to distinguish between knowledge that was taught vs. learned experientially.
+
 ---
 
 ## Impact
@@ -1559,6 +1661,7 @@ WebGuard/
 │   ├── mesh_cognition.rs               # Cross-service learning mesh
 │   ├── eq_iq_regulator.rs              # EQ/IQ behavioral regulation
 │   ├── retrospective_learning.rs       # False negative learning
+│   ├── threat_educator.rs              # Pedagogical knowledge transfer to PSI
 │   ├── adaptive_threshold.rs           # Dynamic threshold adjustment
 │   ├── self_model.rs                   # BHSM Self-Model Node (metacognitive monitoring)
 │   │

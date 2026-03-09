@@ -305,9 +305,11 @@ These demonstrations are preliminary. Rigorous evaluation would require larger d
 
 The WebGuard proof-of-concept implements core BHSM components:
 
-**Implemented**: Reward-Gated Associative Memory, Persistent Semantic Index, confidence calibration, cross-instance learning, action constraints.
+**Implemented**: Reward-Gated Associative Memory, Persistent Semantic Index, confidence calibration, cross-instance learning, action constraints, **ThreatEducator** (pedagogical knowledge transfer).
 
-**Not implemented**: Federated learning across hosts, cryptographic authentication for shared updates, cold-start mitigation through pre-trained patterns.
+**Not implemented**: Federated learning across hosts, cryptographic authentication for shared updates.
+
+**Cold-start mitigation**: The ThreatEducator module provides structured knowledge transfer to PSI, enabling pre-deployment threat awareness without operational experience. Curricula define threat categories declaratively (feature profiles, signature patterns, generative templates) and the educator synthesizes examples that are injected via one-shot learning with proper Hebbian connections. This addresses the cold-start vulnerability by pre-warming PSI with threat knowledge before the first real request.
 
 ### 7.2 Evaluation Gaps
 
@@ -327,7 +329,7 @@ Future work should address these gaps with larger-scale evaluation against stand
 
 **Feedback dependency**: Learning quality depends on feedback accuracy. Incorrect feedback degrades performance.
 
-**Cold start**: New deployments have no learned patterns and rely on initial feature statistics until sufficient experience accumulates.
+**Cold start**: New deployments have no learned patterns and rely on initial feature statistics until sufficient experience accumulates. This vulnerability is mitigated by the **ThreatEducator** module (Section 7.1), which pre-warms PSI with threat curricula before deployment.
 
 ### 7.4 Performance Characteristics
 

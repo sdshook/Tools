@@ -1,0 +1,177 @@
+[
+  {
+    "name": "SQL Injection - Boolean Based",
+    "category": "injection.sql.boolean",
+    "description": "Boolean-based SQL injection uses conditional statements to infer database content by observing application responses to true/false conditions.",
+    "severity": "critical",
+    "feature_profile": {
+      "entropy_range": [0.55, 0.75],
+      "special_char_ratio": [0.15, 0.35],
+      "punctuation_ratio": [0.1, 0.3],
+      "quote_unbalanced": true,
+      "bracket_unbalanced": false,
+      "nesting_depth": [0.0, 0.2],
+      "markers": ["unbalanced_quotes", "consecutive_special"]
+    },
+    "signature_patterns": [
+      { "ngram": "' OR", "weight": 0.9 },
+      { "ngram": "1=1", "weight": 0.85 },
+      { "ngram": "' AND", "weight": 0.8 },
+      { "ngram": "--", "weight": 0.7 },
+      { "ngram": "/*", "weight": 0.65 }
+    ],
+    "templates": [
+      "' OR {bool_expr} --",
+      "' AND {bool_expr} --",
+      "1' OR '{char}'='{char}",
+      "admin'--"
+    ],
+    "mutations": [
+      { "type": "case_variation", "targets": ["OR", "AND"], "variants": [] },
+      { "type": "whitespace", "targets": [], "variants": ["/**/", "+", "%20"] },
+      { "type": "encoding", "targets": [], "variants": ["url"] }
+    ]
+  },
+  {
+    "name": "SQL Injection - UNION Based",
+    "category": "injection.sql.union",
+    "description": "UNION-based SQL injection combines results from injected queries with original query results to extract data from other tables.",
+    "severity": "critical",
+    "feature_profile": {
+      "entropy_range": [0.5, 0.7],
+      "special_char_ratio": [0.12, 0.3],
+      "quote_unbalanced": true,
+      "markers": ["union_keyword", "select_keyword"]
+    },
+    "signature_patterns": [
+      { "ngram": "UNION", "weight": 0.95 },
+      { "ngram": "SELECT", "weight": 0.7 },
+      { "ngram": "FROM", "weight": 0.6 },
+      { "ngram": "NULL", "weight": 0.5 }
+    ],
+    "templates": [
+      "' UNION SELECT {column} FROM {table}--",
+      "' UNION SELECT NULL,NULL,{column} FROM {table}--",
+      "' UNION ALL SELECT * FROM {table}--"
+    ],
+    "mutations": [
+      { "type": "case_variation", "targets": ["UNION", "SELECT", "FROM"], "variants": [] },
+      { "type": "comment_insertion", "targets": [], "variants": [] }
+    ]
+  },
+  {
+    "name": "XSS - Reflected",
+    "category": "xss.reflected",
+    "description": "Reflected XSS occurs when malicious script is injected through user input and immediately reflected back in the response without proper sanitization.",
+    "severity": "high",
+    "feature_profile": {
+      "entropy_range": [0.5, 0.7],
+      "special_char_ratio": [0.2, 0.4],
+      "bracket_unbalanced": true,
+      "nesting_depth": [0.1, 0.4],
+      "markers": ["angle_brackets", "event_handlers"]
+    },
+    "signature_patterns": [
+      { "ngram": "<script", "weight": 0.95 },
+      { "ngram": "javascript:", "weight": 0.9 },
+      { "ngram": "onerror=", "weight": 0.85 },
+      { "ngram": "onload=", "weight": 0.8 },
+      { "ngram": "onclick=", "weight": 0.75 },
+      { "ngram": "alert(", "weight": 0.7 }
+    ],
+    "templates": [
+      "<script>{script}</script>",
+      "<img src=x onerror={script}>",
+      "<svg onload={script}>",
+      "javascript:{script}"
+    ],
+    "mutations": [
+      { "type": "case_variation", "targets": ["script", "onerror", "onload"], "variants": [] },
+      { "type": "encoding", "targets": [], "variants": ["url", "unicode"] }
+    ]
+  },
+  {
+    "name": "Path Traversal",
+    "category": "traversal.path",
+    "description": "Path traversal attacks use sequences like ../ to escape the intended directory and access arbitrary files on the server filesystem.",
+    "severity": "high",
+    "feature_profile": {
+      "entropy_range": [0.4, 0.6],
+      "special_char_ratio": [0.2, 0.35],
+      "markers": ["repetition", "path_separators"]
+    },
+    "signature_patterns": [
+      { "ngram": "../", "weight": 0.9 },
+      { "ngram": "..\\", "weight": 0.9 },
+      { "ngram": "/etc/passwd", "weight": 0.85 },
+      { "ngram": "....//", "weight": 0.8 },
+      { "ngram": "%2e%2e", "weight": 0.85 }
+    ],
+    "templates": [
+      "../../../{file}",
+      "....//....//....//etc/passwd",
+      "..\\..\\..\\windows\\system32\\config\\sam"
+    ],
+    "mutations": [
+      { "type": "encoding", "targets": [], "variants": ["url"] }
+    ]
+  },
+  {
+    "name": "Command Injection",
+    "category": "injection.command",
+    "description": "Command injection attacks execute arbitrary system commands by injecting shell metacharacters into application input that is passed to system shells.",
+    "severity": "critical",
+    "feature_profile": {
+      "entropy_range": [0.5, 0.7],
+      "special_char_ratio": [0.15, 0.3],
+      "markers": ["pipe_char", "semicolon", "backticks"]
+    },
+    "signature_patterns": [
+      { "ngram": "; cat", "weight": 0.9 },
+      { "ngram": "| ls", "weight": 0.85 },
+      { "ngram": "`id`", "weight": 0.9 },
+      { "ngram": "$(", "weight": 0.75 },
+      { "ngram": "&&", "weight": 0.6 },
+      { "ngram": "||", "weight": 0.6 }
+    ],
+    "templates": [
+      "; {cmd}",
+      "| {cmd}",
+      "`{cmd}`",
+      "$({cmd})",
+      "&& {cmd}"
+    ],
+    "mutations": [
+      { "type": "whitespace", "targets": [], "variants": ["${IFS}", "\t"] },
+      { "type": "encoding", "targets": [], "variants": ["url", "hex"] }
+    ]
+  },
+  {
+    "name": "Server-Side Request Forgery (SSRF)",
+    "category": "ssrf",
+    "description": "SSRF attacks trick the server into making requests to internal services or arbitrary external URLs, potentially accessing internal resources or performing port scanning.",
+    "severity": "high",
+    "feature_profile": {
+      "entropy_range": [0.5, 0.65],
+      "special_char_ratio": [0.15, 0.3],
+      "markers": ["url_scheme", "internal_ip"]
+    },
+    "signature_patterns": [
+      { "ngram": "http://localhost", "weight": 0.9 },
+      { "ngram": "http://127.0.0.1", "weight": 0.9 },
+      { "ngram": "file://", "weight": 0.85 },
+      { "ngram": "gopher://", "weight": 0.85 },
+      { "ngram": "169.254.169.254", "weight": 0.95 },
+      { "ngram": "http://0.0.0.0", "weight": 0.85 }
+    ],
+    "templates": [
+      "http://localhost:{port}/{path}",
+      "http://127.0.0.1/{path}",
+      "file:///etc/passwd",
+      "http://169.254.169.254/latest/meta-data/"
+    ],
+    "mutations": [
+      { "type": "encoding", "targets": [], "variants": ["url"] }
+    ]
+  }
+]

@@ -24,6 +24,7 @@ pub mod adaptive_threshold;
 // Learning Systems
 pub mod eq_iq_regulator;
 pub mod retrospective_learning;
+pub mod threat_educator;  // Pedagogical knowledge transfer to PSI
 
 // Infrastructure
 pub mod mesh_cognition;
