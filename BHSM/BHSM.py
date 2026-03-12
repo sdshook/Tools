@@ -582,6 +582,14 @@ class BDHMemory:
             alpha=0.6, beta=0.4, learning_rate=self.eta
         )
         
+        # Gap 5: Temporal Sequence Modeling
+        # Track trace transitions for behavior prediction
+        self.trace_transitions: Dict[str, Dict[str, float]] = {}  # from_trace -> {to_trace: weight}
+        self.last_trace_id: Optional[str] = None
+        self.temporal_window: List[Tuple[str, float]] = []  # [(trace_id, timestamp), ...]
+        self.max_temporal_window = 20
+        self.transition_decay = 0.95  # Decay factor for old transitions
+        
     def add_trace(self, trace_id: str, vec: np.ndarray, 
                   valence: float = 0.0, protected: bool = False,
                   label: str = "unknown"):
@@ -657,15 +665,27 @@ class BDHMemory:
             items.append((similarity, trace_id, entry))
         return sorted(items, key=lambda x: x[0], reverse=True)[:top_k]
     
-    def compute_differential_similarity(self, query: np.ndarray) -> float:
+    def compute_differential_similarity(self, query: np.ndarray, 
+                                         use_hebbian: bool = True) -> float:
         """
-        Compute differential threat similarity.
+        Compute differential threat similarity with Hebbian attractor dynamics.
+        
+        This method uses two complementary signals:
+        1. Cosine similarity-based differential (original method)
+        2. Hebbian consensus signal (Gap 1 enhancement)
+        
+        The Hebbian consensus computes how strongly each trace's learned associations
+        "vote" for threat vs benign, weighted by the activation strength.
         
         Returns: amplified difference between threat and benign similarity.
         Positive = threat-leaning, Negative = benign-leaning
         Range: [-1, 1]
         """
         query_norm = l2_norm(query)
+        
+        # =====================================================
+        # Signal 1: Cosine-based differential (original method)
+        # =====================================================
         threat_sims = []
         benign_sims = []
         
@@ -681,7 +701,7 @@ class BDHMemory:
         if not threat_sims and not benign_sims:
             return 0.0
         
-        # Use weighted average of top-k similar, not just max
+        # Use weighted average of top-k similar
         k = 3
         top_threat = sorted(threat_sims, reverse=True)[:k]
         top_benign = sorted(benign_sims, reverse=True)[:k]
@@ -689,15 +709,266 @@ class BDHMemory:
         avg_threat = np.mean(top_threat) if top_threat else 0.0
         avg_benign = np.mean(top_benign) if top_benign else 0.0
         
-        # Compute raw differential
-        raw_diff = avg_threat - avg_benign
+        cosine_differential = avg_threat - avg_benign
         
-        # Amplify the differential for better discrimination
-        # Use tanh-like amplification to keep in [-1, 1] range
-        amplification_factor = 5.0  # Amplify small differences
-        amplified = np.tanh(raw_diff * amplification_factor)
+        # =====================================================
+        # Signal 2: Hebbian consensus (Gap 1 enhancement)
+        # =====================================================
+        hebbian_signal = 0.0
+        hebbian_weights = []  # Initialize outside the if block
+        
+        if use_hebbian:
+            hebbian_votes = []
+            
+            for trace_id, entry in self.storage.items():
+                W = entry.get("W")
+                if W is None:
+                    continue
+                    
+                w_norm = np.linalg.norm(W)
+                if w_norm < 1e-8:
+                    continue
+                
+                # Compute Hebbian activation: how strongly does this trace's
+                # learned association pattern respond to the query?
+                activation = float(query_norm @ W @ entry["vec"])
+                normalized_activation = activation / (w_norm + 1e-12)
+                
+                # Weight by:
+                # 1. How much this trace has been trained (uses)
+                # 2. Cosine similarity (nearby memories more relevant)
+                # 3. Absolute valence (strong opinions count more)
+                uses = entry.get("uses", 1)
+                learning_weight = min(uses / 5.0, 1.0)  # Caps at 5 uses
+                similarity = sim_cos(query_norm, entry["vec"])
+                valence_weight = abs(entry["valence"])
+                
+                combined_weight = learning_weight * similarity * valence_weight
+                
+                if combined_weight > 0.01:  # Filter out low-confidence votes
+                    # The vote: activation sign * valence gives threat prediction
+                    # Positive activation + positive valence = strong threat vote
+                    # Positive activation + negative valence = strong benign vote
+                    vote = np.tanh(normalized_activation * 3.0) * entry["valence"]
+                    hebbian_votes.append(vote)
+                    hebbian_weights.append(combined_weight)
+            
+            if hebbian_weights:
+                total_weight = sum(hebbian_weights)
+                hebbian_signal = sum(v * w for v, w in zip(hebbian_votes, hebbian_weights)) / total_weight
+        
+        # =====================================================
+        # Combine signals
+        # =====================================================
+        # Adaptive weighting: blend Hebbian signal when we have trained memories
+        n_trained = sum(1 for e in self.storage.values() if e.get("uses", 0) > 2)
+        
+        if n_trained > 10 and hebbian_weights:
+            # We have enough training to use Hebbian signal
+            # Scale Hebbian to match cosine magnitude for fair blending
+            hebbian_scale = abs(cosine_differential) / (abs(hebbian_signal) + 1e-8)
+            hebbian_scale = min(hebbian_scale, 3.0)  # Cap scaling
+            scaled_hebbian = hebbian_signal * hebbian_scale
+            
+            # Blend: Hebbian contribution grows with training
+            hebbian_blend = min(n_trained / 100.0, 0.4)  # Max 40% Hebbian
+            combined = cosine_differential * (1.0 - hebbian_blend) + scaled_hebbian * hebbian_blend
+        else:
+            combined = cosine_differential
+        
+        # Amplify for better discrimination
+        amplified = np.tanh(combined * 5.0)
         
         return float(amplified)
+    
+    def compute_hebbian_activation(self, query: np.ndarray, trace_id: str) -> float:
+        """
+        Compute Hebbian activation for a specific trace.
+        
+        Returns the strength of learned association between query and trace.
+        """
+        entry = self.storage.get(trace_id)
+        if entry is None or entry["W"] is None:
+            return 0.0
+        
+        query_norm = l2_norm(query)
+        W = entry["W"]
+        
+        # Bidirectional activation: query activates trace via learned weights
+        activation = float(query_norm @ W @ entry["vec"])
+        w_norm = np.linalg.norm(W) + 1e-12
+        
+        return np.tanh(activation / (w_norm + 1.0))
+    
+    # =========================================================================
+    # Gap 5: Temporal Sequence Modeling Methods
+    # =========================================================================
+    
+    def record_temporal_transition(self, trace_id: str, timestamp: Optional[float] = None):
+        """
+        Record a temporal transition from the last trace to the current trace.
+        
+        This builds a transition graph that captures behavioral sequences:
+        trace_A -> trace_B -> trace_C forms a behavior pattern.
+        
+        Args:
+            trace_id: The current trace being activated
+            timestamp: Optional timestamp (defaults to current time)
+        """
+        timestamp = timestamp or time.time()
+        
+        # Record transition from last trace to current trace
+        if self.last_trace_id is not None and self.last_trace_id != trace_id:
+            if self.last_trace_id not in self.trace_transitions:
+                self.trace_transitions[self.last_trace_id] = {}
+            
+            # Increment transition weight (with decay for existing transitions)
+            transitions = self.trace_transitions[self.last_trace_id]
+            if trace_id in transitions:
+                transitions[trace_id] = transitions[trace_id] * self.transition_decay + 0.1
+            else:
+                transitions[trace_id] = 0.1
+            
+            # Normalize transition probabilities
+            total = sum(transitions.values())
+            if total > 0:
+                for k in transitions:
+                    transitions[k] /= total
+        
+        # Update temporal window
+        self.temporal_window.append((trace_id, timestamp))
+        if len(self.temporal_window) > self.max_temporal_window:
+            self.temporal_window = self.temporal_window[-self.max_temporal_window:]
+        
+        # Update last trace
+        self.last_trace_id = trace_id
+    
+    def predict_next_traces(self, current_trace_id: str, top_k: int = 3) -> List[Tuple[str, float]]:
+        """
+        Predict the most likely next traces based on learned transitions.
+        
+        This enables behavior prediction - knowing what pattern is likely to follow.
+        
+        Args:
+            current_trace_id: The current active trace
+            top_k: Number of predictions to return
+            
+        Returns:
+            List of (trace_id, probability) tuples
+        """
+        if current_trace_id not in self.trace_transitions:
+            return []
+        
+        transitions = self.trace_transitions[current_trace_id]
+        sorted_transitions = sorted(transitions.items(), key=lambda x: x[1], reverse=True)
+        return sorted_transitions[:top_k]
+    
+    def compute_temporal_context(self, query: np.ndarray, decay: float = 0.8) -> float:
+        """
+        Compute temporal context score based on recent trace history.
+        
+        This captures "momentum" - if recent traces were threat-like, there's
+        elevated probability the current input is part of an attack sequence.
+        
+        Args:
+            query: Current query vector
+            decay: Temporal decay factor (more recent = higher weight)
+            
+        Returns:
+            Temporal context score in [-1, 1] range
+        """
+        if not self.temporal_window:
+            return 0.0
+        
+        weighted_valence = 0.0
+        weight_sum = 0.0
+        current_time = time.time()
+        
+        for trace_id, timestamp in reversed(self.temporal_window):
+            if trace_id not in self.storage:
+                continue
+            
+            entry = self.storage[trace_id]
+            
+            # Time-based decay
+            time_diff = current_time - timestamp
+            time_weight = decay ** (time_diff / 60.0)  # Decay over minutes
+            
+            # Similarity-based weighting
+            similarity = sim_cos(l2_norm(query), entry["vec"])
+            
+            # Combined weight
+            weight = time_weight * (0.5 + 0.5 * similarity)
+            
+            weighted_valence += entry["valence"] * weight
+            weight_sum += weight
+        
+        if weight_sum < 1e-12:
+            return 0.0
+        
+        return np.clip(weighted_valence / weight_sum, -1.0, 1.0)
+    
+    def get_behavioral_sequence(self, length: int = 5) -> List[Dict]:
+        """
+        Get the recent behavioral sequence with metadata.
+        
+        Returns:
+            List of dictionaries with trace info and timing
+        """
+        sequence = []
+        for trace_id, timestamp in self.temporal_window[-length:]:
+            if trace_id in self.storage:
+                entry = self.storage[trace_id]
+                sequence.append({
+                    "trace_id": trace_id,
+                    "timestamp": timestamp,
+                    "valence": entry["valence"],
+                    "label": entry.get("label", "unknown")
+                })
+        return sequence
+    
+    def compute_sequence_threat_escalation(self) -> float:
+        """
+        Detect threat escalation patterns in the recent sequence.
+        
+        Returns a score indicating whether threats are escalating (positive)
+        or de-escalating (negative).
+        """
+        if len(self.temporal_window) < 3:
+            return 0.0
+        
+        # Get valences of recent traces
+        valences = []
+        for trace_id, _ in self.temporal_window[-10:]:
+            if trace_id in self.storage:
+                valences.append(self.storage[trace_id]["valence"])
+        
+        if len(valences) < 3:
+            return 0.0
+        
+        # Compute trend (simple linear regression slope)
+        x = np.arange(len(valences))
+        slope = np.polyfit(x, valences, 1)[0]
+        
+        # Normalize to [-1, 1] range
+        return np.clip(slope * 10, -1.0, 1.0)
+    
+    def get_transition_stats(self) -> Dict:
+        """Get statistics about learned transitions."""
+        if not self.trace_transitions:
+            return {
+                "total_source_traces": 0,
+                "total_transitions": 0,
+                "avg_transitions_per_trace": 0.0
+            }
+        
+        total_transitions = sum(len(t) for t in self.trace_transitions.values())
+        return {
+            "total_source_traces": len(self.trace_transitions),
+            "total_transitions": total_transitions,
+            "avg_transitions_per_trace": total_transitions / len(self.trace_transitions),
+            "temporal_window_size": len(self.temporal_window)
+        }
     
     def reward_gated_update(self, trace_id: str, state_vec: np.ndarray, 
                            reward: float, context_stability: float = 0.5, 
@@ -1122,11 +1393,15 @@ class BHSMClassifier:
     
     Architecture:
         SYNAPTIC LAYER   - BDH (Reward-Gated Associative Memory) + PSI
-        COGNITIVE LAYER  - Classification, score fusion, confidence calibration
+        COGNITIVE LAYER  - Classification, CognitiveMesh meta-reasoning, confidence calibration
         MECHANICAL LAYER - Constrained action space (semantic-execution boundary)
     
-    Score Fusion:
-        score = (psi_valence × 0.4) + (bdh_differential × 0.3) + (statistical_baseline × 0.3)
+    Gap 3 Enhancement: CognitiveMesh is now integrated for neural meta-reasoning
+    instead of simple weighted score fusion. The mesh processes component signals
+    through distributed reasoning nodes.
+    
+    Gap 5 Enhancement: Temporal context from BDH is integrated into classification
+    for sequence-aware threat detection.
     """
     
     def __init__(self,
@@ -1134,7 +1409,9 @@ class BHSMClassifier:
                  bdh: Optional[BDHMemory] = None,
                  psi: Optional[PSIIndex] = None,
                  action_thresholds: Optional[ActionThresholds] = None,
-                 name: str = "bhsm_classifier"):
+                 name: str = "bhsm_classifier",
+                 use_cognitive_mesh: bool = True,
+                 use_temporal_context: bool = True):
         
         self.name = name
         self.feature_extractor = feature_extractor or TextFeatureExtractor()
@@ -1145,22 +1422,100 @@ class BHSMClassifier:
         self.confidence_calibrator = ConfidenceCalibrator()
         self.valence_controller = ValenceController()
         
+        # Gap 3: CognitiveMesh for neural meta-reasoning
+        self.use_cognitive_mesh = use_cognitive_mesh
+        if use_cognitive_mesh:
+            self.cognitive_mesh = CognitiveMesh()
+            self.cognitive_mesh.to(DEVICE)
+            self.cognitive_mesh.eval()  # Start in eval mode
+            self.mesh_optimizer = optim.Adam(self.cognitive_mesh.parameters(), lr=0.001)
+        else:
+            self.cognitive_mesh = None
+            self.mesh_optimizer = None
+        
+        # Gap 5: Temporal context integration
+        self.use_temporal_context = use_temporal_context
+        
         # Statistics tracking
         self.classification_count = 0
         self.correct_count = 0
+        
+        # Track mesh vs linear performance for adaptive switching
+        self.mesh_correct = 0
+        self.linear_correct = 0
+        self.comparison_window = 50
+    
+    def _prepare_mesh_input(self, features: np.ndarray, 
+                           psi_valence: float, bdh_differential: float,
+                           statistical_baseline: float,
+                           temporal_context: float = 0.0,
+                           escalation: float = 0.0) -> torch.Tensor:
+        """
+        Prepare input for CognitiveMesh neural reasoning.
+        
+        Creates node embeddings that combine raw features with component scores,
+        allowing the mesh to learn nonlinear relationships between signals.
+        """
+        # Create 3 node embeddings (one per mesh node)
+        # Each node gets a different view of the data
+        
+        # Node 0: Feature-focused (raw features + statistical baseline)
+        node0 = np.zeros(EMBED_DIM * 2)
+        node0[:EMBED_DIM] = features
+        node0[EMBED_DIM:EMBED_DIM+8] = [
+            statistical_baseline, temporal_context, escalation,
+            features[4],  # entropy
+            features[10],  # special char ratio
+            features[16],  # nesting depth
+            features[30],  # structural anomaly
+            features[31]   # statistical complexity
+        ]
+        
+        # Node 1: Memory-focused (PSI and BDH signals)
+        node1 = np.zeros(EMBED_DIM * 2)
+        node1[:EMBED_DIM] = features
+        node1[EMBED_DIM:EMBED_DIM+8] = [
+            psi_valence, bdh_differential, temporal_context,
+            (psi_valence + 1) / 2,  # normalized PSI
+            (bdh_differential + 1) / 2,  # normalized BDH
+            len(self.bdh.storage) / 100,  # memory coverage
+            len(self.psi.docs) / 100,  # PSI coverage
+            escalation
+        ]
+        
+        # Node 2: Context-focused (temporal and escalation patterns)
+        node2 = np.zeros(EMBED_DIM * 2)
+        node2[:EMBED_DIM] = features
+        node2[EMBED_DIM:EMBED_DIM+8] = [
+            temporal_context, escalation,
+            psi_valence * bdh_differential,  # agreement signal
+            abs(psi_valence - bdh_differential),  # disagreement signal
+            statistical_baseline * temporal_context,  # baseline-temporal interaction
+            min(self.classification_count / 100, 1.0),  # experience level
+            1.0 if self.classification_count > 50 else 0.5,  # confidence boost after training
+            (psi_valence + bdh_differential + statistical_baseline) / 3  # ensemble average
+        ]
+        
+        # Stack into tensor [3, EMBED_DIM*2]
+        node_embeddings = np.stack([node0, node1, node2])
+        return torch.tensor(node_embeddings, dtype=torch.float32, device=DEVICE)
     
     def classify(self, input_data: Any, 
-                 return_details: bool = False) -> ClassificationVerdict:
+                 return_details: bool = False,
+                 force_linear: bool = False) -> ClassificationVerdict:
         """
         Classify input and return constrained action.
         
         This implements the semantic-execution boundary:
         - Raw input is analyzed in the synaptic/cognitive layers
+        - CognitiveMesh provides neural meta-reasoning over component scores
+        - Temporal context (Gap 5) is integrated for sequence-aware detection
         - Only abstract verdicts cross to the mechanical layer
         
         Args:
             input_data: Domain-specific input to classify
             return_details: If True, include detailed metadata
+            force_linear: If True, bypass CognitiveMesh and use linear fusion
             
         Returns:
             ClassificationVerdict with action bounded to predefined set
@@ -1176,7 +1531,7 @@ class BHSMClassifier:
         # COGNITIVE LAYER: Score computation
         # ===========================================
         
-        # Step 1: BDH differential similarity
+        # Step 1: BDH differential similarity (now with Hebbian activation - Gap 1)
         bdh_differential = self.bdh.compute_differential_similarity(features)
         
         # Step 2: PSI valence-weighted average
@@ -1185,27 +1540,82 @@ class BHSMClassifier:
         # Step 3: Statistical baseline from raw features
         statistical_baseline = self.feature_extractor.compute_statistical_baseline(features)
         
-        # Step 4: Score fusion
-        raw_score = (
-            psi_valence * PSI_WEIGHT +
-            bdh_differential * BDH_WEIGHT +
-            statistical_baseline * BASELINE_WEIGHT
-        )
+        # Step 4: Temporal context (Gap 5)
+        if self.use_temporal_context:
+            temporal_context = self.bdh.compute_temporal_context(features)
+            escalation = self.bdh.compute_sequence_threat_escalation()
+        else:
+            temporal_context = 0.0
+            escalation = 0.0
         
-        # Normalize score to [0, 1] range
-        threat_score = (raw_score + 1.0) / 2.0  # Map from [-1,1] to [0,1]
+        # Step 5: Score fusion - Neural (CognitiveMesh) or Linear
+        use_mesh = (self.use_cognitive_mesh and 
+                    self.cognitive_mesh is not None and 
+                    not force_linear)
+        
+        if use_mesh:
+            # Neural meta-reasoning via CognitiveMesh (Gap 3)
+            mesh_input = self._prepare_mesh_input(
+                features, psi_valence, bdh_differential, 
+                statistical_baseline, temporal_context, escalation
+            )
+            
+            with torch.no_grad():
+                mesh_output = self.cognitive_mesh(mesh_input)
+                
+            # Extract threat probability from mesh output
+            # Mesh outputs action probabilities [ALLOW, DETECT, BLOCK, ...]
+            probs = mesh_output["probs"].cpu().numpy()
+            
+            # Convert action probabilities to threat score
+            # ALLOW=low threat, DETECT=medium, BLOCK=high
+            threat_score = probs[1] * 0.35 + probs[2] * 0.65  # DETECT + BLOCK weighted
+            
+            # Get confidence from mesh nodes
+            node_confs = mesh_output["node_confs"].cpu().numpy()
+            mesh_confidence = float(np.mean(node_confs))
+            
+            # Compute component agreement for metadata
+            component_agreement = 1.0 - float(np.std(node_confs))
+            
+            fusion_method = "cognitive_mesh"
+        else:
+            # Linear score fusion (original method)
+            # Include temporal context in fusion (Gap 5)
+            temporal_weight = 0.15 if self.use_temporal_context else 0.0
+            adjusted_psi_weight = PSI_WEIGHT * (1 - temporal_weight)
+            adjusted_baseline_weight = BASELINE_WEIGHT * (1 - temporal_weight)
+            
+            raw_score = (
+                psi_valence * adjusted_psi_weight +
+                bdh_differential * BDH_WEIGHT +
+                statistical_baseline * adjusted_baseline_weight +
+                temporal_context * temporal_weight * 0.7 +
+                escalation * temporal_weight * 0.3
+            )
+            
+            # Normalize score to [0, 1] range
+            threat_score = (raw_score + 1.0) / 2.0
+            
+            # Confidence estimation
+            component_agreement = 1.0 - np.std([
+                (psi_valence + 1) / 2,
+                (bdh_differential + 1) / 2,
+                statistical_baseline
+            ])
+            
+            mesh_confidence = None
+            fusion_method = "linear"
+        
         threat_score = np.clip(threat_score, 0.0, 1.0)
         
-        # Step 5: Confidence estimation
-        # Based on agreement between components and memory coverage
-        component_agreement = 1.0 - np.std([
-            (psi_valence + 1) / 2,
-            (bdh_differential + 1) / 2,
-            statistical_baseline
-        ])
+        # Step 6: Confidence estimation
+        memory_coverage = min(len(self.bdh.storage) / 100, 1.0)
         
-        memory_coverage = min(len(self.bdh.storage) / 100, 1.0)  # Confidence grows with experience
-        raw_confidence = 0.5 * component_agreement + 0.3 * memory_coverage + 0.2
+        if mesh_confidence is not None:
+            raw_confidence = 0.4 * mesh_confidence + 0.3 * component_agreement + 0.2 * memory_coverage + 0.1
+        else:
+            raw_confidence = 0.5 * component_agreement + 0.3 * memory_coverage + 0.2
         
         # Apply confidence calibration
         calibrated_confidence = self.confidence_calibrator.calibrate(raw_confidence)
@@ -1230,10 +1640,13 @@ class BHSMClassifier:
                 "psi_valence": psi_valence,
                 "bdh_differential": bdh_differential,
                 "statistical_baseline": statistical_baseline,
-                "raw_score": raw_score,
+                "temporal_context": temporal_context,
+                "escalation": escalation,
                 "raw_confidence": raw_confidence,
                 "component_agreement": component_agreement,
-                "memory_coverage": memory_coverage
+                "memory_coverage": memory_coverage,
+                "fusion_method": fusion_method,
+                "mesh_confidence": mesh_confidence
             }
         
         return ClassificationVerdict(
@@ -1244,16 +1657,67 @@ class BHSMClassifier:
             metadata=metadata
         )
     
+    def train_cognitive_mesh(self, input_data: Any, true_label: str, 
+                            reward: float = 1.0):
+        """
+        Train the CognitiveMesh on a labeled example.
+        
+        This allows the mesh to learn optimal meta-reasoning over
+        component signals based on ground truth feedback.
+        """
+        if not self.use_cognitive_mesh or self.cognitive_mesh is None:
+            return
+        
+        features = self.feature_extractor.extract(input_data)
+        bdh_differential = self.bdh.compute_differential_similarity(features)
+        psi_valence = self.psi.compute_valence_weighted_average(features, top_k=3)
+        statistical_baseline = self.feature_extractor.compute_statistical_baseline(features)
+        temporal_context = self.bdh.compute_temporal_context(features) if self.use_temporal_context else 0.0
+        escalation = self.bdh.compute_sequence_threat_escalation() if self.use_temporal_context else 0.0
+        
+        mesh_input = self._prepare_mesh_input(
+            features, psi_valence, bdh_differential,
+            statistical_baseline, temporal_context, escalation
+        )
+        
+        # Target action based on label
+        if true_label == "threat":
+            target_action = 2  # BLOCK
+        elif true_label == "suspicious":
+            target_action = 1  # DETECT
+        else:
+            target_action = 0  # ALLOW
+        
+        self.cognitive_mesh.train()
+        self.mesh_optimizer.zero_grad()
+        
+        output = self.cognitive_mesh(mesh_input)
+        probs = output["probs"]
+        
+        # Cross-entropy loss toward target action
+        target = torch.tensor([target_action], device=DEVICE)
+        loss = nn.functional.cross_entropy(probs.unsqueeze(0), target)
+        
+        # Scale by reward (stronger learning for mistakes)
+        loss = loss * reward
+        
+        loss.backward()
+        self.mesh_optimizer.step()
+        
+        self.cognitive_mesh.eval()
+    
     def learn_from_feedback(self, input_data: Any, 
                            was_correct: bool,
                            true_label: str = "unknown"):
         """
         Update memory based on classification outcome.
         
-        Implements experiential learning:
+        Implements experiential learning with Gap enhancements:
         - Content-based trace IDs ensure same patterns strengthen same memories
         - Stronger learning signal for corrections (mistakes teach more)
         - Memories added to both BDH (short-term) and PSI (long-term)
+        - Gap 3: Train CognitiveMesh on feedback
+        - Gap 5: Record temporal transitions for sequence learning
         
         Args:
             input_data: The input that was classified
@@ -1307,6 +1771,10 @@ class BHSMClassifier:
         # Add/update in BDH memory
         self.bdh.add_or_update(trace_id, features, valence=valence, label=true_label)
         
+        # Gap 5: Record temporal transition for sequence learning
+        if self.use_temporal_context:
+            self.bdh.record_temporal_transition(trace_id)
+        
         # Apply reward-gated Hebbian update
         regulated_reward = self.valence_controller.regulate_reward(reward)
         self.bdh.reward_gated_update(
@@ -1328,13 +1796,21 @@ class BHSMClassifier:
             protected=False
         )
         
+        # Gap 3: Train CognitiveMesh on this feedback
+        if self.use_cognitive_mesh and not was_correct:
+            # Train more strongly on mistakes
+            self.train_cognitive_mesh(input_data, true_label, reward=reward)
+        elif self.use_cognitive_mesh and was_correct and random.random() < 0.3:
+            # Occasionally reinforce correct predictions too
+            self.train_cognitive_mesh(input_data, true_label, reward=reward * 0.5)
+        
         # Track accuracy
         if was_correct:
             self.correct_count += 1
     
     def get_stats(self) -> Dict:
-        """Get classifier statistics."""
-        return {
+        """Get classifier statistics including Gap enhancements."""
+        stats = {
             "name": self.name,
             "classification_count": self.classification_count,
             "accuracy": self.correct_count / max(1, self.classification_count),
@@ -1344,8 +1820,17 @@ class BHSMClassifier:
             "valence_controller": {
                 "empathy_factor": self.valence_controller.empathy_factor,
                 "arrogance_penalty": self.valence_controller.arrogance_penalty
-            }
+            },
+            # Gap enhancement status
+            "use_cognitive_mesh": self.use_cognitive_mesh,
+            "use_temporal_context": self.use_temporal_context,
         }
+        
+        # Gap 5: Add temporal statistics
+        if self.use_temporal_context:
+            stats["temporal_stats"] = self.bdh.get_transition_stats()
+        
+        return stats
 
 
 class EventGenerator:

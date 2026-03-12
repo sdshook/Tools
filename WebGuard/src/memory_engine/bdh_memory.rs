@@ -42,6 +42,15 @@ pub struct HebbianConnection {
     pub last_update: f32,
 }
 
+/// Temporal trace transition for Gap 5 sequence modeling
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceTransition {
+    pub from_trace: String,
+    pub to_trace: String,
+    pub weight: f32,
+    pub timestamp: f64,
+}
+
 #[derive(Debug)]
 pub struct BdhMemory {
     pub traces: Vec<MemoryTrace>,
@@ -60,6 +69,12 @@ pub struct BdhMemory {
     pub performance_history: Vec<f32>,
     // EQ/IQ Balanced Reward System
     pub eq_iq_regulator: ExperientialBehavioralRegulator,
+    // Gap 5: Temporal Sequence Modeling
+    pub trace_transitions: Vec<TraceTransition>,
+    pub last_trace_id: Option<String>,
+    pub temporal_sequence: Vec<(String, f64)>,  // (trace_id, timestamp)
+    pub max_temporal_sequence: usize,
+    pub transition_decay: f32,
 }
 
 impl BdhMemory {
@@ -81,6 +96,12 @@ impl BdhMemory {
             performance_history: Vec::new(),
             // Initialize EQ/IQ regulator with balanced parameters (α=0.6, β=0.4)
             eq_iq_regulator: ExperientialBehavioralRegulator::new(0.6, 0.4, 0.01),
+            // Gap 5: Temporal Sequence Modeling initialization
+            trace_transitions: Vec::new(),
+            last_trace_id: None,
+            temporal_sequence: Vec::new(),
+            max_temporal_sequence: 20,
+            transition_decay: 0.95,
         } 
     }
 
@@ -373,17 +394,30 @@ impl BdhMemory {
     /// SELF-LEARNING: Uses ALL features equally. The system learns which features
     /// matter through experience, not through pre-defined assumptions about which
     /// features indicate attacks.
+    /// Differential threat similarity with Hebbian consensus (Gap 1 enhancement)
+    /// 
+    /// This method uses two complementary signals:
+    /// 1. Distance-based differential (original method)
+    /// 2. Hebbian consensus signal from learned associations
     pub fn differential_threat_similarity(&self, q: &[f32; EMBED_DIM]) -> f32 {
+        self.differential_threat_similarity_with_hebbian(q, true)
+    }
+    
+    /// Core implementation with optional Hebbian activation
+    pub fn differential_threat_similarity_with_hebbian(&self, q: &[f32; EMBED_DIM], use_hebbian: bool) -> f32 {
         if self.traces.is_empty() {
             // No experience yet - return neutral (slightly suspicious for security)
             return 0.3;
         }
         
+        // =====================================================
+        // Signal 1: Distance-based differential (original method)
+        // =====================================================
+        
         // Calculate distance to threat patterns (valence > 0.5)
         let min_threat_dist = self.traces.iter()
             .filter(|t| t.valence > 0.5)
             .map(|t| {
-                // Full Euclidean distance on ALL features (no assumptions)
                 let dist: f32 = (0..EMBED_DIM).map(|i| (q[i] - t.vec[i]).powi(2)).sum();
                 dist.sqrt()
             })
@@ -400,38 +434,93 @@ impl BdhMemory {
         
         // Handle edge cases - SECURITY-FIRST: Unknown patterns are suspicious
         if min_threat_dist == f32::INFINITY && min_benign_dist == f32::INFINITY {
-            // No patterns learned at all - suspicious (security-first)
             return 0.4;
         }
         
-        if min_threat_dist == f32::INFINITY {
-            // Only benign patterns learned - closer to benign = lower threat
-            return if min_benign_dist < 0.5 { 0.15 } else { 0.35 };
-        }
-        
-        if min_benign_dist == f32::INFINITY {
-            // Only threat patterns learned - closer to threat = higher threat
-            return if min_threat_dist < 0.5 { 0.85 } else { 0.5 };
-        }
-        
-        // EXPERIENTIAL DECISION: Purely based on relative distances
-        let threat_proximity = 1.0 / (min_threat_dist + 0.1);
-        let benign_proximity = 1.0 / (min_benign_dist + 0.1);
-        
-        // Threat score based on proximity ratio
-        let raw_score = threat_proximity / (threat_proximity + benign_proximity);
-        
-        // Apply security-first bias: slightly boost uncertain scores toward suspicion
-        if raw_score > 0.4 && raw_score < 0.6 {
-            // Uncertain region - lean toward suspicion
-            (raw_score + 0.1).min(0.65)
-        } else if raw_score > 0.5 {
-            // Likely threat - amplify
-            (0.5 + (raw_score - 0.5) * 1.3).min(1.0)
+        let distance_score = if min_threat_dist == f32::INFINITY {
+            if min_benign_dist < 0.5 { 0.15 } else { 0.35 }
+        } else if min_benign_dist == f32::INFINITY {
+            if min_threat_dist < 0.5 { 0.85 } else { 0.5 }
         } else {
-            // Likely benign - keep as is
-            raw_score
+            let threat_proximity = 1.0 / (min_threat_dist + 0.1);
+            let benign_proximity = 1.0 / (min_benign_dist + 0.1);
+            threat_proximity / (threat_proximity + benign_proximity)
+        };
+        
+        // =====================================================
+        // Signal 2: Hebbian consensus (Gap 1 enhancement)
+        // =====================================================
+        let hebbian_signal = if use_hebbian {
+            self.compute_hebbian_consensus(q)
+        } else {
+            0.0
+        };
+        
+        // =====================================================
+        // Combine signals
+        // =====================================================
+        let n_trained = self.traces.iter().filter(|t| t.uses > 2).count();
+        
+        let combined_score = if n_trained > 10 && use_hebbian && hebbian_signal.abs() > 0.01 {
+            // Blend Hebbian signal with distance score
+            let hebbian_blend = (n_trained as f32 / 100.0).min(0.4);
+            distance_score * (1.0 - hebbian_blend) + (hebbian_signal + 0.5) * hebbian_blend
+        } else {
+            distance_score
+        };
+        
+        // Apply security-first bias
+        if combined_score > 0.4 && combined_score < 0.6 {
+            (combined_score + 0.1).min(0.65)
+        } else if combined_score > 0.5 {
+            (0.5 + (combined_score - 0.5) * 1.3).min(1.0)
+        } else {
+            combined_score
         }
+    }
+    
+    /// Compute Hebbian consensus from learned weight matrices (Gap 1)
+    fn compute_hebbian_consensus(&self, q: &[f32; EMBED_DIM]) -> f32 {
+        let mut hebbian_votes: Vec<f32> = Vec::new();
+        let mut hebbian_weights: Vec<f32> = Vec::new();
+        
+        for trace in &self.traces {
+            // Calculate Hebbian weight magnitude
+            let w_norm: f32 = trace.hebbian_weights.iter().map(|w| w * w).sum::<f32>().sqrt();
+            if w_norm < 1e-6 {
+                continue;
+            }
+            
+            // Hebbian activation: how strongly does this trace's learned pattern activate?
+            let activation: f32 = (0..EMBED_DIM)
+                .map(|i| q[i] * trace.hebbian_weights[i] * trace.vec[i])
+                .sum();
+            let normalized_activation = activation / (w_norm + 1e-8);
+            
+            // Weight by: learning amount, similarity, valence strength
+            let learning_weight = (trace.uses as f32 / 5.0).min(1.0);
+            let similarity = cosine_sim(&trace.vec, q);
+            let valence_weight = trace.valence.abs();
+            
+            let combined_weight = learning_weight * similarity * valence_weight;
+            
+            if combined_weight > 0.01 {
+                // Vote: activation sign * valence gives threat prediction
+                let vote = (normalized_activation * 3.0).tanh() * trace.valence;
+                hebbian_votes.push(vote);
+                hebbian_weights.push(combined_weight);
+            }
+        }
+        
+        if hebbian_weights.is_empty() {
+            return 0.0;
+        }
+        
+        let total_weight: f32 = hebbian_weights.iter().sum();
+        hebbian_votes.iter()
+            .zip(hebbian_weights.iter())
+            .map(|(v, w)| v * w)
+            .sum::<f32>() / total_weight
     }
     
     /// Weighted threat similarity incorporating cumulative reward history
@@ -1010,6 +1099,159 @@ impl BdhMemory {
                 actual_outcome
             );
         }
+    }
+    
+    // =========================================================================
+    // Gap 5: Temporal Sequence Modeling Methods
+    // =========================================================================
+    
+    /// Record a temporal transition from the last trace to the current trace
+    pub fn record_temporal_transition(&mut self, trace_id: &str) {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0);
+        
+        // Record transition from last trace to current trace
+        if let Some(ref last_id) = self.last_trace_id {
+            if last_id != trace_id {
+                // Find existing transition or create new one
+                let existing_idx = self.trace_transitions.iter()
+                    .position(|t| t.from_trace == *last_id && t.to_trace == trace_id);
+                
+                if let Some(idx) = existing_idx {
+                    // Update existing transition weight with decay
+                    self.trace_transitions[idx].weight = 
+                        self.trace_transitions[idx].weight * self.transition_decay + 0.1;
+                    self.trace_transitions[idx].timestamp = timestamp;
+                } else {
+                    // Create new transition
+                    self.trace_transitions.push(TraceTransition {
+                        from_trace: last_id.clone(),
+                        to_trace: trace_id.to_string(),
+                        weight: 0.1,
+                        timestamp,
+                    });
+                }
+                
+                // Normalize transition weights for this source
+                let total_weight: f32 = self.trace_transitions.iter()
+                    .filter(|t| t.from_trace == *last_id)
+                    .map(|t| t.weight)
+                    .sum();
+                
+                if total_weight > 0.0 {
+                    for trans in &mut self.trace_transitions {
+                        if trans.from_trace == *last_id {
+                            trans.weight /= total_weight;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Update temporal sequence
+        self.temporal_sequence.push((trace_id.to_string(), timestamp));
+        if self.temporal_sequence.len() > self.max_temporal_sequence {
+            self.temporal_sequence.remove(0);
+        }
+        
+        // Update last trace
+        self.last_trace_id = Some(trace_id.to_string());
+    }
+    
+    /// Predict the most likely next traces based on learned transitions
+    pub fn predict_next_traces(&self, current_trace_id: &str, top_k: usize) -> Vec<(String, f32)> {
+        let mut predictions: Vec<(String, f32)> = self.trace_transitions.iter()
+            .filter(|t| t.from_trace == current_trace_id)
+            .map(|t| (t.to_trace.clone(), t.weight))
+            .collect();
+        
+        predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        predictions.into_iter().take(top_k).collect()
+    }
+    
+    /// Compute temporal context score based on recent trace history
+    pub fn compute_temporal_context(&self, query: &[f32; EMBED_DIM]) -> f32 {
+        if self.temporal_sequence.is_empty() {
+            return 0.0;
+        }
+        
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0);
+        
+        let mut weighted_valence = 0.0f32;
+        let mut weight_sum = 0.0f32;
+        
+        for (trace_id, timestamp) in self.temporal_sequence.iter().rev() {
+            if let Some(trace) = self.traces.iter().find(|t| t.id == *trace_id) {
+                // Time-based decay
+                let time_diff = current_time - timestamp;
+                let time_weight = 0.8f32.powf((time_diff / 60.0) as f32);
+                
+                // Similarity-based weighting
+                let similarity = cosine_sim(&trace.vec, query);
+                
+                let weight = time_weight * (0.5 + 0.5 * similarity);
+                
+                weighted_valence += trace.valence * weight;
+                weight_sum += weight;
+            }
+        }
+        
+        if weight_sum < 1e-8 {
+            return 0.0;
+        }
+        
+        (weighted_valence / weight_sum).clamp(-1.0, 1.0)
+    }
+    
+    /// Detect threat escalation patterns in the recent sequence
+    pub fn compute_sequence_threat_escalation(&self) -> f32 {
+        if self.temporal_sequence.len() < 3 {
+            return 0.0;
+        }
+        
+        // Get valences of recent traces
+        let mut valences: Vec<f32> = Vec::new();
+        for (trace_id, _) in self.temporal_sequence.iter().rev().take(10) {
+            if let Some(trace) = self.traces.iter().find(|t| t.id == *trace_id) {
+                valences.push(trace.valence);
+            }
+        }
+        
+        if valences.len() < 3 {
+            return 0.0;
+        }
+        
+        // Compute simple trend (linear regression slope approximation)
+        let n = valences.len() as f32;
+        let x_sum: f32 = (0..valences.len()).map(|i| i as f32).sum();
+        let y_sum: f32 = valences.iter().sum();
+        let xy_sum: f32 = valences.iter().enumerate()
+            .map(|(i, v)| i as f32 * v)
+            .sum();
+        let x2_sum: f32 = (0..valences.len()).map(|i| (i as f32).powi(2)).sum();
+        
+        let slope = (n * xy_sum - x_sum * y_sum) / (n * x2_sum - x_sum.powi(2) + 1e-8);
+        
+        // Normalize to [-1, 1] range
+        (slope * 10.0).clamp(-1.0, 1.0)
+    }
+    
+    /// Get transition statistics
+    pub fn get_transition_stats(&self) -> (usize, usize, f32) {
+        let source_traces: std::collections::HashSet<_> = self.trace_transitions.iter()
+            .map(|t| &t.from_trace)
+            .collect();
+        
+        (
+            source_traces.len(),
+            self.trace_transitions.len(),
+            self.temporal_sequence.len() as f32
+        )
     }
 }
 
