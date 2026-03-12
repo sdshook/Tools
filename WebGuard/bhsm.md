@@ -167,7 +167,13 @@ Memory growth is bounded. BDH enforces a maximum of 1000 traces. When utilizatio
 
 The cognitive layer implements classification and monitoring:
 
-**Classification** queries memory systems, retrieves similar patterns, and computes scores from stored valences weighted by similarity.
+**Classification** queries memory systems, retrieves similar patterns, and computes scores from stored valences weighted by similarity. In addition to distance-based similarity, **Hebbian consensus** contributes learned associative patterns through weighted voting:
+
+```
+hebbian_signal = Σ (activation_i × valence_i × weight_i) / Σ weight_i
+```
+
+Where each trace votes based on its Hebbian weight activation, with voting weight determined by learning amount (uses), similarity, and valence strength. This ensures that Hebbian weights actively participate in inference, not just learning.
 
 **Confidence calibration** tracks prediction accuracy and adjusts confidence scores when high-confidence predictions produce poor outcomes. This is implemented as a penalty coefficient (0.3) applied to confidence scores when the error rate among predictions with confidence > 0.8 exceeds 20%.
 
@@ -179,6 +185,58 @@ The cognitive layer implements classification and monitoring:
 - When a service learns a high-confidence pattern (|valence| > cross_service_threshold), it propagates to the shared PSI with dampened learning rate (mesh_learning_rate × 0.5)
 - Conflict resolution: later writes overwrite earlier ones; dampened learning rates prevent single-service dominance
 - Updates are asynchronous—services don't block waiting for propagation
+
+### 3.2.1 Temporal Sequence Modeling
+
+BHSM implements temporal reasoning that operates **without context window constraints**—a fundamental architectural advantage over LLM-based approaches.
+
+**The Context Window Problem**: LLMs operate within fixed context windows (8K-200K tokens). For security applications where attack patterns unfold over hours or days (reconnaissance → probing → exploitation), early warning signs fall out of context before the attack completes. BHSM solves this through persistent temporal memory.
+
+**Trace Transitions**: The BDH maintains a transition graph recording sequences of behavioral patterns:
+
+```
+TraceTransition {
+    from_trace: String,
+    to_trace: String,  
+    weight: f32,      // Normalized probability
+    timestamp: f64,
+}
+```
+
+When traces are activated sequentially, transitions are recorded and their weights reinforced:
+- New transitions initialize with weight 0.1
+- Repeated transitions accumulate: `weight = weight × decay + 0.1`
+- Weights are normalized per source trace to form probability distributions
+
+**Temporal Context**: Recent patterns contribute time-weighted context:
+```
+temporal_context = Σ (valence_i × time_weight_i × similarity_i) / Σ weight_i
+```
+Where `time_weight = 0.8^(minutes_elapsed / 60)` provides graceful decay rather than hard cutoffs.
+
+**Threat Escalation Detection**: The system detects increasing threat trends by computing the slope of recent valence history:
+```
+escalation = linear_regression_slope(recent_valences) × 10
+```
+A positive escalation score indicates a pattern of increasingly threatening requests—useful for detecting multi-stage attacks.
+
+**Behavioral Prediction**: Given a current trace, BHSM predicts likely next patterns:
+```rust
+predict_next_traces(current_trace_id, top_k) → Vec<(trace_id, probability)>
+```
+This enables proactive defense: "After reconnaissance patterns, expect probing attempts."
+
+**Architectural Comparison**:
+
+| Aspect | LLM Context Window | BHSM Temporal Memory |
+|--------|-------------------|----------------------|
+| Temporal horizon | Fixed (tokens) | Unbounded (persistent) |
+| Old patterns | Forgotten | Compressed into Hebbian weights |
+| Sequence cost | O(n²) attention | O(k) transition lookup |
+| Cross-session | Requires external memory | Native (PSI persists) |
+| Learning | Frozen at inference | Continuous online |
+
+This temporal architecture enables detection of patterns that unfold across hours, days, or weeks—timescales that exceed any practical context window.
 
 ### 3.3 Mechanical Layer
 

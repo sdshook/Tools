@@ -722,13 +722,119 @@ All collective immunity mechanisms are **fully self-learning**:
 
 ---
 
+## Temporal Reasoning: Beyond LLM Context Windows
+
+### The Context Window Problem
+
+Large Language Models (LLMs) operate within fixed context windows—typically 8K to 200K tokens. This creates fundamental limitations for security applications:
+
+```
+LLM Context Window Limitation:
+├── Request 1 (hour 0)     ─┐
+├── Request 2 (hour 1)      │  
+├── Request 3 (hour 2)      │ Eventually falls
+├── ...                     │ out of context
+├── Request 1000 (hour 24)  ◄┘ "Forgot" the reconnaissance phase
+└── Attack detected too late — no memory of early warning signs
+```
+
+**Attack patterns unfold over hours, days, or weeks**—far exceeding any context window:
+- Reconnaissance → Probing → Exploitation sequences
+- Low-and-slow brute force attacks
+- Persistent threat actors building attack chains
+- Business logic abuse patterns across sessions
+
+### BHSM's Unbounded Temporal Memory
+
+WebGuard's BHSM architecture provides **true temporal reasoning without context constraints**:
+
+```
+BHSM Temporal Memory:
+├── trace_A (recon)     ──► stored in BDH (persists forever)
+│     │
+│     └──► transition(A→B) weight: 0.3
+│
+├── trace_B (probe)     ──► stored in BDH  
+│     │
+│     └──► transition(B→C) weight: 0.5
+│
+├── trace_C (exploit)   ──► stored in BDH
+│
+└── compute_sequence_threat_escalation() 
+    └── "Escalating threat pattern detected across 24 hours"
+```
+
+### Architectural Comparison
+
+| Aspect | LLMs | BHSM |
+|--------|------|------|
+| **Memory Model** | Fixed context window (8K-200K tokens) | Persistent experiential memory (unbounded) |
+| **Temporal Horizon** | Limited to window size | Indefinite — traces persist forever |
+| **Old Information** | Falls off the window, forgotten | Compressed into Hebbian weights, retained |
+| **Attention Cost** | O(n²) with sequence length | O(1) lookup + O(k) similarity search |
+| **Learning** | Frozen weights at inference | Continuous online learning |
+| **Sequence Patterns** | Must fit in context | Stored as transition graphs |
+| **Cross-Session** | Requires external memory | Native — PSI persists across sessions |
+
+### Temporal Sequence Modeling Features
+
+WebGuard implements comprehensive temporal reasoning through:
+
+1. **Trace Transitions**: Records sequences of behavioral patterns
+   ```rust
+   // Tracks A → B → C attack progressions
+   record_temporal_transition(trace_id)
+   ```
+
+2. **Behavioral Prediction**: Anticipates next attack steps
+   ```rust
+   // "After reconnaissance, expect probing"
+   predict_next_traces(current_trace, top_k)
+   ```
+
+3. **Threat Escalation Detection**: Identifies increasing threat trends
+   ```rust
+   // Detects rising threat valence over time
+   compute_sequence_threat_escalation()
+   ```
+
+4. **Temporal Context**: Time-weighted relevance of recent patterns
+   ```rust
+   // Recent patterns weighted higher, with decay
+   compute_temporal_context(query)
+   ```
+
+### Why This Matters for Security
+
+| Scenario | LLM Approach | BHSM Approach |
+|----------|--------------|---------------|
+| **Multi-stage attack (24h)** | ❌ Early stages forgotten | ✅ Full sequence retained |
+| **Slow brute force** | ❌ Can't correlate attempts | ✅ Learns attempt→attempt transitions |
+| **Returning attacker** | ❌ No memory of past behavior | ✅ PSI recognizes historical patterns |
+| **Behavioral anomaly** | ❌ Limited to current context | ✅ Compares against long-term baseline |
+
+### The Fundamental Difference
+
+| | LLM | BHSM |
+|-|-----|------|
+| **Philosophy** | "Remember everything in window" | "Learn patterns, forget details" |
+| **Biology Analogy** | Working memory (limited) | Long-term + episodic memory |
+| **Scaling** | More tokens = more cost | More experience = better patterns |
+| **Forgetting** | Hard cutoff at window edge | Graceful decay with reinforcement |
+
+**BHSM provides true neuromorphic temporal reasoning**—not a workaround or RAG-style retrieval bolted onto a stateless model, but architecturally native persistent memory that learns behavioral sequences across unlimited time horizons.
+
+---
+
 ## Core Innovation
 
 ### The Unique Combination
-The system fuses seven key components that have rarely been integrated:
+The system fuses eight key components that have rarely been integrated:
 - **True Bidirectional Hebbian Learning**: "Neurons that fire together, wire together" - explicit connection weights between memory traces that strengthen with co-activation and reward
+- **Hebbian Consensus Inference**: Learned Hebbian weights actively participate in classification decisions through weighted voting, not just storage
 - **Reinforcement-Modulated Plasticity**: Reward/punishment signals directly modulate Hebbian learning rates and connection strengths in real-time
 - **Persistent Semantic Index (PSI)**: Long-term memory structure storing reinforced associations across unlimited time horizons
+- **Temporal Sequence Modeling**: Trace transitions, escalation detection, and behavioral prediction without context window constraints
 - **Host-Based Mesh Cognition**: Cross-service learning between web processes on the same host, enabling collaborative defense
 - **EQ/IQ Behavioral Regulation**: Emotional intelligence (empathy, social awareness) balanced with analytical intelligence for context-aware decision making
 - **Retrospective Learning System**: Enhanced learning from false negatives (missed threats) discovered after initial analysis, mimicking natural learning from mistakes
