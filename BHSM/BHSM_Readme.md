@@ -89,14 +89,118 @@ score = (psi_valence × 0.4) + (bdh_differential × 0.3) + (statistical_baseline
 
 Where:
 - `psi_valence`: Valence-weighted average from top-k similar PSI entries
-- `bdh_differential`: Difference between max threat and max benign similarity
+- `bdh_differential`: Difference between max threat and max benign similarity (enhanced with Hebbian consensus)
 - `statistical_baseline`: `(features[30] × 0.6) + (features[31] × 0.4)`
+
+### Hebbian Consensus Inference
+
+In addition to distance-based similarity, BHSM computes a **Hebbian consensus signal** that actively uses learned weight matrices during classification:
+
+```
+hebbian_signal = Σ (activation_i × valence_i × weight_i) / Σ weight_i
+```
+
+Where each trace votes based on its Hebbian weight activation, with voting weight determined by:
+- **Learning amount**: How many times the trace has been reinforced (uses)
+- **Similarity**: Cosine similarity between query and trace
+- **Valence strength**: Confidence of the trace's classification
+
+This ensures Hebbian weights actively participate in inference decisions, not just learning—a critical distinction from systems that train associative weights but never use them.
 
 ### Confidence Calibration
 
 - Tracks accuracy of high-confidence predictions (confidence > 0.8)
 - Applies penalty coefficient (0.3) when error rate exceeds 20%
 - Prevents overconfidence from degrading system reliability
+
+---
+
+## Temporal Reasoning: Beyond LLM Context Windows
+
+### The Context Window Problem
+
+Large Language Models operate within fixed context windows (8K-200K tokens). For classification applications where patterns unfold over extended periods, this creates fundamental limitations:
+
+- Early warning signs fall out of context before patterns complete
+- No memory of prior sessions without external augmentation
+- Attention cost scales O(n²) with sequence length
+- Learning is frozen at inference time
+
+### BHSM's Unbounded Temporal Memory
+
+BHSM provides **true temporal reasoning without context constraints** through persistent trace transitions and sequence modeling:
+
+```
+Trace Sequence Memory:
+├── trace_A (event 1)    ──► stored in BDH (persists indefinitely)
+│     │
+│     └──► transition(A→B) weight: 0.3
+│
+├── trace_B (event 2)    ──► stored in BDH  
+│     │
+│     └──► transition(B→C) weight: 0.5
+│
+├── trace_C (event 3)    ──► stored in BDH
+│
+└── compute_sequence_escalation() 
+    └── "Escalating pattern detected across extended timeframe"
+```
+
+### Temporal Modeling Components
+
+**Trace Transitions**: Records sequences of behavioral patterns as a directed graph:
+```python
+TraceTransition:
+    from_trace: str      # Source trace ID
+    to_trace: str        # Target trace ID  
+    weight: float        # Normalized transition probability
+    timestamp: float     # When transition occurred
+```
+
+Transitions accumulate with reinforcement: `weight = weight × decay + increment`
+
+**Temporal Context**: Recent patterns contribute time-weighted context:
+```
+temporal_context = Σ (valence_i × time_weight_i × similarity_i) / Σ weight_i
+```
+Where `time_weight = decay^(time_elapsed)` provides graceful decay rather than hard cutoffs.
+
+**Escalation Detection**: Identifies increasing threat trends via slope analysis:
+```
+escalation = linear_regression_slope(recent_valences)
+```
+Positive escalation indicates a pattern of increasing threat—useful for detecting multi-stage progressions.
+
+**Behavioral Prediction**: Predicts likely next patterns given current state:
+```python
+predict_next_traces(current_trace_id, top_k) → [(trace_id, probability), ...]
+```
+
+### Architectural Comparison: BHSM vs LLM
+
+| Aspect | LLM Context Window | BHSM Temporal Memory |
+|--------|-------------------|----------------------|
+| **Temporal horizon** | Fixed (tokens) | Unbounded (persistent) |
+| **Old patterns** | Forgotten at window edge | Compressed into Hebbian weights |
+| **Sequence cost** | O(n²) attention | O(k) transition lookup |
+| **Cross-session** | Requires external memory | Native (PSI persists) |
+| **Learning** | Frozen at inference | Continuous online |
+| **Forgetting** | Hard cutoff | Graceful decay with reinforcement |
+
+### Complementary Detection Mechanisms
+
+BHSM's temporal escalation detection (linear regression on valence trends) complements rather than competes with spatial anomaly detection (e.g., Isolation Forest):
+
+| Mechanism | Question Answered | Data Scope |
+|-----------|------------------|------------|
+| **Spatial Anomaly** | "Is this point structurally unusual?" | Single feature vector |
+| **Temporal Escalation** | "Is threat level trending upward?" | Sequence of valences |
+
+These mechanisms cover orthogonal dimensions:
+- Spatial anomaly detects novel/unusual individual events
+- Temporal escalation detects multi-stage patterns that may individually appear benign
+
+Together, they provide defense-in-depth across both feature space and time.
 
 ---
 
@@ -582,12 +686,14 @@ BHSM provides an architecture combining:
 
 1. **Persistent memory** enabling operational experience accumulation
 2. **Reward-gated learning** enabling behavioral adaptation from feedback
-3. **Constrained action spaces** bounding the consequence of classification errors
-4. **Shared memory** enabling cross-instance knowledge aggregation
+3. **Hebbian consensus inference** using learned weights actively during classification
+4. **Temporal sequence modeling** detecting patterns across unlimited time horizons
+5. **Constrained action spaces** bounding the consequence of classification errors
+6. **Shared memory** enabling cross-instance knowledge aggregation
 
-The architecture addresses a specific deployment scenario: classification applications requiring continuous adaptation where feedback is available and output bounding is valuable.
+The architecture addresses a specific deployment scenario: classification applications requiring continuous adaptation where feedback is available and output bounding is valuable. Unlike LLM-based approaches constrained by fixed context windows, BHSM provides **true neuromorphic temporal reasoning**—patterns persist indefinitely, enabling detection of multi-stage progressions that unfold over hours, days, or weeks.
 
-BHSM is best understood as an engineering integration of established techniques—embedding-based classification, reward-modulated learning, constrained outputs, shared databases—organized around principles motivated by biological memory systems.
+BHSM is best understood as an engineering integration of established techniques—embedding-based classification, reward-modulated learning, Hebbian associative memory, temporal sequence modeling, constrained outputs, shared databases—organized around principles motivated by biological memory systems.
 
 ---
 
