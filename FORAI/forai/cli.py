@@ -14,7 +14,7 @@ from .extraction.extractors import ForensicExtractor, STANDARD_QUESTIONS
 from .extraction.plaso import import_plaso_to_db, FAST_PARSERS, STANDARD_PARSERS
 from .graph.graph import ForensicGraph
 from .graph.builder import build_graph_from_evidence
-from .report.generator import generate_report, save_report
+from .report.generator import generate_report, save_full_report, DEFAULT_REPORTS_DIR
 
 
 def cmd_analyze(args):
@@ -70,7 +70,7 @@ def cmd_analyze(args):
         print(f"  {answer.question_id}: {confidence_str} - {answer.answer.split(chr(10))[0][:60]}...")
     
     # Generate report
-    print(f"\nGenerating {args.report_format} report...")
+    print(f"\nGenerating report...")
     report = generate_report(
         case_id=args.case_id,
         answers=answers,
@@ -78,11 +78,32 @@ def cmd_analyze(args):
         graph_hash=graph.get_state_hash()
     )
     
-    output_path = config.reports_dir / f"{args.case_id}_report.{args.report_format}"
-    save_report(report, output_path, args.report_format)
-    print(f"Report saved: {output_path}")
+    # Determine output directory
+    output_dir = Path(args.output_dir) if args.output_dir else DEFAULT_REPORTS_DIR
     
-    db.log_custody_event(args.case_id, "ANALYSIS_COMPLETE", f"Report generated: {output_path}")
+    # Determine formats
+    formats = ["json"]
+    if args.report_format == "pdf":
+        formats.append("pdf")
+    elif args.report_format == "all":
+        formats = ["json", "pdf"]
+    
+    # Save full report package
+    report_dir = save_full_report(
+        case_id=args.case_id,
+        report=report,
+        output_dir=output_dir,
+        formats=formats
+    )
+    
+    print(f"\nReport saved to: {report_dir}/")
+    print(f"  - report.json")
+    if "pdf" in formats:
+        print(f"  - report.pdf")
+    print(f"  - provenance.json")
+    print(f"  - manifest.txt")
+    
+    db.log_custody_event(args.case_id, "ANALYSIS_COMPLETE", f"Report generated: {report_dir}")
     
     return 0
 
@@ -228,8 +249,10 @@ def main():
     p_analyze = subparsers.add_parser("analyze", help="Run full analysis")
     p_analyze.add_argument("case_id", help="Case identifier")
     p_analyze.add_argument("--plaso-file", type=Path, help="Plaso file to import")
-    p_analyze.add_argument("--report-format", choices=["json", "pdf"], default="json",
-                          help="Report format")
+    p_analyze.add_argument("--output-dir", "-o", type=Path,
+                          help="Report output directory (default: ./Reports)")
+    p_analyze.add_argument("--report-format", choices=["json", "pdf", "all"], default="all",
+                          help="Report format: json, pdf, or all (default: all)")
     p_analyze.set_defaults(func=cmd_analyze)
     
     # question command

@@ -1,5 +1,8 @@
 """
 Forensic report generator with full provenance.
+
+Reports are saved to: {output_dir}/{case_id}_{YYMMDDHHMMSS}/
+Default output_dir: ./Reports
 """
 
 import json
@@ -8,10 +11,47 @@ import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from ..db.evidence import EvidenceDB
 from ..extraction.extractors import QuestionAnswer, ForensicExtractor
+
+
+# Default report output directory
+DEFAULT_REPORTS_DIR = Path("Reports")
+
+
+def get_report_dir(case_id: str, output_dir: Optional[Union[str, Path]] = None) -> Path:
+    """
+    Get the report directory path for a case.
+    
+    Args:
+        case_id: Case identifier
+        output_dir: Base output directory (default: ./Reports)
+        
+    Returns:
+        Path to report directory: {output_dir}/{case_id}_{YYMMDDHHMMSS}/
+    """
+    base_dir = Path(output_dir) if output_dir else DEFAULT_REPORTS_DIR
+    timestamp = datetime.now().strftime("%y%m%d%H%M%S")
+    report_dir = base_dir / f"{case_id}_{timestamp}"
+    return report_dir
+
+
+def ensure_report_dir(case_id: str, output_dir: Optional[Union[str, Path]] = None) -> Path:
+    """
+    Create and return the report directory path.
+    
+    Args:
+        case_id: Case identifier
+        output_dir: Base output directory (default: ./Reports)
+        
+    Returns:
+        Path to created report directory
+    """
+    report_dir = get_report_dir(case_id, output_dir)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    return report_dir
 
 
 def generate_report(case_id: str,
@@ -167,3 +207,133 @@ def save_report(report: Dict[str, Any], output_path: Path, format: str = "json")
         save_report_pdf(report, output_path)
     else:
         save_report_json(report, output_path)
+
+
+def save_full_report(case_id: str,
+                     report: Dict[str, Any],
+                     output_dir: Optional[Union[str, Path]] = None,
+                     formats: List[str] = None) -> Path:
+    """
+    Save complete report package to designated directory.
+    
+    Creates: {output_dir}/{case_id}_{YYMMDDHHMMSS}/
+    Contains:
+      - report.json (always)
+      - report.pdf (if 'pdf' in formats)
+      - provenance.json (trajectory, LLM log, hashes)
+      - manifest.txt (file listing with hashes)
+    
+    Args:
+        case_id: Case identifier
+        report: Generated report dict
+        output_dir: Base output directory (default: ./Reports)
+        formats: List of formats to save ['json', 'pdf'] (default: both)
+        
+    Returns:
+        Path to the report directory
+    """
+    if formats is None:
+        formats = ["json", "pdf"]
+    
+    # Create report directory
+    report_dir = ensure_report_dir(case_id, output_dir)
+    
+    # Always save JSON
+    json_path = report_dir / "report.json"
+    save_report_json(report, json_path)
+    
+    # Save PDF if requested
+    if "pdf" in formats:
+        pdf_path = report_dir / "report.pdf"
+        save_report_pdf(report, pdf_path)
+    
+    # Save provenance separately for easy access
+    provenance = {
+        "case_id": case_id,
+        "report_hash": report["metadata"]["report_hash"],
+        "generated_at": report["metadata"]["generated_at"],
+        "graph_state_hash": report["provenance"].get("graph_state_hash"),
+        "trajectory": report["provenance"].get("trajectory"),
+        "llm_interactions": report["provenance"].get("llm_interactions"),
+        "chain_of_custody_entries": len(report.get("chain_of_custody", []))
+    }
+    provenance_path = report_dir / "provenance.json"
+    with open(provenance_path, 'w') as f:
+        json.dump(provenance, f, indent=2, default=str)
+    
+    # Create manifest with file hashes
+    manifest_lines = [
+        f"FORAI Report Manifest",
+        f"Case ID: {case_id}",
+        f"Generated: {report['metadata']['generated_at']}",
+        f"Report Hash: {report['metadata']['report_hash']}",
+        "",
+        "Files:",
+    ]
+    
+    for file_path in sorted(report_dir.iterdir()):
+        if file_path.is_file() and file_path.name != "manifest.txt":
+            file_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()[:16]
+            manifest_lines.append(f"  {file_path.name}: {file_hash}")
+    
+    manifest_path = report_dir / "manifest.txt"
+    manifest_path.write_text("\n".join(manifest_lines))
+    
+    return report_dir
+
+
+def save_report_text(report: Dict[str, Any], output_path: Path):
+    """Save report as plain text (for quick review)."""
+    lines = [
+        "=" * 60,
+        "FORAI Forensic Analysis Report",
+        "=" * 60,
+        f"Case ID: {report['metadata']['case_id']}",
+        f"Generated: {report['metadata']['generated_at']}",
+        f"Report Hash: {report['metadata']['report_hash']}",
+        "",
+        "-" * 60,
+        "SUMMARY",
+        "-" * 60,
+        f"Questions Answered: {report['summary']['total_questions']}",
+        f"High Confidence: {report['summary']['high_confidence_answers']}",
+        f"Evidence Sources: {report['summary']['evidence_sources']}",
+        "",
+        "-" * 60,
+        "FORENSIC QUESTIONS",
+        "-" * 60,
+    ]
+    
+    for q in report["questions"]:
+        lines.append("")
+        lines.append(f"{q['id']}: {q['question']}")
+        lines.append("-" * 40)
+        lines.append(f"Answer: {q['answer']}")
+        lines.append(f"Confidence: {q['confidence']:.0%}")
+        lines.append(f"Sources ({len(q['sources'])}): {', '.join(q['sources'][:5])}")
+        if len(q['sources']) > 5:
+            lines.append(f"  ... and {len(q['sources']) - 5} more")
+    
+    lines.extend([
+        "",
+        "-" * 60,
+        "PROVENANCE",
+        "-" * 60,
+        f"Graph State Hash: {report['provenance'].get('graph_state_hash', 'N/A')}",
+    ])
+    
+    if report["provenance"].get("trajectory"):
+        traj = report["provenance"]["trajectory"]
+        lines.append(f"RL Trajectory: {traj.get('trajectory_id', 'N/A')} ({len(traj.get('steps', []))} steps)")
+    
+    if report["provenance"].get("llm_interactions"):
+        lines.append(f"LLM Interactions: {len(report['provenance']['llm_interactions'])}")
+    
+    lines.extend([
+        "",
+        "=" * 60,
+        "END OF REPORT",
+        "=" * 60,
+    ])
+    
+    output_path.write_text("\n".join(lines))

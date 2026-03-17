@@ -420,22 +420,70 @@ python main.py list-questions
 
 ### Analyze a Forensic Image
 ```bash
-python main.py analyze --case-id CASE001 --image-path /mnt/evidence/disk.E01
+python main.py analyze CASE001 --plaso-file timeline.plaso
+```
+
+### Specify Custom Output Directory
+```bash
+python main.py analyze CASE001 --plaso-file timeline.plaso --output-dir /path/to/reports
 ```
 
 ### Answer a Specific Question
 ```bash
-python main.py question --case-id CASE001 --question-id Q7  # USB devices
+python main.py question CASE001 Q7  # USB devices
 ```
 
 ### Interactive Mode (Analyst Review Gate)
 ```bash
-python main.py interactive --case-id CASE001
+python main.py interactive CASE001
 ```
 
 ### With Local LLM
 ```bash
-python main.py analyze --case-id CASE001 --image-path /mnt/evidence --llm-model ./models/llama3.gguf
+python main.py analyze CASE001 --plaso-file timeline.plaso --llm-model ./models/llama3.gguf
+```
+
+## Report Output
+
+Reports are saved to a timestamped directory:
+
+```
+{output_dir}/{case_id}_{YYMMDDHHMMSS}/
+```
+
+**Default output directory:** `./Reports`
+
+### Report Directory Contents
+
+```
+Reports/CASE001_250317143052/
+├── report.json       # Full report with all question answers
+├── report.pdf        # PDF version for printing/sharing
+├── provenance.json   # Separate provenance data for verification
+└── manifest.txt      # File listing with SHA-256 hashes
+```
+
+### Report Files
+
+| File | Purpose |
+|------|---------|
+| `report.json` | Complete forensic report with answers, confidence scores, sources |
+| `report.pdf` | Formatted PDF for human review and legal proceedings |
+| `provenance.json` | Graph state hash, RL trajectory, LLM interaction log |
+| `manifest.txt` | Integrity verification with file hashes |
+
+### Example manifest.txt
+
+```
+FORAI Report Manifest
+Case ID: CASE001
+Generated: 2025-03-17T14:30:52
+Report Hash: a3b8f29c1e5d7a42
+
+Files:
+  provenance.json: 8f2c1a9e3b7d5f40
+  report.json: a3b8f29c1e5d7a42
+  report.pdf: 5d9f2c8a1b3e7f60
 ```
 
 ## Key Design Decisions
