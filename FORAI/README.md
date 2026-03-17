@@ -478,15 +478,50 @@ python main.py analyze --case-id CASE001 --image-path /mnt/evidence --llm-model 
 | Graph grounding | ✅ Complete | Context builder for LLM |
 | Report generator | ✅ Complete | PDF/JSON/text output |
 | Plaso integration | 🔄 Interface | Parser ready, needs runtime testing |
-| World model training | ❌ Not yet | Needs baseline Windows telemetry |
-| RL agent training | ❌ Not yet | Needs analyst feedback sessions |
+| World model training | 🔄 Incremental | Learns from each investigation (see below) |
+| RL agent training | 🔄 Incremental | Learns from analyst feedback (see below) |
+
+### Continuous Learning & Knowledge Export
+
+Both the **World Model** and **RL Agent** are designed for **incremental learning**—they improve with each investigation performed:
+
+| Component | Learns From | What Improves |
+|-----------|-------------|---------------|
+| **World Model** | Each case's artifact sequences | P(next_state\|current_state) predictions; anomaly detection accuracy |
+| **RL Agent** | Analyst approve/reject/redirect actions | Investigation navigation; which paths yield actionable findings |
+
+**Knowledge Export for Cross-Investigation Use:**
+
+Learned model weights can be exported and imported into future investigations via BHSM/PSI (Bio-Hierarchical Sequence Memory / Pattern Sequence Index):
+
+```python
+# Export learned knowledge (anonymized, no case-specific data)
+world_model.export_weights("baseline_windows_v1.pth")
+agent.export_policy("analyst_trained_policy_v1.npz")
+
+# Import into new investigation
+world_model.import_weights("baseline_windows_v1.pth")
+agent.import_policy("analyst_trained_policy_v1.npz")
+```
+
+**Privacy Guarantees:**
+- Exported weights contain **only statistical patterns**, not raw evidence
+- No file paths, usernames, IP addresses, or case identifiers in exports
+- Transition probabilities are aggregated—individual sequences cannot be reconstructed
+- Policy weights encode action preferences, not investigation specifics
+- Exports are safe for sharing across teams or organizations without exposing protected information
+
+**Recommended Workflow:**
+1. Start new cases with pre-trained baseline models
+2. Models refine during investigation based on analyst feedback
+3. After case closure, export improved weights (optional)
+4. Import aggregated knowledge into team's shared baseline
 
 ## Limitations
 
 - **Windows-focused**: KAPE and many parsers target Windows artifacts
 - **No memory forensics**: Volatility integration not implemented
-- **World model untrained**: Needs baseline Windows telemetry data
-- **RL agent untrained**: Needs analyst feedback sessions
+- **Cold start**: World model and RL agent start with random initialization; accuracy improves after processing multiple investigations (or import pre-trained weights)
 - **Graph building**: Currently infers edges from timestamps, not full causal analysis
 
 ## Example Output
