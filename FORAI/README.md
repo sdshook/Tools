@@ -3,67 +3,92 @@
 
 ## What It Is
 
-FORAI is a forensic analysis tool that:
-- Collects Windows artifacts using KAPE
-- Creates timelines using Plaso (log2timeline + psort)
-- Stores events in SQLite for analysis
-- Answers 12 standard forensic backgrounding questions
-- Optionally uses local LLMs for follow-up analysis
+FORAI is a **graph-based forensic analysis system** that combines deterministic evidence extraction with AI-guided investigation. It builds a **temporal knowledge graph** from forensic artifacts, uses a **world model** to score anomalies against expected Windows behavior, and employs an **RL agent** to navigate the investigation while an analyst supervises.
+
+**Core capabilities:**
+- **12 Standard Questions**: Deterministic answers with confidence scores and source attribution—the baseline report every investigation needs before diving deeper
+- **Temporal Knowledge Graph**: Artifacts become nodes (Process, File, Network, Registry, User, Service) connected by edges (spawned_by, wrote_to, precedes, anomalous_delta)
+- **World Model**: Predicts P(next_state|current_state) to quantify how unexpected each artifact sequence is
+- **RL Agent**: Learns productive investigation paths; actions include pivot_to_node, expand_subgraph, flag_IOC, request_LLM_explanation
+- **Graph-Grounded LLM**: Local LLM (Ollama/llama.cpp) explains findings using only evidence from the graph—no hallucination
+- **Defensible Output**: Every LLM prompt/response hashed, RL trajectory logged, model versions recorded
 
 ## Architecture
 
 ```
-Forensic Image (read-only)
+Forensic Image (read-only mount)
         │
         ▼
 ┌───────────────────────────────────┐
-│  Deterministic Extraction Layer   │
-│  • KAPE artifact collection       │
+│  Deterministic Extraction Layer   │  forai/extraction/
 │  • Plaso timeline parsing         │
+│  • Hayabusa/Volatility (planned)  │
+│  • 12 standard question answers   │
 │  • SQLite evidence database       │
 └───────────────────────────────────┘
         │
         ▼
 ┌───────────────────────────────────┐
-│  Temporal Knowledge Graph         │  ← NEW: forensic_graph.py
+│  Temporal Knowledge Graph         │  forai/graph/
 │  Nodes: Process|File|Network|     │
 │         Registry|User|Service     │
 │  Edges: spawned_by|wrote_to|      │
+│         connected_to|modified|    │
 │         precedes|anomalous_delta  │
+│  Props: timestamp, confidence,    │
+│         artifact_source, hash     │
 └───────────────────────────────────┘
         │
         ▼
 ┌───────────────────────────────────┐
-│  World Model Layer                │  ← NEW: world_model.py
+│  World Model Layer                │  forai/world_model/
+│  • Trained on baseline telemetry  │
 │  • P(next_state | current_state)  │
-│  • Anomaly scoring                │
-│  • Causal plausibility            │
+│  • Anomaly scoring per edge/node  │
+│  • Causal plausibility output     │
 └───────────────────────────────────┘
         │
         ▼
 ┌───────────────────────────────────┐
-│  RL Agent                         │  ← NEW: rl_agent.py
-│  Actions: pivot|expand|flag_IOC|  │
-│           request_LLM|mark_benign │
-│  Rewards: anomaly confirmation,   │
-│           analyst approval        │
+│  RL Agent                         │  forai/agent/
+│  State: graph neighborhood +      │
+│         world model belief        │
+│  Actions: pivot_to_node |         │
+│           expand_subgraph |       │
+│           flag_IOC | request_LLM |│
+│           mark_benign | finish    │
+│  Reward: anomaly confirmation,    │
+│          analyst approval,        │
+│          causal chain completion  │
 └───────────────────────────────────┘
         │
         ▼
 ┌───────────────────────────────────┐
-│  Local LLM (Optional)             │
-│  • llama-cpp-python (TinyLlama)   │
+│  Local LLM                        │  forai/llm/
+│  • Ollama / llama-cpp-python      │
+│  • Receives: subgraph context +   │
+│              RL agent findings    │
 │  • Graph-grounded explanations    │
-│  • Responses logged with hashes   │
+│  • Every response logged with     │
+│    graph state hash               │
 └───────────────────────────────────┘
         │
         ▼
 ┌───────────────────────────────────┐
-│  Defensible Report                │
-│  • Chain of custody logs          │
+│  Analyst Review Gate              │
+│  • Approve/reject/redirect agent  │
+│  • Annotate nodes with reasoning  │
+│  • Interactive question mode      │
+└───────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────┐
+│  Defensible Report                │  forai/report/
+│  • Full graph provenance          │
 │  • LLM prompt/response hashes     │
 │  • RL trajectory (what was seen)  │
-│  • Model version on record        │
+│  • Model version, seed, temp      │
+│  • Chain of custody logs          │
 └───────────────────────────────────┘
 ```
 
@@ -91,17 +116,51 @@ Each answer includes:
 - **Source attribution** (which files/registry keys)
 - **Timestamp range** (when applicable)
 
-## Components
+## Package Structure
 
-### Core (Existing)
-- `FORAI.py` - Main analysis tool
-- `eq_iq_regulator.py` - EQ/IQ balanced reward system (synced from BHSM)
-
-### New Modules
-- `forensic_graph.py` - Temporal knowledge graph with SQLite backend
-- `world_model.py` - State transition prediction and anomaly scoring
-- `rl_agent.py` - RL agent for investigation navigation
-- `bhsm_advanced.py` - Advanced BHSM with temporal sequences, CognitiveMesh
+```
+FORAI/
+├── main.py                 # Entry point
+├── requirements.txt
+├── README.md
+└── forai/
+    ├── config.py           # ForaiConfig dataclass
+    ├── cli.py              # CLI interface (argparse)
+    │
+    ├── db/                 # Database layer
+    │   ├── schema.py       # Table definitions
+    │   └── evidence.py     # EvidenceStore class
+    │
+    ├── graph/              # Temporal knowledge graph
+    │   ├── nodes.py        # NodeType enum, GraphNode
+    │   ├── edges.py        # EdgeType enum, GraphEdge
+    │   ├── graph.py        # TemporalGraph class
+    │   └── builder.py      # GraphBuilder (events → graph)
+    │
+    ├── extraction/         # Deterministic extraction
+    │   ├── extractors.py   # 12 forensic questions + extractors
+    │   └── plaso.py        # PlasoParser (timeline → events)
+    │
+    ├── bhsm/               # Bio-Hierarchical Sequence Memory
+    │   ├── memory.py       # BHSMMemory class
+    │   └── embedder.py     # EventEmbedder
+    │
+    ├── world_model/        # Anomaly detection
+    │   ├── encoder.py      # StateEncoder (graph → vector)
+    │   └── predictor.py    # TransitionPredictor
+    │
+    ├── agent/              # RL investigation agent
+    │   ├── actions.py      # ForensicAction enum
+    │   ├── rewards.py      # RewardCalculator
+    │   └── agent.py        # ForensicAgent class
+    │
+    ├── llm/                # Graph-grounded LLM
+    │   ├── provider.py     # LLMProvider (Ollama/llama.cpp)
+    │   └── grounding.py    # GraphGrounder (context builder)
+    │
+    └── report/             # Output generation
+        └── generator.py    # ReportGenerator (PDF/JSON/text)
+```
 
 ## Installation
 
@@ -109,45 +168,46 @@ Each answer includes:
 pip install -r requirements.txt
 ```
 
-Required:
+**Required:**
 - Python 3.9+
-- numpy, sqlite3, fpdf2, tqdm, psutil
+- numpy, fpdf2, tqdm
 
-Optional:
-- llama-cpp-python (for local LLM)
-- torch (for CognitiveMesh neural reasoning)
-- kuzu (for native graph database)
-- stable-baselines3 (for PPO-based RL)
+**Optional:**
+- `llama-cpp-python` - Local LLM inference
+- `plaso` - Timeline parsing (log2timeline, psort)
+- `kuzu` - Native graph database (SQLite fallback included)
+- `stable-baselines3` - PPO-based RL (simple policy included)
 
-External tools (Windows):
-- KAPE.exe
+**External tools (Windows forensics):**
+- KAPE.exe (artifact collection)
 - Plaso (log2timeline, psort)
+- Hayabusa (Windows event log analysis)
 
 ## Usage
 
-### Full Analysis (One Command)
+### List the 12 Standard Questions
 ```bash
-python FORAI.py --case-id CASE001 --full-analysis --target-drive C: --chain-of-custody
+python main.py list-questions
 ```
 
-### Answer All 12 Questions
+### Analyze a Forensic Image
 ```bash
-python FORAI.py --case-id CASE001 --autonomous-analysis --report pdf
+python main.py analyze --case-id CASE001 --image-path /mnt/evidence/disk.E01
 ```
 
-### Import Existing Plaso File
+### Answer a Specific Question
 ```bash
-python FORAI.py --case-id CASE001 --plaso-file timeline.plaso
+python main.py question --case-id CASE001 --question-id Q7  # USB devices
 ```
 
-### Interactive Analysis
+### Interactive Mode (Analyst Review Gate)
 ```bash
-python FORAI.py --case-id CASE001 --interactive
+python main.py interactive --case-id CASE001
 ```
 
 ### With Local LLM
 ```bash
-python FORAI.py --case-id CASE001 --autonomous-analysis --llm-folder ./LLM
+python main.py analyze --case-id CASE001 --image-path /mnt/evidence --llm-model ./models/llama3.gguf
 ```
 
 ## Key Design Decisions
@@ -172,37 +232,24 @@ python FORAI.py --case-id CASE001 --autonomous-analysis --llm-folder ./LLM
 - P(next_state|current_state) quantifies "unexpectedness"
 - Causal plausibility helps filter false positives
 
-## What's Implemented vs Planned
+## Implementation Status
 
-| Component | Status |
-|-----------|--------|
-| KAPE integration | ✅ Working |
-| Plaso parsing | ✅ Working |
-| 12 standard questions | ✅ Working |
-| Chain of custody | ✅ Working |
-| Local LLM (llama-cpp) | ✅ Working |
-| BHSM (basic) | ✅ Working |
-| BHSM (advanced with temporal) | ✅ New module |
-| Knowledge graph | ✅ New module |
-| World model | ✅ New module |
-| RL agent | ✅ New module |
-| Ollama support | ❌ Not yet |
-| Kuzu native graph | ❌ SQLite fallback |
-| stable-baselines3 PPO | ❌ Simple policy gradient |
-
-## File Structure
-
-```
-FORAI/
-├── FORAI.py              # Main tool
-├── eq_iq_regulator.py    # EQ/IQ reward balance
-├── bhsm_advanced.py      # Advanced BHSM components
-├── forensic_graph.py     # Temporal knowledge graph
-├── world_model.py        # State prediction
-├── rl_agent.py           # RL investigation agent
-├── requirements.txt
-└── README.md
-```
+| Component | Status | Notes |
+|-----------|--------|-------|
+| 12 standard questions | ✅ Complete | Deterministic extractors with confidence scores |
+| Temporal knowledge graph | ✅ Complete | 6 node types, 7 edge types, SQLite backend |
+| Graph builder | ✅ Complete | Events → nodes/edges with temporal ordering |
+| World model encoder | ✅ Complete | Graph neighborhood → state vector |
+| Transition predictor | ✅ Complete | P(next\|current), anomaly scoring |
+| RL agent | ✅ Complete | 6 actions, reward calculator |
+| BHSM memory | ✅ Complete | Temporal sequences, embeddings |
+| LLM provider | ✅ Complete | Ollama + llama-cpp-python support |
+| Graph grounding | ✅ Complete | Context builder for LLM |
+| Report generator | ✅ Complete | PDF/JSON/text output |
+| Plaso integration | 🔄 Interface | Parser ready, needs runtime testing |
+| World model training | ❌ Not yet | Needs baseline Windows telemetry |
+| RL agent training | ❌ Not yet | Needs analyst feedback sessions |
+| Kuzu native graph | ❌ Planned | SQLite fallback works |
 
 ## Limitations
 
