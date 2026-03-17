@@ -245,16 +245,51 @@ print('\\nFORAI is ready for use!')
 
 ## Local LLM Setup
 
-FORAI uses local LLMs for graph-grounded explanations. There are two options:
+FORAI uses **local LLMs** for graph-grounded explanations. Both options run entirely on your hardware with no cloud dependency:
 
-| Option | Best For | Pros | Cons |
-|--------|----------|------|------|
-| **Ollama** | Most users, networked environments | Easy setup, auto-updates, simple API | Requires Ollama daemon running |
-| **llama.cpp (GGUF)** | Air-gapped labs, maximum control | Fully offline, reproducible | Manual model management |
+| Option | Best For | How It Works | Pros | Cons |
+|--------|----------|--------------|------|------|
+| **Ollama** | Most users | Local daemon + local HTTP API | Easy model management, auto GPU detection | Daemon must be running |
+| **llama.cpp (GGUF)** | Air-gapped labs | Direct model file loading | Single file, maximum control | Manual model downloads |
+
+> Both options are **100% local**—no data leaves your machine, no subscriptions, no cloud. The difference is only in how the local model is managed.
 
 ### Option 1: Ollama (Recommended for Most Users)
 
-Ollama is a local LLM server that manages model downloads and provides a simple API.
+Ollama is a **fully local** LLM runtime that runs entirely on your own hardware.
+
+> ✅ **Evidentiary Integrity**: Ollama is NOT a cloud service. The "API" is a local HTTP interface (localhost:11434) for your programs to communicate with the model running on YOUR machine. No data is transmitted externally. Models are downloaded once and stored locally—all inference happens on your CPU/GPU.
+
+**How Ollama works:**
+```
+┌─────────────────────────────────────────────────────────┐
+│  YOUR MACHINE (fully local, no cloud)                   │
+│                                                         │
+│  ┌──────────┐    localhost:11434    ┌───────────────┐  │
+│  │  FORAI   │ ◄──────────────────► │ Ollama Daemon │  │
+│  │ (Python) │    HTTP requests      │  (local only) │  │
+│  └──────────┘                       └───────┬───────┘  │
+│                                             │          │
+│                                     ┌───────▼───────┐  │
+│                                     │ Model Files   │  │
+│                                     │ ~/.ollama/    │  │
+│                                     │ models/       │  │
+│                                     └───────────────┘  │
+└─────────────────────────────────────────────────────────┘
+         ⬆ Everything stays inside your machine
+```
+
+**What Ollama provides:**
+- Local daemon that loads models into memory
+- Local HTTP API for sending prompts and receiving responses
+- Model management (download, list, delete)
+- GPU acceleration when available
+
+**What Ollama does NOT do:**
+- ❌ Send any data to external servers
+- ❌ Require internet after initial model download
+- ❌ Have any subscription or usage fees
+- ❌ Phone home or collect telemetry
 
 **Install Ollama:**
 ```bash
@@ -268,10 +303,11 @@ brew install ollama
 # Download from https://ollama.com/download/windows
 ```
 
-**Pull a model:**
+**Pull a model (one-time download, stored locally):**
 ```bash
 # Recommended for 16GB RAM systems
 ollama pull llama3:8b
+# Downloads to: ~/.ollama/models/
 
 # Smaller model for 8GB RAM systems
 ollama pull llama3.2:3b
@@ -283,12 +319,19 @@ ollama pull llama3:70b
 **Start Ollama (if not auto-started):**
 ```bash
 ollama serve
+# Starts local server on localhost:11434
+# This is a LOCAL address - not accessible from internet
 ```
 
-**Verify:**
+**Verify local operation:**
 ```bash
+# List locally stored models
 ollama list
-# Should show: llama3:8b or your chosen model
+# Shows models stored on YOUR disk
+
+# Verify local API (no external calls)
+curl http://localhost:11434/api/tags
+# Returns list of local models
 ```
 
 **Use with FORAI:**
@@ -298,6 +341,15 @@ python main.py interactive CASE001
 
 # Or specify explicitly
 python main.py analyze CASE001 --plaso-file timeline.plaso --llm-provider ollama
+```
+
+**For air-gapped environments:**
+```bash
+# On internet-connected machine: download model
+ollama pull llama3:8b
+
+# Copy ~/.ollama/models/ directory to air-gapped machine
+# On air-gapped machine: Ollama will use local model files
 ```
 
 ### Option 2: llama.cpp with GGUF Models (Air-Gapped / Offline)
