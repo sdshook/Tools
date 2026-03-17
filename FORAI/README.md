@@ -241,15 +241,17 @@ python main.py analyze --case-id CASE001 --image-path /mnt/evidence --llm-model 
 | Graph builder | ✅ Complete | Events → nodes/edges with temporal ordering |
 | World model encoder | ✅ Complete | Graph neighborhood → state vector |
 | Transition predictor | ✅ Complete | P(next\|current), anomaly scoring |
-| RL agent | ✅ Complete | 6 actions, reward calculator |
+| RL agent | ✅ Complete | 6 actions, simple policy gradient |
 | BHSM memory | ✅ Complete | Temporal sequences, embeddings |
-| LLM provider | ✅ Complete | Ollama + llama-cpp-python support |
+| LLM provider (Ollama) | ✅ Complete | Full API integration |
+| LLM provider (llama.cpp) | ✅ Complete | Local GGUF model support |
 | Graph grounding | ✅ Complete | Context builder for LLM |
 | Report generator | ✅ Complete | PDF/JSON/text output |
 | Plaso integration | 🔄 Interface | Parser ready, needs runtime testing |
 | World model training | ❌ Not yet | Needs baseline Windows telemetry |
 | RL agent training | ❌ Not yet | Needs analyst feedback sessions |
 | Kuzu native graph | ❌ Planned | SQLite fallback works |
+| stable-baselines3 PPO | ❌ Planned | Simple policy gradient implemented |
 
 ## Limitations
 
