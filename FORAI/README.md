@@ -29,18 +29,20 @@ FORAI is a **graph-based forensic analysis system** that combines deterministic 
 **Analyst Workstation (Interactive Analysis)**
 - 16 GB RAM, 8-core CPU, 256 GB SSD
 - Sufficient for small-medium cases (<100K events)
-- Local LLM via Ollama with 7B parameter models
+- LLM: Ollama with Llama-3-8B (see [Local LLM Setup](#local-llm-setup))
 
 **Investigation Server (Large Cases)**
 - 64 GB RAM, 16-core CPU, 1 TB NVMe
 - Handles large forensic images (1M+ events)
 - GPU recommended for faster LLM inference
+- LLM: Llama-3-70B or GPU-accelerated 8B model
 - PPO agent training with stable-baselines3
 
 **Air-Gapped Forensic Lab**
-- Same as above, fully offline capable
-- Pre-download LLM models (GGUF format)
-- All dependencies installed from local mirrors
+- Same hardware as Investigation Server
+- Fully offline capable—no network required
+- LLM: Pre-downloaded GGUF models (see [llama.cpp setup](#option-2-llamacpp-with-gguf-models-air-gapped--offline))
+- All Python dependencies installed from local mirrors
 
 ## Build & Setup
 
@@ -239,6 +241,189 @@ print(f'✓ {len(STANDARD_QUESTIONS)} forensic questions loaded')
 print(f'✓ LLM provider ready')
 print('\\nFORAI is ready for use!')
 "
+```
+
+## Local LLM Setup
+
+FORAI uses local LLMs for graph-grounded explanations. There are two options:
+
+| Option | Best For | Pros | Cons |
+|--------|----------|------|------|
+| **Ollama** | Most users, networked environments | Easy setup, auto-updates, simple API | Requires Ollama daemon running |
+| **llama.cpp (GGUF)** | Air-gapped labs, maximum control | Fully offline, reproducible | Manual model management |
+
+### Option 1: Ollama (Recommended for Most Users)
+
+Ollama is a local LLM server that manages model downloads and provides a simple API.
+
+**Install Ollama:**
+```bash
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# macOS
+brew install ollama
+
+# Windows
+# Download from https://ollama.com/download/windows
+```
+
+**Pull a model:**
+```bash
+# Recommended for 16GB RAM systems
+ollama pull llama3:8b
+
+# Smaller model for 8GB RAM systems
+ollama pull llama3.2:3b
+
+# Larger model for 32GB+ RAM or GPU systems
+ollama pull llama3:70b
+```
+
+**Start Ollama (if not auto-started):**
+```bash
+ollama serve
+```
+
+**Verify:**
+```bash
+ollama list
+# Should show: llama3:8b or your chosen model
+```
+
+**Use with FORAI:**
+```bash
+# Ollama is auto-detected when running on localhost:11434
+python main.py interactive CASE001
+
+# Or specify explicitly
+python main.py analyze CASE001 --plaso-file timeline.plaso --llm-provider ollama
+```
+
+### Option 2: llama.cpp with GGUF Models (Air-Gapped / Offline)
+
+For forensic labs without network access, download GGUF model files directly.
+
+**Install llama-cpp-python:**
+```bash
+# CPU only
+pip install llama-cpp-python
+
+# With NVIDIA GPU acceleration
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python
+
+# With Apple Silicon acceleration
+CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python
+```
+
+**Download GGUF Models:**
+
+Models are available from Hugging Face. Recommended models for forensic analysis:
+
+| Model | Size | RAM Required | Download |
+|-------|------|--------------|----------|
+| Llama-3.2-3B-Instruct | 2.0 GB | 8 GB | [Q4_K_M](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF) |
+| Llama-3-8B-Instruct | 4.7 GB | 16 GB | [Q4_K_M](https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF) |
+| Llama-3-70B-Instruct | 40 GB | 64 GB | [Q4_K_M](https://huggingface.co/bartowski/Meta-Llama-3-70B-Instruct-GGUF) |
+| Mistral-7B-Instruct | 4.1 GB | 16 GB | [Q4_K_M](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF) |
+
+**Download example (using wget or browser):**
+```bash
+# Create models directory
+mkdir -p models
+
+# Download Llama 3 8B (recommended)
+wget -O models/llama3-8b-instruct-q4_k_m.gguf \
+  "https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"
+
+# Or download via browser and place in models/ directory
+```
+
+**Use with FORAI:**
+```bash
+python main.py analyze CASE001 --plaso-file timeline.plaso \
+  --llm-model ./models/llama3-8b-instruct-q4_k_m.gguf
+```
+
+### Model Selection Guide
+
+**Choose based on your hardware and use case:**
+
+| Scenario | Recommended Model | Why |
+|----------|-------------------|-----|
+| **Laptop (8GB RAM)** | Llama-3.2-3B or Mistral-7B Q4 | Fits in memory, reasonable speed |
+| **Workstation (16GB RAM)** | Llama-3-8B Q4_K_M | Best balance of quality and speed |
+| **Server (32GB+ RAM)** | Llama-3-8B Q8 or Llama-3-70B Q4 | Higher quality responses |
+| **GPU (8GB+ VRAM)** | Llama-3-8B Q4_K_M | Fast inference with GPU offload |
+| **Air-gapped lab** | Any GGUF model | Pre-download, fully offline |
+
+**Quantization levels (in GGUF filenames):**
+- `Q4_K_M`: Good balance of size and quality (recommended)
+- `Q5_K_M`: Slightly better quality, ~25% larger
+- `Q8_0`: Near full quality, ~2x size of Q4
+- `F16`: Full precision, largest size
+
+### Why Local LLM?
+
+FORAI requires local LLMs (not cloud APIs) for forensic defensibility:
+
+1. **Reproducibility**: Same model file = same outputs given same inputs
+2. **Offline operation**: Works in air-gapped forensic labs
+3. **Evidence integrity**: No case data sent to external servers
+4. **Auditability**: Model version recorded in every report
+5. **Cost**: No per-token API charges
+
+### LLM Configuration in Code
+
+```python
+from forai.llm import create_provider
+
+# Auto-detect (tries Ollama first, then llama.cpp)
+provider = create_provider()
+
+# Explicit Ollama
+provider = create_provider(provider_type="ollama", model="llama3:8b")
+
+# Explicit llama.cpp with GGUF file
+provider = create_provider(
+    provider_type="llama_cpp",
+    model_path="./models/llama3-8b-instruct-q4_k_m.gguf",
+    n_ctx=4096,      # Context window
+    n_gpu_layers=35  # GPU offload (0 for CPU only)
+)
+
+# Check availability
+if provider.is_available():
+    response = provider.generate("Explain this process execution...")
+```
+
+### Troubleshooting LLM Issues
+
+**Ollama not responding:**
+```bash
+# Check if running
+curl http://localhost:11434/api/tags
+
+# Restart Ollama
+ollama serve
+```
+
+**Out of memory with GGUF:**
+```bash
+# Use smaller quantization
+# Instead of Q8_0, use Q4_K_M
+
+# Or reduce context window
+python main.py analyze CASE001 --llm-context 2048
+```
+
+**Slow inference:**
+```bash
+# Enable GPU offload (if available)
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install --force-reinstall llama-cpp-python
+
+# Or use smaller model
+ollama pull llama3.2:3b
 ```
 
 ## Architecture
