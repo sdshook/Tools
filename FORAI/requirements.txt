@@ -1,43 +1,26 @@
-# FORAI - Forensic Rapid Analysis Intelligence
-# REQUIRED dependencies for full functionality
+# FORAI Dependencies
 
-# Core ML and Scientific Computing (REQUIRED)
-numpy>=1.22.0
-scipy>=1.8.0
-scikit-learn>=1.3.0
+# Core (required)
+numpy>=1.20.0
 
-# PDF Report Generation (REQUIRED)
-fpdf2>=2.8.0
+# PDF reports (optional but recommended)
+fpdf2>=2.7.0
 
-# Progress Bars and UI (REQUIRED)
-tqdm>=4.64.0
+# Progress bars
+tqdm>=4.60.0
 
-# System Monitoring (REQUIRED for performance analysis)
-psutil>=5.9.0
+# Local LLM - llama-cpp-python (optional)
+# llama-cpp-python>=0.2.0
 
-# Optional LLM Support (for advanced analysis)
-# llama-cpp-python>=0.2.0  # Uncomment if local LLM support needed
+# Local LLM - Ollama client (optional)
+# requests>=2.28.0
 
-# Optional API LLM Support (for cloud-based analysis)
-# openai>=1.0.0  # Uncomment if OpenAI API support needed
-# anthropic>=0.7.0  # Uncomment if Anthropic API support needed
+# Neural networks - for CognitiveMesh (optional)
+# torch>=2.0.0
 
-# Standard library dependencies (usually included with Python)
-# sqlite3 - Database operations
-# json - Data serialization  
-# pathlib - File path handling
-# datetime - Timestamp processing
-# hashlib - Cryptographic functions
-# argparse - Command line parsing
-# logging - Application logging
-# re - Regular expressions
-# os - Operating system interface
-# sys - System-specific parameters
-# time - Time-related functions
-# subprocess - Process management
-# shutil - File operations
-# zipfile - Archive handling
-# collections - Specialized container datatypes
-# functools - Higher-order functions
-# dataclasses - Data classes
-# typing - Type hints
+# RL framework (optional)
+# stable-baselines3>=2.0.0
+# gymnasium>=0.29.0
+
+# Graph database - Kuzu (optional, SQLite fallback available)
+# kuzu>=0.1.0
