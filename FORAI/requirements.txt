@@ -3,24 +3,45 @@
 # Core (required)
 numpy>=1.20.0
 
-# PDF reports (optional but recommended)
+# PDF reports
 fpdf2>=2.7.0
 
 # Progress bars
 tqdm>=4.60.0
 
-# Local LLM - llama-cpp-python (optional)
+# HTTP client (for Ollama)
+requests>=2.28.0
+
+# =============================================================================
+# OPTIONAL DEPENDENCIES - uncomment as needed
+# =============================================================================
+
+# Local LLM - llama-cpp-python
+# pip install llama-cpp-python
 # llama-cpp-python>=0.2.0
 
-# Local LLM - Ollama client (optional)
-# requests>=2.28.0
-
-# Neural networks - for CognitiveMesh (optional)
+# Neural networks - for world model training
+# pip install torch
 # torch>=2.0.0
 
-# RL framework (optional)
+# RL framework - PPO agent (recommended)
+# pip install "stable-baselines3[extra]" gymnasium
 # stable-baselines3>=2.0.0
 # gymnasium>=0.29.0
 
-# Graph database - Kuzu (optional, SQLite fallback available)
-# kuzu>=0.1.0
+# Native graph database - Kuzu (recommended for large graphs)
+# pip install kuzu
+# kuzu>=0.4.0
+
+# =============================================================================
+# INSTALL COMMANDS FOR OPTIONAL FEATURES
+# =============================================================================
+# Full installation (all features):
+#   pip install llama-cpp-python torch "stable-baselines3[extra]" gymnasium kuzu
+#
+# Minimal RL:
+#   pip install "stable-baselines3[extra]" gymnasium
+#
+# Minimal graph:
+#   pip install kuzu
+# =============================================================================

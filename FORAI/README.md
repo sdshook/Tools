@@ -237,11 +237,13 @@ python main.py analyze --case-id CASE001 --image-path /mnt/evidence --llm-model 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | 12 standard questions | ✅ Complete | Deterministic extractors with confidence scores |
-| Temporal knowledge graph | ✅ Complete | 6 node types, 7 edge types, SQLite backend |
+| Temporal knowledge graph (SQLite) | ✅ Complete | 6 node types, 7 edge types |
+| Temporal knowledge graph (Kuzu) | ✅ Complete | Native graph traversal, faster path queries |
 | Graph builder | ✅ Complete | Events → nodes/edges with temporal ordering |
 | World model encoder | ✅ Complete | Graph neighborhood → state vector |
 | Transition predictor | ✅ Complete | P(next\|current), anomaly scoring |
-| RL agent | ✅ Complete | 6 actions, simple policy gradient |
+| RL agent (policy gradient) | ✅ Complete | Simple REINFORCE, epsilon-greedy |
+| RL agent (PPO) | ✅ Complete | stable-baselines3, gymnasium env |
 | BHSM memory | ✅ Complete | Temporal sequences, embeddings |
 | LLM provider (Ollama) | ✅ Complete | Full API integration |
 | LLM provider (llama.cpp) | ✅ Complete | Local GGUF model support |
@@ -250,8 +252,6 @@ python main.py analyze --case-id CASE001 --image-path /mnt/evidence --llm-model 
 | Plaso integration | 🔄 Interface | Parser ready, needs runtime testing |
 | World model training | ❌ Not yet | Needs baseline Windows telemetry |
 | RL agent training | ❌ Not yet | Needs analyst feedback sessions |
-| Kuzu native graph | ❌ Planned | SQLite fallback works |
-| stable-baselines3 PPO | ❌ Planned | Simple policy gradient implemented |
 
 ## Limitations
 
