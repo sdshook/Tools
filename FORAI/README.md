@@ -365,13 +365,30 @@ python main.py analyze CASE001 --plaso-file timeline.plaso \
 
 ### Why Local LLM?
 
-FORAI requires local LLMs (not cloud APIs) for forensic defensibility:
+> ⚠️ **Important**: Subscription-based cloud LLMs (OpenAI, Anthropic, Google, etc.) are **inappropriate for forensic investigations**. Chain of custody cannot be established when case data is transmitted to third-party servers, model versions change without notice, and outputs are not reproducible. Courts and opposing counsel can challenge findings produced by opaque, externally-controlled systems.
 
-1. **Reproducibility**: Same model file = same outputs given same inputs
-2. **Offline operation**: Works in air-gapped forensic labs
-3. **Evidence integrity**: No case data sent to external servers
-4. **Auditability**: Model version recorded in every report
-5. **Cost**: No per-token API charges
+FORAI requires local LLMs for forensic defensibility:
+
+1. **Chain of Custody**: Local model files have verifiable SHA-256 hashes recorded in every report—the exact model used is documented and reproducible
+2. **Reproducibility**: Same model file + same prompt + same parameters = same output (deterministic with temperature=0)
+3. **Evidence Integrity**: No case data (file paths, usernames, IP addresses, artifacts) ever leaves your controlled environment
+4. **Offline Operation**: Works in air-gapped forensic labs with no network dependency
+5. **Auditability**: Model name, version, file hash, and inference parameters logged for every LLM interaction
+6. **Legal Defensibility**: Expert witnesses can demonstrate exactly how conclusions were reached using the same model
+7. **Cost Control**: No per-token API charges; fixed infrastructure cost
+
+**What gets recorded in FORAI reports:**
+```
+LLM Provenance:
+  Model: llama3-8b-instruct-q4_k_m.gguf
+  SHA-256: 7c23b8a1d4e5f6...
+  Temperature: 0.1
+  Prompt Hash: a3f8c2b1...
+  Response Hash: 9d4e7f2a...
+  Graph State Hash: 5b8c3a1f...
+```
+
+This level of documentation is impossible with subscription LLM services where models are updated silently and API responses cannot be independently verified.
 
 ### LLM Configuration in Code
 
