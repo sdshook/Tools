@@ -175,6 +175,10 @@ The values of the overhead parameters (compensation drift rate, routing degradat
 
 MCR's structural insulation: context delivered to the model is always bounded by the retrieval policy (R times K times Tc plus Tt), which stays well within any model's context window regardless of workflow length. Compensation drift does not occur because the prior context is precisely reconstructed, not re-stated. Congestion-driven routing degradation does not affect MCR token counts because the token budget per step is policy-controlled. Re-run rates from context loss are near zero. The MCR cost curve remains approximately linear as N grows, while stateless costs accelerate; the savings ratio widens with workflow length.
 
+![Figure 5.1: Conceptual superlinear cost curve](images/figure_5_1_superlinear_cost_curve.png)
+
+*Figure 5.1. Conceptual superlinear cost curve. The dashed line shows the linear model used in Section 5.6; the solid upper curve shows a representative non-linear cost profile with compensation drift (α = 0.12), soft context window overflow (W = 12,000 tokens), and re-run overhead (coefficient = 0.20). The shaded red region between the two stateless curves represents savings that the linear model does not capture. Non-linear parameters are illustrative; actual values are workflow-specific.*
+
 ### 5.2 Model Variables and Definitions
 
 The following variables define the cost estimation model:
@@ -213,6 +217,10 @@ Savings(%)      = (1 - R) × K × Tc / (K × Tc + Tt)
 
 With R = 0.35, the savings percentage ceiling is (1 - R) = 65 percent, approached only when K × Tc greatly exceeds Tt. For shallow workflows with K = 1 the formula yields approximately 30 to 35 percent savings. For the enterprise workflow profiles in Section 5.5 (K = 3 to 8), the modeled range is 55 to 62 percent. Tighter retrieval policies, that is, lower R values, raise the ceiling proportionally.
 
+![Figure 5.3: Token consumption versus workflow steps](images/figure_5_3_token_consumption.png)
+
+*Figure 5.3. Token consumption versus workflow steps. Parameters: K = 5, Tc = 2,000, Tt = 800, R = 0.35. The shaded region represents tokens eliminated by MCR's selective reconstruction.*
+
 ### 5.4 Cost Model
 
 Translating token savings to dollar cost, with P expressed as dollars per 1,000 tokens:
@@ -224,6 +232,10 @@ Cost(MCR)       = N × (R × K × Tc + Tt) × P / 1,000  +  MCR_overhead
 
 MCR overhead consists of NATS messaging and JetStream storage costs, which are negligible compared to model inference costs at enterprise scale. At Synadia's published pricing, per-message costs are on the order of fractions of a cent per thousand messages, compared to dollars per million tokens for capable model tiers.
 
+![Figure 5.4: Inference cost versus workflow steps](images/figure_5_4_inference_cost.png)
+
+*Figure 5.4. Inference cost versus workflow steps, with cost savings shown as a separate line. P = $12 per million input tokens. Parameters as in Figure 5.3.*
+
 ### 5.5 Latency Model
 
 Per-step end-to-end input-processing latency for stateless invocation and for MCR:
@@ -234,6 +246,10 @@ Latency(MCR, step)       = Ls + (R × K × Tc + Tt) × Li / 1,000
 ```
 
 For high-K workflows the JetStream read latency Ls is negligible compared to the inference latency saved by reducing input token count. As context depth K increases, the gap between stateless and MCR latency widens. With R = 0.35, Tc = 2,000, Tt = 800, Li = 45, and Ls = 5, the stateless-to-MCR latency ratio at K = 10 is 936 ms divided by 356 ms, or approximately 2.6 times. The ratio asymptotes toward 1/R = 2.86 as K grows large and task tokens become proportionally smaller relative to re-injected context.
+
+![Figure 5.5: Per-step latency versus context depth](images/figure_5_5_latency_vs_context_depth.png)
+
+*Figure 5.5. Per-step input-processing latency versus context depth K. Li = 45 ms per 1,000 tokens, Tc = 2,000, Tt = 800, Ls = 5 ms, R = 0.35. At K = 10 the stateless-to-MCR ratio is 2.63; the ratio asymptotes toward 1/R = 2.86 as K grows large.*
 
 ### 5.6 Scenario Projections
 
@@ -276,6 +292,10 @@ The following scenarios apply the model with representative parameters. Model in
 | Per-step latency (stateless / MCR) | 945 ms / 365 ms |
 
 These projections assume a fixed relevance ratio of 0.35. Actual ratios depend on retrieval policy design and workflow structure. Organizations should baseline their own K, Tc, and Tt values from production API logs before applying this model.
+
+![Figure 5.6: Annualized inference cost savings](images/figure_5_6_annualized_savings.png)
+
+*Figure 5.6. Annualized inference cost savings versus daily run volume for all three scenarios. Savings scale linearly with volume; the slope of each line reflects per-run savings for that scenario.*
 
 ### 5.7 SLA Value: From Variable to Bounded Latency
 
