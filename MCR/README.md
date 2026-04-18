@@ -121,6 +121,170 @@ JetStream streams are configured per workflow domain with retention policies mat
 
 JetStream consumers are configured to filter by subject and, through message headers, by correlation identifier. This allows MCR reconstruction services to retrieve only the events belonging to a specific workflow instance without scanning entire streams. Consumer acknowledgment policies ensure that reconstruction operations are idempotent and can be resumed on failure.
 
+## 4. Service Level Improvements
+
+### 4.1 Deterministic Context Reconstruction
+
+A fundamental service level challenge in stateless AI architectures is outcome variability: the same workflow, executed twice with nominally the same inputs, may produce different results because the context reconstruction process at each step introduces variation. Token ordering, truncation decisions, and prompt formatting differences all contribute to non-determinism that makes service-level enforcement effectively impossible.
+
+MCR addresses this by making context reconstruction a deterministic, reproducible operation. The JetStream event stream for a given workflow instance contains an ordered, immutable record of all events. The reconstruction service applies the same retrieval policy to produce the same context for the same workflow state, eliminating reconstruction-induced variability.
+
+### 4.2 Backpressure and Flow Control
+
+JetStream's persistence layer provides natural backpressure handling for MCR deployments. When downstream model endpoints are under load, context events accumulate in JetStream streams rather than being dropped or causing upstream timeouts. Consumer acknowledgment ensures that no context events are lost, and the decoupling of context production from context consumption enables MCR architectures to gracefully absorb load spikes that would cause cascading failures in synchronous, stateless architectures.
+
+### 4.3 Latency Control Through Routing Policies
+
+MCR's routing layer enables latency to be managed as a first-class service level objective. Rather than accepting the latency of a single fixed model endpoint, MCR routing policies specify latency budgets for each workflow step and route to the fastest available provider meeting the task's quality requirements. When a primary provider is experiencing elevated latency, routing policies fail over to an alternative provider without workflow-level reconfiguration.
+
+### 4.4 Replay-Based Validation and Compliance
+
+For regulated industries, MCR's replay capability provides a compliance posture that is impossible to achieve in stateless architectures. Every context event, meaning the exact information the model had access to at each decision point, is retained in JetStream with configurable retention periods. Compliance processes can replay any workflow instance to validate that the model's reasoning was consistent with the available context, or to investigate anomalous outputs after the fact.
+
+This is particularly valuable in financial services, where model-assisted credit and risk decisions are subject to regulatory scrutiny; in healthcare, where clinical decision support outputs must be explainable; and in security operations, where incident response decisions may be reviewed weeks or months after resolution.
+
+## 5. Cost Estimation Framework: MCR versus Stateless API / MCP / CLI
+
+This section presents a quantitative estimation model for comparing the resource costs of stateless invocation patterns against MCR-governed workflows. The model is parameterized to allow projection across different workflow profiles and can be calibrated to an organization's actual token consumption and pricing data.
+
+Before presenting the quantitative model, it is important to establish its scope. The formulas in sections 5.3 through 5.6 are linear estimations. They accurately capture the baseline context reconstruction tax but do not capture several compounding mechanisms that cause actual stateless costs to grow faster than linearly with workflow length. Section 5.1 describes those mechanisms. The linear model is therefore a lower bound on actual stateless costs, and the savings percentages derived from it are conservative estimates of true MCR value.
+
+### 5.1 Why Real-World Stateless Costs Are Superlinear
+
+The linear model treats token consumption per step as a constant: K prior steps, each of Tc tokens, plus Tt task tokens, repeated N times. In practice, four interacting mechanisms cause actual costs to curve upward as workflows grow, compounding the economic case for MCR.
+
+**Compensation Token Drift**
+
+As a stateless workflow extends, operators and automated orchestration layers observe declining output consistency and respond by adding compensating tokens: explicit re-statements of system instructions, intermediate summaries, and state recaps injected alongside the prior context. This causes the effective per-step token count to grow beyond the baseline K times Tc. The growth profile is approximately logarithmic with step index, since each additional instruction re-statement adds a fixed marginal volume while the need for re-statement grows with workflow length. Even a modest drift rate of 10 to 15 percent additional tokens per logarithmic decade of workflow steps causes cumulative costs to exceed the linear model by 25 to 40 percent at N equals 50.
+
+**Congestion-Driven Model Routing Degradation**
+
+Model routers operating under load preferentially assign requests to available capacity, which is disproportionately found in smaller, less expensive models with more limited context windows. A workflow that begins execution on a large-context primary model may be partially re-routed to fallback models with context windows of 8,000 to 16,000 tokens as system load increases. These narrower windows compress the effective context limit dynamically, causing overflow to occur at lower accumulated context depths than the nominal model tier would suggest. The result is that context overflow, truncation, and associated re-run costs become likely at workflow lengths that appear safe under the nominal specification.
+
+**Re-Iteration Overhead from Quality Degradation**
+
+When context is truncated or attention is diluted over a long prompt, output quality at affected steps degrades measurably. Automated validation checks and human review cycles detect this degradation and trigger re-execution of the affected step, each re-execution carrying the full context reconstruction cost of the original. If the re-run probability at step i is denoted rho(i) and rho(i) is non-trivial (even 10 to 15 percent for steps operating near context window limits), the effective cost multiplier for that step is 1 divided by (1 minus rho(i)). Across N steps in this condition, the cumulative re-iteration overhead is superlinear.
+
+**Interaction and Compounding**
+
+These mechanisms do not operate independently. Higher compensation token drift pushes per-step token counts toward context window limits sooner, increasing the probability of congestion-driven routing to smaller models, which further compresses effective context windows, which increases re-run rates, which adds more re-iteration tokens, which further increases drift. The feedback loop means that the three mechanisms compound multiplicatively, not additively, in sufficiently long workflows.
+
+**What This Means for the Quantitative Model**
+
+The values of the overhead parameters (compensation drift rate, routing degradation threshold, re-run coefficient) are workflow-specific and cannot be generalized without instrumented production data. For this reason, the quantitative model in sections 5.3 through 5.6 isolates only the linear component. The specific cost projections in Section 5.6 should be read as conservative lower bounds. For workflows with N greater than approximately 20 steps, actual stateless costs may exceed the linear model by 20 to 40 percent, while MCR costs remain approximately linear throughout because MCR is structurally insulated from all three mechanisms.
+
+MCR's structural insulation: context delivered to the model is always bounded by the retrieval policy (R times K times Tc plus Tt), which stays well within any model's context window regardless of workflow length. Compensation drift does not occur because the prior context is precisely reconstructed, not re-stated. Congestion-driven routing degradation does not affect MCR token counts because the token budget per step is policy-controlled. Re-run rates from context loss are near zero. The MCR cost curve remains approximately linear as N grows, while stateless costs accelerate; the savings ratio widens with workflow length.
+
+### 5.2 Model Variables and Definitions
+
+The following variables define the cost estimation model:
+
+| Variable | Definition |
+|----------|------------|
+| N | Total number of steps in a workflow instance |
+| K | Average number of prior steps re-injected per invocation in a stateless architecture |
+| R | Relevance ratio (0 to 1): the fraction of prior context that MCR injects via selective reconstruction. A value of 0.35 means MCR injects 35 percent of what a stateless call would inject. |
+| Tc | Average token count per prior-step context chunk |
+| Tt | Average token count of the new task request at each step |
+| P | Model input pricing in dollars per 1,000 tokens |
+| Li | Model input processing latency in milliseconds per 1,000 tokens |
+| Ls | JetStream stream read latency per reconstruction in milliseconds (typically 2 to 8 ms) |
+
+### 5.3 Token Consumption Model
+
+For a stateless architecture, total input tokens consumed by a workflow instance are:
+
+```
+Tokens(stateless) = N × (K × Tc + Tt)
+```
+
+The first term, N × K × Tc, is the context reconstruction tax: tokens consumed purely to re-establish prior state at each step. For MCR, selective reconstruction replaces full re-injection:
+
+```
+Tokens(MCR) = N × (R × K × Tc + Tt)
+```
+
+Token savings per workflow instance and as a percentage of total stateless consumption:
+
+```
+Savings(tokens) = N × (1 - R) × K × Tc
+Savings(%)      = (1 - R) × K × Tc / (K × Tc + Tt)
+```
+
+With R = 0.35, the savings percentage ceiling is (1 - R) = 65 percent, approached only when K × Tc greatly exceeds Tt. For shallow workflows with K = 1 the formula yields approximately 30 to 35 percent savings. For the enterprise workflow profiles in Section 5.5 (K = 3 to 8), the modeled range is 55 to 62 percent. Tighter retrieval policies, that is, lower R values, raise the ceiling proportionally.
+
+### 5.4 Cost Model
+
+Translating token savings to dollar cost, with P expressed as dollars per 1,000 tokens:
+
+```
+Cost(stateless) = N × (K × Tc + Tt) × P / 1,000
+Cost(MCR)       = N × (R × K × Tc + Tt) × P / 1,000  +  MCR_overhead
+```
+
+MCR overhead consists of NATS messaging and JetStream storage costs, which are negligible compared to model inference costs at enterprise scale. At Synadia's published pricing, per-message costs are on the order of fractions of a cent per thousand messages, compared to dollars per million tokens for capable model tiers.
+
+### 5.5 Latency Model
+
+Per-step end-to-end input-processing latency for stateless invocation and for MCR:
+
+```
+Latency(stateless, step) = (K × Tc + Tt) × Li / 1,000
+Latency(MCR, step)       = Ls + (R × K × Tc + Tt) × Li / 1,000
+```
+
+For high-K workflows the JetStream read latency Ls is negligible compared to the inference latency saved by reducing input token count. As context depth K increases, the gap between stateless and MCR latency widens. With R = 0.35, Tc = 2,000, Tt = 800, Li = 45, and Ls = 5, the stateless-to-MCR latency ratio at K = 10 is 936 ms divided by 356 ms, or approximately 2.6 times. The ratio asymptotes toward 1/R = 2.86 as K grows large and task tokens become proportionally smaller relative to re-injected context.
+
+### 5.6 Scenario Projections
+
+The following scenarios apply the model with representative parameters. Model input pricing is $12 per million tokens at an enterprise volume rate. Li = 45 ms per 1,000 tokens. R = 0.35 for all scenarios.
+
+**Scenario A: Lightweight Workflow (Customer Support, 10 Steps)**
+
+| Metric | Value |
+|--------|-------|
+| Parameters | N = 10, K = 3, Tc = 1,200 tokens, Tt = 600 tokens |
+| Stateless tokens | 10 × (3 × 1,200 + 600) = 42,000 tokens per run |
+| MCR tokens | 10 × (0.35 × 3 × 1,200 + 600) = 18,600 tokens per run |
+| Token reduction | 55.7 percent |
+| Cost per run (stateless / MCR) | $0.504 / $0.223 |
+| Annualized savings at 2,000 runs per day | approximately $205,000 |
+| Per-step latency (stateless / MCR) | 189 ms / 88.7 ms |
+
+**Scenario B: Mid-Complexity Workflow (Security Operations Incident, 25 Steps)**
+
+| Metric | Value |
+|--------|-------|
+| Parameters | N = 25, K = 5, Tc = 2,000 tokens, Tt = 800 tokens |
+| Stateless tokens | 25 × (5 × 2,000 + 800) = 270,000 tokens per run |
+| MCR tokens | 25 × (0.35 × 5 × 2,000 + 800) = 107,500 tokens per run |
+| Token reduction | 60.2 percent |
+| Cost per run (stateless / MCR) | $3.24 / $1.29 |
+| Annualized savings at 500 runs per day | approximately $355,000 |
+| Per-step latency (stateless / MCR) | 486 ms / 198.5 ms |
+
+**Scenario C: High-Complexity Workflow (Financial Credit Decision, 50 Steps)**
+
+| Metric | Value |
+|--------|-------|
+| Parameters | N = 50, K = 8, Tc = 2,500 tokens, Tt = 1,000 tokens |
+| Stateless tokens | 50 × (8 × 2,500 + 1,000) = 1,050,000 tokens per run |
+| MCR tokens | 50 × (0.35 × 8 × 2,500 + 1,000) = 400,000 tokens per run |
+| Token reduction | 61.9 percent |
+| Cost per run (stateless / MCR) | $12.60 / $4.80 |
+| Annualized savings at 200 runs per day | approximately $569,000 |
+| Per-step latency (stateless / MCR) | 945 ms / 365 ms |
+
+These projections assume a fixed relevance ratio of 0.35. Actual ratios depend on retrieval policy design and workflow structure. Organizations should baseline their own K, Tc, and Tt values from production API logs before applying this model.
+
+### 5.7 SLA Value: From Variable to Bounded Latency
+
+The cost model above captures the average-case benefit of MCR. The SLA benefit is captured in variance reduction, which averages do not fully represent. In stateless architectures, per-step latency variance is driven by context reconstruction size variability: different steps in the same workflow inject different amounts of prior context depending on what is available. This produces wide latency distributions that make p95 and p99 commitments very difficult to honor.
+
+With MCR, context reconstruction is a deterministic, indexed operation. The JetStream read latency Ls has a stable, low-variance distribution. The model input token count is bounded by the retrieval policy rather than by accumulating prior output size. The result is that MCR's per-step latency distribution is substantially narrower than stateless equivalents, enabling meaningful p95 and p99 SLA commitments.
+
+In Scenario B, stateless p99 latency for a 25-step workflow could reach twice the median if late-stage steps accumulate large prior context. MCR's bounded retrieval keeps p99 within approximately 15 to 20 percent of the median. This is the difference between a system that can commit to a 60-second workflow SLA and one that cannot commit to anything under three minutes.
+
 ## 6. Enterprise Workflow Use Cases
 
 ### 6.1 Security Operations: Multi-Stage Incident Response
