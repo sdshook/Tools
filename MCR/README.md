@@ -522,6 +522,8 @@ All configuration is centralized in `config.py` with environment variable overri
 
 | File | Purpose |
 |------|---------|
+| `mcr_client.py` | **Primary integration point**: Client library for any Python application |
+| `mcr_cli.py` | Command-line interface for scripting and CI/CD |
 | `config.py` | Centralized configuration with environment variable support |
 | `context_plane.py` | JetStream lifecycle, event publishing, semantic reconstruction |
 | `mcp_server.py` | JSON-RPC 2.0 MCP server with tool schemas |
@@ -529,6 +531,16 @@ All configuration is centralized in `config.py` with environment variable overri
 | `mcr_poc_runner.py` | End-to-end demonstration with simulated responses |
 | `nats_config.conf` | NATS server configuration with JetStream enabled |
 | `requirements.txt` | Python dependencies |
+
+### Integration Examples
+
+The `examples/` directory contains patterns for integrating MCR with existing systems:
+
+| Example | Use Case |
+|---------|----------|
+| `mcp_integration.py` | Adding MCR to an existing MCP server |
+| `cicd_integration.py` | Multi-stage CI/CD pipelines with context persistence |
+| `rest_api_integration.py` | REST API endpoints for webhook integration |
 
 ### Subject Hierarchy
 
@@ -574,6 +586,128 @@ assistant_text = response.content[0].text
 ```
 
 See `tests/test_live_integration.py` for a complete working example.
+
+### Using MCR with Existing MCP Servers
+
+If you have an existing MCP server, you can add MCR context persistence without replacing your implementation:
+
+```python
+from mcr_client import MCRClient
+
+class YourExistingMCPServer:
+    def __init__(self):
+        self.mcr = MCRClient()
+    
+    async def handle_tool_call(self, tool_name, args, correlation_id, step):
+        # 1. Publish request to MCR
+        await self.mcr.publish_event(
+            workflow_id=correlation_id,
+            step_index=step,
+            role="user",
+            content=json.dumps({"tool": tool_name, "args": args}),
+        )
+        
+        # 2. Get context from prior steps
+        context = await self.mcr.reconstruct(
+            workflow_id=correlation_id,
+            current_step=step,
+            current_task=f"Execute {tool_name}",
+        )
+        
+        # 3. Your existing tool logic (now with context)
+        result = await self.your_tool_implementation(tool_name, args, context["messages"])
+        
+        # 4. Publish response to MCR
+        await self.mcr.publish_event(
+            workflow_id=correlation_id,
+            step_index=step,
+            role="assistant",
+            content=json.dumps(result),
+            event_type="response",
+        )
+        
+        return result
+```
+
+See `examples/mcp_integration.py` for a complete example.
+
+### Using MCR from CLI in CI/CD Pipelines
+
+The `mcr_cli.py` tool enables MCR integration in shell scripts and CI/CD:
+
+```bash
+# Start a workflow (capture ID for later steps)
+WORKFLOW_ID=$(python mcr_cli.py start --type ci --json | jq -r .workflow_id)
+
+# Publish events from each CI stage
+python mcr_cli.py publish \
+  --workflow-id $WORKFLOW_ID \
+  --step 0 \
+  --role user \
+  --content "$(cat analysis_results.json)" \
+  --type ci
+
+# Reconstruct context for downstream stages
+python mcr_cli.py reconstruct \
+  --workflow-id $WORKFLOW_ID \
+  --step 1 \
+  --task "Security scan with prior analysis context" \
+  --type ci \
+  --messages-only > context.json
+
+# Use context with your tools
+your-security-scanner --context context.json
+```
+
+GitHub Actions example:
+```yaml
+jobs:
+  analyze:
+    steps:
+      - name: Start MCR workflow
+        run: |
+          echo "WORKFLOW_ID=$(mcr start --type ci --json | jq -r .workflow_id)" >> $GITHUB_ENV
+      
+      - name: Publish analysis
+        run: |
+          mcr publish --workflow-id $WORKFLOW_ID --step 0 --role user \
+            --content "$(cat analysis.json)" --type ci
+
+  security:
+    needs: analyze
+    steps:
+      - name: Get context
+        run: |
+          mcr reconstruct --workflow-id $WORKFLOW_ID --step 1 \
+            --task "Security scan" --messages-only > context.json
+```
+
+See `examples/cicd_integration.py` for a complete example.
+
+### Exposing MCR via REST API
+
+For webhook integration or non-Python systems, expose MCR via REST:
+
+```bash
+# Start the REST server
+pip install fastapi uvicorn
+python examples/rest_api_integration.py
+
+# Use from any HTTP client
+curl -X POST http://localhost:8000/workflows \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_type": "webhook"}'
+
+curl -X POST http://localhost:8000/events \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "...", "step_index": 0, "role": "user", "content": "..."}'
+
+curl -X POST http://localhost:8000/reconstruct \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "...", "current_step": 1, "current_task": "..."}'
+```
+
+See `examples/rest_api_integration.py` for the full FastAPI implementation.
 
 ### Production Considerations
 
