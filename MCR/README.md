@@ -11,7 +11,7 @@ Enterprise AI workflows are unreliable because attention cannot be maintained ac
 
 ## The Solution
 
-Model Context Routing (MCR) is an architectural pattern that externalizes attention management into a persistent, event-driven context plane. Rather than relying on the model's context window to carry state—where it is subject to sliding, truncation, and signal dilution—MCR maintains workflow context in a durable infrastructure layer built on NATS messaging and JetStream persistence.
+Model Context Routing (MCR) is an architectural pattern that externalizes attention management into a persistent, event-driven context plane. Rather than relying on the model's context window to carry state, where it is subject to sliding, truncation, and signal dilution, MCR maintains workflow context in a durable infrastructure layer built on NATS messaging and JetStream persistence.
 
 This separation enables what invocation protocols alone cannot provide:
 
@@ -20,17 +20,17 @@ This separation enables what invocation protocols alone cannot provide:
 - **Policy-governed SLAs** for cost, latency, and output consistency
 - **Defendable reliability** backed by exact replay of decision context
 
-Token reduction of 30 to 65 percent is a beneficial consequence of solving the attention problem—selective, relevance-governed reconstruction eliminates the wasteful re-injection of irrelevant prior context. But the primary value is architectural: MCR makes enterprise AI workflows reliable enough to govern by policy rather than accept as inherently variable.
+Token reduction of 30 to 65 percent is a beneficial consequence of solving the attention problem. Selective, relevance-governed reconstruction eliminates the wasteful re-injection of irrelevant prior context. But the primary value is architectural: MCR makes enterprise AI workflows reliable enough to govern by policy rather than accept as inherently variable.
 
 ## Executive Summary
 
 Large language models deployed in enterprise workflows fail not because of reasoning limitations but because attention is not maintained across invocations. Each API call is stateless by design. Context must be reconstructed from scratch at every step, and the model's fixed context window forces truncation that is recency-governed rather than relevance-governed. Compounding this, transformer architectures exhibit progressive signal dilution even within a single call, attenuating earlier content relative to more recent tokens.
 
-The consequences are observable in every production deployment: instruction drift across multi-step workflows, decision inconsistency when identical logic produces different outputs, and the impossibility of defining service-level agreements for AI-driven processes. Operators cannot defend reliability because they cannot control—or even audit—what context the model had access to at each decision point.
+The consequences are observable in every production deployment: instruction drift across multi-step workflows, decision inconsistency when identical logic produces different outputs, and the impossibility of defining service-level agreements for AI-driven processes. Operators cannot defend reliability because they cannot control, or even audit, what context the model had access to at each decision point.
 
 MCR addresses this by separating context management from model execution. Workflow context is published to JetStream as a durable event stream, correlated by workflow instance, and selectively reconstructed at each step using semantic relevance scoring. The model receives precisely the prior context relevant to the current task, bounded by policy-defined token budgets, with every reconstruction reproducible from the persistent event log.
 
-This architecture is complementary to existing invocation protocols. MCP, REST APIs, and CLI-based agent orchestration all serve as ingress points that publish into the MCR context plane. MCR does not replace these protocols; it provides the infrastructure layer they lack—the layer responsible for maintaining attention across the workflow lifetime.
+This architecture is complementary to existing invocation protocols. MCP, REST APIs, and CLI-based agent orchestration all serve as ingress points that publish into the MCR context plane. MCR does not replace these protocols; it provides the infrastructure layer they lack, the layer responsible for maintaining attention across the workflow lifetime.
 
 Section 5 presents a quantitative framework demonstrating 30 to 65 percent token reduction under a relevance ratio of 0.35. For representative enterprise scenarios, reductions range from 55 to 62 percent. These savings are material, but they are secondary to the architectural benefit: MCR provides a foundation for enterprise AI deployments where reliability can be defined, measured, and defended.
 
