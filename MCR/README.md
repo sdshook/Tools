@@ -1,21 +1,38 @@
 # Model Context Routing
 
-**Externalizing Attention into a Persistent, Event-Driven Context Plane**
+**Maintaining Attention Across Enterprise AI Workflows to Enable Defendable SLAs**
 
 *Shane D. Shook, PhD*  
 *April 18, 2026*
 
-An architectural pattern for persistent, event-driven AI context management implemented on Synadia's NATS and JetStream infrastructure. MCR eliminates stateless context loss in multi-step enterprise AI workflows, providing measurable reductions in token consumption, inference cost, and latency while enabling deterministic service-level guarantees.
+## The Problem
+
+Enterprise AI workflows are unreliable because attention cannot be maintained across model invocations. MCP, REST APIs, and CLI tools define *how* to call a model, but none of them solve the fundamental problem: each invocation is stateless, context slides or truncates unpredictably, and earlier instructions are progressively diluted. The result is that enterprises cannot define SLAs, cannot defend reliability claims, and cannot audit what context informed each decision.
+
+## The Solution
+
+Model Context Routing (MCR) is an architectural pattern that externalizes attention management into a persistent, event-driven context plane. Rather than relying on the model's context window to carry state—where it is subject to sliding, truncation, and signal dilution—MCR maintains workflow context in a durable infrastructure layer built on NATS messaging and JetStream persistence.
+
+This separation enables what invocation protocols alone cannot provide:
+
+- **Attention maintenance** across arbitrary workflow depth and duration
+- **Deterministic context reconstruction** that is auditable and reproducible
+- **Policy-governed SLAs** for cost, latency, and output consistency
+- **Defendable reliability** backed by exact replay of decision context
+
+Token reduction of 30 to 65 percent is a beneficial consequence of solving the attention problem—selective, relevance-governed reconstruction eliminates the wasteful re-injection of irrelevant prior context. But the primary value is architectural: MCR makes enterprise AI workflows reliable enough to govern by policy rather than accept as inherently variable.
 
 ## Executive Summary
 
-Large language models deployed in enterprise workflows fail not because of reasoning limitations but because of a structural mismatch in how they are invoked. Each model invocation is stateless. Context is reconstructed from scratch at every step. Instructions are repeated, prior decisions are re-established, and prior outputs must be re-injected, creating a compounding cycle of token waste, latency, and outcome variability.
+Large language models deployed in enterprise workflows fail not because of reasoning limitations but because attention is not maintained across invocations. Each API call is stateless by design. Context must be reconstructed from scratch at every step, and the model's fixed context window forces truncation that is recency-governed rather than relevance-governed. Compounding this, transformer architectures exhibit progressive signal dilution even within a single call, attenuating earlier content relative to more recent tokens.
 
-This paper introduces Model Context Routing (MCR), a system-level architectural pattern that separates context management from model execution. Rather than relying on the model's context window to carry state across workflow steps, MCR externalizes state into a durable, event-driven infrastructure layer built on NATS messaging and JetStream persistence, governed by the Synadia control plane.
+The consequences are observable in every production deployment: instruction drift across multi-step workflows, decision inconsistency when identical logic produces different outputs, and the impossibility of defining service-level agreements for AI-driven processes. Operators cannot defend reliability because they cannot control—or even audit—what context the model had access to at each decision point.
 
-MCR is not a product. It is an architectural abstraction: a defined pattern for how enterprise systems should publish, persist, correlate, and selectively retrieve AI context across multi-step workflows. It is complementary to existing standards including Anthropic's Model Context Protocol (MCP), REST APIs, and CLI-based agent orchestration, all of which serve as ingress points that publish into the MCR context plane.
+MCR addresses this by separating context management from model execution. Workflow context is published to JetStream as a durable event stream, correlated by workflow instance, and selectively reconstructed at each step using semantic relevance scoring. The model receives precisely the prior context relevant to the current task, bounded by policy-defined token budgets, with every reconstruction reproducible from the persistent event log.
 
-Section 5 presents a quantitative estimation framework demonstrating that MCR reduces per-workflow input token consumption by 30 to 65 percent under a relevance ratio of 0.35, depending on workflow depth and context density. For the three representative enterprise scenarios modeled in Section 5.5, reductions range from 55 to 62 percent. Combined with Synadia's SLA enforcement and deterministic context reconstruction, MCR provides a foundation for enterprise AI deployments where cost, latency, and output consistency can be governed by policy rather than accepted as inherent variability.
+This architecture is complementary to existing invocation protocols. MCP, REST APIs, and CLI-based agent orchestration all serve as ingress points that publish into the MCR context plane. MCR does not replace these protocols; it provides the infrastructure layer they lack—the layer responsible for maintaining attention across the workflow lifetime.
+
+Section 5 presents a quantitative framework demonstrating 30 to 65 percent token reduction under a relevance ratio of 0.35. For representative enterprise scenarios, reductions range from 55 to 62 percent. These savings are material, but they are secondary to the architectural benefit: MCR provides a foundation for enterprise AI deployments where reliability can be defined, measured, and defended.
 
 ## 1. The Context Persistence Problem in Enterprise AI
 
