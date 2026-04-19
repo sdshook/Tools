@@ -18,6 +18,7 @@ Workflow: 5-step security incident investigation
 import asyncio
 import json
 import os
+import shutil
 import subprocess
 import time
 import uuid
@@ -128,13 +129,55 @@ def warn(t):  print(f"  {YLW}{t}{RST}")
 # ── NATS server ───────────────────────────────────────────────────────────────
 
 def start_nats() -> subprocess.Popen:
+    """
+    Start NATS server with JetStream enabled.
+    
+    Looks for nats-server in common locations and uses the config file
+    from the src/ directory.
+    """
     os.makedirs("/tmp/mcr_nats_store", exist_ok=True)
+    
+    # Find nats-server binary
+    nats_paths = [
+        "nats-server",  # In PATH
+        "/usr/local/bin/nats-server",
+        "/usr/bin/nats-server",
+        "/usr/sbin/nats-server",
+        "/tmp/nats-server-v2.10.25-linux-amd64/nats-server",  # Downloaded binary
+    ]
+    
+    nats_bin = None
+    for path in nats_paths:
+        if os.path.isfile(path) or shutil.which(path):
+            nats_bin = path
+            break
+    
+    if not nats_bin:
+        raise RuntimeError(
+            "nats-server not found. Install NATS server or set path in start_nats().\n"
+            "See Appendix B in README.md for installation instructions."
+        )
+    
+    # Use config file from src/ directory
+    config_path = os.path.join(os.path.dirname(__file__), "nats_config.conf")
+    if not os.path.isfile(config_path):
+        # Create minimal config if not present
+        config_path = "/tmp/mcr_nats_config.conf"
+        with open(config_path, "w") as f:
+            f.write("""
+port: 4222
+jetstream {
+    store_dir: /tmp/mcr_nats_store
+    max_memory_store: 256M
+    max_file_store: 1G
+}
+""")
+    
     proc = subprocess.Popen(
-        ["/usr/sbin/nats-server", "-c",
-         "/home/claude/mcr_poc/nats_config.conf"],
+        [nats_bin, "-c", config_path],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
-    time.sleep(1.2)
+    time.sleep(1.5)
     return proc
 
 

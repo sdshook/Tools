@@ -438,25 +438,157 @@ This approach applies at the infrastructure level the same principle that the At
 
 ## Appendix A: Implementation Checklist
 
-The following checklist summarizes the key implementation decisions for an MCR deployment on Synadia. Steps are ordered by dependency.
+The following checklist summarizes the key implementation decisions for an MCR deployment. Steps are ordered by dependency.
 
 1. Define subject taxonomy aligned to tenant, domain, workflow type, and event type.
 2. Configure JetStream streams per domain with retention policies matched to compliance requirements.
 3. Implement correlation identifier generation and propagation for all workflow-initiating events.
 4. Deploy ingress adapters for each protocol gateway: MCP endpoint normalization, REST webhook handlers, and CLI event publishers.
 5. Implement context reconstruction services with workflow-type-specific retrieval policies and relevance-governed truncation.
-6. Configure Synadia control plane access policies for per-tenant stream isolation and cross-workflow context sharing policies.
+6. Configure access policies for per-tenant stream isolation and cross-workflow context sharing policies.
 7. Implement routing policy configuration and model provider integration.
 8. Deploy monitoring for token consumption, latency, and reconstruction efficiency metrics.
 
-## Appendix B: Sample Source Code
+## Appendix B: Deployment Guide
 
-The sample source code demonstrating the MCR proof of concept is available in the `src/` directory. The implementation consists of four production-structured modules:
+### Prerequisites
 
-- **context_plane.py** - Manages JetStream lifecycle, event publication with correlation ID embedded in subject hierarchy, and semantic relevance reconstruction
-- **mcp_server.py** - Implements JSON-RPC 2.0 MCP server with tool dispatch
-- **mcr_orchestrator.py** - Contains the routing engine and semantic reconstruction bridge
-- **mcr_poc_runner.py** - End-to-end demonstration runner
+- Python 3.11 or later
+- NATS Server 2.10 or later with JetStream enabled
+- Anthropic API key (for live model calls)
+
+### Quick Start (Local Development)
+
+```bash
+# 1. Install NATS Server
+# macOS:
+brew install nats-server
+
+# Linux (download binary):
+curl -L https://github.com/nats-io/nats-server/releases/download/v2.10.25/nats-server-v2.10.25-linux-amd64.tar.gz | tar -xz
+sudo mv nats-server-v2.10.25-linux-amd64/nats-server /usr/local/bin/
+
+# 2. Clone and install dependencies
+cd MCR/src
+pip install -r requirements.txt
+
+# 3. Start NATS with JetStream
+nats-server -c nats_config.conf &
+
+# 4. Run the simulated POC (no API key required)
+python mcr_poc_runner.py
+
+# 5. Run the live integration test (requires API key)
+export ANTHROPIC_API_KEY="your-api-key"
+cd ../tests
+python test_live_integration.py
+```
+
+### Docker Deployment
+
+```bash
+# Build the container
+docker build -t mcr-context-plane .
+
+# Run with API key
+docker run -p 4222:4222 -p 8222:8222 \
+  -e ANTHROPIC_API_KEY=your-key \
+  mcr-context-plane
+
+# Run with persistent JetStream storage
+docker run -p 4222:4222 -p 8222:8222 \
+  -v mcr_jetstream:/var/lib/nats/jetstream \
+  -e ANTHROPIC_API_KEY=your-key \
+  mcr-context-plane
+```
+
+### Configuration
+
+All configuration is centralized in `config.py` with environment variable overrides:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCR_NATS_URL` | `nats://localhost:4222` | NATS server connection URL |
+| `MCR_TENANT` | `default` | Tenant identifier for multi-tenant isolation |
+| `MCR_DOMAIN` | `workflows` | Domain classification in subject hierarchy |
+| `MCR_STREAM_NAME` | `MCR_CONTEXT` | JetStream stream name |
+| `MCR_RELEVANCE_RATIO` | `0.35` | Fraction of prior context to reconstruct |
+| `MCR_MAX_STREAM_AGE` | `86400` | Event retention in seconds (24 hours) |
+| `MCR_MAX_STREAM_MSGS` | `500000` | Maximum messages per stream |
+| `MCR_MAX_STREAM_BYTES` | `536870912` | Maximum stream size (512MB) |
+| `ANTHROPIC_API_KEY` | (none) | Required for live model calls |
+
+### Source Files
+
+| File | Purpose |
+|------|---------|
+| `config.py` | Centralized configuration with environment variable support |
+| `context_plane.py` | JetStream lifecycle, event publishing, semantic reconstruction |
+| `mcp_server.py` | JSON-RPC 2.0 MCP server with tool schemas |
+| `mcr_orchestrator.py` | Routing engine and reconstruction bridge |
+| `mcr_poc_runner.py` | End-to-end demonstration with simulated responses |
+| `nats_config.conf` | NATS server configuration with JetStream enabled |
+| `requirements.txt` | Python dependencies |
+
+### Subject Hierarchy
+
+MCR uses a five-level subject hierarchy for event routing and filtering:
+
+```
+{tenant}.{domain}.{workflow_type}.{correlation_id}.{event_type}
+```
+
+Example: `default.workflows.incident.a1b2c3d4-e5f6-7890-abcd-ef1234567890.request`
+
+This structure enables:
+- **Level 1 (tenant)**: Multi-tenant isolation at the NATS account level
+- **Level 2 (domain)**: Stream partitioning by business domain
+- **Level 3 (workflow_type)**: Filtering by workflow classification
+- **Level 4 (correlation_id)**: Per-workflow consumer filtering at the broker
+- **Level 5 (event_type)**: Selection of request vs response events
+
+### Integrating with Your LLM Provider
+
+The POC uses simulated responses in `mcr_orchestrator.py`. To integrate with live APIs:
+
+1. Import your LLM client:
+```python
+import anthropic
+client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+```
+
+2. Replace the simulated response in `process_step_via_mcr()`:
+```python
+# Instead of: assistant_text = RESPONSES[step_index]
+# Use:
+messages = [{"role": e.role, "content": e.content} for e in selected_events]
+messages.append({"role": "user", "content": task})
+
+response = client.messages.create(
+    model=provider["api_model"],
+    max_tokens=1024,
+    system="Your system prompt here",
+    messages=messages,
+)
+assistant_text = response.content[0].text
+```
+
+See `tests/test_live_integration.py` for a complete working example.
+
+### Production Considerations
+
+**Authentication**: The default `nats_config.conf` has authentication disabled. For production, enable token, username/password, or TLS client certificate authentication.
+
+**Persistence**: Mount `/var/lib/nats/jetstream` to persistent storage to survive container restarts.
+
+**Monitoring**: NATS exposes metrics on port 8222. Integrate with Prometheus using the NATS Prometheus exporter.
+
+**Scaling**: For high-volume deployments, consider:
+- NATS clustering for high availability
+- Synadia Cloud for managed JetStream with global replication
+- Separate orchestrator instances per workflow domain
+
+**Compliance**: Configure `MCR_MAX_STREAM_AGE` to match your data retention requirements. All events are replayable for audit purposes until they expire.
 
 ## POC Results Summary
 

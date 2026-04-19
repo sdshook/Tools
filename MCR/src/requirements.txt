@@ -1,0 +1,7 @@
+# MCR Core Dependencies
+nats-py>=2.14.0
+anthropic>=0.96.0
+
+# Dashboard generation (optional, for test visualization)
+matplotlib>=3.10.0
+numpy>=2.4.0
