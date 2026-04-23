@@ -1,0 +1,96 @@
+================================================================================
+SecuritySidecar Test Results
+================================================================================
+
+Test Date: 2026-04-23
+Test Environment: Python 3.13.12, Linux
+Test Script: testing/test_standalone.py
+
+DESCRIPTION OF TESTS PERFORMED
+------------------------------
+
+1. MODELS TESTS
+   - Verify enum values (TrustLevel, Severity, SourceType)
+   - Verify dataclass structures (ScanResult, PolicyDecision)
+
+2. SCANNER TESTS
+   - Clean content detection: Verify normal text passes without flags
+   - Injection pattern detection: Detect "ignore previous instructions" patterns
+   - Invisible Unicode detection: Detect zero-width spaces and similar chars
+   - Hidden HTML detection: Detect HTML comments used to hide instructions
+   - Trust level classification: Map source types to appropriate trust levels
+
+3. REDACTOR TESTS
+   - Trust-based redaction: HIGH/MEDIUM trust not redacted, LOW/UNTRUSTED redacted
+   - SSN redaction: Pattern ###-##-#### detected and replaced
+   - AWS key redaction: AKIA... pattern detected and replaced
+   - Internal IP redaction: 10.x.x.x, 192.168.x.x patterns detected
+   - Email redaction: user@domain.com patterns detected
+   - Cryptographic hashes: Verify SHA-256 hashes in redaction records
+
+4. SEQUENCE ANALYZER TESTS
+   - Clean sequence: Verify benign tool sequences pass
+   - Toxic flow detection: Detect credential_read -> network_egress patterns
+
+5. POLICY ENGINE TESTS
+   - Denylist enforcement: Block tools on denylist (execute_shell)
+   - Allowlist enforcement: Permit tools on allowlist (read_file)
+   - Approval patterns: Verify delete_* matches require_approval
+
+6. END-TO-END PIPELINE TESTS
+   - Full scan -> redact flow with realistic content
+   - Verify all sensitive data types are properly redacted
+
+================================================================================
+TEST EXECUTION OUTPUT
+================================================================================
+
+============================================================
+SecuritySidecar Standalone Integration Tests
+============================================================
+
+=== Testing Models ===
+✓ Enums have correct values
+✓ ScanResult dataclass works
+✓ PolicyDecision dataclass works
+
+=== Testing Scanner ===
+✓ Clean content passes through correctly
+✓ Injection pattern detected correctly
+✓ Invisible Unicode detected and sanitized
+✓ Hidden HTML comment detected
+✓ Trust levels assigned correctly by source type
+
+=== Testing Redactor ===
+✓ HIGH trust content not redacted
+✓ SSN redacted from LOW trust content
+✓ AWS key redacted
+✓ Internal IPs redacted
+✓ Email addresses redacted
+✓ Redaction records include cryptographic hashes
+
+=== Testing Sequence Analyzer ===
+✓ Clean sequence passes
+✓ Credential exfiltration pattern detected
+
+=== Testing Policy Engine ===
+✓ Denylist enforcement works
+✓ Allowlist permits valid tools
+✓ Approval pattern matching works for destructive operations
+
+=== Testing End-to-End Pipeline ===
+  Scan result: trust_level=low, flags=0
+  Redaction result: modified=True, records=5
+✓ End-to-end pipeline correctly sanitizes sensitive data
+
+  Redacted output:
+    Database query result:
+    User: [REDACTED:email:ebab270a]
+    SSN: [REDACTED:ssn:01a54629]
+    API Key: [REDACTED:api_key_sk:51a32bf5]
+    AWS Key: [REDACTED:aws_access_key:1a5d44a2]
+    Server: [REDACTED:private_ip_10:330046ae]
+
+============================================================
+All tests passed!
+============================================================
