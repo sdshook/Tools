@@ -30,8 +30,7 @@ logger = logging.getLogger(__name__)
 # Categories that are invisible or used for instruction hiding
 _INVISIBLE_CATEGORIES = {
     "Cf",   # Format characters (zero-width joiners, directional marks, etc.)
-    "Cc",   # Control characters
-    "Zs",   # Space separators (non-standard spaces)
+    "Cc",   # Control characters (except common ones like \n, \t, \r)
 }
 
 # Specific codepoints commonly exploited
@@ -43,6 +42,28 @@ _SUSPICIOUS_CODEPOINTS = {
     0x2029,  # Paragraph separator
     0xFEFF,  # BOM / zero-width no-break space
     0x00AD,  # Soft hyphen
+    0x00A0,  # Non-breaking space (looks like regular space but isn't)
+    0x2000,  # En quad
+    0x2001,  # Em quad
+    0x2002,  # En space
+    0x2003,  # Em space
+    0x2004,  # Three-per-em space
+    0x2005,  # Four-per-em space
+    0x2006,  # Six-per-em space
+    0x2007,  # Figure space
+    0x2008,  # Punctuation space
+    0x2009,  # Thin space
+    0x200A,  # Hair space
+    0x202F,  # Narrow no-break space
+    0x205F,  # Medium mathematical space
+    0x3000,  # Ideographic space
+}
+
+# Common control characters that are NOT suspicious
+_ALLOWED_CONTROL = {
+    0x0009,  # Tab
+    0x000A,  # Line feed
+    0x000D,  # Carriage return
 }
 
 
@@ -134,6 +155,9 @@ def _check_invisible_unicode(content: str) -> list[ScanFlag]:
     flags = []
     for i, ch in enumerate(content):
         cp = ord(ch)
+        # Skip allowed control characters (tab, newline, carriage return)
+        if cp in _ALLOWED_CONTROL:
+            continue
         cat = unicodedata.category(ch)
         if cat in _INVISIBLE_CATEGORIES or cp in _SUSPICIOUS_CODEPOINTS:
             flags.append(ScanFlag(
@@ -185,10 +209,14 @@ def _check_base64_blobs(content: str) -> list[ScanFlag]:
 def _sanitize(content: str) -> str:
     """Strip provably inert hidden markup. Does not remove payload text."""
     content = _HIDDEN_HTML_COMMENT.sub("", content)
-    # Strip invisible Unicode characters
+    # Strip invisible Unicode characters (but keep allowed control chars)
     cleaned = []
     for ch in content:
         cp = ord(ch)
+        # Always keep allowed control characters
+        if cp in _ALLOWED_CONTROL:
+            cleaned.append(ch)
+            continue
         cat = unicodedata.category(ch)
         if cat not in _INVISIBLE_CATEGORIES and cp not in _SUSPICIOUS_CODEPOINTS:
             cleaned.append(ch)

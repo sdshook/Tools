@@ -58,7 +58,7 @@ egress:
   approved_domains:
     - api.internal.company.com
     - docs.company.com
-    - *.trusted-partner.com
+    - "*.trusted-partner.com"
 
 # ---------------------------------------------------------------------------
 # Redaction policy
