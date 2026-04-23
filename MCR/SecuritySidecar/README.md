@@ -48,6 +48,24 @@ This enables:
 - **Post-incident investigation**: Reconstruct the exact context that preceded an anomalous model output
 - **Compliance verification**: Demonstrate to auditors that a model-assisted decision was made using only approved data within defined policy constraints
 
+### Chain of Custody for Evidentiary Requirements
+
+The combination of JetStream's immutable log and investigator.py's forensic replay capabilities creates a chain of custody suitable for legal and regulatory evidentiary requirements:
+
+**Immutability**: JetStream provides append-only storage. Once an event is written, it cannot be modified or deleted until the retention period expires. This satisfies the "unaltered original" requirement for digital evidence.
+
+**Timestamping**: Every event carries a JetStream sequence number and server timestamp, providing an authoritative, monotonic ordering that cannot be retroactively manipulated.
+
+**Completeness**: The event stream captures the full context: what data the model received, what tools were called, what arguments were passed, what the model returned, and what security decisions were made at each step.
+
+**Authenticity**: Events are tied to authenticated NATS accounts with tenant isolation. The provenance of each event (which ingress source, which workflow, which user context) is recorded at write time.
+
+**Reproducibility**: investigator.py can replay any workflow from the event log and produce identical timeline reconstructions. Two analysts examining the same workflow_id will see the same evidence.
+
+**Export formats**: export_for_siem() produces structured JSON with cryptographic hashes of event payloads, suitable for ingestion into legal hold systems or presentation as court exhibits.
+
+For organizations subject to litigation hold, HIPAA, SOX, or similar requirements, the retention configuration in policy.yaml should be set to match the applicable preservation period, and exports should be performed to write-once storage before the JetStream retention window closes.
+
 ### Context Reconstruction: Trust-Aware Redaction
 
 The reconstruction service assembles the context window delivered to the model at each workflow step. MCR's existing relevance-ratio filtering already limits what prior context is reconstructed. Trust-aware redaction means that low-trust events undergo content scanning before their payloads are included.
@@ -83,6 +101,29 @@ Sequence policies can express constraints such as:
 | Post-incident investigation | Context persistence | Replay of exact event stream by workflow_id |
 | Compliance audit | Context persistence | Tamper-evident, time-retained event log |
 | Anomaly detection and alerting | All layers | Security events to dedicated NATS subject; wildcard consumer feeds SIEM |
+
+## Active Interception vs Detection
+
+The SecuritySidecar is not passive monitoring. It actively intercedes in malicious actions at synchronous chokepoints in the request path.
+
+**Active Interception (blocks malicious actions):**
+
+| Component | Location | Enforcement Actions |
+|-----------|----------|---------------------|
+| scanner.py | Before publish_event | Block/flag injection attempts, downgrade trust levels, trigger workflow suspension |
+| policy_engine.py | Before handle_tool_call | Deny denylisted tools, block toxic sequences, reject unapproved egress, require human approval |
+| redactor.py | Inside reconstruct | Strip credentials/PII/topology before model sees the content |
+
+When policy_engine returns `PolicyDecision(permitted=False)`, the tool call does not execute. When scanner flags content as UNTRUSTED, downstream components treat it accordingly. When redactor processes low-trust content, sensitive material is replaced with placeholders before it ever reaches the model.
+
+**Detection Only (async, forensic):**
+
+| Component | Function |
+|-----------|----------|
+| audit_consumer.py | Logs security events, forwards to SIEM, can trigger alerts but operates after the fact |
+| investigator.py | Post-incident forensic analysis, timeline reconstruction, evidence export |
+
+The architectural point: synchronous components sit in the request path and stop malicious actions before they complete. Async components handle logging, alerting, and investigation after events have been recorded.
 
 ## Why a Sidecar Architecture
 
@@ -327,7 +368,7 @@ pytest testing/ --cov=. --cov-report=html
 
 ### Investigation (async, off the hot path)
 - **audit_consumer.py**: Separate process; wildcard subscriber on *.*.*.*.security_event; writes audit log, forwards to SIEM, escalates on CRITICAL
-- **investigator.py**: Forensic replay from JetStream; replay_workflow(), build_timeline(), diff_context(), summarize_redactions(), export_for_siem()
+- **investigator.py**: Forensic replay from JetStream with chain-of-custody support; replay_workflow(), build_timeline(), diff_context(), summarize_redactions(), export_for_siem() with cryptographic hashes for evidentiary use
 
 ### Configuration
 - **policy.yaml**: Allowlist, denylist, egress limits, redaction toggles, SIEM endpoint
