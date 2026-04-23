@@ -52,7 +52,7 @@ Thirteen files. Here is what each does and how they relate:
 ## Integration
 
 - **INTEGRATION.md** — the exact code snippets showing the two context_plane.py touch points and the one mcr_orchestrator.py touch point, plus the CLI extensions and Docker Compose addition
-- **requirements.txt** — only two new dependencies beyond MCR core: aiohttp for SIEM forwarding and pyyaml which MCR likely already has
+- **requirements.txt** — dependencies organized by function: ingress scanning, sequence analysis, trust scoring, forensic replay, and SIEM integration
 
 ---
 
@@ -161,3 +161,45 @@ policy_engine.py      calls  sequence_analyzer.py
 audit_consumer.py     runs independently, subscribes to *.*.*.*.security_event
 investigator.py       called from mcr_cli.py extensions or directly by analysts
 ```
+
+---
+
+## Dependencies
+
+### Ingress Scanning / Injection Detection
+
+- **detect-secrets** (Yelp) — production-grade credential and API key pattern detection across 30+ token formats; better than hand-rolled regex
+- **presidio-analyzer** (Microsoft) — PII entity recognition including SSNs, credit cards, emails, phone numbers, names; runs locally with no data leaving the environment
+- **unicodedata** (stdlib) — invisible Unicode detection; category-based inspection of every character in an inbound payload
+- **regex** — drop-in `re` replacement with better Unicode property support for injection pattern matching across scripts
+
+### Sequence and Flow Analysis
+
+- **nats-py** — already a dependency for MCR core; the async subscriber you need for the security audit consumer and sequence query against prior workflow events
+- **networkx** — model tool call sequences as directed graphs; useful for detecting known toxic flow patterns (read-then-exfiltrate, escalate-then-delete) as subgraph matches rather than brittle if-then rules
+- **pydantic** — schema validation for tool call arguments before dispatch; define strict models per tool and reject non-conforming calls at the routing layer
+
+### Trust Scoring and Reconstruction
+
+- **langdetect** or **lingua-py** — detect language switches mid-payload, a signal for injected content from a different source than the surrounding context
+- **scikit-learn** — lightweight anomaly detection on token volume, call frequency, and sequence patterns using IsolationForest or similar; no heavy inference required
+- **tiktoken** (OpenAI, but model-agnostic for counting) — accurate token counting for redacted vs. unredacted context, so you can verify the reconstruction stays within policy-defined budgets after redaction
+
+### Forensic Replay and Investigation
+
+- **duckdb** — query JetStream event exports as structured data without standing up a full database; fast enough for ad hoc forensic queries across millions of events by workflow_id, timestamp, or event_type
+- **pandas** — timeline reconstruction from replayed event streams; pivot by correlation_id to produce a per-workflow decision audit trail
+- **rich** — human-readable CLI rendering of replayed workflows for analyst investigation; pairs well with mcr_cli.py for interactive forensic sessions
+
+### SIEM Integration
+
+- **python-json-logger** — structured JSON log output from the security audit consumer in a format SIEM ingestion pipelines expect natively
+- **aiohttp** — async HTTP for forwarding security events to SIEM webhook endpoints without blocking the NATS consumer loop
+
+### Notes on Fit
+
+**presidio-analyzer** is the heaviest dependency here and ships with spaCy models, so it warrants its own worker process rather than running inline in `publish_event()`. The pattern is to publish the raw event to JetStream immediately, then have a dedicated scanning consumer process it asynchronously and publish a `scan_result` event back. This keeps ingress latency clean while still ensuring no flagged content reaches reconstruction.
+
+**networkx** is worth calling out specifically because it shifts sequence detection from a list of hand-coded rules to a graph problem. You define known toxic flow patterns as small directed graphs, then check each new tool call to see whether it completes a known pattern in the workflow's call history. This is significantly more maintainable as the number of tools and attack patterns grows.
+
+**duckdb** is the right choice for forensic replay over a Pandas-only approach because JetStream event exports can be large and DuckDB handles them without loading everything into memory, which matters for 90-day retention windows in the finance and healthcare scenarios.
