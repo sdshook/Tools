@@ -7,213 +7,235 @@ Run with: pytest testing/test_sequence_analyzer.py -v
 import pytest
 import sys
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sequence_analyzer import (
-    load_patterns,
-    match,
-    build_call_graph,
-    find_pattern_match,
-)
+from models import PolicyDecision
+from config import PatternLibrary, ToxicPattern, ToolCategory
 
 
-class TestPatternLoading:
-    """Tests for pattern file loading."""
-
-    def test_load_valid_patterns(self, tmp_path):
-        patterns_file = tmp_path / "patterns.yaml"
-        patterns_file.write_text("""
-toxic_flows:
-  - name: credential_exfil
-    description: Read credentials then make network call
-    sequence:
-      - category: credential_read
-        tools: [read_secrets, get_env, read_config]
-      - category: network_egress
-        tools: [http_request, curl, wget]
-    window: 5
-    severity: critical
-""")
-        patterns = load_patterns(str(patterns_file))
-        assert len(patterns["toxic_flows"]) == 1
-        assert patterns["toxic_flows"][0]["name"] == "credential_exfil"
-
-    def test_load_multiple_patterns(self, tmp_path):
-        patterns_file = tmp_path / "patterns.yaml"
-        patterns_file.write_text("""
-toxic_flows:
-  - name: pattern_1
-    sequence:
-      - category: a
-        tools: [tool_a]
-      - category: b
-        tools: [tool_b]
-    window: 3
-  - name: pattern_2
-    sequence:
-      - category: x
-        tools: [tool_x]
-      - category: y
-        tools: [tool_y]
-    window: 5
-""")
-        patterns = load_patterns(str(patterns_file))
-        assert len(patterns["toxic_flows"]) == 2
-
-    def test_missing_file_raises(self):
-        with pytest.raises(FileNotFoundError):
-            load_patterns("/nonexistent/patterns.yaml")
+def make_mock_library(categories=None, patterns=None):
+    """Create a mock PatternLibrary for testing."""
+    return PatternLibrary(
+        categories=categories or [],
+        patterns=patterns or [],
+    )
 
 
-class TestCallGraphBuilding:
-    """Tests for building tool call graphs from history."""
+class TestCheckSequence:
+    """Tests for the check_sequence function."""
 
-    def test_empty_history(self):
-        graph = build_call_graph([])
-        assert len(graph.nodes) == 0
+    def test_no_patterns_returns_none(self):
+        from sequence_analyzer import check_sequence
+        
+        mock_library = make_mock_library(categories=[], patterns=[])
+        
+        with patch("sequence_analyzer.get_patterns", return_value=mock_library):
+            result = check_sequence("http_request", ["read_file", "search_code"])
+        
+        assert result is None  # No match means continue evaluation
 
-    def test_single_call(self):
-        history = [{"tool": "read_file", "step": 1}]
-        graph = build_call_graph(history)
-        assert len(graph.nodes) == 1
-        assert "read_file:1" in graph.nodes
-
-    def test_sequential_calls(self):
-        history = [
-            {"tool": "read_file", "step": 1},
-            {"tool": "process_data", "step": 2},
-            {"tool": "write_file", "step": 3},
-        ]
-        graph = build_call_graph(history)
-        assert len(graph.nodes) == 3
-        assert graph.has_edge("read_file:1", "process_data:2")
-        assert graph.has_edge("process_data:2", "write_file:3")
-
-
-class TestPatternMatching:
-    """Tests for toxic flow pattern matching."""
+    def test_simple_sequence_match(self):
+        from sequence_analyzer import check_sequence
+        
+        mock_library = make_mock_library(
+            categories=[
+                ToolCategory(name="credential_read", tools=["read_secrets", "get_env"]),
+                ToolCategory(name="network_egress", tools=["http_request", "fetch_url"]),
+            ],
+            patterns=[
+                ToxicPattern(
+                    name="credential_exfil",
+                    description="Credential read then network call",
+                    severity="critical",
+                    sequence=["credential_read", "network_egress"],
+                    window=5,
+                ),
+            ],
+        )
+        
+        with patch("sequence_analyzer.get_patterns", return_value=mock_library):
+            result = check_sequence("http_request", ["read_file", "read_secrets"])
+        
+        assert result is not None
+        assert isinstance(result, PolicyDecision)
+        assert result.permitted is False
+        assert result.matched_pattern == "credential_exfil"
 
     def test_no_match_clean_history(self):
-        patterns = {
-            "toxic_flows": [{
-                "name": "exfil",
-                "sequence": [
-                    {"category": "cred", "tools": ["read_secrets"]},
-                    {"category": "net", "tools": ["http_request"]},
-                ],
-                "window": 5
-            }]
-        }
-        history = [
-            {"tool": "read_file", "step": 1},
-            {"tool": "write_file", "step": 2},
-        ]
-        proposed = {"tool": "search_code", "step": 3}
-        result = match(history, proposed, patterns)
-        assert result["matched"] is False
+        from sequence_analyzer import check_sequence
+        
+        mock_library = make_mock_library(
+            categories=[
+                ToolCategory(name="credential_read", tools=["read_secrets"]),
+                ToolCategory(name="network_egress", tools=["http_request"]),
+            ],
+            patterns=[
+                ToxicPattern(
+                    name="credential_exfil",
+                    description="Credential read then network call",
+                    severity="critical",
+                    sequence=["credential_read", "network_egress"],
+                    window=5,
+                ),
+            ],
+        )
+        
+        with patch("sequence_analyzer.get_patterns", return_value=mock_library):
+            # No credential read in history
+            result = check_sequence("http_request", ["read_file", "search_code"])
+        
+        assert result is None  # No match
 
-    def test_match_simple_sequence(self):
-        patterns = {
-            "toxic_flows": [{
-                "name": "exfil",
-                "sequence": [
-                    {"category": "cred", "tools": ["read_secrets"]},
-                    {"category": "net", "tools": ["http_request"]},
-                ],
-                "window": 5
-            }]
-        }
-        history = [
-            {"tool": "read_file", "step": 1},
-            {"tool": "read_secrets", "step": 2},
-        ]
-        proposed = {"tool": "http_request", "step": 3}
-        result = match(history, proposed, patterns)
-        assert result["matched"] is True
-        assert result["pattern_name"] == "exfil"
-
-    def test_match_respects_window(self):
-        patterns = {
-            "toxic_flows": [{
-                "name": "exfil",
-                "sequence": [
-                    {"category": "cred", "tools": ["read_secrets"]},
-                    {"category": "net", "tools": ["http_request"]},
-                ],
-                "window": 3
-            }]
-        }
-        # read_secrets is 5 steps back, outside window
-        history = [
-            {"tool": "read_secrets", "step": 1},
-            {"tool": "a", "step": 2},
-            {"tool": "b", "step": 3},
-            {"tool": "c", "step": 4},
-            {"tool": "d", "step": 5},
-        ]
-        proposed = {"tool": "http_request", "step": 6}
-        result = match(history, proposed, patterns)
-        assert result["matched"] is False
-
-    def test_match_three_step_sequence(self):
-        patterns = {
-            "toxic_flows": [{
-                "name": "escalate_delete",
-                "sequence": [
-                    {"category": "auth", "tools": ["assume_role"]},
-                    {"category": "read", "tools": ["list_resources"]},
-                    {"category": "delete", "tools": ["delete_resource"]},
-                ],
-                "window": 10
-            }]
-        }
-        history = [
-            {"tool": "assume_role", "step": 1},
-            {"tool": "list_resources", "step": 2},
-        ]
-        proposed = {"tool": "delete_resource", "step": 3}
-        result = match(history, proposed, patterns)
-        assert result["matched"] is True
-        assert result["pattern_name"] == "escalate_delete"
-
-    def test_partial_sequence_no_match(self):
-        patterns = {
-            "toxic_flows": [{
-                "name": "exfil",
-                "sequence": [
-                    {"category": "cred", "tools": ["read_secrets"]},
-                    {"category": "net", "tools": ["http_request"]},
-                ],
-                "window": 5
-            }]
-        }
-        # Only has the second part, missing first
-        history = [
-            {"tool": "read_file", "step": 1},
-        ]
-        proposed = {"tool": "http_request", "step": 2}
-        result = match(history, proposed, patterns)
-        assert result["matched"] is False
+    def test_window_respected(self):
+        from sequence_analyzer import check_sequence
+        
+        mock_library = make_mock_library(
+            categories=[
+                ToolCategory(name="credential_read", tools=["read_secrets"]),
+                ToolCategory(name="network_egress", tools=["http_request"]),
+            ],
+            patterns=[
+                ToxicPattern(
+                    name="credential_exfil",
+                    description="Credential read then network call",
+                    severity="critical",
+                    sequence=["credential_read", "network_egress"],
+                    window=3,  # Only look back 3 calls
+                ),
+            ],
+        )
+        
+        with patch("sequence_analyzer.get_patterns", return_value=mock_library):
+            # read_secrets is 5 calls back, outside window of 3
+            result = check_sequence(
+                "http_request",
+                ["read_secrets", "a", "b", "c", "d"]
+            )
+        
+        assert result is None  # No match because outside window
 
 
-class TestFindPatternMatch:
-    """Tests for the pattern matching helper."""
+class TestToolCategoryMatching:
+    """Tests for tool to category matching."""
 
-    def test_find_in_window(self):
-        history = ["a", "b", "target", "c", "d"]
-        found = find_pattern_match(history, "target", window=5)
-        assert found is True
+    def test_exact_match(self):
+        from sequence_analyzer import _tool_matches_category
+        
+        category = ToolCategory(name="test", tools=["read_file"])
+        assert _tool_matches_category("read_file", category) is True
 
-    def test_not_in_window(self):
-        history = ["target", "a", "b", "c", "d", "e"]
-        found = find_pattern_match(history, "target", window=3)
-        assert found is False
+    def test_no_match(self):
+        from sequence_analyzer import _tool_matches_category
+        
+        category = ToolCategory(name="test", tools=["read_file"])
+        assert _tool_matches_category("write_file", category) is False
 
-    def test_multiple_occurrences(self):
-        history = ["target", "a", "target", "b"]
-        found = find_pattern_match(history, "target", window=2)
-        assert found is True  # Second occurrence is within window
+    def test_glob_match(self):
+        from sequence_analyzer import _tool_matches_category
+        
+        category = ToolCategory(name="test", tools=["delete_*"])
+        assert _tool_matches_category("delete_user", category) is True
+        assert _tool_matches_category("delete_file", category) is True
+        assert _tool_matches_category("create_user", category) is False
+
+    def test_case_insensitive(self):
+        from sequence_analyzer import _tool_matches_category
+        
+        category = ToolCategory(name="test", tools=["Read_File"])
+        assert _tool_matches_category("read_file", category) is True
+
+
+class TestCategoryResolution:
+    """Tests for resolving tool names to categories."""
+
+    def test_resolve_single_category(self):
+        from sequence_analyzer import _resolve_category
+        
+        library = make_mock_library(
+            categories=[
+                ToolCategory(name="file_ops", tools=["read_file", "write_file"]),
+                ToolCategory(name="network", tools=["http_request"]),
+            ],
+        )
+        
+        result = _resolve_category("read_file", library)
+        assert result == ["file_ops"]
+
+    def test_resolve_multiple_categories(self):
+        from sequence_analyzer import _resolve_category
+        
+        library = make_mock_library(
+            categories=[
+                ToolCategory(name="sensitive", tools=["read_secrets"]),
+                ToolCategory(name="credential_read", tools=["read_secrets", "get_env"]),
+            ],
+        )
+        
+        result = _resolve_category("read_secrets", library)
+        assert "sensitive" in result
+        assert "credential_read" in result
+
+    def test_resolve_no_category(self):
+        from sequence_analyzer import _resolve_category
+        
+        library = make_mock_library(
+            categories=[
+                ToolCategory(name="network", tools=["http_request"]),
+            ],
+        )
+        
+        result = _resolve_category("unknown_tool", library)
+        assert result == []
+
+
+class TestDescribeHistory:
+    """Tests for the describe_history helper."""
+
+    def test_describe_annotates_categories(self):
+        from sequence_analyzer import describe_history
+        
+        mock_library = make_mock_library(
+            categories=[
+                ToolCategory(name="file_ops", tools=["read_file"]),
+                ToolCategory(name="network", tools=["http_request"]),
+            ],
+        )
+        
+        with patch("sequence_analyzer.get_patterns", return_value=mock_library):
+            result = describe_history(["read_file", "http_request", "unknown"])
+        
+        assert len(result) == 3
+        assert result[0]["tool"] == "read_file"
+        assert "file_ops" in result[0]["categories"]
+        assert result[1]["tool"] == "http_request"
+        assert "network" in result[1]["categories"]
+        assert result[2]["categories"] == []
+
+
+class TestPatternLibraryHelper:
+    """Tests for PatternLibrary helper methods."""
+
+    def test_category_tools_found(self):
+        library = make_mock_library(
+            categories=[
+                ToolCategory(name="network", tools=["http_request", "fetch_url"]),
+            ],
+        )
+        
+        tools = library.category_tools("network")
+        assert tools == ["http_request", "fetch_url"]
+
+    def test_category_tools_not_found(self):
+        library = make_mock_library(
+            categories=[
+                ToolCategory(name="network", tools=["http_request"]),
+            ],
+        )
+        
+        tools = library.category_tools("nonexistent")
+        assert tools == []
 
 
 if __name__ == "__main__":
