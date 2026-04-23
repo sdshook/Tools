@@ -1,6 +1,124 @@
 # SecuritySidecar
 
-It rides alongside the MCR context plane without modifying the core architecture. MCR's job stays what it is: attention management, context persistence, and routing. The security sidecar observes the same event stream, enforces policy at the two points where it must be synchronous (ingress scan before publish, policy check before dispatch), and otherwise operates independently on its own consumers.
+## Model Context Routing: Supporting an Enterprise AI Security Plane
+
+*Shane D. Shook, PhD — April 18, 2026*
+
+---
+
+## Overview
+
+Enterprise AI workflows introduce a class of security risk that conventional application security tooling is not architected to address. Prompt injection, malicious tool call sequences, and data leakage via model context are runtime threats that exist inside the AI execution layer, below the network perimeter and above the application logic, in a gap that neither firewalls nor API gateways reach.
+
+Model Context Routing (MCR) closes this gap. Because MCR already interposes a persistent, event-driven context plane between all ingress sources and every model invocation, it occupies the exact architectural position required to enforce a security policy universally. Every MCP tool call, REST webhook, CLI invocation, and agent output passes through the MCR context plane before any of it reaches the model. That single chokepoint, reinforced by MCR's durable JetStream event log and declarative routing policy engine, is the foundation of a comprehensive AI security plane.
+
+---
+
+## The Security Gap in Stateless AI Architectures
+
+Standard AI invocation protocols, MCP, REST APIs, and CLI tools, define how a model receives context and returns a response within a single call. They do not define what happens to that context across calls, who is permitted to inject content into it, or how to detect when tool results have been weaponized to redirect model behavior. Three threat classes exploit this gap directly.
+
+**Prompt injection via tool results.** When an AI agent reads external content, a GitHub issue, a document, a web page, or a database record, that content becomes part of the model's context. Adversaries embed instructions in this content that override system prompts or redirect tool use. In a stateless architecture there is no layer positioned to scan tool results before they reach the model.
+
+**Toxic tool call sequences.** A single tool call may be benign in isolation but malicious in sequence. Reading credentials from a secrets store followed immediately by an outbound network call is a data exfiltration pattern regardless of whether each individual call is permitted. Stateless architectures have no memory of prior tool calls within a workflow, making sequence-based detection impossible.
+
+**Context-borne data leakage.** PII, API keys, internal network topology, and other sensitive material routinely appear in tool results. Without a reconstruction layer that can scan and redact before model injection, this material enters the model's context window and may subsequently appear in model outputs, logs, or downstream tool calls.
+
+API gateways operate on HTTP request and response envelopes. They see the fact of a tool call but not the semantic sequence of tool calls within a workflow. SIEM systems receive logs after execution and can detect but not prevent. MCR operates before execution, with full knowledge of the workflow's event history, making it the only layer positioned to enforce both content and sequence policies simultaneously.
+
+---
+
+## MCR as a Security Plane: Four Enforcement Points
+
+MCR's architecture defines four functional layers, each of which becomes a natural enforcement point when extended with security controls. No new infrastructure is required. Each control is an extension of an existing MCR component.
+
+### Ingress Normalization: Prompt Injection Detection
+
+All events enter the MCR context plane through the ingress normalization layer, where they are converted to a consistent event schema before publication to JetStream. This normalization step is the correct location to scan for injection content, because it occurs before any event is persisted and before any context is reconstructed for model delivery.
+
+The scan examines every inbound payload for:
+
+- Invisible Unicode characters used to conceal instructions
+- HTML comment blocks and hidden markdown fragments
+- Known injection phrase patterns, such as directives to ignore prior instructions or assume a new identity
+- Base64-encoded payloads that may carry obfuscated instruction content
+
+Each event is annotated with a trust level derived from its source type. Content originating from external tool results, the highest-risk category, is tagged as low-trust, and that tag persists through the entire workflow lifecycle. Flagged events are published to a dedicated security subject in NATS and can trigger immediate workflow suspension, analyst notification, or SIEM forwarding without interrupting the audit record.
+
+### Context Persistence: Immutable Audit Log
+
+JetStream's immutable event log, which MCR already uses for context reconstruction, is simultaneously the most capable forensic resource available in an enterprise AI deployment. Every event, the exact content the model had access to at each decision point, the tool calls made, and the model outputs returned, is retained with configurable retention periods and is replayable on demand.
+
+This replay capability enables two security functions that stateless architectures cannot provide:
+
+- **Post-incident investigation** can reconstruct the exact context that preceded an anomalous model output, enabling analysts to determine whether the output resulted from injected instructions, malformed context, or legitimate reasoning.
+- **Compliance verification** for regulated industries can demonstrate to auditors that a model-assisted decision was made using only approved data within defined policy constraints, because the event log is an exact, ordered, tamper-evident record of the inputs to every decision.
+
+### Context Reconstruction: Trust-Aware Redaction
+
+The reconstruction service assembles the context window delivered to the model at each workflow step. MCR's existing relevance-ratio filtering already limits what prior context is reconstructed. Extending this with trust-aware redaction means that low-trust events undergo content scanning before their payloads are included in the assembled context.
+
+Redaction targets:
+
+- Credentials and API keys matching known token formats
+- Personally identifiable information including national identifiers, contact data, and financial account numbers
+- Internal network topology such as private IP ranges and internal hostnames
+- Any content flagged during ingress scanning
+
+Redacted events are replaced with annotated placeholders that preserve the workflow's semantic continuity while removing the sensitive material. The original event is retained unmodified in JetStream for forensic purposes. Only the reconstructed context delivered to the model is sanitized.
+
+### Routing and Dispatch: Sequence Policy Enforcement
+
+The routing layer has visibility into the full event history of a workflow instance through JetStream. This history enables sequence-aware policy enforcement that is impossible in any single-call security layer. Before any tool call is dispatched, the routing engine queries the workflow's prior event stream and evaluates the proposed call against declared sequence policies.
+
+Sequence policies can express constraints such as:
+
+- Deny any outbound network tool call in a workflow where a credential-read tool call has occurred within the prior five steps
+- Require human confirmation before executing any destructive operation
+- Limit the number of external egress calls per workflow instance
+- Deny any tool call to a destination not on the approved domain list
+
+These policies are declared in the same routing configuration already used for cost and latency governance, and they apply universally regardless of which ingress protocol initiated the workflow.
+
+---
+
+## Security Control Mapping
+
+The following maps principal AI security threat vectors to their MCR enforcement point and the specific mechanism applied at that layer.
+
+| Threat | Component | Mechanism |
+|--------|-----------|-----------|
+| Prompt injection via tool results | Ingress normalization (publish_event) | Unicode and pattern scanning before JetStream persist; event trust-level tagging |
+| Hidden instruction injection via HTML or markdown | Ingress normalization | Content sanitization applied to all low-trust source types before schema normalization |
+| Toxic tool call sequences | Routing and dispatch | JetStream history query per workflow_id; sequence policy evaluation before execution |
+| Credential and secret exfiltration | Context reconstruction | Regex-based redaction of token patterns before context is assembled for model delivery |
+| PII leakage into model context | Context reconstruction | Entity recognition and placeholder substitution on low-trust events during reconstruction |
+| Unapproved egress destinations | Routing and dispatch | Domain allowlist enforcement on all network-class tool arguments before dispatch |
+| Post-incident forensic investigation | Context persistence (JetStream) | Replay of exact event stream for any workflow_id with correlation ID scoping |
+| Compliance audit and verification | Context persistence (JetStream) | Tamper-evident, time-retained event log with configurable retention per compliance tier |
+| Anomaly detection and alerting | All layers via security subject | Security events published to dedicated NATS subject; wildcard consumer feeds SIEM |
+
+---
+
+## Governance and Integration
+
+MCR's security controls are expressed as declarative policy configurations attached to workflow definitions, consistent with the routing policy pattern already used for cost, latency, and compliance governance. Security policy dimensions include:
+
+- Tool allowlist and denylist per workflow type
+- Sequence constraints on tool call ordering
+- Egress call limits and approved destination lists
+- Data classification rules governing which content types require redaction
+- Human-in-the-loop confirmation requirements for high-risk operations such as delete, publish, and send
+
+Because all security events are published to the NATS subject hierarchy under a dedicated event type, integration with existing SIEM infrastructure requires only a single wildcard consumer subscribing to security events across all tenants. This consumer forwards events to the SIEM in real time, enabling correlation with network and endpoint telemetry without requiring changes to either the SIEM configuration or the MCR workflow definitions.
+
+MCR's multi-tenant isolation, enforced at the NATS account level, ensures that security policy and event data for one business unit or customer is cryptographically separated from all others. Tenant-specific security policies, retention periods, and redaction rules can be configured independently, supporting the distinct compliance requirements of different regulatory contexts within a single shared infrastructure deployment.
+
+---
+
+## Why a Sidecar Architecture
+
+The security sidecar rides alongside the MCR context plane without modifying the core architecture. MCR's job stays what it is: attention management, context persistence, and routing. The security sidecar observes the same event stream, enforces policy at the two points where it must be synchronous (ingress scan before publish, policy check before dispatch), and otherwise operates independently on its own consumers.
 
 The separation matters for a few reasons:
 
@@ -17,6 +135,16 @@ The only coupling is intentional and minimal: two call sites in existing MCR fil
 It's a clean pattern and it fits naturally with how MCR is already structured around NATS as the coordination primitive.
 
 ---
+
+## Conclusion
+
+The security threats intrinsic to enterprise AI workflows, prompt injection, malicious tool sequencing, and context-borne data leakage, are not addressable by perimeter security controls because they occur inside the AI execution layer. MCR's context plane is the only architectural layer that is positioned universally between all ingress sources and the model, operates with full knowledge of the workflow's event history, and controls exactly what context the model receives at every step.
+
+Extended with trust-aware ingress scanning, sequence-policy enforcement, redaction-governed reconstruction, and SIEM-integrated event publication, MCR provides an enterprise AI security plane that is both comprehensive and operationally integrated with the governance and reliability controls that MCR already delivers. Organizations deploying MCR for cost and SLA benefits acquire the security plane as a structural consequence of the same architecture.
+
+---
+
+## File Reference
 
 Thirteen files. Here is what each does and how they relate:
 
