@@ -281,11 +281,24 @@ def export_for_siem(timeline: WorkflowTimeline, path: Path) -> None:
     """
     Dump the complete forensic record as structured NDJSON for SIEM ingestion.
     One JSON object per line: workflow metadata, each event, each security event.
+    
+    Each record includes a content_hash (SHA-256) for chain of custody verification.
+    This enables:
+    - Tamper detection: hash mismatch indicates modification
+    - Deduplication: identical content produces identical hash
+    - Audit trail: hashes can be independently verified
     """
+    import hashlib
+    
+    def compute_hash(data: dict) -> str:
+        """Compute SHA-256 hash of JSON-serialized record for chain of custody."""
+        content = json.dumps(data, sort_keys=True, default=str)
+        return hashlib.sha256(content.encode()).hexdigest()
+    
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         # Header record
-        f.write(json.dumps({
+        header = {
             "record_type":  "workflow_summary",
             "workflow_id":  timeline.workflow_id,
             "tenant":       timeline.tenant,
@@ -296,16 +309,34 @@ def export_for_siem(timeline: WorkflowTimeline, path: Path) -> None:
             "total_events": len(timeline.events),
             "flagged_steps": timeline.flagged_steps,
             "redacted_steps": timeline.redacted_steps,
-        }) + "\n")
+        }
+        header["content_hash"] = compute_hash(header)
+        f.write(json.dumps(header) + "\n")
 
-        # Workflow events
-        for row in build_timeline(timeline):
-            row["record_type"] = "workflow_event"
-            f.write(json.dumps(row) + "\n")
+        # Workflow events with content hashes
+        for event in timeline.events:
+            record = {
+                "record_type":    "workflow_event",
+                "seq":            event.seq,
+                "step":           event.step_index,
+                "timestamp":      event.timestamp.isoformat(),
+                "role":           event.role,
+                "source_type":    event.source_type.value,
+                "trust_level":    event.trust_level.value,
+                "tool":           event.tool_name,
+                "tool_args":      event.tool_args,
+                "policy":         event.policy_outcome,
+                "scan_flags":     event.scan_flags,
+                "redactions":     len(event.redactions),
+                "content_excerpt": event.content[:200] + "..." if len(event.content) > 200 else event.content,
+                "content_hash":   hashlib.sha256(event.content.encode()).hexdigest(),
+            }
+            record["record_hash"] = compute_hash(record)
+            f.write(json.dumps(record) + "\n")
 
-        # Security events
+        # Security events with content hashes
         for se in timeline.security_events:
-            f.write(json.dumps({
+            record = {
                 "record_type": "security_event",
                 "event_id":    se.event_id,
                 "timestamp":   se.timestamp.isoformat(),
@@ -314,6 +345,8 @@ def export_for_siem(timeline: WorkflowTimeline, path: Path) -> None:
                 "step_index":  se.step_index,
                 "detail":      se.detail,
                 "flags":       se.raw_flags,
-            }) + "\n")
+            }
+            record["record_hash"] = compute_hash(record)
+            f.write(json.dumps(record) + "\n")
 
     logger.info("export_for_siem: wrote %s", path)

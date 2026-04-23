@@ -15,6 +15,9 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_DIR"
 
+# Set PYTHONPATH to include the project directory
+export PYTHONPATH="$PROJECT_DIR:$PYTHONPATH"
+
 # Check if pytest is installed
 if ! command -v pytest &> /dev/null; then
     echo "pytest not found. Installing test dependencies..."
@@ -25,7 +28,7 @@ echo "Running SecuritySidecar tests..."
 echo "================================"
 
 # Run pytest with coverage
-pytest testing/ \
+python -m pytest testing/ \
     --tb=short \
     --cov=. \
     --cov-report=term-missing \
