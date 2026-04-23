@@ -1,0 +1,12 @@
+# security/requirements.txt
+#
+# MCR Security Sidecar dependencies.
+# Install separately from MCR core requirements:
+#   pip install -r security/requirements.txt
+
+# Inherited from MCR core (already present)
+nats-py>=2.6.0
+pyyaml>=6.0
+
+# Sidecar-specific
+aiohttp>=3.9.0          # async SIEM HTTP forwarding

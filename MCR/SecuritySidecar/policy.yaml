@@ -1,0 +1,108 @@
+# security/policy.yaml
+#
+# Declarative security policy for the MCR sidecar.
+# Hot-reloadable: send SIGHUP to the sidecar process or call config.reload().
+# Changes take effect on the next evaluation without restarting MCR core.
+
+# ---------------------------------------------------------------------------
+# Tool policy
+# ---------------------------------------------------------------------------
+tools:
+  # Only tools on this list may be called. Empty list = all non-denied tools permitted.
+  allowlist:
+    - read_file
+    - search_code
+    - run_tests
+    - query_db
+    - list_directory
+    - get_issue
+    - get_pr
+    - search_issues
+    - get_commit
+    - fetch_url
+
+  # These tools are always denied regardless of workflow context.
+  denylist:
+    - execute_shell
+    - eval_code
+    - write_arbitrary_file
+    - modify_system_config
+
+  # These tools require explicit human confirmation before execution.
+  # Glob patterns supported.
+  require_approval:
+    - delete_*
+    - publish_*
+    - send_*
+    - push_*
+    - deploy_*
+    - drop_*
+
+# ---------------------------------------------------------------------------
+# Egress policy
+# ---------------------------------------------------------------------------
+egress:
+  # Maximum number of outbound network calls permitted per workflow instance.
+  max_calls_per_workflow: 3
+
+  # Tool names (or glob patterns) that constitute outbound network calls.
+  network_tool_classes:
+    - fetch_url
+    - http_post
+    - http_get
+    - send_webhook
+    - upload_*
+
+  # Destinations outside this list are denied.
+  # Empty list = all destinations permitted (not recommended for production).
+  approved_domains:
+    - api.internal.company.com
+    - docs.company.com
+    - *.trusted-partner.com
+
+# ---------------------------------------------------------------------------
+# Redaction policy
+# ---------------------------------------------------------------------------
+redaction:
+  # Enable built-in credential pattern redaction (API keys, tokens, private keys).
+  credentials: true
+
+  # Enable built-in PII redaction (SSNs, credit cards, emails, phone numbers).
+  pii: true
+
+  # Enable internal network topology redaction (private IPs, internal hostnames).
+  internal_topology: true
+
+  # Additional custom regex patterns to redact. Applied after built-in patterns.
+  custom_patterns: []
+    # Example:
+    # - "ACME-[A-Z0-9]{16}"   # Internal ticket reference numbers
+    # - "EMP-\d{6}"           # Employee IDs
+
+# ---------------------------------------------------------------------------
+# Retention policy
+# ---------------------------------------------------------------------------
+retention:
+  # How long security events are retained in the audit log (days).
+  security_events_days: 90
+
+  # How long full workflow forensic records are retained (days).
+  audit_records_days: 365
+
+# ---------------------------------------------------------------------------
+# SIEM integration
+# ---------------------------------------------------------------------------
+siem:
+  enabled: false
+  endpoint: "https://siem.internal.company.com/ingest/mcr"
+  format: json
+  headers:
+    Authorization: "Bearer YOUR_SIEM_TOKEN"
+    X-Source: "mcr-security-sidecar"
+
+# ---------------------------------------------------------------------------
+# Failure mode
+# ---------------------------------------------------------------------------
+# fail_open: true  = scanner errors permit the event (prioritizes availability)
+# fail_open: false = scanner errors block the event (prioritizes security)
+fail_open: false

@@ -1,0 +1,167 @@
+# security/patterns.yaml
+#
+# Toxic flow pattern library for the MCR sequence analyzer.
+# Add new patterns here without touching code.
+# Hot-reloadable alongside policy.yaml.
+#
+# Pattern matching:
+#   - sequence: ordered list of category names that must appear in that order
+#     within the workflow's call history (within the step window).
+#   - window: maximum number of steps between first and last match.
+#   - Tool membership uses fnmatch glob patterns (case-insensitive).
+
+# ---------------------------------------------------------------------------
+# Tool categories
+# Categories group tools that share a risk profile for pattern matching.
+# ---------------------------------------------------------------------------
+categories:
+
+  - name: credential_read
+    tools:
+      - get_secret
+      - read_secret
+      - fetch_credentials
+      - get_api_key
+      - read_env
+      - get_token
+      - list_secrets
+      - describe_secret
+
+  - name: sensitive_data_read
+    tools:
+      - query_db
+      - read_file
+      - get_file_contents
+      - list_directory
+      - get_user_data
+      - fetch_pii
+      - read_record
+
+  - name: network_egress
+    tools:
+      - fetch_url
+      - http_post
+      - http_get
+      - send_webhook
+      - upload_*
+      - post_to_*
+      - send_to_*
+
+  - name: external_write
+    tools:
+      - create_issue
+      - post_comment
+      - send_*
+      - publish_*
+      - push_*
+      - write_to_external
+
+  - name: destructive_operation
+    tools:
+      - delete_*
+      - drop_*
+      - remove_*
+      - truncate_*
+      - destroy_*
+
+  - name: code_execution
+    tools:
+      - execute_shell
+      - eval_code
+      - run_script
+      - invoke_lambda
+      - execute_*
+
+  - name: privilege_operation
+    tools:
+      - modify_system_config
+      - update_permissions
+      - grant_access
+      - add_user
+      - change_role
+
+  - name: reconnaissance
+    tools:
+      - list_*
+      - search_*
+      - describe_*
+      - get_issue
+      - get_pr
+      - get_commit
+
+# ---------------------------------------------------------------------------
+# Toxic flow patterns
+# Each pattern names a prohibited sequence of tool categories.
+# ---------------------------------------------------------------------------
+patterns:
+
+  - name: credential_exfiltration
+    description: >
+      Credentials read from a secrets store followed by an outbound network call.
+      Classic data exfiltration pattern regardless of individual call legitimacy.
+    severity: critical
+    sequence:
+      - credential_read
+      - network_egress
+    window: 5
+
+  - name: pii_exfiltration
+    description: >
+      Sensitive or PII data read followed by an outbound write or network call.
+      Indicates potential data exfiltration via tool chain.
+    severity: critical
+    sequence:
+      - sensitive_data_read
+      - network_egress
+    window: 8
+
+  - name: read_then_external_write
+    description: >
+      Internal data read followed by external write (issue, comment, webhook).
+      Covers exfiltration via public channels rather than direct network calls.
+    severity: high
+    sequence:
+      - sensitive_data_read
+      - external_write
+    window: 5
+
+  - name: credential_then_external_write
+    description: >
+      Credentials accessed followed by external write operation.
+      May indicate credential theft via public repository or issue tracker.
+    severity: critical
+    sequence:
+      - credential_read
+      - external_write
+    window: 5
+
+  - name: recon_to_destruction
+    description: >
+      Broad reconnaissance (listing, searching) followed by a destructive operation.
+      Pattern consistent with automated discovery-then-destroy attacks.
+    severity: high
+    sequence:
+      - reconnaissance
+      - destructive_operation
+    window: 15
+
+  - name: privilege_escalation_then_execution
+    description: >
+      Privilege modification followed by code execution.
+      Consistent with privilege escalation attacks.
+    severity: critical
+    sequence:
+      - privilege_operation
+      - code_execution
+    window: 5
+
+  - name: mass_recon
+    description: >
+      Multiple reconnaissance calls in rapid succession, potentially mapping
+      internal systems before a targeted operation.
+    severity: medium
+    sequence:
+      - reconnaissance
+      - reconnaissance
+      - reconnaissance
+    window: 6
