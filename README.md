@@ -130,6 +130,32 @@ Tools for managing administrative access and assessing security risks:
 * **[AppSecretsChanges_JITA.ps1](AdminCreds/AppSecretsChanges_JITA.ps1)** - Application secrets changes monitoring (JITA)
 * **[AppSecretsChanges_persistent.ps1](AdminCreds/AppSecretsChanges_persistent.ps1)** - Application secrets changes monitoring (persistent)
 
+### ADVulture - Active Directory Vulnerability Intelligence
+Advanced Active Directory security posture analysis with Graph Neural Networks:
+
+* **[ADVulture/](ADVulture/)** - Active Directory Vulnerability Intelligence Platform
+  - **Empirical Posture Analysis** through Graph Neural Networks and Markov Modelling
+  - **Temporal Depth**: Fuses 30–90 days of authentication/authorization event logs for empirically weighted risk analysis
+  - **Gradient-Ranked Remediation**: Computes partial derivatives of Tier 0 compromise probability to produce mathematically ordered remediation priorities
+  - **Unified Risk Taxonomy**: Models six risk classes simultaneously (AuthN hygiene, AuthZ structure/behavior, privilege escalation, delegation overrides, AI agent surfaces)
+  - **Regime Classification**: Identifies ordered, critical, or chaotic security posture states inspired by Sakana AI's Digital Ecosystems research
+  - **Standalone Operation**: No dependency on BloodHound, Neo4j, or external graph databases
+  - **Multi-Source Collection**: LDAP enumeration, Windows Event Logs, Entra ID/AAD, ADFS Federation, OAuth/PIM logs
+  - Extends BloodHound paradigm with temporal analysis and mathematical remediation ranking
+
+### MCR - Model Context Routing
+Enterprise AI attention management infrastructure for reliable workflows:
+
+* **[MCR/](MCR/)** - Model Context Routing Architecture
+  - **Attention Maintenance**: Persistent context plane across arbitrary workflow depth and duration
+  - **Deterministic Context Reconstruction**: Auditable and reproducible decision context
+  - **Policy-Governed SLAs**: Define and enforce cost, latency, and output consistency requirements
+  - **Defendable Reliability**: Exact replay capability for AI decision auditing
+  - **Token Reduction**: 30-65% token savings through relevance-governed context reconstruction
+  - **NATS/JetStream Backend**: Durable event-driven context persistence
+  - **Protocol Agnostic**: Complements MCP, REST APIs, and CLI-based agent orchestration
+  - Solves the fundamental enterprise AI problem: maintaining attention across stateless model invocations
+
 ### Other Security Utilities
 
 * **[wildcard_xyz_hunter.py](Other/wildcard_xyz_hunter.py)** - Specialized security utility for wildcard domain hunting
