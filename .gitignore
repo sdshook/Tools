@@ -2,8 +2,6 @@
 __pycache__/
 *.py[cod]
 *$py.class
-*.pyo
-*.pyd
 *.so
 
 # Distribution / packaging
@@ -44,7 +42,6 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
-.ruff_cache/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -120,15 +117,3 @@ CRA/EVMS/data/
 CRA/EVMS/*.deb
 CRA/EVMS/LICENSE.md
 CRA/EVMS/README_*.md
-
-# ADVulture specific
-*.duckdb
-*.duckdb.wal
-*.evtx
-config.yaml
-
-# IDE
-.DS_Store
-.idea/
-.vscode/
-*.iml
