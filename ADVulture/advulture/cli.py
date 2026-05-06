@@ -6,7 +6,6 @@ ADVulture — CLI Entry Point
 
 from __future__ import annotations
 import logging
-import sys
 from pathlib import Path
 from typing import Optional
 import click
@@ -42,10 +41,49 @@ def main(ctx, config: Path, log_level: str):
               help="EVTX files to analyse (can specify multiple)")
 @click.option("--format", "fmt", default="both",
               type=click.Choice(["html", "json", "both"]))
+# On-prem AD options
+@click.option("--ad-auth", type=click.Choice(["prompt", "kerberos", "ntlm", "simple"]),
+              help="On-prem AD auth mode (default: prompt for creds)")
+@click.option("--domain", help="AD domain (auto-discovered if not specified)")
+@click.option("--server", help="DC hostname (auto-discovered if not specified)")
+# Entra ID options
+@click.option("--entra-auth", type=click.Choice([
+              "device_code", "interactive", "client_secret", 
+              "certificate", "managed_identity"]),
+              help="Enable Entra ID analysis with specified auth mode")
+@click.option("--entra-only", is_flag=True, default=False,
+              help="Run Entra ID analysis only (no on-prem AD)")
+@click.option("--ad-only", is_flag=True, default=False,
+              help="Run on-prem AD analysis only (no Entra)")
+@click.option("--tenant-id", envvar="AZURE_TENANT_ID",
+              help="Entra ID tenant ID (optional for interactive auth)")
+@click.option("--client-id", envvar="AZURE_CLIENT_ID",
+              help="Entra ID client/app ID (optional for interactive auth)")
 @click.pass_context
-def analyze(ctx, output: Path, evtx, fmt: str):
-    """Run posture analysis and generate reports."""
-    from advulture.config import Config
+def analyze(ctx, output: Path, evtx, fmt: str, 
+            ad_auth: Optional[str], domain: Optional[str], server: Optional[str],
+            entra_auth: Optional[str], entra_only: bool, ad_only: bool,
+            tenant_id: Optional[str], client_id: Optional[str]):
+    """
+    Run posture analysis and generate reports.
+    
+    \b
+    SIMPLEST USAGE - just run and authenticate:
+    
+      # Cloud-only (Entra ID)
+      advulture analyze --entra-only
+    
+      # On-prem only (prompts for AD creds, auto-discovers domain)
+      advulture analyze --ad-only
+    
+      # Hybrid (both on-prem AD and Entra)
+      advulture analyze --entra-auth device_code
+    
+    \b
+    On a domain-joined Windows machine with Kerberos ticket:
+      advulture analyze --ad-auth kerberos --entra-auth device_code
+    """
+    from advulture.config import Config, EntraAuthMode, LDAPAuthMode
     from advulture.analysis.posture import PostureAnalyzer
     from advulture.reporting.report import ReportGenerator
 
@@ -58,6 +96,53 @@ def analyze(ctx, output: Path, evtx, fmt: str):
 
     if evtx:
         cfg.logs.evtx_paths = list(evtx)
+
+    # Handle environment type flags
+    if entra_only and ad_only:
+        console.print("[red]Error:[/red] Cannot specify both --entra-only and --ad-only")
+        raise SystemExit(1)
+
+    if entra_only:
+        # Entra-only: disable on-prem AD
+        cfg.entra.enabled = True
+        cfg.entra.auth_mode = EntraAuthMode(entra_auth or "device_code")
+        cfg.ldap.server = ""
+        cfg.ldap.username = ""
+        console.print("[dim]Mode: Entra ID only (cloud)[/dim]")
+        
+    elif ad_only:
+        # AD-only: disable Entra
+        cfg.entra.enabled = False
+        cfg.ldap.auth_mode = LDAPAuthMode(ad_auth or "prompt")
+        if domain:
+            cfg.ldap.domain = domain
+        if server:
+            cfg.ldap.server = server
+        console.print("[dim]Mode: On-prem AD only[/dim]")
+        
+    else:
+        # Hybrid or default
+        if entra_auth:
+            cfg.entra.enabled = True
+            cfg.entra.auth_mode = EntraAuthMode(entra_auth)
+        if ad_auth:
+            cfg.ldap.auth_mode = LDAPAuthMode(ad_auth)
+        if domain:
+            cfg.ldap.domain = domain
+        if server:
+            cfg.ldap.server = server
+        if tenant_id:
+            cfg.entra.tenant_id = tenant_id
+        if client_id:
+            cfg.entra.client_id = client_id
+            
+        mode_parts = []
+        if cfg.ldap.server or cfg.ldap.domain or ad_auth:
+            mode_parts.append("on-prem AD")
+        if cfg.entra.enabled:
+            mode_parts.append("Entra ID")
+        if mode_parts:
+            console.print(f"[dim]Mode: {' + '.join(mode_parts)}[/dim]")
 
     console.print(Panel.fit(
         "[bold cyan]🦅 ADVulture[/bold cyan] — Starting analysis",
@@ -264,92 +349,56 @@ def audit(ctx, ntds: Path, system: Optional[Path], evtx, output: Path,
 
 @main.command()
 def configure():
-    """Generate example config.yaml."""
+    """Generate example config.yaml for automation scenarios."""
     example = Path("config.example.yaml")
     content = """# ADVulture Configuration
 # (c) 2025 Shane D. Shook, PhD - All Rights Reserved
+#
+# This config file is OPTIONAL. For interactive use, just run:
+#   advulture analyze --ad-only          # On-prem AD
+#   advulture analyze --entra-only       # Cloud (Entra ID)
+#   advulture analyze --entra-auth device_code  # Hybrid
+#
+# Use this config file for automation scenarios with stored credentials.
 
+# ── On-Premises Active Directory ──────────────────────────────────────
 ldap:
-  server: "ldaps://dc01.corp.local"
-  port: 636
-  use_ssl: true
-  username: "CORP\\advulture_svc"
-  password: "CHANGE_ME"
-  domain: "corp.local"
-  base_dn: "DC=corp,DC=local"
+  # Leave empty for auto-discovery, or specify explicitly
+  server: ""                    # e.g., "ldaps://dc01.corp.local"
+  domain: ""                    # e.g., "corp.local" (auto-discovered)
+  base_dn: ""                   # e.g., "DC=corp,DC=local" (derived from domain)
+  # Authentication: prompt, kerberos, ntlm, simple
+  auth_mode: "prompt"
+  # Only needed for auth_mode: simple (automation)
+  username: ""
+  password: ""
 
+# ── Event Log Collection ──────────────────────────────────────────────
 logs:
-  evtx_paths: []
-  winrm_hosts: []
+  evtx_paths: []                # List of EVTX files for offline analysis
   authn_window_days: 30
   authz_window_days: 90
 
+# ── Entra ID / Azure AD ───────────────────────────────────────────────
+# For interactive use, no config needed - just use --entra-auth device_code
 entra:
   enabled: false
+  # Authentication: device_code, interactive, client_secret, certificate, managed_identity
+  auth_mode: "device_code"
+  # Only needed for automation (client_secret, certificate, managed_identity)
   tenant_id: ""
   client_id: ""
   client_secret: ""
+  certificate_path: ""
 
-adfs:
-  enabled: false
-  server_hosts: []
-
+# ── Output ────────────────────────────────────────────────────────────
 db_path: "advulture.duckdb"
 report_dir: "reports"
 log_level: "INFO"
 """
     example.write_text(content)
     console.print(f"[green]Written:[/green] {example}")
-    console.print("Edit config.example.yaml then rename to config.yaml")
-
-
-@main.command()
-@click.option("--output", "-o", type=Path, default=Path("reports"),
-              help="Output directory for reports")
-@click.pass_context
-def collect(ctx, output: Path):
-    """Enumerate AD objects only (no ML analysis)."""
-    from advulture.config import Config
-    from advulture.collection.ldap_enumerator import LDAPEnumerator
-    import json
-    
-    config_path: Path = ctx.obj["config_path"]
-    if not config_path.exists():
-        console.print("[red]Error:[/red] config.yaml not found")
-        raise SystemExit(1)
-    
-    cfg = Config.from_file(config_path)
-    
-    console.print(Panel.fit(
-        "[bold cyan]🦅 ADVulture[/bold cyan] — Collection Mode",
-        border_style="cyan",
-    ))
-    
-    with console.status("[bold green]Enumerating AD objects..."):
-        enum = LDAPEnumerator(
-            cfg.ldap.server,
-            cfg.ldap.username,
-            cfg.ldap.password,
-            cfg.ldap.base_dn,
-        )
-        snapshot = enum.enumerate_all()
-    
-    console.print(
-        f"[bold]Collected:[/bold] "
-        f"{len(snapshot.users)} users, "
-        f"{len(snapshot.computers)} computers, "
-        f"{len(snapshot.groups)} groups"
-    )
-    
-    output.mkdir(parents=True, exist_ok=True)
-    from datetime import datetime
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    json_path = output / f"collection_{timestamp}.json"
-    
-    with open(json_path, "w") as f:
-        json.dump(snapshot.to_dict(), f, indent=2)
-    
-    console.print(f"[green]Collection saved:[/green] {json_path}")
+    console.print("This config is optional — for interactive use, just run: advulture analyze --ad-only")
 
 
 if __name__ == "__main__":

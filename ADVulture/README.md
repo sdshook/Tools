@@ -303,19 +303,154 @@ advulture configure
 
 ---
 
-## Usage
+## Authentication
 
-### Full Analysis (Live Environment)
+ADVulture supports three deployment scenarios with simple, interactive authentication for each:
+
+| Scenario | Command | What Happens |
+|----------|---------|--------------|
+| **Cloud-only (Entra ID)** | `advulture analyze --entra-only` | Browser login to Microsoft |
+| **On-prem only (AD)** | `advulture analyze --ad-only` | Prompts for AD credentials |
+| **Hybrid (AD + Entra)** | `advulture analyze --ad-only --entra-auth device_code` | Both prompts |
+
+### Simplest Usage
 
 ```bash
-# Run complete posture analysis against live AD
-advulture analyze --config config.yaml --output reports/
+# Cloud-only environment (Entra ID / Azure AD)
+advulture analyze --entra-only
 
-# Include specific EVTX files
-advulture analyze --config config.yaml --evtx Security.evtx --evtx System.evtx
+# On-prem only environment (traditional AD)
+advulture analyze --ad-only
 
-# Enumerate only (no ML analysis)
-advulture collect --config config.yaml --output reports/
+# Hybrid environment (domain-joined to Entra)
+advulture analyze --ad-only --entra-auth device_code
+```
+
+That's it. No config file needed. You'll be prompted to authenticate interactively.
+
+---
+
+### On-Premises Active Directory Authentication
+
+| Mode | Use Case | Credentials |
+|------|----------|-------------|
+| `prompt` | Interactive assessments (default) | Prompted at runtime |
+| `kerberos` | Domain-joined machine | Current Kerberos ticket |
+| `ntlm` | NTLM authentication | Prompted or config |
+| `simple` | Automation with config file | From config.yaml |
+
+```bash
+# Interactive prompt (default) - auto-discovers domain and DC
+advulture analyze --ad-only
+
+# Specify domain if not auto-detected
+advulture analyze --ad-only --domain corp.local
+
+# Use current Kerberos ticket (domain-joined Windows/Linux)
+advulture analyze --ad-only --ad-auth kerberos
+
+# NTLM authentication
+advulture analyze --ad-only --ad-auth ntlm
+```
+
+**Auto-discovery:**
+- **Domain**: Detected from `USERDNSDOMAIN` env var or machine FQDN
+- **Domain Controller**: DNS SRV lookup (`_ldap._tcp.dc._msdcs.DOMAIN`)
+- **Base DN**: Derived from domain name
+
+**Required permissions:** Domain Users + read access to AD objects (or Domain Admin for full analysis)
+
+---
+
+### Entra ID / Azure AD Authentication
+
+| Mode | Use Case | App Registration |
+|------|----------|-----------------|
+| `device_code` | CLI/SSH assessments (default) | **Not required** |
+| `interactive` | Desktop with browser | **Not required** |
+| `client_secret` | Automation | Required |
+| `certificate` | Secure automation | Required |
+| `managed_identity` | Azure-hosted | Required |
+
+```bash
+# Interactive - just log in (no app registration needed)
+advulture analyze --entra-only
+
+# Browser popup instead of device code
+advulture analyze --entra-only --entra-auth interactive
+
+# For automation (requires app registration + config file)
+advulture analyze --entra-only --config config.yaml
+```
+
+**How interactive auth works:**
+1. ADVulture uses Microsoft's well-known Azure CLI client ID
+2. You're prompted to visit a URL and enter a code
+3. You sign in with your admin credentials (MFA enforced by your CA policies)
+4. Your identity determines which tenant you access
+
+**Required roles** for interactive auth: Global Reader, Security Reader, or Reports Reader
+
+---
+
+### Hybrid Environment (On-Prem + Entra)
+
+For domain-joined environments synced to Entra ID:
+
+```bash
+# Prompt for AD creds + device code for Entra
+advulture analyze --ad-only --entra-auth device_code
+
+# Use Kerberos ticket + device code
+advulture analyze --ad-auth kerberos --entra-auth device_code
+
+# With DC event logs
+advulture analyze --ad-only --entra-auth device_code \
+  --evtx Security.evtx --evtx System.evtx
+```
+
+---
+
+### Automation (App Registration Required)
+
+For scheduled scans, create an app registration with **application** permissions:
+- `Directory.Read.All`, `AuditLog.Read.All`, `IdentityProtection.Read.All`
+- `Policy.Read.All`, `Reports.Read.All`, `RoleManagement.Read.Directory`
+
+```bash
+# Via environment variables
+export AZURE_TENANT_ID="your-tenant-id"
+export AZURE_CLIENT_ID="your-app-id"  
+export AZURE_CLIENT_SECRET="your-secret"
+advulture analyze --entra-only --entra-auth client_secret
+
+# Or via config.yaml
+advulture analyze --config config.yaml
+```
+
+**Security note:** App registrations create persistent high-privilege identities. Use interactive auth when possible.
+
+---
+
+## Usage
+
+### Full Analysis
+
+```bash
+# Cloud-only (Entra ID) — prompts for login
+advulture analyze --entra-only
+
+# On-prem only (AD) — prompts for credentials  
+advulture analyze --ad-only
+
+# Hybrid (AD + Entra) — prompts for both
+advulture analyze --ad-only --entra-auth device_code
+
+# With DC event logs
+advulture analyze --ad-only --evtx Security.evtx --evtx System.evtx
+
+# Using config file (for automation)
+advulture analyze --config config.yaml
 ```
 
 ### Offline Audit (NTDS.dit + SYSTEM + Logs)
@@ -368,17 +503,6 @@ The offline audit analyzes:
 - **Trust configurations** (SID filtering)
 - **Authentication anomalies** from event logs (password spray, Kerberoasting activity)
 - **Privilege use patterns** (SeDebugPrivilege, sensitive operations)
-
-### Scenario Testing
-
-```bash
-# Test specific remediation scenarios
-advulture scenario \
-  --deploy mfa_tier0=1.0 \
-  --deploy adcs_hardened=1.0 \
-  --deploy laps=1.0 \
-  --compare-to current
-```
 
 ### API Server
 

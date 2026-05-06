@@ -1,47 +1,67 @@
 # ADVulture Configuration
 # (c) 2025 Shane D. Shook, PhD - All Rights Reserved
-# Copy to config.yaml and edit before running.
+#
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │  THIS CONFIG FILE IS OPTIONAL                                        │
+# │                                                                       │
+# │  For interactive use, just run:                                       │
+# │    advulture analyze --ad-only          # On-prem AD                  │
+# │    advulture analyze --entra-only       # Cloud (Entra ID)            │
+# │    advulture analyze --ad-only --entra-auth device_code  # Hybrid     │
+# │                                                                       │
+# │  Use this config file only for AUTOMATION with stored credentials.   │
+# └─────────────────────────────────────────────────────────────────────┘
 
-# ── Active Directory LDAP ──────────────────────────────────────────────
+# ── On-Premises Active Directory ──────────────────────────────────────
 ldap:
-  server: "ldaps://dc01.corp.local"
+  # Leave empty for auto-discovery (recommended for interactive use)
+  server: ""                      # e.g., "ldaps://dc01.corp.local"
+  domain: ""                      # e.g., "corp.local" (auto-discovered)
+  base_dn: ""                     # e.g., "DC=corp,DC=local" (derived from domain)
   port: 636
   use_ssl: true
-  username: "CORP\\advulture_svc"
-  password: "CHANGE_ME"
-  domain: "corp.local"
-  base_dn: "DC=corp,DC=local"
-  page_size: 1000
+  
+  # Authentication mode:
+  #   prompt   - Prompt for credentials at runtime (default, recommended)
+  #   kerberos - Use current Kerberos ticket (domain-joined machine)
+  #   ntlm     - NTLM authentication
+  #   simple   - Simple LDAP bind with credentials below (automation only)
+  auth_mode: "prompt"
+  
+  # Only needed for auth_mode: simple (automation)
+  username: ""                    # e.g., "CORP\\svc_advulture"
+  password: ""
 
-# ── Event Log Collection ───────────────────────────────────────────────
+# ── Event Log Collection ──────────────────────────────────────────────
 logs:
-  # Option 1: offline EVTX files
-  evtx_paths:
-    - "/path/to/security.evtx"
-    - "/path/to/system.evtx"
-    - "/path/to/sysmon.evtx"
-  # Option 2: live WinRM collection (leave evtx_paths empty)
-  winrm_hosts:
-    - "dc01.corp.local"
-    - "dc02.corp.local"
-  winrm_username: "CORP\\advulture_svc"
-  winrm_password: "CHANGE_ME"
+  # EVTX files for offline/forensic analysis
+  evtx_paths: []
   # Collection windows
   authn_window_days: 30
   authz_window_days: 90
 
-# ── Entra ID / Azure AD ────────────────────────────────────────────────
+# ── Entra ID / Azure AD ───────────────────────────────────────────────
 entra:
   enabled: false
-  tenant_id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-  client_id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-  client_secret: "CHANGE_ME"
+  
+  # Authentication mode:
+  #   device_code      - Interactive device code flow (default, no app reg needed)
+  #   interactive      - Interactive browser popup (no app reg needed)
+  #   client_secret    - App registration with secret (automation)
+  #   certificate      - App registration with certificate (secure automation)
+  #   managed_identity - Azure Managed Identity (Azure-hosted only)
+  auth_mode: "device_code"
+  
+  # Only needed for automation (client_secret, certificate, managed_identity)
+  tenant_id: ""
+  client_id: ""
+  client_secret: ""
+  certificate_path: ""
 
 # ── ADFS Federation ───────────────────────────────────────────────────
 adfs:
   enabled: false
-  server_hosts:
-    - "adfs01.corp.local"
+  server_hosts: []
 
 # ── ML Configuration ──────────────────────────────────────────────────
 ml:

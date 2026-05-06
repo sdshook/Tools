@@ -4,15 +4,26 @@
 ADVulture — LDAP Enumerator
 Direct AD enumeration via LDAP3. Replaces SharpHound collection
 without external tooling dependency.
+
+Authentication Options:
+- prompt:    Prompt for credentials at runtime (default, no stored creds)
+- kerberos:  Use current Kerberos ticket (domain-joined machine)
+- ntlm:      NTLM authentication with provided credentials
+- simple:    Simple LDAP bind with credentials from config
 """
 
 from __future__ import annotations
 import logging
+import os
+import socket
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, Any
-from ldap3 import Server, Connection, ALL, SUBTREE, ALL_ATTRIBUTES
+from typing import Optional, List, Any, TYPE_CHECKING
+from ldap3 import Server, Connection, ALL, SUBTREE, ALL_ATTRIBUTES, SASL, NTLM
 from ldap3.core.exceptions import LDAPException
+
+if TYPE_CHECKING:
+    from advulture.config import LDAPConfig
 
 log = logging.getLogger(__name__)
 
@@ -160,6 +171,15 @@ class LDAPEnumerator:
     """
     Full Active Directory enumeration via LDAP3.
     Collects users, computers, groups, ACLs, trusts, ADCS templates.
+    
+    Authentication modes:
+    - prompt:    Interactive credential prompt (no stored creds)
+    - kerberos:  Use current Kerberos ticket (domain-joined machine)
+    - ntlm:      NTLM authentication
+    - simple:    Simple LDAP bind
+    
+    For the simplest usage, just instantiate with no arguments and it will
+    auto-discover the domain and prompt for credentials.
     """
 
     USER_ATTRS = [
@@ -199,22 +219,208 @@ class LDAPEnumerator:
         "nTSecurityDescriptor",
     ]
 
-    def __init__(self, server: str, username: str, password: str,
-                 base_dn: str, use_ssl: bool = True):
+    def __init__(
+        self,
+        server: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        base_dn: Optional[str] = None,
+        domain: Optional[str] = None,
+        use_ssl: bool = True,
+        auth_mode: str = "prompt",
+    ):
+        """
+        Initialize LDAP enumerator with flexible authentication.
+        
+        For interactive use, all parameters are optional:
+        - Domain and DC will be auto-discovered
+        - Credentials will be prompted at runtime
+        
+        Args:
+            server: DC hostname/IP (auto-discovered if not provided)
+            username: DOMAIN\\user or user@domain (prompted if not provided)
+            password: Password (prompted if not provided)
+            base_dn: LDAP base DN (derived from domain if not provided)
+            domain: Domain name (auto-discovered if not provided)
+            use_ssl: Use LDAPS (default True)
+            auth_mode: prompt, kerberos, ntlm, or simple
+        """
         self.server_uri = server
         self.username = username
         self.password = password
         self.base_dn = base_dn
+        self.domain = domain
         self.use_ssl = use_ssl
+        self.auth_mode = auth_mode.lower()
         self._conn: Optional[Connection] = None
 
-    def connect(self):
-        srv = Server(self.server_uri, get_info=ALL)
-        self._conn = Connection(
-            srv, user=self.username, password=self.password,
-            auto_bind=True, read_only=True,
+    @classmethod
+    def from_config(cls, config: "LDAPConfig") -> "LDAPEnumerator":
+        """Create enumerator from LDAPConfig object."""
+        return cls(
+            server=config.server or None,
+            username=config.username or None,
+            password=config.password or None,
+            base_dn=config.base_dn or None,
+            domain=config.domain or None,
+            use_ssl=config.use_ssl,
+            auth_mode=config.auth_mode.value if hasattr(config.auth_mode, 'value') else config.auth_mode,
         )
-        log.info("Connected to %s as %s", self.server_uri, self.username)
+
+    def _auto_discover_domain(self) -> str:
+        """Auto-discover domain from machine's DNS suffix or environment."""
+        # Try USERDNSDOMAIN (Windows domain-joined)
+        domain = os.environ.get("USERDNSDOMAIN")
+        if domain:
+            return domain.lower()
+        
+        # Try machine's FQDN
+        try:
+            fqdn = socket.getfqdn()
+            if "." in fqdn:
+                return ".".join(fqdn.split(".")[1:]).lower()
+        except Exception:
+            pass
+        
+        return ""
+
+    def _auto_discover_dc(self, domain: str) -> str:
+        """Auto-discover domain controller via DNS SRV lookup."""
+        import dns.resolver
+        try:
+            # Query _ldap._tcp.dc._msdcs.DOMAIN
+            srv_query = f"_ldap._tcp.dc._msdcs.{domain}"
+            answers = dns.resolver.resolve(srv_query, "SRV")
+            if answers:
+                dc = str(answers[0].target).rstrip(".")
+                log.info("Auto-discovered DC: %s", dc)
+                return dc
+        except Exception as e:
+            log.debug("DNS SRV lookup failed: %s", e)
+        
+        # Fallback: try common DC naming patterns
+        for prefix in ["dc1", "dc01", "dc"]:
+            try:
+                candidate = f"{prefix}.{domain}"
+                socket.gethostbyname(candidate)
+                log.info("Found DC by name: %s", candidate)
+                return candidate
+            except socket.gaierror:
+                continue
+        
+        return ""
+
+    def _domain_to_base_dn(self, domain: str) -> str:
+        """Convert domain.com to DC=domain,DC=com."""
+        parts = domain.lower().split(".")
+        return ",".join(f"DC={p}" for p in parts)
+
+    def _prompt_credentials(self):
+        """Prompt user for credentials interactively."""
+        from rich.console import Console
+        from rich.prompt import Prompt
+        from rich.panel import Panel
+        import getpass
+        
+        console = Console()
+        console.print(Panel.fit(
+            "[bold cyan]🔐 Active Directory Authentication[/bold cyan]\n\n"
+            f"Domain: [yellow]{self.domain or 'auto-detect'}[/yellow]\n"
+            f"Server: [yellow]{self.server_uri or 'auto-detect'}[/yellow]",
+            border_style="cyan",
+        ))
+        
+        if not self.username:
+            self.username = Prompt.ask(
+                "Username",
+                default=f"{self.domain}\\administrator" if self.domain else None
+            )
+        
+        if not self.password:
+            self.password = getpass.getpass("Password: ")
+
+    def connect(self):
+        """Connect to Active Directory with configured authentication."""
+        # Auto-discover domain if needed
+        if not self.domain:
+            self.domain = self._auto_discover_domain()
+            if not self.domain:
+                raise ValueError(
+                    "Could not auto-discover domain. Please specify --domain or "
+                    "run from a domain-joined machine."
+                )
+        
+        # Auto-discover DC if needed  
+        if not self.server_uri:
+            dc = self._auto_discover_dc(self.domain)
+            if dc:
+                protocol = "ldaps" if self.use_ssl else "ldap"
+                self.server_uri = f"{protocol}://{dc}"
+            else:
+                raise ValueError(
+                    f"Could not discover DC for domain {self.domain}. "
+                    "Please specify --server."
+                )
+        
+        # Derive base_dn if needed
+        if not self.base_dn:
+            self.base_dn = self._domain_to_base_dn(self.domain)
+        
+        # Handle authentication modes
+        srv = Server(self.server_uri, get_info=ALL)
+        
+        if self.auth_mode == "kerberos":
+            # Use GSSAPI/Kerberos with current ticket
+            log.info("Using Kerberos authentication (current ticket)")
+            self._conn = Connection(
+                srv,
+                authentication=SASL,
+                sasl_mechanism="GSSAPI",
+                auto_bind=True,
+                read_only=True,
+            )
+            
+        elif self.auth_mode == "ntlm":
+            # NTLM authentication
+            if not self.username or not self.password:
+                self._prompt_credentials()
+            log.info("Using NTLM authentication as %s", self.username)
+            self._conn = Connection(
+                srv,
+                user=self.username,
+                password=self.password,
+                authentication=NTLM,
+                auto_bind=True,
+                read_only=True,
+            )
+            
+        elif self.auth_mode == "prompt":
+            # Prompt for credentials if not provided
+            if not self.username or not self.password:
+                self._prompt_credentials()
+            log.info("Using simple bind as %s", self.username)
+            self._conn = Connection(
+                srv,
+                user=self.username,
+                password=self.password,
+                auto_bind=True,
+                read_only=True,
+            )
+            
+        else:  # simple
+            # Simple bind with provided credentials
+            if not self.username or not self.password:
+                raise ValueError("Username and password required for auth_mode='simple'")
+            log.info("Using simple bind as %s", self.username)
+            self._conn = Connection(
+                srv,
+                user=self.username,
+                password=self.password,
+                auto_bind=True,
+                read_only=True,
+            )
+        
+        log.info("Connected to %s (base: %s)", self.server_uri, self.base_dn)
 
     def disconnect(self):
         if self._conn:

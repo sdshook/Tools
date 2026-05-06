@@ -5,16 +5,41 @@ ADVulture — Entra ID (Azure AD) Enumerator and Log Ingester
 Microsoft Graph API collection for cloud and hybrid environments.
 Note: Azure AD was rebranded to Microsoft Entra ID in 2023.
 Both names refer to the same service and the same APIs.
+
+Authentication Options:
+- device_code:      Interactive login via device code flow (CLI/SSH-friendly)
+- interactive:      Interactive login via browser popup (desktop)
+- client_secret:    App registration with client secret (automation)
+- certificate:      App registration with certificate (more secure automation)
+- managed_identity: Azure Managed Identity (Azure-hosted workloads only)
+
+For interactive modes (device_code, interactive), no app registration is required.
+ADVulture uses Microsoft's well-known Azure CLI client ID by default.
 """
 
 from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from pathlib import Path
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from enum import Enum
 
+if TYPE_CHECKING:
+    from advulture.config import EntraConfig
+
 log = logging.getLogger(__name__)
+
+# Well-known Microsoft public client IDs (no app registration needed)
+AZURE_CLI_CLIENT_ID = "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+AZURE_POWERSHELL_CLIENT_ID = "1950a258-227b-4e31-a9cf-717495945fc2"
+GRAPH_POWERSHELL_CLIENT_ID = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
+
+# Default client ID for interactive auth (Azure CLI - widely trusted)
+DEFAULT_CLIENT_ID = AZURE_CLI_CLIENT_ID
+
+# Default tenant for multi-tenant auth (any work/school account)
+DEFAULT_TENANT = "organizations"
 
 
 class SignInResult(str, Enum):
@@ -177,9 +202,21 @@ class EntraEventStream:
 class EntraEnumerator:
     """
     Microsoft Graph API enumeration for Entra ID (Azure AD).
-    Requires: AuditLog.Read.All, Directory.Read.All,
-              IdentityProtection.Read.All, Policy.Read.All,
-              Reports.Read.All, RoleManagement.Read.Directory
+    
+    Supports multiple authentication modes:
+    - device_code:      Interactive login via device code (best for CLI/SSH)
+    - interactive:      Interactive login via browser popup (desktop)
+    - client_secret:    App registration with client secret
+    - certificate:      App registration with certificate
+    - managed_identity: Azure Managed Identity (Azure-hosted only)
+    
+    Required Permissions (Application or Delegated):
+        AuditLog.Read.All, Directory.Read.All,
+        IdentityProtection.Read.All, Policy.Read.All,
+        Reports.Read.All, RoleManagement.Read.Directory
+    
+    For delegated permissions, the signed-in user must have appropriate
+    admin roles (e.g., Global Reader, Security Reader, Reports Reader).
     """
 
     # AI agent identity name patterns for classification
@@ -189,23 +226,183 @@ class EntraEnumerator:
         "power virtual", "copilot studio",
     ]
 
-    def __init__(self, tenant_id: str, client_id: str, client_secret: str):
-        self.tenant_id = tenant_id
-        self.client_id = client_id
+    def __init__(
+        self,
+        tenant_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        certificate_path: Optional[str] = None,
+        certificate_password: Optional[str] = None,
+        auth_mode: str = "device_code",
+    ):
+        """
+        Initialize Entra ID enumerator with flexible authentication.
+        
+        For interactive modes (device_code, interactive), no parameters are required.
+        Just instantiate and call enumerate_all() - you'll be prompted to log in,
+        and your credentials determine which tenant you access.
+        
+        Args:
+            tenant_id: Azure AD tenant ID or "organizations"/"common".
+                       Optional for interactive auth (defaults to "organizations").
+            client_id: Application (client) ID. Optional for interactive auth
+                       (defaults to Azure CLI's well-known public client ID).
+            client_secret: Client secret (only for auth_mode="client_secret")
+            certificate_path: Path to .pem certificate (only for auth_mode="certificate")
+            certificate_password: Optional certificate password
+            auth_mode: One of: device_code, interactive, client_secret, 
+                       certificate, managed_identity
+        """
+        # For interactive auth, use sensible defaults (no app registration needed)
+        self.auth_mode = auth_mode.lower() if isinstance(auth_mode, str) else auth_mode
+        
+        if self.auth_mode in ("device_code", "interactive"):
+            self.tenant_id = tenant_id or DEFAULT_TENANT
+            self.client_id = client_id or DEFAULT_CLIENT_ID
+        else:
+            # Non-interactive modes require explicit IDs
+            if not tenant_id:
+                raise ValueError(f"tenant_id required for auth_mode='{auth_mode}'")
+            if not client_id:
+                raise ValueError(f"client_id required for auth_mode='{auth_mode}'")
+            self.tenant_id = tenant_id
+            self.client_id = client_id
+            
         self.client_secret = client_secret
+        self.certificate_path = certificate_path
+        self.certificate_password = certificate_password
         self._client = None
+        self._credential = None
+        self._authenticated_tenant_id = None  # Actual tenant after auth
+
+    @classmethod
+    def from_config(cls, config: "EntraConfig") -> "EntraEnumerator":
+        """Create enumerator from EntraConfig object."""
+        return cls(
+            tenant_id=config.tenant_id,
+            client_id=config.client_id,
+            client_secret=config.client_secret or None,
+            certificate_path=config.certificate_path or None,
+            certificate_password=config.certificate_password or None,
+            auth_mode=config.auth_mode.value if hasattr(config.auth_mode, 'value') else config.auth_mode,
+        )
+
+    def _get_credential(self):
+        """
+        Build Azure credential based on configured auth_mode.
+        
+        Returns appropriate credential for the configured authentication mode.
+        For interactive modes, will prompt user for authentication.
+        """
+        if self._credential is not None:
+            return self._credential
+
+        try:
+            from azure.identity import (
+                ClientSecretCredential,
+                CertificateCredential,
+                DeviceCodeCredential,
+                InteractiveBrowserCredential,
+                ManagedIdentityCredential,
+                ChainedTokenCredential,
+            )
+        except ImportError as e:
+            log.error("azure-identity not installed: %s", e)
+            raise ImportError(
+                "azure-identity package required. Install with: "
+                "pip install azure-identity"
+            ) from e
+
+        mode = self.auth_mode.lower() if isinstance(self.auth_mode, str) else self.auth_mode
+
+        if mode == "device_code":
+            log.info("Using device code authentication — check terminal for login URL")
+            self._credential = DeviceCodeCredential(
+                tenant_id=self.tenant_id,
+                client_id=self.client_id,
+                # Callback to display device code message
+                prompt_callback=self._device_code_prompt,
+            )
+
+        elif mode == "interactive":
+            log.info("Using interactive browser authentication")
+            self._credential = InteractiveBrowserCredential(
+                tenant_id=self.tenant_id,
+                client_id=self.client_id,
+            )
+
+        elif mode == "client_secret":
+            if not self.client_secret:
+                raise ValueError("client_secret required for auth_mode='client_secret'")
+            log.info("Using client secret authentication")
+            self._credential = ClientSecretCredential(
+                tenant_id=self.tenant_id,
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+            )
+
+        elif mode == "certificate":
+            if not self.certificate_path:
+                raise ValueError("certificate_path required for auth_mode='certificate'")
+            log.info("Using certificate authentication")
+            self._credential = CertificateCredential(
+                tenant_id=self.tenant_id,
+                client_id=self.client_id,
+                certificate_path=self.certificate_path,
+                password=self.certificate_password,
+            )
+
+        elif mode == "managed_identity":
+            log.info("Using managed identity authentication")
+            self._credential = ManagedIdentityCredential(
+                client_id=self.client_id if self.client_id else None,
+            )
+
+        else:
+            # Default: try managed identity first, fall back to device code
+            log.info("Using chained authentication (managed identity → device code)")
+            self._credential = ChainedTokenCredential(
+                ManagedIdentityCredential(),
+                DeviceCodeCredential(
+                    tenant_id=self.tenant_id,
+                    client_id=self.client_id,
+                    prompt_callback=self._device_code_prompt,
+                ),
+            )
+
+        return self._credential
+
+    def _device_code_prompt(self, verification_uri: str, user_code: str, expires_on: datetime):
+        """Callback to display device code authentication instructions."""
+        from rich.console import Console
+        from rich.panel import Panel
+        console = Console()
+        console.print(Panel.fit(
+            f"[bold cyan]🔐 Entra ID Authentication Required[/bold cyan]\n\n"
+            f"1. Open: [link={verification_uri}]{verification_uri}[/link]\n"
+            f"2. Enter code: [bold yellow]{user_code}[/bold yellow]\n"
+            f"3. Sign in with an admin account\n\n"
+            f"[dim]Code expires: {expires_on}[/dim]",
+            title="Device Code Login",
+            border_style="cyan",
+        ))
 
     def _get_client(self):
+        """Get or create Microsoft Graph client with configured authentication."""
         if self._client is None:
             try:
-                from azure.identity import ClientSecretCredential
                 from msgraph import GraphServiceClient
-                cred = ClientSecretCredential(
-                    self.tenant_id, self.client_id, self.client_secret
-                )
-                self._client = GraphServiceClient(credentials=cred)
-            except ImportError:
-                log.warning("msgraph-sdk or azure-identity not installed.")
+            except ImportError as e:
+                log.error("msgraph-sdk not installed: %s", e)
+                raise ImportError(
+                    "msgraph-sdk package required. Install with: "
+                    "pip install msgraph-sdk"
+                ) from e
+
+            credential = self._get_credential()
+            self._client = GraphServiceClient(credentials=credential)
+            log.info("Microsoft Graph client initialized (auth_mode=%s)", self.auth_mode)
+
         return self._client
 
     async def enumerate_all(self) -> EntraSnapshot:
@@ -287,6 +484,9 @@ class EntraLogIngester:
     """
     Fetches sign-in and audit logs from Microsoft Graph API.
     Maps Entra events to the same semantic categories as Windows Event Logs.
+    
+    Supports the same authentication modes as EntraEnumerator:
+    - device_code, interactive, client_secret, certificate, managed_identity
     """
 
     LEGACY_AUTH_PROTOCOLS = {
@@ -295,10 +495,63 @@ class EntraLogIngester:
         "basic authentication", "legacy auth",
     }
 
-    def __init__(self, tenant_id: str, client_id: str, client_secret: str):
+    def __init__(
+        self,
+        tenant_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        certificate_path: Optional[str] = None,
+        certificate_password: Optional[str] = None,
+        auth_mode: str = "device_code",
+    ):
+        """
+        Initialize Entra ID log ingester with flexible authentication.
+        
+        For interactive modes (device_code, interactive), no parameters are required.
+        Just instantiate and call collect_window() - you'll be prompted to log in.
+        
+        Args:
+            tenant_id: Azure AD tenant ID or "organizations"/"common".
+                       Optional for interactive auth.
+            client_id: Application (client) ID. Optional for interactive auth.
+            client_secret: Client secret (only for auth_mode="client_secret")
+            certificate_path: Path to .pem certificate (only for auth_mode="certificate")
+            certificate_password: Optional certificate password
+            auth_mode: One of: device_code, interactive, client_secret,
+                       certificate, managed_identity
+        """
         self.tenant_id = tenant_id
         self.client_id = client_id
         self.client_secret = client_secret
+        self.certificate_path = certificate_path
+        self.certificate_password = certificate_password
+        self.auth_mode = auth_mode
+        self._enumerator: Optional[EntraEnumerator] = None
+
+    @classmethod
+    def from_config(cls, config: "EntraConfig") -> "EntraLogIngester":
+        """Create log ingester from EntraConfig object."""
+        return cls(
+            tenant_id=config.tenant_id,
+            client_id=config.client_id,
+            client_secret=config.client_secret or None,
+            certificate_path=config.certificate_path or None,
+            certificate_password=config.certificate_password or None,
+            auth_mode=config.auth_mode.value if hasattr(config.auth_mode, 'value') else config.auth_mode,
+        )
+
+    def _get_enumerator(self) -> EntraEnumerator:
+        """Get shared EntraEnumerator for Graph client access."""
+        if self._enumerator is None:
+            self._enumerator = EntraEnumerator(
+                tenant_id=self.tenant_id,
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+                certificate_path=self.certificate_path,
+                certificate_password=self.certificate_password,
+                auth_mode=self.auth_mode,
+            )
+        return self._enumerator
 
     async def collect_window(self, days: int = 30) -> EntraEventStream:
         since = datetime.utcnow() - timedelta(days=days)
