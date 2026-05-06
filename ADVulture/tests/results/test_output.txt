@@ -19,13 +19,13 @@ tests/test_advulture.py::TestFinding::test_all_risk_classes_have_distinct_values
 tests/test_advulture.py::TestFinding::test_kerberoast_finding_template PASSED [ 29%]
 tests/test_advulture.py::TestFinding::test_lpe_finding_is_class_d PASSED [ 32%]
 tests/test_advulture.py::TestFinding::test_finding_weighted_priority PASSED [ 35%]
-tests/test_advulture.py::TestMarkovChain::test_steady_state_sums_to_one FAILED [ 38%]
+tests/test_advulture.py::TestMarkovChain::test_steady_state_sums_to_one PASSED [ 38%]
 tests/test_advulture.py::TestMarkovChain::test_tier0_is_absorbing PASSED [ 41%]
-tests/test_advulture.py::TestMarkovChain::test_gradient_flows_through_theta FAILED [ 44%]
+tests/test_advulture.py::TestMarkovChain::test_gradient_flows_through_theta PASSED [ 44%]
 tests/test_advulture.py::TestKillChainHMM::test_clean_sequence_detects_clean_phase PASSED [ 47%]
 tests/test_advulture.py::TestKillChainHMM::test_spray_sequence_detects_compromise PASSED [ 50%]
 tests/test_advulture.py::TestKillChainHMM::test_phase_distribution_sums_to_one PASSED [ 52%]
-tests/test_advulture.py::TestPostureAnalyzerSmoke::test_analyze_with_empty_snapshot FAILED [ 55%]
+tests/test_advulture.py::TestPostureAnalyzerSmoke::test_analyze_with_empty_snapshot PASSED [ 55%]
 tests/test_audit.py::TestOfflineUser::test_user_enabled_flag PASSED      [ 58%]
 tests/test_audit.py::TestOfflineUser::test_kerberoastable_detection PASSED [ 61%]
 tests/test_audit.py::TestOfflineUser::test_asrep_roastable_detection PASSED [ 64%]
@@ -42,38 +42,6 @@ tests/test_audit.py::TestOfflineAuditor::test_asrep_roastable_audit PASSED [ 94%
 tests/test_audit.py::TestOfflineAuditor::test_unconstrained_delegation_audit PASSED [ 97%]
 tests/test_audit.py::TestRunAuditFunction::test_run_audit_with_no_files PASSED [100%]
 
-=================================== FAILURES ===================================
-________________ TestMarkovChain.test_steady_state_sums_to_one _________________
-tests/test_advulture.py:218: in test_steady_state_sums_to_one
-    assert abs(total - 1.0) < 0.01, f"Steady state should sum to 1, got {total}"
-E   AssertionError: Steady state should sum to 1, got 0.0
-E   assert 1.0 < 0.01
-E    +  where 1.0 = abs((0.0 - 1.0))
-______________ TestMarkovChain.test_gradient_flows_through_theta _______________
-tests/test_advulture.py:249: in test_gradient_flows_through_theta
-    loss.backward()
-/home/openhands/.local/lib/python3.13/site-packages/torch/_tensor.py:631: in backward
-    torch.autograd.backward(
-/home/openhands/.local/lib/python3.13/site-packages/torch/autograd/__init__.py:381: in backward
-    _engine_run_backward(
-/home/openhands/.local/lib/python3.13/site-packages/torch/autograd/graph.py:869: in _engine_run_backward
-    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
-E   RuntimeError: element 0 of tensors does not require grad and does not have a grad_fn
-__________ TestPostureAnalyzerSmoke.test_analyze_with_empty_snapshot ___________
-tests/test_advulture.py:305: in test_analyze_with_empty_snapshot
-    report = analyzer.analyze()
-             ^^^^^^^^^^^^^^^^^^
-advulture/analysis/posture.py:196: in analyze
-    ranking = self.gradient_engine.compute_ranking(
-advulture/ml/markov/chain.py:367: in compute_ranking
-    tier0_prob.backward()
-/home/openhands/.local/lib/python3.13/site-packages/torch/_tensor.py:631: in backward
-    torch.autograd.backward(
-/home/openhands/.local/lib/python3.13/site-packages/torch/autograd/__init__.py:381: in backward
-    _engine_run_backward(
-/home/openhands/.local/lib/python3.13/site-packages/torch/autograd/graph.py:869: in _engine_run_backward
-    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
-E   RuntimeError: element 0 of tensors does not require grad and does not have a grad_fn
 =============================== warnings summary ===============================
 ../../../../home/openhands/.local/lib/python3.13/site-packages/_pytest/config/__init__.py:1434
   /home/openhands/.local/lib/python3.13/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: asyncio_mode
@@ -103,6 +71,10 @@ tests/test_advulture.py::TestEventStream::test_dcsync_detection
 tests/test_advulture.py::TestPostureAnalyzerSmoke::test_analyze_with_empty_snapshot
   /workspace/project/Tools/ADVulture/tests/test_advulture.py:301: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
     base_dn="DC=test,DC=local", timestamp=datetime.utcnow()
+
+tests/test_advulture.py::TestPostureAnalyzerSmoke::test_analyze_with_empty_snapshot
+  /workspace/project/Tools/ADVulture/advulture/analysis/posture.py:223: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    timestamp=datetime.utcnow(),
 
 tests/test_audit.py::TestOfflineUser::test_password_age_calculation
   /workspace/project/Tools/ADVulture/tests/test_audit.py:102: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
@@ -143,8 +115,4 @@ tests/test_audit.py::TestOfflineAuditor::test_unconstrained_delegation_audit
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 - Generated html report: file:///workspace/project/Tools/ADVulture/tests/results/test_report.html -
-=========================== short test summary info ============================
-FAILED tests/test_advulture.py::TestMarkovChain::test_steady_state_sums_to_one
-FAILED tests/test_advulture.py::TestMarkovChain::test_gradient_flows_through_theta
-FAILED tests/test_advulture.py::TestPostureAnalyzerSmoke::test_analyze_with_empty_snapshot
-================== 3 failed, 31 passed, 23 warnings in 1.42s ===================
+======================= 34 passed, 24 warnings in 1.31s ========================

@@ -59,38 +59,80 @@ class AttackChainMarkov:
         """
         Constructs N×N differentiable transition matrix.
         LPE paths are added as additional transitions orthogonal to AD-based paths.
+        
+        IMPORTANT: This method preserves gradient tracking through theta parameters.
         """
-        P = torch.zeros(self.n, self.n, requires_grad=False)
+        # Start with zeros - we'll accumulate differentiable values
+        P = torch.zeros(self.n, self.n, dtype=torch.float32)
+        
+        # Ensure edge_probs supports gradients if needed
+        if not edge_probs.requires_grad:
+            edge_probs = edge_probs.clone().detach()
 
         # Standard AD graph transitions
+        # Apply control suppression to edge probabilities
+        # Base suppression from MFA and other controls
+        mfa = theta.get("mfa_coverage", torch.tensor(0.0, dtype=torch.float32))
+        smb = theta.get("smb_signing", torch.tensor(0.0, dtype=torch.float32))
+        tiered = theta.get("tiered_admin", torch.tensor(0.0, dtype=torch.float32))
+        
+        # Combined suppression factor (controls reduce transition probability)
+        suppression = 1.0 - 0.3 * mfa - 0.2 * smb - 0.25 * tiered
+        suppression = torch.clamp(suppression, min=0.1, max=1.0)
+        
         for idx in range(edge_index.shape[1]):
             src = edge_index[0, idx].item()
             dst = edge_index[1, idx].item()
-            p = edge_probs[idx]
-            P[src, dst] = torch.max(P[src, dst], p)
+            # Apply suppression to edge probability (maintains gradient flow)
+            p = edge_probs[idx] * suppression
+            # Use in-place max operation while preserving gradients
+            if P[src, dst] < p:
+                P = P.clone()  # Avoid in-place modification issues
+                P[src, dst] = p
 
         # LPE transitions (suppressed only by EDR, not AD controls)
         if lpe_pairs:
-            edr = theta.get("edr_coverage", torch.tensor(0.0))
+            edr = theta.get("edr_coverage", torch.tensor(0.0, dtype=torch.float32))
             for lpe in lpe_pairs:
                 src_id = lpe.get("account_node_id")
                 sys_id = lpe.get("system_node_id")
-                if src_id is not None and sys_id is not None:
-                    lpe_p = torch.tensor(lpe.get("probability", 0.5)) * (1 - 0.80 * edr)
-                    P[src_id, sys_id] = torch.max(P[src_id, sys_id], lpe_p)
+                if src_id is not None and sys_id is not None and src_id < self.n and sys_id < self.n:
+                    base_prob = torch.tensor(lpe.get("probability", 0.5), dtype=torch.float32)
+                    lpe_p = base_prob * (1.0 - 0.80 * edr)
+                    if P[src_id, sys_id] < lpe_p:
+                        P = P.clone()
+                        P[src_id, sys_id] = lpe_p
                     # SYSTEM → cached credential nodes
                     for cred_node_id in lpe.get("credential_nodes", []):
-                        P[sys_id, cred_node_id] = torch.tensor(0.95)
+                        if cred_node_id < self.n:
+                            P = P.clone()
+                            P[sys_id, cred_node_id] = torch.tensor(0.95, dtype=torch.float32)
 
         # Absorbing states: once Tier0 is reached, attacker stays
-        tier0 = torch.tensor(self.tier0_ids)
-        P[tier0] = 0.0
+        # Zero out rows for tier0 nodes, then set self-loop to 1
         for t in self.tier0_ids:
-            P[t, t] = 1.0
+            if t < self.n:
+                P = P.clone()
+                P[t, :] = 0.0
+                P[t, t] = 1.0
 
-        # Row-normalise
-        row_sums = P.sum(dim=1, keepdim=True).clamp(min=1e-10)
+        # Row-normalize to make it a valid stochastic matrix
+        # Add small self-loop probability for nodes with no outgoing edges
+        row_sums = P.sum(dim=1, keepdim=True)
+        
+        # For rows with zero sum (no outgoing edges), add self-loop
+        zero_rows = (row_sums.squeeze() < 1e-10)
+        if zero_rows.any():
+            P = P.clone()
+            for i in range(self.n):
+                if zero_rows[i] and i not in self.tier0_ids:
+                    P[i, i] = 1.0
+            row_sums = P.sum(dim=1, keepdim=True)
+        
+        # Normalize
+        row_sums = row_sums.clamp(min=1e-10)
         P = P / row_sums
+        
         return P
 
     def steady_state(self, P: torch.Tensor) -> torch.Tensor:
@@ -98,13 +140,25 @@ class AttackChainMarkov:
         Power iteration — converges in ~150 steps.
         Differentiable through autograd: gradients flow back through
         each iteration to all parameters that affect P.
+        
+        Returns a valid probability distribution that sums to 1.0.
         """
-        pi = torch.ones(self.n, device=P.device) / self.n
-        for _ in range(150):
-            pi_next = pi @ P
-            if torch.norm(pi_next - pi) < 1e-9:
+        # Initialize with uniform distribution
+        pi = torch.ones(self.n, dtype=P.dtype, device=P.device) / self.n
+        
+        # Power iteration
+        for iteration in range(200):
+            pi_next = torch.matmul(pi, P)
+            
+            # Check convergence
+            diff = torch.norm(pi_next - pi)
+            if diff < 1e-10:
                 break
             pi = pi_next
+        
+        # Ensure it sums to 1 (numerical stability)
+        pi = pi / (pi.sum() + 1e-10)
+        
         return pi
 
     def mean_first_passage_time(self, P: torch.Tensor) -> float:
@@ -133,13 +187,23 @@ class AttackChainMarkov:
     ) -> MarkovResult:
         P = self.build_transition_matrix(edge_index, edge_probs, theta, lpe_pairs)
         pi = self.steady_state(P)
-        tier0_tensor = torch.tensor(self.tier0_ids)
-        tier0_prob = pi[tier0_tensor].sum().item()
+        
+        # Get tier0 probability (keep as tensor for potential gradient flow)
+        valid_tier0_ids = [t for t in self.tier0_ids if t < self.n]
+        if valid_tier0_ids:
+            tier0_prob_tensor = pi[valid_tier0_ids].sum()
+            tier0_prob = tier0_prob_tensor.item()
+        else:
+            tier0_prob = 0.0
+        
         mfpt = self.mean_first_passage_time(P)
 
         # Most exposed non-Tier0 nodes (high steady-state probability)
-        pi_np = pi.detach().numpy()
-        pi_np[self.tier0_ids] = 0.0
+        # IMPORTANT: Use .copy() to avoid modifying the original tensor
+        pi_np = pi.detach().numpy().copy()
+        for t in self.tier0_ids:
+            if t < len(pi_np):
+                pi_np[t] = 0.0
         top_exposed = np.argsort(pi_np)[::-1][:10].tolist()
 
         return MarkovResult(
@@ -359,19 +423,44 @@ class GradientEngine:
             for k, v in theta_values.items()
         }
 
-        # Forward: compute π_tier0
-        result = markov.analyze(edge_index, edge_probs, theta, lpe_pairs)
-        tier0_prob = result.pi[torch.tensor(markov.tier0_ids)].sum()
-
-        # Backward: ∂π_tier0/∂theta
-        tier0_prob.backward()
+        # Build transition matrix with gradient tracking
+        P = markov.build_transition_matrix(edge_index, edge_probs, theta, lpe_pairs)
+        
+        # Compute steady state
+        pi = markov.steady_state(P)
+        
+        # Get tier0 probability as a differentiable tensor
+        valid_tier0_ids = [t for t in markov.tier0_ids if t < markov.n]
+        
+        if valid_tier0_ids:
+            tier0_prob = pi[valid_tier0_ids].sum()
+        else:
+            # No valid tier0 nodes - use a dummy differentiable value
+            tier0_prob = pi.sum() * 0.0  # Zero but maintains grad connection
+        
+        # Check if gradient computation is possible
+        grads = {}
+        if tier0_prob.requires_grad:
+            try:
+                # Backward: ∂π_tier0/∂theta
+                tier0_prob.backward(retain_graph=True)
+                
+                for ctrl, t in theta.items():
+                    grads[ctrl] = t.grad.item() if t.grad is not None else 0.0
+            except RuntimeError as e:
+                log.warning("Gradient computation failed: %s. Using numerical gradients.", e)
+                grads = self._numerical_gradients(edge_index, edge_probs, theta_values, markov, lpe_pairs)
+        else:
+            # Fall back to numerical gradient estimation
+            log.debug("Tensor does not require grad, using numerical gradients")
+            grads = self._numerical_gradients(edge_index, edge_probs, theta_values, markov, lpe_pairs)
 
         # Phase-weighted priority
         phase_weights = self._phase_weights(phase_detection)
 
         items = []
-        for ctrl, t in theta.items():
-            grad = t.grad.item() if t.grad is not None else 0.0
+        for ctrl in theta_values.keys():
+            grad = grads.get(ctrl, 0.0)
             phase_rel = phase_weights.get(ctrl, 1.0)
             items.append(RemediationItem(
                 control=ctrl,
@@ -384,6 +473,43 @@ class GradientEngine:
             ))
 
         return sorted(items, key=lambda x: x.weighted_priority, reverse=True)
+    
+    def _numerical_gradients(
+        self,
+        edge_index: torch.Tensor,
+        edge_probs: torch.Tensor,
+        theta_values: Dict[str, float],
+        markov: AttackChainMarkov,
+        lpe_pairs: Optional[List] = None,
+        epsilon: float = 0.01,
+    ) -> Dict[str, float]:
+        """
+        Compute numerical gradients via finite differences.
+        Fallback when autograd fails.
+        """
+        grads = {}
+        
+        # Baseline tier0 probability
+        theta_base = {k: torch.tensor(v, dtype=torch.float32) for k, v in theta_values.items()}
+        P_base = markov.build_transition_matrix(edge_index, edge_probs, theta_base, lpe_pairs)
+        pi_base = markov.steady_state(P_base)
+        valid_tier0_ids = [t for t in markov.tier0_ids if t < markov.n]
+        base_prob = pi_base[valid_tier0_ids].sum().item() if valid_tier0_ids else 0.0
+        
+        # Compute gradient for each control
+        for ctrl in theta_values.keys():
+            # Perturb control value
+            theta_plus = {k: torch.tensor(v, dtype=torch.float32) for k, v in theta_values.items()}
+            theta_plus[ctrl] = torch.tensor(min(theta_values[ctrl] + epsilon, 1.0), dtype=torch.float32)
+            
+            P_plus = markov.build_transition_matrix(edge_index, edge_probs, theta_plus, lpe_pairs)
+            pi_plus = markov.steady_state(P_plus)
+            plus_prob = pi_plus[valid_tier0_ids].sum().item() if valid_tier0_ids else 0.0
+            
+            # Numerical gradient (negative because increasing control should decrease risk)
+            grads[ctrl] = (plus_prob - base_prob) / epsilon
+        
+        return grads
 
     def _phase_weights(self, detection: PhaseDetection) -> Dict[str, float]:
         dist = detection.distribution
