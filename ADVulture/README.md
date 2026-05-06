@@ -307,26 +307,35 @@ advulture configure
 
 ADVulture supports three deployment scenarios with simple, interactive authentication for each:
 
-| Scenario | Command | What Happens |
+| Scenario | Command | Data Sources |
 |----------|---------|--------------|
-| **Cloud-only (Entra ID)** | `advulture analyze --entra-only` | Browser login to Microsoft |
-| **On-prem only (AD)** | `advulture analyze --ad-only` | Prompts for AD credentials |
-| **Hybrid (AD + Entra)** | `advulture analyze --ad-only --entra-auth device_code` | Both prompts |
+| **Cloud-only** | `advulture analyze --entra-only` | Entra ID directory + sign-in logs |
+| **On-prem only** | `advulture analyze --ad-only --evtx *.evtx` | AD via LDAP + DC event logs |
+| **Hybrid** | `advulture analyze --entra-auth device_code --evtx *.evtx` | All of the above |
 
 ### Simplest Usage
 
 ```bash
 # Cloud-only environment (Entra ID / Azure AD)
+# - Entra directory objects + 30 days of sign-in/audit logs
 advulture analyze --entra-only
 
 # On-prem only environment (traditional AD)
-advulture analyze --ad-only
+# - AD objects via LDAP + DC event logs for behavioral analysis
+advulture analyze --ad-only \
+  --evtx /path/to/Security.evtx \
+  --evtx /path/to/System.evtx
 
-# Hybrid environment (domain-joined to Entra)
-advulture analyze --ad-only --entra-auth device_code
+# Hybrid environment (AD synced to Entra)
+# - AD objects + DC logs + Entra directory + Entra sign-in logs
+advulture analyze --entra-auth device_code \
+  --evtx /path/to/Security.evtx \
+  --evtx /path/to/System.evtx
 ```
 
-That's it. No config file needed. You'll be prompted to authenticate interactively.
+No config file needed. You'll be prompted to authenticate interactively.
+
+**Note:** For full behavioral analysis, always include DC event logs (`--evtx`). The EVTX files contain authentication events (4624, 4625, 4768, 4769, etc.) essential for detecting attack patterns.
 
 ---
 
@@ -395,18 +404,32 @@ advulture analyze --entra-only --config config.yaml
 
 ### Hybrid Environment (On-Prem + Entra)
 
-For domain-joined environments synced to Entra ID:
+For domain-joined environments synced to Entra ID via Azure AD Connect:
 
 ```bash
-# Prompt for AD creds + device code for Entra
-advulture analyze --ad-only --entra-auth device_code
+# Full hybrid analysis with DC event logs
+# - Prompts for AD credentials
+# - Prompts for Entra device code
+# - Collects DC Security/System logs
+advulture analyze --entra-auth device_code \
+  --evtx /path/to/Security.evtx \
+  --evtx /path/to/System.evtx \
+  --evtx /path/to/Sysmon.evtx
 
-# Use Kerberos ticket + device code
-advulture analyze --ad-auth kerberos --entra-auth device_code
-
-# With DC event logs
-advulture analyze --ad-only --entra-auth device_code \
+# Using Kerberos ticket (domain-joined machine)
+advulture analyze --ad-auth kerberos --entra-auth device_code \
   --evtx Security.evtx --evtx System.evtx
+
+# Specify domain explicitly if auto-discovery fails
+advulture analyze --domain corp.local --entra-auth device_code \
+  --evtx Security.evtx
+```
+
+**Collecting DC logs:** Export from domain controllers before running:
+```powershell
+wevtutil epl Security C:\logs\Security.evtx
+wevtutil epl System C:\logs\System.evtx
+wevtutil epl Microsoft-Windows-Sysmon/Operational C:\logs\Sysmon.evtx
 ```
 
 ---
@@ -437,17 +460,16 @@ advulture analyze --config config.yaml
 ### Full Analysis
 
 ```bash
-# Cloud-only (Entra ID) — prompts for login
+# Cloud-only (Entra ID)
 advulture analyze --entra-only
 
-# On-prem only (AD) — prompts for credentials  
-advulture analyze --ad-only
+# On-prem only (AD + DC logs)
+advulture analyze --ad-only \
+  --evtx Security.evtx --evtx System.evtx
 
-# Hybrid (AD + Entra) — prompts for both
-advulture analyze --ad-only --entra-auth device_code
-
-# With DC event logs
-advulture analyze --ad-only --evtx Security.evtx --evtx System.evtx
+# Hybrid (AD + Entra + DC logs) — recommended for domain-joined environments
+advulture analyze --entra-auth device_code \
+  --evtx Security.evtx --evtx System.evtx
 
 # Using config file (for automation)
 advulture analyze --config config.yaml
