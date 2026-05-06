@@ -30,6 +30,26 @@ Authorization records (the granular logs of what accounts actually accessed, whe
 - **Delegation chains** that are architecturally permitted but behaviorally anomalous when actually exercised
 - **Authentication timing** that reveals credential theft, since legitimate users do not authenticate at 3 AM from foreign IP ranges, even if their accounts technically permit it
 
+### The Agentic AI Dimension
+
+Agentic AI introduces an entirely new category of IAM and IGA risk that traditional identity evaluation frameworks are not equipped to address.
+
+AI agents are effectively delegated permissions by objects controlled by domain services: an OAuth application registration, a service principal, or an Entra ID managed identity. From a traditional rights-architecture perspective, the agent's permissions appear bounded by the scopes granted to its controlling identity. The evaluation stops there.
+
+However, agents possess characteristics that fundamentally break this assumption:
+
+- **System primitives access:** Agents with code execution capabilities (MCP tools, function calling, shell access) can invoke operating system primitives, file system operations, network calls, and API requests that extend far beyond their OAuth scopes. The agent's *effective* permission surface is the union of its delegated identity rights and the system capabilities of its execution environment.
+
+- **Self-directed learning and adaptation:** Agents with memory, retrieval-augmented generation, or fine-tuning feedback loops can learn access patterns, discover available resources, and optimize their own lateral movement strategies. Unlike static service accounts, agents evolve their behavior based on what they encounter.
+
+- **Autonomous lateral access:** An agent granted Mail.Read and a code execution tool can read an email containing credentials, then use those credentials to access systems entirely outside its delegated scope. The agent's authorization boundary is not its configured permissions; it is the transitive closure of everything reachable from its starting position plus its runtime capabilities.
+
+- **Prompt injection as privilege escalation:** External content (emails, documents, web pages) processed by the agent can contain adversarial instructions that hijack agent behavior. The resulting actions execute with the agent's full delegated authority, but serve attacker objectives.
+
+These dynamics mean that evaluation of authentication architecture alone, without review of authorization history, will not surface agentic risk. The agent's identity may authenticate correctly, its OAuth token may contain only approved scopes, and its service principal may appear properly constrained. Yet its actual resource accesses, lateral movements, and data exfiltration activities are invisible until authorization logs reveal what the agent actually did versus what its identity configuration appeared to permit.
+
+ADVulture addresses this through its Risk Class F (AI Agent Surface), which models agent permissions, execution capabilities, and observed behavioral patterns as first-class elements of the posture graph.
+
 Traditional tools see the rights. Forensic investigators see the use. The disconnect means security teams are perpetually reactive, discovering the gap only after breach evidence forces them to examine what credentials actually did versus what they were allowed to do.
 
 ### The Coincident Approach
