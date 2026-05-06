@@ -305,18 +305,69 @@ advulture configure
 
 ## Usage
 
-### Full Analysis
+### Full Analysis (Live Environment)
 
 ```bash
-# Run complete posture analysis
+# Run complete posture analysis against live AD
 advulture analyze --config config.yaml --output reports/
 
-# Specify log window
-advulture analyze --log-window 30 --authz-window 90
+# Include specific EVTX files
+advulture analyze --config config.yaml --evtx Security.evtx --evtx System.evtx
 
 # Enumerate only (no ML analysis)
-advulture collect --config config.yaml
+advulture collect --config config.yaml --output reports/
 ```
+
+### Offline Audit (NTDS.dit + SYSTEM + Logs)
+
+For forensic analysis or environments where live access is not available, ADVulture can analyze extracted AD artifacts:
+
+```bash
+# Basic audit with NTDS.dit only
+advulture audit --ntds ./ntds.dit --output reports/
+
+# Full audit with SYSTEM hive and event logs
+advulture audit \
+  --ntds ./ntds.dit \
+  --system ./SYSTEM \
+  --evtx ./Security.evtx \
+  --evtx ./System.evtx \
+  --output reports/
+
+# Extract password hashes (requires SYSTEM hive)
+advulture audit \
+  --ntds ./ntds.dit \
+  --system ./SYSTEM \
+  --extract-hashes \
+  --output reports/
+```
+
+**Artifact Collection:** To obtain these files from a domain controller:
+
+```powershell
+# Create VSS snapshot and extract NTDS.dit
+ntdsutil "ac i ntds" "ifm" "create full C:\extract" q q
+
+# Or use Volume Shadow Copy directly
+vssadmin create shadow /for=C:
+copy \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1\Windows\NTDS\ntds.dit C:\extract\
+copy \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1\Windows\System32\config\SYSTEM C:\extract\
+
+# Export event logs
+wevtutil epl Security C:\extract\Security.evtx
+wevtutil epl System C:\extract\System.evtx
+```
+
+The offline audit analyzes:
+- **Kerberoastable accounts** (SPNs on user accounts)
+- **AS-REP roastable accounts** (preauth disabled)
+- **Password policy violations** (never expires, not required)
+- **Privileged account hygiene** (stale passwords, dormant accounts)
+- **Delegation misconfigurations** (unconstrained, RBCD)
+- **Legacy operating systems**
+- **Trust configurations** (SID filtering)
+- **Authentication anomalies** from event logs (password spray, Kerberoasting activity)
+- **Privilege use patterns** (SeDebugPrivilege, sensitive operations)
 
 ### Scenario Testing
 
