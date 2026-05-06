@@ -1,0 +1,150 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0 -- /usr/local/bin/python
+cachedir: .pytest_cache
+metadata: {'Python': '3.13.13', 'Platform': 'Linux-6.8.0-1025-gke-x86_64-with-glibc2.41', 'Packages': {'pytest': '9.0.3', 'pluggy': '1.6.0'}, 'Plugins': {'anyio': '4.13.0', 'metadata': '3.1.1', 'html': '4.2.0'}}
+rootdir: /workspace/project/Tools/ADVulture
+configfile: pyproject.toml
+plugins: anyio-4.13.0, metadata-3.1.1, html-4.2.0
+collecting ... collected 34 items
+
+tests/test_advulture.py::TestLDAPEnumerator::test_uac_flag_parsing PASSED [  2%]
+tests/test_advulture.py::TestLDAPEnumerator::test_esc1_detection PASSED  [  5%]
+tests/test_advulture.py::TestLDAPEnumerator::test_esc1_not_triggered_with_manager_approval PASSED [  8%]
+tests/test_advulture.py::TestEventStream::test_event_filtering_by_id PASSED [ 11%]
+tests/test_advulture.py::TestEventStream::test_rc4_downgrade_detection PASSED [ 14%]
+tests/test_advulture.py::TestEventStream::test_dcsync_detection PASSED   [ 17%]
+tests/test_advulture.py::TestEventStream::test_edge_tensor_anomaly_scoring PASSED [ 20%]
+tests/test_advulture.py::TestFinding::test_finding_id_is_deterministic PASSED [ 23%]
+tests/test_advulture.py::TestFinding::test_all_risk_classes_have_distinct_values PASSED [ 26%]
+tests/test_advulture.py::TestFinding::test_kerberoast_finding_template PASSED [ 29%]
+tests/test_advulture.py::TestFinding::test_lpe_finding_is_class_d PASSED [ 32%]
+tests/test_advulture.py::TestFinding::test_finding_weighted_priority PASSED [ 35%]
+tests/test_advulture.py::TestMarkovChain::test_steady_state_sums_to_one FAILED [ 38%]
+tests/test_advulture.py::TestMarkovChain::test_tier0_is_absorbing PASSED [ 41%]
+tests/test_advulture.py::TestMarkovChain::test_gradient_flows_through_theta FAILED [ 44%]
+tests/test_advulture.py::TestKillChainHMM::test_clean_sequence_detects_clean_phase PASSED [ 47%]
+tests/test_advulture.py::TestKillChainHMM::test_spray_sequence_detects_compromise PASSED [ 50%]
+tests/test_advulture.py::TestKillChainHMM::test_phase_distribution_sums_to_one PASSED [ 52%]
+tests/test_advulture.py::TestPostureAnalyzerSmoke::test_analyze_with_empty_snapshot FAILED [ 55%]
+tests/test_audit.py::TestOfflineUser::test_user_enabled_flag PASSED      [ 58%]
+tests/test_audit.py::TestOfflineUser::test_kerberoastable_detection PASSED [ 61%]
+tests/test_audit.py::TestOfflineUser::test_asrep_roastable_detection PASSED [ 64%]
+tests/test_audit.py::TestOfflineUser::test_password_age_calculation PASSED [ 67%]
+tests/test_audit.py::TestOfflineUser::test_delegation_flags PASSED       [ 70%]
+tests/test_audit.py::TestOfflineComputer::test_domain_controller_detection PASSED [ 73%]
+tests/test_audit.py::TestOfflineComputer::test_unconstrained_delegation PASSED [ 76%]
+tests/test_audit.py::TestOfflineGroup::test_privileged_group_detection PASSED [ 79%]
+tests/test_audit.py::TestAuditFinding::test_finding_to_dict PASSED       [ 82%]
+tests/test_audit.py::TestAuditReport::test_severity_counting PASSED      [ 85%]
+tests/test_audit.py::TestAuditReport::test_report_summary PASSED         [ 88%]
+tests/test_audit.py::TestOfflineAuditor::test_kerberoastable_audit PASSED [ 91%]
+tests/test_audit.py::TestOfflineAuditor::test_asrep_roastable_audit PASSED [ 94%]
+tests/test_audit.py::TestOfflineAuditor::test_unconstrained_delegation_audit PASSED [ 97%]
+tests/test_audit.py::TestRunAuditFunction::test_run_audit_with_no_files PASSED [100%]
+
+=================================== FAILURES ===================================
+________________ TestMarkovChain.test_steady_state_sums_to_one _________________
+tests/test_advulture.py:218: in test_steady_state_sums_to_one
+    assert abs(total - 1.0) < 0.01, f"Steady state should sum to 1, got {total}"
+E   AssertionError: Steady state should sum to 1, got 0.0
+E   assert 1.0 < 0.01
+E    +  where 1.0 = abs((0.0 - 1.0))
+______________ TestMarkovChain.test_gradient_flows_through_theta _______________
+tests/test_advulture.py:249: in test_gradient_flows_through_theta
+    loss.backward()
+/home/openhands/.local/lib/python3.13/site-packages/torch/_tensor.py:631: in backward
+    torch.autograd.backward(
+/home/openhands/.local/lib/python3.13/site-packages/torch/autograd/__init__.py:381: in backward
+    _engine_run_backward(
+/home/openhands/.local/lib/python3.13/site-packages/torch/autograd/graph.py:869: in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+E   RuntimeError: element 0 of tensors does not require grad and does not have a grad_fn
+__________ TestPostureAnalyzerSmoke.test_analyze_with_empty_snapshot ___________
+tests/test_advulture.py:305: in test_analyze_with_empty_snapshot
+    report = analyzer.analyze()
+             ^^^^^^^^^^^^^^^^^^
+advulture/analysis/posture.py:196: in analyze
+    ranking = self.gradient_engine.compute_ranking(
+advulture/ml/markov/chain.py:367: in compute_ranking
+    tier0_prob.backward()
+/home/openhands/.local/lib/python3.13/site-packages/torch/_tensor.py:631: in backward
+    torch.autograd.backward(
+/home/openhands/.local/lib/python3.13/site-packages/torch/autograd/__init__.py:381: in backward
+    _engine_run_backward(
+/home/openhands/.local/lib/python3.13/site-packages/torch/autograd/graph.py:869: in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+E   RuntimeError: element 0 of tensors does not require grad and does not have a grad_fn
+=============================== warnings summary ===============================
+../../../../home/openhands/.local/lib/python3.13/site-packages/_pytest/config/__init__.py:1434
+  /home/openhands/.local/lib/python3.13/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: asyncio_mode
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+tests/test_advulture.py::TestLDAPEnumerator::test_uac_flag_parsing
+  /home/openhands/.local/lib/python3.13/site-packages/ldap3/utils/asn1.py:50: DeprecationWarning: tagMap is deprecated. Please use TAG_MAP instead.
+    from pyasn1.codec.ber.encoder import tagMap, typeMap, AbstractItemEncoder
+
+tests/test_advulture.py::TestLDAPEnumerator::test_uac_flag_parsing
+  /home/openhands/.local/lib/python3.13/site-packages/ldap3/utils/asn1.py:50: DeprecationWarning: typeMap is deprecated. Please use TYPE_MAP instead.
+    from pyasn1.codec.ber.encoder import tagMap, typeMap, AbstractItemEncoder
+
+tests/test_advulture.py::TestEventStream::test_event_filtering_by_id
+tests/test_advulture.py::TestEventStream::test_event_filtering_by_id
+tests/test_advulture.py::TestEventStream::test_event_filtering_by_id
+tests/test_advulture.py::TestEventStream::test_event_filtering_by_id
+tests/test_advulture.py::TestEventStream::test_rc4_downgrade_detection
+tests/test_advulture.py::TestEventStream::test_rc4_downgrade_detection
+tests/test_advulture.py::TestEventStream::test_rc4_downgrade_detection
+tests/test_advulture.py::TestEventStream::test_dcsync_detection
+tests/test_advulture.py::TestEventStream::test_dcsync_detection
+  /workspace/project/Tools/ADVulture/tests/test_advulture.py:85: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    timestamp=datetime.utcnow(),
+
+tests/test_advulture.py::TestPostureAnalyzerSmoke::test_analyze_with_empty_snapshot
+  /workspace/project/Tools/ADVulture/tests/test_advulture.py:301: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    base_dn="DC=test,DC=local", timestamp=datetime.utcnow()
+
+tests/test_audit.py::TestOfflineUser::test_password_age_calculation
+  /workspace/project/Tools/ADVulture/tests/test_audit.py:102: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    pwd_last_set=datetime.utcnow() - timedelta(days=30),
+
+tests/test_audit.py::TestOfflineUser::test_password_age_calculation
+tests/test_audit.py::TestOfflineUser::test_password_age_calculation
+  /workspace/project/Tools/ADVulture/advulture/audit.py:92: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return (datetime.utcnow() - self.pwd_last_set).days
+
+tests/test_audit.py::TestAuditReport::test_severity_counting
+  /workspace/project/Tools/ADVulture/tests/test_audit.py:245: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    timestamp=datetime.utcnow(),
+
+tests/test_audit.py::TestAuditReport::test_severity_counting
+  /workspace/project/Tools/ADVulture/tests/test_audit.py:259: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    timestamp=datetime.utcnow(),
+
+tests/test_audit.py::TestAuditReport::test_report_summary
+  /workspace/project/Tools/ADVulture/tests/test_audit.py:279: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    timestamp=datetime.utcnow(),
+
+tests/test_audit.py::TestAuditReport::test_report_summary
+  /workspace/project/Tools/ADVulture/tests/test_audit.py:288: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    timestamp=datetime.utcnow(),
+
+tests/test_audit.py::TestOfflineAuditor::test_kerberoastable_audit
+  /workspace/project/Tools/ADVulture/tests/test_audit.py:312: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    timestamp=datetime.utcnow(),
+
+tests/test_audit.py::TestOfflineAuditor::test_asrep_roastable_audit
+  /workspace/project/Tools/ADVulture/tests/test_audit.py:370: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    timestamp=datetime.utcnow(),
+
+tests/test_audit.py::TestOfflineAuditor::test_unconstrained_delegation_audit
+  /workspace/project/Tools/ADVulture/tests/test_audit.py:408: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    timestamp=datetime.utcnow(),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- Generated html report: file:///workspace/project/Tools/ADVulture/tests/results/test_report.html -
+=========================== short test summary info ============================
+FAILED tests/test_advulture.py::TestMarkovChain::test_steady_state_sums_to_one
+FAILED tests/test_advulture.py::TestMarkovChain::test_gradient_flows_through_theta
+FAILED tests/test_advulture.py::TestPostureAnalyzerSmoke::test_analyze_with_empty_snapshot
+================== 3 failed, 31 passed, 23 warnings in 1.42s ===================
