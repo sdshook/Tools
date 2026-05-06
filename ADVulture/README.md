@@ -8,6 +8,46 @@ ADVulture is a standalone Active Directory security posture analysis platform th
 
 ---
 
+## Why ADVulture?
+
+### The Gap in Traditional Identity Risk Assessment
+
+Domain identity risk evaluations have historically focused on two dimensions: **rights** and **architecture**. Security teams assess who has access to what, map group memberships, enumerate privilege escalation paths, and document the structural topology of trust relationships. This approach treats Active Directory as a static blueprint — a map of *potential* access rather than *actual* behaviour.
+
+The critical blindspot in this methodology is **use**.
+
+When behavioural data is incorporated at all, it typically manifests as authentication event analysis interpreted *through the lens of existing rights*. A successful Kerberos ticket request is evaluated against the permissions that ticket grants. A failed logon is flagged if the target account holds elevated privileges. The analysis remains anchored to what rights *permit*, not what credentials *do*.
+
+### Rights vs. Use: The Authorization Evidence Gap
+
+Domain rights and domain use are fundamentally different phenomena, and the gap between them is where breaches live.
+
+Authorization records — the granular logs of what accounts actually accessed, when, from where, and in what sequence — have repeatedly demonstrated this distinction in forensic evidence of compromise and credential abuse:
+
+- **Dormant privileged accounts** that exist in architecture but never authenticate until an attacker discovers them
+- **Service accounts** with broad permissions that historically accessed three systems but suddenly touch fifty
+- **Lateral movement patterns** that follow paths technically available to any Domain Admin but never traversed by legitimate operations
+- **Delegation chains** that are architecturally permitted but behaviourally anomalous when actually exercised
+- **Authentication timing** that reveals credential theft — legitimate users don't authenticate at 3 AM from foreign IP ranges, even if their accounts technically permit it
+
+Traditional tools see the rights. Forensic investigators see the use. The disconnect means security teams are perpetually reactive — discovering the gap only after breach evidence forces them to examine what credentials actually did versus what they were allowed to do.
+
+### The Coincident Approach
+
+ADVulture resolves this by treating rights architecture and credential behaviour as **coincident data streams** that must be evaluated together, not sequentially.
+
+Rather than asking "what could this account do?" and separately asking "what did this account do?", ADVulture fuses both questions into a unified analytical model:
+
+- **Structural edges** representing configured permissions, group memberships, and delegation paths
+- **Behavioural edges** weighted by actual authentication frequency, authorization patterns, and temporal distributions
+- **Anomaly surfaces** where structural permissions exist but behavioural evidence is absent (dormant risk) or where behavioural patterns exceed structural expectations (active compromise indicators)
+
+This coincident evaluation surfaces **hygiene weaknesses** — the gap between what your architecture permits and what your operations require — and **posture weaknesses** — the specific structural configurations that create exploitable paths whether or not they've been exercised.
+
+The result is remediation intelligence grounded in empirical observation rather than theoretical topology. ADVulture doesn't just show you that a path to Domain Admin exists; it shows you which paths are behaviourally dormant (high-value targets for attackers who discover them), which paths show anomalous recent activity (potential active compromise), and which paths carry legitimate operational traffic (high disruption cost if remediated carelessly).
+
+---
+
 ## Conceptual Foundations
 
 ### BloodHound
