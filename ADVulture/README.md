@@ -287,7 +287,7 @@ Users manually added to local Administrators groups on servers (not via domain G
 
 ### Install
 
-```bash
+```shell
 git clone https://github.com/yourorg/advulture
 cd advulture
 pip install -e ".[dev]"
@@ -295,7 +295,7 @@ pip install -e ".[dev]"
 
 ### Configuration
 
-```bash
+```shell
 cp config.example.yaml config.yaml
 # Edit config.yaml with your environment details
 advulture configure
@@ -310,32 +310,28 @@ ADVulture supports three deployment scenarios with simple, interactive authentic
 | Scenario | Command | Data Sources |
 |----------|---------|--------------|
 | **Cloud-only** | `advulture analyze --entra-only` | Entra ID directory + sign-in logs |
-| **On-prem only** | `advulture analyze --ad-only --evtx *.evtx` | AD via LDAP + DC event logs |
-| **Hybrid** | `advulture analyze --entra-auth device_code --evtx *.evtx` | All of the above |
+| **On-prem only** | `advulture analyze --ad-only` | AD via LDAP + DC event logs (auto-discovered) |
+| **Hybrid** | `advulture analyze --entra-auth device_code` | All of the above |
 
 ### Simplest Usage
 
-```bash
-# Cloud-only environment (Entra ID / Azure AD)
-# - Entra directory objects + 30 days of sign-in/audit logs
+```shell
+# Cloud-only (Entra ID)
 advulture analyze --entra-only
 
-# On-prem only environment (traditional AD)
-# - AD objects via LDAP + DC event logs for behavioral analysis
-advulture analyze --ad-only \
-  --evtx /path/to/Security.evtx \
-  --evtx /path/to/System.evtx
+# On-prem only (AD + DC event logs)
+advulture analyze --ad-only
 
-# Hybrid environment (AD synced to Entra)
-# - AD objects + DC logs + Entra directory + Entra sign-in logs
-advulture analyze --entra-auth device_code \
-  --evtx /path/to/Security.evtx \
-  --evtx /path/to/System.evtx
+# Hybrid (AD + Entra)
+advulture analyze --entra-auth device_code
 ```
 
-No config file needed. You'll be prompted to authenticate interactively.
+That's it. No config file, no paths to specify. ADVulture will:
+- **Auto-discover domain and DC** via DNS
+- **Auto-discover EVTX files** from current directory or Windows default locations
+- **Prompt for credentials** interactively (AD creds and/or Entra device code)
 
-**Note:** For full behavioral analysis, always include DC event logs (`--evtx`). The EVTX files contain authentication events (4624, 4625, 4768, 4769, etc.) essential for detecting attack patterns.
+**Note:** For on-prem/hybrid, run from a directory containing exported EVTX files, or run directly on a DC where logs are in the default Windows location.
 
 ---
 
@@ -348,7 +344,7 @@ No config file needed. You'll be prompted to authenticate interactively.
 | `ntlm` | NTLM authentication | Prompted or config |
 | `simple` | Automation with config file | From config.yaml |
 
-```bash
+```shell
 # Interactive prompt (default) - auto-discovers domain and DC
 advulture analyze --ad-only
 
@@ -381,7 +377,7 @@ advulture analyze --ad-only --ad-auth ntlm
 | `certificate` | Secure automation | Required |
 | `managed_identity` | Azure-hosted | Required |
 
-```bash
+```shell
 # Interactive - just log in (no app registration needed)
 advulture analyze --entra-only
 
@@ -406,31 +402,23 @@ advulture analyze --entra-only --config config.yaml
 
 For domain-joined environments synced to Entra ID via Azure AD Connect:
 
-```bash
-# Full hybrid analysis with DC event logs
-# - Prompts for AD credentials
-# - Prompts for Entra device code
-# - Collects DC Security/System logs
-advulture analyze --entra-auth device_code \
-  --evtx /path/to/Security.evtx \
-  --evtx /path/to/System.evtx \
-  --evtx /path/to/Sysmon.evtx
+```shell
+# Full hybrid analysis (EVTX files auto-discovered)
+advulture analyze --entra-auth device_code
 
-# Using Kerberos ticket (domain-joined machine)
-advulture analyze --ad-auth kerberos --entra-auth device_code \
-  --evtx Security.evtx --evtx System.evtx
+# Using Kerberos ticket (domain-joined Windows machine)
+advulture analyze --ad-auth kerberos --entra-auth device_code
 
 # Specify domain explicitly if auto-discovery fails
-advulture analyze --domain corp.local --entra-auth device_code \
-  --evtx Security.evtx
+advulture analyze --domain corp.local --entra-auth device_code
 ```
 
-**Collecting DC logs:** Export from domain controllers before running:
-```powershell
-wevtutil epl Security C:\logs\Security.evtx
-wevtutil epl System C:\logs\System.evtx
-wevtutil epl Microsoft-Windows-Sysmon/Operational C:\logs\Sysmon.evtx
+**Exporting DC logs:** If not running directly on a DC, export logs first:
+```shell
+wevtutil epl Security Security.evtx
+wevtutil epl System System.evtx
 ```
+Then run ADVulture from the directory containing the exported files.
 
 ---
 
@@ -440,7 +428,7 @@ For scheduled scans, create an app registration with **application** permissions
 - `Directory.Read.All`, `AuditLog.Read.All`, `IdentityProtection.Read.All`
 - `Policy.Read.All`, `Reports.Read.All`, `RoleManagement.Read.Directory`
 
-```bash
+```shell
 # Via environment variables
 export AZURE_TENANT_ID="your-tenant-id"
 export AZURE_CLIENT_ID="your-app-id"  
@@ -459,17 +447,15 @@ advulture analyze --config config.yaml
 
 ### Full Analysis
 
-```bash
+```shell
 # Cloud-only (Entra ID)
 advulture analyze --entra-only
 
-# On-prem only (AD + DC logs)
-advulture analyze --ad-only \
-  --evtx Security.evtx --evtx System.evtx
+# On-prem only (AD + DC logs auto-discovered)
+advulture analyze --ad-only
 
-# Hybrid (AD + Entra + DC logs) — recommended for domain-joined environments
-advulture analyze --entra-auth device_code \
-  --evtx Security.evtx --evtx System.evtx
+# Hybrid (AD + Entra) — recommended for domain-joined environments
+advulture analyze --entra-auth device_code
 
 # Using config file (for automation)
 advulture analyze --config config.yaml
@@ -479,7 +465,7 @@ advulture analyze --config config.yaml
 
 For forensic analysis or environments where live access is not available, ADVulture can analyze extracted AD artifacts:
 
-```bash
+```shell
 # Basic audit with NTDS.dit only
 advulture audit --ntds ./ntds.dit --output reports/
 
@@ -501,7 +487,7 @@ advulture audit \
 
 **Artifact Collection:** To obtain these files from a domain controller:
 
-```powershell
+```shell
 # Create VSS snapshot and extract NTDS.dit
 ntdsutil "ac i ntds" "ifm" "create full C:\extract" q q
 
@@ -528,7 +514,7 @@ The offline audit analyzes:
 
 ### API Server
 
-```bash
+```shell
 advulture serve --host 0.0.0.0 --port 8000
 # Dashboard available at http://localhost:8000/ui
 ```

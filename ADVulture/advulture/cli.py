@@ -34,11 +34,38 @@ def main(ctx, config: Path, log_level: str):
     ctx.obj["config_path"] = config
 
 
+# Default EVTX paths on Windows DCs
+DEFAULT_EVTX_PATHS = [
+    Path(r"C:/Windows/System32/winevt/Logs/Security.evtx"),
+    Path(r"C:/Windows/System32/winevt/Logs/System.evtx"),
+    Path(r"C:/Windows/System32/winevt/Logs/Microsoft-Windows-Sysmon%4Operational.evtx"),
+]
+
+
+def _discover_evtx_files() -> list:
+    """Auto-discover EVTX files in default Windows locations or current directory."""
+    found = []
+    
+    # Check default Windows paths
+    for path in DEFAULT_EVTX_PATHS:
+        if path.exists():
+            found.append(path)
+            log.info("Found EVTX: %s", path)
+    
+    # Check current directory for .evtx files
+    for evtx_file in Path(".").glob("*.evtx"):
+        if evtx_file not in found:
+            found.append(evtx_file)
+            log.info("Found EVTX: %s", evtx_file)
+    
+    return found
+
+
 @main.command()
 @click.option("--output", "-o", type=Path, default=Path("reports"),
               help="Output directory for reports")
 @click.option("--evtx", "-e", type=Path, multiple=True,
-              help="EVTX files to analyse (can specify multiple)")
+              help="EVTX files (auto-discovered if not specified)")
 @click.option("--format", "fmt", default="both",
               type=click.Choice(["html", "json", "both"]))
 # On-prem AD options
@@ -68,20 +95,13 @@ def analyze(ctx, output: Path, evtx, fmt: str,
     Run posture analysis and generate reports.
     
     \b
-    SIMPLEST USAGE - just run and authenticate:
+    SIMPLEST USAGE:
+      advulture analyze --entra-only     # Cloud-only (Entra ID)
+      advulture analyze --ad-only        # On-prem AD (auto-discovers logs)
+      advulture analyze                  # Hybrid (prompts for both)
     
-      # Cloud-only (Entra ID)
-      advulture analyze --entra-only
-    
-      # On-prem only (prompts for AD creds, auto-discovers domain)
-      advulture analyze --ad-only
-    
-      # Hybrid (both on-prem AD and Entra)
-      advulture analyze --entra-auth device_code
-    
-    \b
-    On a domain-joined Windows machine with Kerberos ticket:
-      advulture analyze --ad-auth kerberos --entra-auth device_code
+    EVTX files are auto-discovered from current directory or Windows default
+    locations. Use --evtx to specify files explicitly.
     """
     from advulture.config import Config, EntraAuthMode, LDAPAuthMode
     from advulture.analysis.posture import PostureAnalyzer
@@ -91,11 +111,18 @@ def analyze(ctx, output: Path, evtx, fmt: str,
     if config_path.exists():
         cfg = Config.from_file(config_path)
     else:
-        console.print("[yellow]config.yaml not found — using defaults[/yellow]")
+        console.print("[dim]No config.yaml — using auto-discovery[/dim]")
         cfg = Config()
 
+    # Handle EVTX files: use provided, or auto-discover
     if evtx:
         cfg.logs.evtx_paths = list(evtx)
+    elif not entra_only:
+        # Auto-discover EVTX files for on-prem/hybrid modes
+        discovered = _discover_evtx_files()
+        if discovered:
+            cfg.logs.evtx_paths = discovered
+            console.print(f"[dim]Auto-discovered {len(discovered)} EVTX file(s)[/dim]")
 
     # Handle environment type flags
     if entra_only and ad_only:
