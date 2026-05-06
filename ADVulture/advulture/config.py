@@ -1,3 +1,5 @@
+# (c) 2025 Shane D. Shook, PhD - All Rights Reserved
+
 """
 ADVulture configuration — loaded from config.yaml or environment variables.
 """

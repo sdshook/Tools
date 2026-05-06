@@ -1,3 +1,5 @@
+# (c) 2025 Shane D. Shook, PhD - All Rights Reserved
+
 """
 ADVulture — Unified Finding Model
 All six risk classes produce findings in this common schema.

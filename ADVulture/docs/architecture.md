@@ -1,5 +1,7 @@
 # ADVulture Architecture
 
+**(c) 2025 Shane D. Shook, PhD - All Rights Reserved**
+
 ## Overview
 
 ADVulture implements a four-layer architecture connecting raw AD data to

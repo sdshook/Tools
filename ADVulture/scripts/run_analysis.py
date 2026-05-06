@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# (c) 2025 Shane D. Shook, PhD - All Rights Reserved
 """
 ADVulture — Quick Start Analysis Script
 Run: python scripts/run_analysis.py --config config.yaml

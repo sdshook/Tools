@@ -1,3 +1,5 @@
+# (c) 2025 Shane D. Shook, PhD - All Rights Reserved
+
 """
 ADVulture — Entra ID (Azure AD) Enumerator and Log Ingester
 Microsoft Graph API collection for cloud and hybrid environments.

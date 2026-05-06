@@ -1,5 +1,7 @@
 # ADVulture 🦅
 
+**(c) 2025 Shane D. Shook, PhD - All Rights Reserved**
+
 > **Active Directory Vulnerability Intelligence — Empirical Posture Analysis through Graph Neural Networks and Markov Modelling**
 
 ADVulture is a standalone Active Directory security posture analysis platform that fuses static AD configuration data with historical authentication and authorisation event logs to produce mathematically grounded, gradient-ranked remediation intelligence. It operates without dependency on BloodHound, Neo4j, or any external graph database.

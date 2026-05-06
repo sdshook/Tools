@@ -1,3 +1,5 @@
+# (c) 2025 Shane D. Shook, PhD - All Rights Reserved
+
 """
 ADVulture — Windows Event Log Ingester
 Parses Windows Security, System, and ADFS event logs from

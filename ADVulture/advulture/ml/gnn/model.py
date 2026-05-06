@@ -1,3 +1,5 @@
+# (c) 2025 Shane D. Shook, PhD - All Rights Reserved
+
 """
 ADVulture — Graph Neural Network Model
 Heterogeneous Graph Transformer (HGT) over the unified AD graph.

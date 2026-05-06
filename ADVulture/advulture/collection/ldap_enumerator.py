@@ -1,3 +1,5 @@
+# (c) 2025 Shane D. Shook, PhD - All Rights Reserved
+
 """
 ADVulture — LDAP Enumerator
 Direct AD enumeration via LDAP3. Replaces SharpHound collection

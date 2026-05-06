@@ -1,3 +1,5 @@
+# (c) 2025 Shane D. Shook, PhD - All Rights Reserved
+
 """
 ADVulture — Graph Builder
 Constructs a PyTorch Geometric HeteroData graph from the AD snapshot

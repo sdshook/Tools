@@ -1,3 +1,5 @@
+# (c) 2025 Shane D. Shook, PhD - All Rights Reserved
+
 """
 ADVulture — ADFS Log Ingester
 Parses Microsoft-Windows-ADFS/Admin and Operational logs.
