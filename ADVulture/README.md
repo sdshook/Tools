@@ -102,16 +102,16 @@ This classification borrows the ORDERED/CRITICAL/CHAOTIC vocabulary from dynamic
 ┌─────────────────────────────────────────────────────────────┐
 │                     COLLECTION LAYER                         │
 │  LDAP Enumerator    Windows Event Logs    Entra ID / AAD    │
-│  ACL Parser         ADFS Federation       AI Agent Census   │
-│  LPE Enumerator     Service Acct Audit    OAuth/PIM Logs    │
+│  Cert Template Enum ADFS Federation       Service Principal │
+│  Event Stream       Sign-in Logs          OAuth Permissions │
 └──────────────┬──────────────────────────────┬───────────────┘
                │                              │
                ▼                              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      GRAPH LAYER                             │
 │  Heterogeneous AD Graph  +  Temporal Behavioral Tensors    │
-│  AuthZ Dependency Graph  +  Override Surface Model          │
-│  DuckDB Persistence (zero server)                           │
+│  Node Types: User, Computer, Group, CertTemplate, Domain   │
+│  Edge Types: 28 relation types across 6 risk classes       │
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                ▼
@@ -121,8 +121,7 @@ This classification borrows the ORDERED/CRITICAL/CHAOTIC vocabulary from dynamic
 │  Heterogeneous GNN ──edge probs──▶ Markov Stack             │
 │  (HGT architecture)               ├─ Transition Matrix P    │
 │                                   ├─ Steady-State π         │
-│                                   ├─ Kill-Chain HMM         │
-│                                   └─ 2nd-Order MC           │
+│                                   └─ Kill-Chain HMM         │
 │                                           │                 │
 │                                    Gradient Engine          │
 │                                    ∂π_tier0/∂θ              │
@@ -133,12 +132,12 @@ This classification borrows the ORDERED/CRITICAL/CHAOTIC vocabulary from dynamic
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Regime Classification │ Trajectory │ Unified Finding Rank  │
+│  Regime Classification  │  Kill-Chain Phase  │  Finding Rank │
 └─────────────────────────────────────────────────────────────┘
                                │
-              ┌────────────────┼─────────────────┐
-              ▼                ▼                 ▼
-           FastAPI          HTML Report      Streamlit UI
+              ┌────────────────┴─────────────────┐
+              ▼                                  ▼
+           FastAPI                          HTML/JSON Report
 ```
 
 ### Implementation Notes
@@ -158,6 +157,13 @@ This classification borrows the ORDERED/CRITICAL/CHAOTIC vocabulary from dynamic
 - **Neighborhood Attention:** The HGT convolution layers implement proper neighborhood attention where each destination node attends over its full set of incoming source nodes. Attention weights are normalized per-destination using a custom neighborhood softmax, with learned per-relation importance weights.
 
 - **Event Pre-Indexing:** Event streams are pre-indexed by event ID, subject SID, and source hostname at ingestion time, enabling O(1) lookups during graph construction instead of O(n) linear scans per query.
+
+**Not Yet Implemented:**
+
+- **ACL Parsing:** Security descriptors (nTSecurityDescriptor) are collected but not parsed. GenericAll/WriteDacl edge detection requires impacket-based descriptor parsing.
+- **RBCD Edge Detection:** msDS-AllowedToActOnBehalfOfOtherIdentity collection is stubbed; requires security descriptor parsing.
+- **PIM Role Assignments:** Entra ID Privileged Identity Management queries are stubbed.
+- **Sysmon Integration:** Event IDs 7045/4698/Sysmon 10 are not currently ingested.
 
 ---
 
@@ -544,10 +550,9 @@ advulture serve --host 0.0.0.0 --port 8000
 ADVulture produces:
 - **Unified gradient-ranked finding list:** All six risk classes ordered by `∂π_tier0/∂θ`
 - **Regime classification:** ORDERED / CRITICAL / CHAOTIC with supporting evidence
-- **Kill-chain phase detection:** Current attacker phase inferred from log sequences
-- **30/60/90-day trajectory projection:** Where is your posture heading
+- **Kill-chain phase detection:** Current attacker phase inferred from log sequences via HMM
 - **Scenario comparison:** RF-predicted risk reduction for proposed control sets
-- **Dependency impact:** What breaks if a given permission is remediated
+- **Mean first passage time:** Expected steps for an attacker to reach Tier 0
 - **HTML executive and technical reports**
 - **JSON output** for SOAR/SIEM integration
 
@@ -557,12 +562,12 @@ ADVulture produces:
 
 | Class | Name | Primary Sources |
 |-------|------|-----------------|
-| A | AuthN Hygiene | LDAP, 4624/4625/4769/4768/4771/4776 |
-| B | AuthZ Structure | LDAP ACLs, GPO, ADCS template flags |
-| C | AuthZ Behavior | 5140/4663/4670/4732, ADFS 299/403, Entra CA/OAuth |
-| D | Privilege Escalation | 4672/4673/7045/4698, Sysmon 10 |
-| E | Delegation Override | LDAP msDS-*, 4769 TransitedServices |
-| F | AI Agent Surface | Entra app permissions, MCP manifests, Graph API logs |
+| A | AuthN Hygiene | LDAP (SPNs, UACFlags), 4624/4625/4769/4768/4771/4776 |
+| B | AuthZ Structure | LDAP (group membership, cert templates), ADCS template flags |
+| C | AuthZ Behavior | 5140/4663/4670/4732, ADFS events, Entra sign-in logs |
+| D | Privilege Escalation | 4672/4673 (special privileges) |
+| E | Delegation Override | LDAP msDS-AllowedToDelegateTo, unconstrained delegation flags |
+| F | AI Agent Surface | Entra service principal permissions, display name pattern matching |
 
 ---
 
