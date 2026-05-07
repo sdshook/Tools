@@ -5,9 +5,10 @@
 # │  THIS CONFIG FILE IS OPTIONAL                                        │
 # │                                                                       │
 # │  For interactive use, just run:                                       │
-# │    advulture analyze --ad-only          # On-prem AD                  │
-# │    advulture analyze --entra-only       # Cloud (Entra ID)            │
-# │    advulture analyze --ad-only --entra-auth device_code  # Hybrid     │
+# │    advulture analyze --ad-only                    # On-prem AD only   │
+# │    advulture analyze --entra-only                 # Entra ID only     │
+# │    advulture analyze --ad-auth kerberos --entra-auth device_code      │
+# │                                          # Hybrid (AD + Entra ID)     │
 # │                                                                       │
 # │  Use this config file only for AUTOMATION with stored credentials.   │
 # └─────────────────────────────────────────────────────────────────────┘

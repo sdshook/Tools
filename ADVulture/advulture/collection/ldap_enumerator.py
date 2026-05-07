@@ -17,7 +17,7 @@ import logging
 import os
 import socket
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Any, TYPE_CHECKING
 from ldap3 import Server, Connection, ALL, SUBTREE, ALL_ATTRIBUTES, SASL, NTLM
 from ldap3.core.exceptions import LDAPException
@@ -437,7 +437,7 @@ class LDAPEnumerator:
             domain=domain,
             domain_sid=domain_sid,
             base_dn=self.base_dn,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         snapshot.users = self._enumerate_users()
@@ -477,7 +477,7 @@ class LDAPEnumerator:
             attributes=self.USER_ATTRS,
             paged_size=1000,
         )
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         for entry in self._conn.entries:
             uac = int(entry.userAccountControl.value or 0)
             pwd_last_set = self._to_datetime(entry.pwdLastSet)

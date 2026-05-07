@@ -16,7 +16,7 @@ import logging
 import hashlib
 import struct
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple, Iterator
 from enum import Enum
@@ -89,7 +89,7 @@ class OfflineUser:
     @property
     def password_age_days(self) -> Optional[int]:
         if self.pwd_last_set:
-            return (datetime.utcnow() - self.pwd_last_set).days
+            return (datetime.now(timezone.utc) - self.pwd_last_set).days
         return None
 
 
@@ -334,7 +334,7 @@ class NTDSParser:
             domain_sid="",
             forest_name="",
             functional_level="",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             ntds_path=str(self.ntds_path),
             system_hive_path=str(self.system_hive_path) if self.system_hive_path else None,
         )
@@ -410,7 +410,7 @@ class NTDSParser:
             domain_sid="",
             forest_name="",
             functional_level="",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             ntds_path=str(self.ntds_path),
         )
         
@@ -511,7 +511,7 @@ class NTDSParser:
             domain_sid="",
             forest_name="",
             functional_level="",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             ntds_path=str(self.ntds_path),
         )
 
@@ -566,7 +566,7 @@ class OfflineAuditor:
                 domain_sid="",
                 forest_name="",
                 functional_level="",
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 ntds_path="",
             )
         
@@ -608,7 +608,7 @@ class OfflineAuditor:
         findings.sort(key=lambda f: severity_order.get(f.severity, 5))
         
         report = AuditReport(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             snapshot=self.snapshot,
             findings=findings,
             evtx_files_analyzed=[str(p) for p in self.evtx_paths],
@@ -902,7 +902,7 @@ class OfflineAuditor:
         """Find stale/dormant accounts."""
         findings = []
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Users who haven't logged in for 90+ days
         stale_users = [
@@ -1333,7 +1333,7 @@ def run_audit(
         output_dir = Path(output_path)
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         
         if output_format in ("json", "both"):
             json_path = output_dir / f"audit_{timestamp}.json"

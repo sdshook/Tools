@@ -227,8 +227,16 @@ class ADRiskGNN(nn.Module):
 
 class HGTConvLayer(nn.Module):
     """
-    Simplified Heterogeneous Graph Transformer convolution layer.
-    Performs attention-weighted message passing across all edge types.
+    Heterogeneous Graph Transformer convolution layer.
+    
+    This implements proper neighborhood attention where each destination node
+    attends over its full set of incoming source nodes (not per-edge attention).
+    
+    Key design decisions:
+    - Destination node is the query ("what do I need?")
+    - Source nodes are keys/values ("what do I offer?")
+    - Attention weights are learned per-relation type
+    - Edge weights from control suppression modulate attention
     """
 
     def __init__(self, hidden_dim: int, num_heads: int,
@@ -238,15 +246,28 @@ class HGTConvLayer(nn.Module):
         self.num_heads = num_heads
         self.head_dim = hidden_dim // num_heads
         self.dropout = nn.Dropout(dropout)
+        self.scale = (self.head_dim) ** -0.5
 
-        # Per-relation attention weights
-        self.rel_attention = nn.ModuleDict({
-            f"{src}__{rel}__{dst}": nn.MultiheadAttention(
-                embed_dim=hidden_dim,
-                num_heads=num_heads,
-                batch_first=True,
-                dropout=dropout,
-            )
+        # Per-relation Q/K/V projections (more efficient than MultiheadAttention for variable neighborhoods)
+        self.rel_q = nn.ModuleDict()
+        self.rel_k = nn.ModuleDict()
+        self.rel_v = nn.ModuleDict()
+        self.rel_msg = nn.ModuleDict()
+        
+        for src, rel, dst in edge_types:
+            key = f"{src}__{rel}__{dst}"
+            # Query from destination (what do I need?)
+            self.rel_q[key] = nn.Linear(hidden_dim, hidden_dim, bias=False)
+            # Key from source (what do I offer?)
+            self.rel_k[key] = nn.Linear(hidden_dim, hidden_dim, bias=False)
+            # Value from source (information to propagate)
+            self.rel_v[key] = nn.Linear(hidden_dim, hidden_dim, bias=False)
+            # Message transform
+            self.rel_msg[key] = nn.Linear(hidden_dim, hidden_dim)
+
+        # Per-relation importance weights (learned)
+        self.rel_importance = nn.ParameterDict({
+            f"{src}__{rel}__{dst}": nn.Parameter(torch.tensor(1.0))
             for src, rel, dst in edge_types
         })
 
@@ -267,46 +288,118 @@ class HGTConvLayer(nn.Module):
         edge_index_dict: Dict[tuple, torch.Tensor],
         edge_attr_dict: Dict[tuple, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-
+        
+        # Accumulate weighted messages per destination node type
         aggregated: Dict[str, list] = {nt: [] for nt in h_dict}
+        importance_weights: Dict[str, list] = {nt: [] for nt in h_dict}
 
         for (src_type, rel, dst_type), edge_index in edge_index_dict.items():
             if src_type not in h_dict or dst_type not in h_dict:
                 continue
 
             key = f"{src_type}__{rel}__{dst_type}"
-            if key not in self.rel_attention:
+            if key not in self.rel_q:
                 continue
 
-            src_features = h_dict[src_type][edge_index[0]]  # [E, D]
-            dst_features = h_dict[dst_type][edge_index[1]]  # [E, D]
+            src_features = h_dict[src_type]        # [N_src, D]
+            dst_features = h_dict[dst_type]        # [N_dst, D]
+            
+            src_idx = edge_index[0]                # [E]
+            dst_idx = edge_index[1]                # [E]
+            
+            if src_idx.numel() == 0:
+                continue
 
-            # Self-attention with source as query, dest as key/value
-            src_3d = src_features.unsqueeze(1)  # [E, 1, D]
-            dst_3d = dst_features.unsqueeze(1)  # [E, 1, D]
-
-            attn_out, _ = self.rel_attention[key](src_3d, dst_3d, dst_3d)
-            msg = attn_out.squeeze(1)  # [E, D]
-
-            # Apply edge attribute weighting if available
-            if edge_type := edge_attr_dict.get((src_type, rel, dst_type)):
-                weight = edge_type if edge_type.shape[-1] == 1 else edge_type.mean(-1, keepdim=True)
-                msg = msg * weight
-
+            # Get features for edges
+            src_h = src_features[src_idx]          # [E, D]
+            dst_h = dst_features[dst_idx]          # [E, D]
+            
+            # Compute Q/K/V
+            # Q from destination: "what does the destination need?"
+            q = self.rel_q[key](dst_h)             # [E, D]
+            # K from source: "what does the source offer?"
+            k = self.rel_k[key](src_h)             # [E, D]
+            # V from source: "what information to propagate"
+            v = self.rel_v[key](src_h)             # [E, D]
+            
+            # Reshape for multi-head attention
+            q = q.view(-1, self.num_heads, self.head_dim)  # [E, H, D/H]
+            k = k.view(-1, self.num_heads, self.head_dim)  # [E, H, D/H]
+            v = v.view(-1, self.num_heads, self.head_dim)  # [E, H, D/H]
+            
+            # Compute attention scores per edge
+            # This gives each edge an attention weight based on Q-K similarity
+            attn_scores = (q * k).sum(dim=-1) * self.scale  # [E, H]
+            
+            # Apply edge attribute weighting (from control suppression)
+            edge_weight = edge_attr_dict.get((src_type, rel, dst_type))
+            if edge_weight is not None:
+                weight = edge_weight if edge_weight.dim() == 1 else edge_weight.squeeze(-1)
+                attn_scores = attn_scores * weight.unsqueeze(-1)  # [E, H]
+            
+            # Softmax over each destination's neighborhood
+            # We need to compute softmax per destination node across its incoming edges
+            attn_probs = self._neighborhood_softmax(attn_scores, dst_idx, h_dict[dst_type].shape[0])
+            
+            # Weight values by attention
+            weighted_v = v * attn_probs.unsqueeze(-1)  # [E, H, D/H]
+            weighted_v = weighted_v.view(-1, self.hidden_dim)  # [E, D]
+            
+            # Transform message
+            msg = self.rel_msg[key](weighted_v)    # [E, D]
+            
+            # Apply relation importance weight (learned)
+            rel_weight = torch.sigmoid(self.rel_importance[key])
+            msg = msg * rel_weight
+            
             # Scatter aggregate to destination nodes
             num_dst = h_dict[dst_type].shape[0]
             agg = torch.zeros(num_dst, self.hidden_dim, device=msg.device)
-            idx = edge_index[1].unsqueeze(-1).expand(-1, self.hidden_dim)
+            idx = dst_idx.unsqueeze(-1).expand(-1, self.hidden_dim)
             agg.scatter_add_(0, idx, msg)
+            
             aggregated[dst_type].append(agg)
+            importance_weights[dst_type].append(rel_weight.detach())
 
-        # Combine aggregated messages and apply residual + norm
+        # Combine aggregated messages with learned importance weighting
         out = {}
         for nt, h in h_dict.items():
             if aggregated[nt]:
-                combined = torch.stack(aggregated[nt], dim=0).mean(0)
+                # Weight each relation's contribution by its learned importance
+                weights = torch.stack([w for w in importance_weights[nt]])
+                weights = F.softmax(weights, dim=0)
+                
+                messages = torch.stack(aggregated[nt], dim=0)  # [num_rels, N, D]
+                combined = (messages * weights.view(-1, 1, 1)).sum(dim=0)  # [N, D]
+                
                 projected = self.output_proj[nt](combined)
                 out[nt] = self.layer_norm[nt](h + self.dropout(projected))
             else:
                 out[nt] = h
         return out
+    
+    def _neighborhood_softmax(
+        self, 
+        scores: torch.Tensor,      # [E, H]
+        dst_idx: torch.Tensor,     # [E]
+        num_dst: int,
+    ) -> torch.Tensor:
+        """
+        Compute softmax over each destination node's neighborhood.
+        This normalizes attention weights so they sum to 1 for each destination.
+        """
+        # Shift for numerical stability
+        scores_max = torch.zeros(num_dst, scores.shape[1], device=scores.device)
+        scores_max.scatter_reduce_(0, dst_idx.unsqueeze(-1).expand(-1, scores.shape[1]), 
+                                   scores, reduce='amax', include_self=False)
+        scores = scores - scores_max[dst_idx]
+        
+        # Compute exp
+        exp_scores = torch.exp(scores)
+        
+        # Sum per destination
+        exp_sum = torch.zeros(num_dst, scores.shape[1], device=scores.device)
+        exp_sum.scatter_add_(0, dst_idx.unsqueeze(-1).expand(-1, scores.shape[1]), exp_scores)
+        
+        # Normalize
+        return exp_scores / (exp_sum[dst_idx] + 1e-10)

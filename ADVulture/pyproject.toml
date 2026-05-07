@@ -1,27 +1,27 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "advulture"
 version = "0.1.0"
 description = "Active Directory Vulnerability Intelligence — Empirical Posture Analysis"
 readme = "README.md"
-license = { file = "LICENSE" }
 requires-python = ">=3.11"
-authors = [{ name = "ADVulture Project" }]
+authors = [{ name = "Shane D. Shook, PhD" }]
 keywords = ["active-directory", "security", "graph-neural-network", "markov", "posture"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Information Technology",
     "Topic :: Security",
     "Programming Language :: Python :: 3.11",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: Other/Proprietary License",
 ]
 
 dependencies = [
     "ldap3>=2.9",
     "impacket>=0.12.0",
+    "dnspython>=2.6.0",
     "python-evtx>=0.8.0",
     "torch>=2.2.0",
     "torch_geometric>=2.5.0",

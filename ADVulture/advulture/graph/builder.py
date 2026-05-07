@@ -180,37 +180,86 @@ class GraphBuilder:
             )
 
     def _add_authn_edges(self, data) -> None:
-        """Authentication hygiene edges — Kerberoastable, AS-REP etc (Class A)."""
-        kerb_src, kerb_dst = [], []
+        """Authentication hygiene edges — Kerberoastable, AS-REP etc (Class A).
+        
+        Note: Kerberoastable status is already in feature vector index 3.
+        This method adds explicit edges for graph-based risk propagation.
+        """
+        # AS-REP roastable edges (users who can be roasted to themselves as markers)
+        asrep_users = []
         for u_idx, u in enumerate(self.snapshot.users):
-            if u.has_spn and u.enabled:
-                kerb_src.append(u_idx)
-                kerb_dst.append(u_idx)  # self-loop marks the attribute
-        if kerb_src:
-            data["User", "KerberoastableVia", "User"].edge_index = torch.tensor(
-                [kerb_src, kerb_dst], dtype=torch.long
+            if u.no_preauth_required and u.enabled:
+                asrep_users.append(u_idx)
+        
+        # RC4 downgrade edges from behavioral analysis
+        rc4_src, rc4_dst = [], []
+        if self.events:
+            rc4_events = [e for e in self.events.filter(ids=[4769]) if e.is_rc4_downgrade]
+            for event in rc4_events:
+                if event.subject_sid in self.node_index and event.service_name:
+                    _, src_idx = self.node_index[event.subject_sid]
+                    # Link to service if known
+                    rc4_src.append(src_idx)
+                    rc4_dst.append(src_idx)  # Self-edge marks RC4 downgrade activity
+        
+        if rc4_src:
+            data["User", "RC4DowngradeObserved", "User"].edge_index = torch.tensor(
+                [rc4_src, rc4_dst], dtype=torch.long
             )
 
     def _add_authz_structural_edges(self, data) -> None:
         """ACL-based edges and ADCS (Class B)."""
+        # ESC1 vulnerable template edges
         esc1_src, esc1_dst = [], []
         for t_idx, tmpl in enumerate(self.snapshot.cert_templates):
             if tmpl.esc1:
-                # All users can enroll → ESC1 edge to all users (simplified)
-                for u_idx in range(min(len(self.snapshot.users), 5)):
-                    esc1_src.append(u_idx)
-                    esc1_dst.append(t_idx)
-        # Additional ACL edges would be added here from ACL parser
+                # Connect all enabled users to vulnerable template
+                # (represents enrollment capability)
+                for u_idx, u in enumerate(self.snapshot.users):
+                    if u.enabled:
+                        esc1_src.append(u_idx)
+                        esc1_dst.append(t_idx)
+        
+        # Assign template edges to graph if any exist
+        if esc1_src:
+            # Note: Requires adding CertTemplate node type to graph
+            # For now, mark users with ESC1 access via self-edges
+            data["User", "ESC1Vulnerable", "User"].edge_index = torch.tensor(
+                [esc1_src, esc1_src], dtype=torch.long
+            )
+        
+        # Nested group membership (transitive closure)
+        group_to_group_src, group_to_group_dst = [], []
+        for g_idx, g in enumerate(self.snapshot.groups):
+            for member_dn in g.member_of:
+                if member_dn in self.node_index:
+                    _, parent_idx = self.node_index[member_dn]
+                    group_to_group_src.append(g_idx)
+                    group_to_group_dst.append(parent_idx)
+        
+        if group_to_group_src:
+            data["Group", "MemberOf", "Group"].edge_index = torch.tensor(
+                [group_to_group_src, group_to_group_dst], dtype=torch.long
+            )
 
     def _add_authz_behavioural_edges(self, data) -> None:
         """Behavioural edges from event log analysis (Class C)."""
-        shadow_src, shadow_dst = [], []
+        # High anomaly score edges - users accessing resources anomalously
+        anomaly_src, anomaly_dst = [], []
         for (sid, resource), tensor in self._edge_tensors.items():
             if tensor.anomaly_score > 0.7 and sid in self.node_index:
                 _, src_idx = self.node_index[sid]
-                shadow_src.append(src_idx)
-                shadow_dst.append(src_idx)  # resource nodes added in full implementation
-        # Full implementation maps resources to Resource node type
+                # Try to resolve resource to a computer node
+                resource_lower = resource.lower()
+                if resource_lower in self.node_index:
+                    _, dst_idx = self.node_index[resource_lower]
+                    anomaly_src.append(src_idx)
+                    anomaly_dst.append(dst_idx)
+        
+        if anomaly_src:
+            data["User", "AnomalousAccess", "Computer"].edge_index = torch.tensor(
+                [anomaly_src, anomaly_dst], dtype=torch.long
+            )
 
     def _add_lpe_edges(self, data) -> None:
         """LPE privilege edges from 4672 events (Class D)."""
@@ -233,16 +282,56 @@ class GraphBuilder:
             )
 
     def _add_delegation_edges(self, data) -> None:
-        """Delegation edges (Class E)."""
+        """Delegation edges (Class E).
+        
+        For unconstrained delegation machines, edges are created to users
+        who have actually authenticated to them (per 4624 events), not
+        to all users. This reflects actual credential exposure.
+        """
         unc_src, unc_dst = [], []
+        
+        # Build index of computers with unconstrained delegation
+        unc_deleg_computers = {}
         for c_idx, computer in enumerate(self.snapshot.computers):
-            if computer.unconstrained_delegation:
-                for u_idx in range(min(len(self.snapshot.users), 3)):
-                    unc_src.append(c_idx)
-                    unc_dst.append(u_idx)
+            if computer.unconstrained_delegation and not computer.is_domain_controller:
+                hostname = (computer.dns_hostname or computer.sam_account_name).lower()
+                unc_deleg_computers[hostname] = c_idx
+        
+        if unc_deleg_computers and self.events:
+            # Find users who authenticated to unconstrained delegation machines
+            for event in self.events.filter(ids=[4624]):
+                target_host = event.source_host.lower()
+                if target_host in unc_deleg_computers:
+                    c_idx = unc_deleg_computers[target_host]
+                    # Find the user who authenticated
+                    if event.subject_sid in self.node_index:
+                        _, u_idx = self.node_index[event.subject_sid]
+                        unc_src.append(c_idx)
+                        unc_dst.append(u_idx)
+        
+        # Deduplicate edges
         if unc_src:
+            edges_set = set(zip(unc_src, unc_dst))
+            unc_src = [e[0] for e in edges_set]
+            unc_dst = [e[1] for e in edges_set]
             data["Computer", "UnconstrainedDelegation", "User"].edge_index = torch.tensor(
                 [unc_src, unc_dst], dtype=torch.long
+            )
+        
+        # RBCD edges
+        rbcd_src, rbcd_dst = [], []
+        for c_idx, computer in enumerate(self.snapshot.computers):
+            if computer.rbcd_principals:
+                for principal_sid in computer.rbcd_principals:
+                    if principal_sid in self.node_index:
+                        node_type, p_idx = self.node_index[principal_sid]
+                        if node_type == "User":
+                            rbcd_src.append(p_idx)
+                            rbcd_dst.append(c_idx)
+        
+        if rbcd_src:
+            data["User", "RBCDConfigured", "Computer"].edge_index = torch.tensor(
+                [rbcd_src, rbcd_dst], dtype=torch.long
             )
 
     # ── Behavioural signal helpers ────────────────────────────────────────────

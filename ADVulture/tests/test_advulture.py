@@ -6,7 +6,7 @@ ADVulture — Test Suite
 
 from __future__ import annotations
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 
@@ -82,7 +82,7 @@ class TestEventStream:
         return ParsedEvent(
             event_id=event_id,
             category=category,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             source_host=kwargs.get("source_host", "dc01.corp.local"),
             channel="Security",
             subject_sid=kwargs.get("subject_sid", "S-1-5-21-1234-5678"),
@@ -298,7 +298,7 @@ class TestPostureAnalyzerSmoke:
         from advulture.collection.log_ingester import EventStream
         with patch.object(analyzer, '_collect_ad', return_value=ADSnapshot(
             domain="test.local", domain_sid="S-1-5-21-0000",
-            base_dn="DC=test,DC=local", timestamp=datetime.utcnow()
+            base_dn="DC=test,DC=local", timestamp=datetime.now(timezone.utc)
         )):
             with patch.object(analyzer, '_collect_logs', return_value=EventStream([])):
                 with patch.object(analyzer, '_collect_adfs', return_value=None):

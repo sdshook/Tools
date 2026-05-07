@@ -9,7 +9,7 @@ EVTX files, WinRM endpoints, or SIEM APIs.
 from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Iterator
 from pathlib import Path
 from enum import Enum
@@ -231,13 +231,29 @@ class EdgeTensor:
 
 
 class EventStream:
-    """Container and query interface for parsed events."""
+    """Container and query interface for parsed events.
+    
+    Pre-indexes events by event_id, subject_sid, and source_host for
+    O(1) filtering performance. This avoids O(n×m) performance when
+    building graphs over large event sets.
+    """
 
     def __init__(self, events: List[ParsedEvent]):
         self.events = events
+        
+        # Pre-index by event ID for fast filtering
         self._by_id: Dict[int, List[ParsedEvent]] = {}
+        # Pre-index by subject SID for fast user lookups
+        self._by_sid: Dict[str, List[ParsedEvent]] = {}
+        # Pre-index by source host for fast host lookups
+        self._by_host: Dict[str, List[ParsedEvent]] = {}
+        
         for e in events:
             self._by_id.setdefault(e.event_id, []).append(e)
+            if e.subject_sid:
+                self._by_sid.setdefault(e.subject_sid, []).append(e)
+            if e.source_host:
+                self._by_host.setdefault(e.source_host.lower(), []).append(e)
 
     def filter(
         self,
@@ -245,18 +261,47 @@ class EventStream:
         category: Optional[EventCategory] = None,
         since: Optional[datetime] = None,
         host: Optional[str] = None,
+        sid: Optional[str] = None,
         exclude_dcs: bool = False,
         dc_hostnames: Optional[List[str]] = None,
     ) -> List[ParsedEvent]:
-        result = self.events
-        if ids:
-            result = [e for e in result if e.event_id in ids]
+        """Filter events with index-accelerated lookup.
+        
+        Uses pre-built indices for event_id, host, and sid filters
+        to achieve O(result_size) instead of O(total_events).
+        """
+        # Start with the most selective filter using an index
+        if ids and len(ids) == 1:
+            # Single ID lookup - use index directly
+            result = self._by_id.get(ids[0], [])
+        elif ids:
+            # Multiple IDs - union from index
+            result = []
+            for event_id in ids:
+                result.extend(self._by_id.get(event_id, []))
+        elif sid:
+            # SID filter - use index
+            result = self._by_sid.get(sid, [])
+        elif host:
+            # Host filter - use index
+            result = self._by_host.get(host.lower(), [])
+        else:
+            result = self.events
+            
+        # Apply remaining filters (these iterate over the reduced result set)
+        if ids and len(ids) > 1:
+            id_set = set(ids)
+            result = [e for e in result if e.event_id in id_set]
         if category:
             result = [e for e in result if e.category == category]
         if since:
             result = [e for e in result if e.timestamp >= since]
-        if host:
-            result = [e for e in result if e.source_host == host]
+        if host and not (sid or (ids and len(ids) == 1)):
+            # Only filter by host if we didn't already start with host index
+            result = [e for e in result if e.source_host and e.source_host.lower() == host.lower()]
+        if sid and not (host or (ids and len(ids) == 1)):
+            # Only filter by sid if we didn't already start with sid index
+            result = [e for e in result if e.subject_sid == sid]
         if exclude_dcs and dc_hostnames:
             result = [e for e in result if e.source_host not in dc_hostnames]
         return result
@@ -277,7 +322,7 @@ class EventStream:
 
     def build_edge_tensors(self, window_days: int = 30) -> Dict[tuple, EdgeTensor]:
         """Build behavioural edge tensors from event history."""
-        cutoff = datetime.utcnow() - timedelta(days=window_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
         tensors: Dict[tuple, EdgeTensor] = {}
 
         for event in self.events:
@@ -302,7 +347,7 @@ class EventStream:
             t = tensors[key]
             t.traversal_count_30d += 1
             t.last_traversal = max(t.last_traversal or event.timestamp, event.timestamp)
-            if event.timestamp >= datetime.utcnow() - timedelta(days=7):
+            if event.timestamp >= datetime.now(timezone.utc) - timedelta(days=7):
                 t.traversal_count_7d += 1
             if event.is_ntlm_on_kerb_capable:
                 t.ntlm_ratio = (t.ntlm_ratio * (t.traversal_count_30d - 1) + 1.0) / t.traversal_count_30d
@@ -373,7 +418,7 @@ class EVTXIngester:
         try:
             timestamp = datetime.fromisoformat(ts_str.rstrip("Z"))
         except ValueError:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
 
         computer_node = sys_node.find("e:Computer", ns)
         source_host = computer_node.text if computer_node is not None else ""

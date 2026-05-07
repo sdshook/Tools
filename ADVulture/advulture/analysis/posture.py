@@ -10,7 +10,7 @@ All six risk classes are evaluated simultaneously.
 from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict
 import torch
 
@@ -220,7 +220,7 @@ class PostureAnalyzer:
             counts[f.risk_class.value] += 1
 
         report = PostureReport(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             domain=snapshot.domain,
             deployment_type="hybrid" if entra_snapshot else "on_prem",
             regime=regime,
@@ -502,19 +502,35 @@ class PostureAnalyzer:
 
     def _collect_ad(self, evtx_paths):
         from advulture.collection.ldap_enumerator import LDAPEnumerator, ADSnapshot
-        from datetime import datetime
+        from advulture.config import LDAPAuthMode
+        from datetime import datetime, timezone
         cfg = self.config.ldap
-        if cfg.server and cfg.username:
+        
+        # Determine if we should attempt LDAP collection
+        # Kerberos auth doesn't need username, other modes may need server/creds
+        should_collect = (
+            cfg.auth_mode == LDAPAuthMode.KERBEROS or
+            (cfg.server and cfg.auth_mode == LDAPAuthMode.PROMPT) or
+            (cfg.server and cfg.username and cfg.auth_mode in (LDAPAuthMode.SIMPLE, LDAPAuthMode.NTLM))
+        )
+        
+        if should_collect:
             try:
                 enum = LDAPEnumerator(
-                    cfg.server, cfg.username, cfg.password, cfg.base_dn
+                    server=cfg.server or None,
+                    username=cfg.username or None,
+                    password=cfg.password or None,
+                    base_dn=cfg.base_dn or None,
+                    domain=cfg.domain or None,
+                    auth_mode=cfg.auth_mode.value,
                 )
                 return enum.enumerate_all()
             except Exception as e:
                 log.warning("LDAP collection failed: %s — using empty snapshot", e)
+        
         return ADSnapshot(
             domain="unknown.local", domain_sid="", base_dn="",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
 
     def _collect_logs(self, evtx_paths):

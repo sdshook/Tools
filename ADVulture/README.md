@@ -2,9 +2,11 @@
 
 **(c) 2025 Shane D. Shook, PhD - All Rights Reserved**
 
-> **Active Directory Vulnerability Intelligence: Empirical Posture Analysis through Graph Neural Networks and Markov Modeling**
+> **Active Directory Vulnerability Intelligence: Posture Analysis through Graph-Based Modeling and Markov Chain Analysis**
 
-ADVulture is a standalone Active Directory security posture analysis platform that fuses static AD configuration data with historical authentication and authorization event logs to produce mathematically grounded, gradient-ranked remediation intelligence. It operates without dependency on BloodHound, Neo4j, or any external graph database.
+ADVulture is a standalone Active Directory security posture analysis tool that combines static AD configuration data with historical authentication and authorization event logs to produce prioritized remediation recommendations. It operates without dependency on BloodHound, Neo4j, or any external graph database.
+
+**Note:** This tool provides detection and prioritization capabilities based on heuristic analysis. The ML components are experimental and require domain-specific tuning for production deployment.
 
 ---
 
@@ -82,19 +84,15 @@ ADVulture extends that paradigm in three ways:
 
 3. **Unified risk taxonomy:** ADVulture models six risk classes simultaneously: AuthN hygiene, AuthZ structure, AuthZ behavior, privilege escalation paths, delegation overrides, and AI agent surfaces. All classes contribute to the same GNN, the same Markov chain, and the same ranked output.
 
-### Digital Ecosystems (Sakana AI)
+### Regime Classification
 
-The regime classification and ecosystem dynamics model in ADVulture is directly inspired by **"Digital Ecosystems: Interactive Multi-Agent Neural Cellular Automata"** by Luke Darlow, Sakana AI (2026):
-
-> https://pub.sakana.ai/digital-ecosystem/
-
-That work introduced the concept of live parameter steering of competing neural species toward or away from the *edge of chaos*, a critical regime between frozen stability and turbulent collapse. ADVulture applies this framing to enterprise security posture:
+ADVulture classifies environments into three regimes based on aggregate risk indicators:
 
 - **Ordered regime:** Controls are sufficient, attack paths are suppressed, and steady-state Tier 0 probability is low.
-- **Critical regime:** The environment sits at the edge of chaos; specific control failures would cascade into full compromise.
-- **Chaotic regime:** Multiple active, high-gradient paths to Tier 0 exist simultaneously; the environment is functionally indefensible without immediate intervention.
+- **Critical regime:** The environment sits at the boundary; specific control failures could cascade into compromise.
+- **Chaotic regime:** Multiple high-priority paths to Tier 0 exist simultaneously; immediate intervention is recommended.
 
-The key insight borrowed from Sakana's work is that a single scalar parameter (in their case, growth-gate steepness; in ADVulture, the aggregate control deployment index) can move a complex system between these three regimes, and computing gradients over that parameter identifies the most efficient steering interventions.
+This classification borrows the ORDERED/CRITICAL/CHAOTIC vocabulary from dynamical systems theory. The concept of systems transitioning between stability and chaos based on parameter tuning is well-established in complexity science (see: edge of chaos, self-organized criticality). The specific thresholds in ADVulture are heuristically defined based on steady-state probability, mean first passage time, and control gradient magnitudes.
 
 ---
 
@@ -143,18 +141,30 @@ The key insight borrowed from Sakana's work is that a single scalar parameter (i
            FastAPI          HTML Report      Streamlit UI
 ```
 
+### Implementation Notes
+
+**Current Limitations:**
+
+- **GNN Training:** The GNN component requires labeled training data for optimal performance. Currently, edge weights are derived from heuristic rules based on AD object properties and event frequencies. Production deployments should consider fine-tuning with environment-specific labeled data.
+
+- **Gradient Computation:** The `∂π_tier0/∂θ` gradient requires parameterizing how security controls affect Markov transition probabilities. ADVulture uses manually-defined suppression factors (e.g., MFA reduces lateral movement edge probability by a configurable amount). These factors should be calibrated to your environment.
+
+- **Edge Weights:** "Empirically weighted edges" refers to edge probabilities computed from event log frequencies and temporal patterns. Edges traversed more frequently in logs receive higher weights. This is deterministic frequency counting, not learned embeddings.
+
 ---
 
-## Security Scenarios ADVulture Can Predict
+## Security Scenarios ADVulture Detects
 
-ADVulture's empirical analysis, combining AD configuration with actual log history, enables prediction of the following compromise scenarios. Each is derived from the gradient of steady-state Tier 0 compromise probability, weighted by observed behavioral signals.
+ADVulture detects the following compromise scenarios and risk conditions by combining AD configuration analysis with log correlation. Each scenario uses detection heuristics based on event patterns and graph reachability.
+
+> **Note:** These are detection patterns, not predictive models. ADVulture identifies indicators that suggest an attack phase is occurring or that a configuration creates an exploitable condition. It does not predict future attacks that haven't begun.
 
 ### Scenario 1: Kerberoasting → Lateral Movement → Domain Compromise
 **Risk Classes:** A (AuthN Hygiene) + E (Delegation)
 
 ADVulture identifies service accounts with Service Principal Names (SPNs) set, correlates them with 4769 events showing RC4 encryption type (0x17 downgrade), and traces the downstream blast radius through the AD graph. Where a Kerberoastable account has AdminTo edges or delegation scope reaching Tier 0, ADVulture flags the compound path.
 
-**Predictive signal:** Spike in 4769/RC4 volume over 14-day baseline indicates active Kerberoasting campaign. ADVulture correlates this with graph reachability to predict which accounts are being targeted and what they can reach.
+**Detection signal:** Spike in 4769/RC4 volume over 14-day baseline indicates active Kerberoasting. ADVulture correlates this with graph reachability to identify which accounts are being targeted and their potential blast radius.
 
 ---
 
@@ -163,25 +173,25 @@ ADVulture identifies service accounts with Service Principal Names (SPNs) set, c
 
 ESC1-vulnerable templates allow Subject Alternative Name specification, enabling any enrolling user to obtain a certificate authenticating as any other identity, including Domain Admin. ADVulture enumerates template flags (`msPKI-Certificate-Name-Flag`, enrollment rights ACLs) and correlates with 4886/4887 events to detect active enrollment against vulnerable templates.
 
-**Predictive signal:** Unusual certificate requests (4886) from non-administrative accounts against templates with broad enrollment rights, combined with ESC1 flag configuration, predicts imminent certificate-based impersonation.
+**Detection signal:** Certificate requests (4886) from non-administrative accounts against templates with broad enrollment rights, combined with ESC1 flag configuration, indicates potential certificate-based impersonation.
 
 ---
 
 ### Scenario 3: Unconstrained Delegation → TGT Harvest → Domain Admin
 **Risk Classes:** E (Delegation Override) + A (AuthN Hygiene)
 
-Computers with unconstrained delegation (`TrustedForDelegation = True`) receive a copy of the TGT of every user authenticating to them. ADVulture identifies these machines, determines which privileged accounts have authenticated to them (via 4624 event correlation), and computes the probability that a compromise of the delegation-capable machine yields Tier 0 credentials.
+Computers with unconstrained delegation (`TrustedForDelegation = True`) receive a copy of the TGT of every user authenticating to them. ADVulture identifies these machines, determines which privileged accounts have authenticated to them (via 4624 event correlation), and flags the exposure.
 
-**Predictive signal:** Tier 0 accounts (Domain Admins, Enterprise Admins) observed authenticating to unconstrained delegation machines via 4624 events creates a concrete, time-bounded compromise prediction.
+**Detection signal:** Tier 0 accounts (Domain Admins, Enterprise Admins) observed authenticating to unconstrained delegation machines via 4624 events indicates credential exposure risk.
 
 ---
 
 ### Scenario 4: Pass-the-Hash Lateral Movement Chains
 **Risk Classes:** A (AuthN Hygiene) + C (AuthZ Behavior)
 
-ADVulture detects PTH indicators: 4624 Type 3 events using NtLmSsp authentication package where Kerberos is expected, very short session durations (seconds), and 4648 explicit credential use patterns. It traces these through the graph to identify the lateral movement chain and destination.
+ADVulture detects PTH indicators: 4624 Type 3 events using NtLmSsp authentication package where Kerberos is expected, very short session durations (seconds), and 4648 explicit credential use patterns. It traces these through the graph to identify lateral movement patterns.
 
-**Predictive signal:** NTLM authentication on Kerberos-capable edges with session durations under 10 seconds indicates automated credential reuse. Graph analysis predicts next-hop targets based on AdminTo edges from the compromise origin.
+**Detection signal:** NTLM authentication on Kerberos-capable edges with session durations under 10 seconds indicates potential automated credential reuse.
 
 ---
 
@@ -190,7 +200,7 @@ ADVulture detects PTH indicators: 4624 Type 3 events using NtLmSsp authenticatio
 
 Shadow admins are accounts with effective administrative control over Tier 0 objects through ACL relationships (GenericAll, WriteDacl, WriteOwner) rather than direct group membership. ADVulture computes effective permission chains through nested ACL relationships and correlates with 4662/4670 events to detect active ACL manipulation.
 
-**Predictive signal:** 4670 (permissions changed) or 4662 (object operation) events on Tier 0 objects by accounts not in privileged groups indicates shadow admin exploitation in progress.
+**Detection signal:** 4670 (permissions changed) or 4662 (object operation) events on Tier 0 objects by accounts not in privileged groups indicates potential shadow admin activity.
 
 ---
 
@@ -199,7 +209,7 @@ Shadow admins are accounts with effective administrative control over Tier 0 obj
 
 RBCD allows any principal with write access to a computer's `msDS-AllowedToActOnBehalfOfOtherIdentity` attribute to configure delegation, enabling impersonation of any domain user to that machine. ADVulture enumerates write rights to this attribute and models the resulting impersonation paths to Tier 0.
 
-**Predictive signal:** Modification of `msDS-AllowedToActOnBehalfOfOtherIdentity` (4662 with specific GUID) followed by S4U2Self/S4U2Proxy Kerberos ticket requests predicts imminent privilege escalation to any account on the target machine.
+**Detection signal:** Modification of `msDS-AllowedToActOnBehalfOfOtherIdentity` (4662 with specific GUID) followed by S4U2Self/S4U2Proxy Kerberos ticket requests indicates RBCD exploitation.
 
 ---
 
@@ -208,7 +218,7 @@ RBCD allows any principal with write access to a computer's `msDS-AllowedToActOn
 
 Service accounts running IIS application pools, SQL Server, or other services commonly hold `SeImpersonatePrivilege`. This enables Potato-family attacks (JuicyPotato, SweetPotato, PrintSpoofer) to escalate to SYSTEM, from which LSASS can be dumped. ADVulture correlates 4672 events (SeImpersonate at logon), Sysmon Event 10 (LSASS access), and cached credential analysis to predict which hosts are one exploit from full credential harvest.
 
-**Predictive signal:** SeImpersonate on a service account (4672) on a machine with observed Tier 0 credential sessions (4624 + 4672 by privileged account) and Sysmon LSASS access attempts (Sysmon 10) constitutes a critical predictive triple.
+**Detection signal:** SeImpersonate on a service account (4672) on a machine with observed Tier 0 credential sessions (4624 + 4672 by privileged account) and Sysmon LSASS access attempts (Sysmon 10) constitutes a critical predictive triple.
 
 ---
 
@@ -217,7 +227,7 @@ Service accounts running IIS application pools, SQL Server, or other services co
 
 ADFS stores its token signing private key in a configuration database. Compromise of the ADFS server or its database enables forging of SAML assertions for any identity (a Golden SAML attack). ADVulture monitors ADFS server exposure, event 1007 (certificate operations), token issuance without corresponding authentication events (ADFS 299 without preceding 4624), and claim rules granting broad access to relying parties.
 
-**Predictive signal:** Token issuance (ADFS 299) from unexpected source IP or without preceding DC authentication, combined with claim rule modifications (403), indicates Golden SAML exploitation.
+**Detection signal:** Token issuance (ADFS 299) from unexpected source IP or without preceding DC authentication, combined with claim rule modifications (403), indicates Golden SAML exploitation.
 
 ---
 
@@ -226,7 +236,7 @@ ADFS stores its token signing private key in a configuration database. Compromis
 
 Misconfigured inter-domain and inter-forest trusts without SID filtering enabled allow SID history injection, enabling accounts from trusted domains to carry Tier 0 SIDs. ADVulture enumerates trust attributes (`trustAttributes`, `securityIdentifier`) and models cross-boundary attack paths.
 
-**Predictive signal:** 4768 Kerberos TGT requests from cross-domain accounts to Tier 0 services, combined with SID filtering disabled on the trust, predicts cross-domain compromise escalation.
+**Detection signal:** 4768 Kerberos TGT requests from cross-domain accounts to Tier 0 services, combined with SID filtering disabled on the trust, indicates cross-domain compromise escalation.
 
 ---
 
@@ -235,7 +245,7 @@ Misconfigured inter-domain and inter-forest trusts without SID filtering enabled
 
 Accounts with `DONT_REQ_PREAUTH` set in `userAccountControl` allow unauthenticated retrieval of Kerberos AS-REP responses, which can be cracked offline. ADVulture identifies all such accounts, determines their group memberships and ACL-based reach, and ranks them by downstream blast radius.
 
-**Predictive signal:** 4768 events without pre-authentication for accounts with downstream Tier 0 reachability identifies active AS-REP roasting targets.
+**Detection signal:** 4768 events without pre-authentication for accounts with downstream Tier 0 reachability identifies active AS-REP roasting targets.
 
 ---
 
@@ -244,7 +254,7 @@ Accounts with `DONT_REQ_PREAUTH` set in `userAccountControl` allow unauthenticat
 
 AI agents (Microsoft Copilot, custom LangChain/AutoGen agents, MCP-enabled agents) authorized with broad OAuth scopes (Mail.ReadWrite, Files.ReadWrite.All) and code execution MCP tools can be weaponized via prompt injection through email, document, or web content. The resulting actions are fully authorized, with no ACL violation, no authentication anomaly.
 
-**Predictive signal:** AI agent with Mail.Read + action-capable MCP tools processing external content constitutes a structural prediction of injection risk regardless of whether exploitation has been observed.
+**Detection signal:** AI agent with Mail.Read + action-capable MCP tools processing external content constitutes a structural prediction of injection risk regardless of whether exploitation has been observed.
 
 ---
 
@@ -253,7 +263,7 @@ AI agents (Microsoft Copilot, custom LangChain/AutoGen agents, MCP-enabled agent
 
 Legacy authentication protocols (Basic Auth, IMAP, POP3, SMTP AUTH) bypass Conditional Access policies including MFA requirements. ADVulture identifies accounts without legacy auth blocked, correlates with Entra sign-in logs showing legacy protocol authentication, and flags accounts targeted by spray patterns (distributed low-velocity failures across many usernames).
 
-**Predictive signal:** Multiple 4625/Entra signin failure events across >50 accounts within 60 minutes using legacy authentication protocols, followed by successful authentication on targeted accounts, predicts successful spray-and-authenticate.
+**Detection signal:** Multiple 4625/Entra signin failure events across >50 accounts within 60 minutes using legacy authentication protocols, followed by successful authentication on targeted accounts, indicates successful spray-and-authenticate.
 
 ---
 
@@ -262,7 +272,7 @@ Legacy authentication protocols (Basic Auth, IMAP, POP3, SMTP AUTH) bypass Condi
 
 Service accounts with passwords unchanged for >365 days, SPNs set, and AdminTo or delegation rights represent the highest-confidence attack path prediction ADVulture generates. The old password increases cracking probability; the SPN enables offline hash retrieval; the downstream rights determine impact.
 
-**Predictive signal:** Service account with SPN + password age > 365 days + AdminTo or unconstrained delegation = near-certain eventual compromise path. Gradient contribution is typically among the top three findings in any environment.
+**Detection signal:** Service account with SPN + password age > 365 days + AdminTo or unconstrained delegation = near-certain eventual compromise path. Gradient contribution is typically among the top three findings in any environment.
 
 ---
 
@@ -271,7 +281,7 @@ Service accounts with passwords unchanged for >365 days, SPNs set, and AdminTo o
 
 Users manually added to local Administrators groups on servers (not via domain GPO or domain group) are invisible to ACL analysis but discoverable through 4732 event correlation on member servers. These standing local admin rights enable credential harvesting even when domain group memberships appear clean.
 
-**Predictive signal:** 4732 events on non-DC hosts for accounts not in domain admin groups, combined with privileged sessions on the same host (4624 + 4672), predicts undocumented lateral movement paths.
+**Detection signal:** 4732 events on non-DC hosts for accounts not in domain admin groups, combined with privileged sessions on the same host (4624 + 4672), indicates undocumented lateral movement paths.
 
 ---
 
@@ -311,7 +321,7 @@ ADVulture supports three deployment scenarios with simple, interactive authentic
 |----------|---------|--------------|
 | **Cloud-only** | `advulture analyze --entra-only` | Entra ID directory + sign-in logs |
 | **On-prem only** | `advulture analyze --ad-only` | AD via LDAP + DC event logs (auto-discovered) |
-| **Hybrid** | `advulture analyze --entra-auth device_code` | All of the above |
+| **Hybrid** | `advulture analyze --ad-auth kerberos --entra-auth device_code` | All of the above |
 
 ### Simplest Usage
 
@@ -322,8 +332,8 @@ advulture analyze --entra-only
 # On-prem only (AD + DC event logs)
 advulture analyze --ad-only
 
-# Hybrid (AD + Entra)
-advulture analyze --entra-auth device_code
+# Hybrid (AD + Entra) - collects from both on-prem DC and Azure AD
+advulture analyze --ad-auth kerberos --entra-auth device_code
 ```
 
 That's it. No config file, no paths to specify. ADVulture will:
@@ -403,14 +413,14 @@ advulture analyze --entra-only --config config.yaml
 For domain-joined environments synced to Entra ID via Azure AD Connect:
 
 ```shell
-# Full hybrid analysis (EVTX files auto-discovered)
-advulture analyze --entra-auth device_code
-
-# Using Kerberos ticket (domain-joined Windows machine)
+# Full hybrid analysis using Kerberos for AD + device code for Entra
 advulture analyze --ad-auth kerberos --entra-auth device_code
 
 # Specify domain explicitly if auto-discovery fails
-advulture analyze --domain corp.local --entra-auth device_code
+advulture analyze --ad-auth kerberos --domain corp.local --entra-auth device_code
+
+# Prompt for AD credentials instead of using Kerberos ticket
+advulture analyze --ad-auth prompt --entra-auth device_code
 ```
 
 **Exporting DC logs:** If not running directly on a DC, export logs first:
@@ -455,7 +465,7 @@ advulture analyze --entra-only
 advulture analyze --ad-only
 
 # Hybrid (AD + Entra) — recommended for domain-joined environments
-advulture analyze --entra-auth device_code
+advulture analyze --ad-auth kerberos --entra-auth device_code
 
 # Using config file (for automation)
 advulture analyze --config config.yaml
@@ -516,7 +526,7 @@ The offline audit analyzes:
 
 ```shell
 advulture serve --host 0.0.0.0 --port 8000
-# Dashboard available at http://localhost:8000/ui
+# API documentation available at http://localhost:8000/docs
 ```
 
 ---
@@ -558,12 +568,8 @@ ADVulture produces:
 
 ---
 
-## License
-
-Apache 2.0. See [LICENSE](LICENSE)
-
----
-
 ## Disclaimer
 
 ADVulture is an authorized security assessment tool. It must only be used against environments for which you have explicit written permission. The authors accept no liability for unauthorized use.
+
+This software is proprietary. All rights reserved. Contact the author for licensing inquiries.

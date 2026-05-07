@@ -20,7 +20,7 @@ ADVulture uses Microsoft's well-known Azure CLI client ID by default.
 from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from enum import Enum
@@ -179,7 +179,7 @@ class EntraEventStream:
 
     def get_spray_candidates(self, window_hours: int = 1) -> List[dict]:
         """Detect password spray: many failures across many users in short window."""
-        cutoff = datetime.utcnow() - timedelta(hours=window_hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
         failures = [
             s for s in self.signins
             if s.timestamp >= cutoff
@@ -408,7 +408,7 @@ class EntraEnumerator:
     async def enumerate_all(self) -> EntraSnapshot:
         log.info("Enumerating Entra ID tenant: %s", self.tenant_id)
         snapshot = EntraSnapshot(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             tenant_id=self.tenant_id,
         )
 
@@ -554,7 +554,7 @@ class EntraLogIngester:
         return self._enumerator
 
     async def collect_window(self, days: int = 30) -> EntraEventStream:
-        since = datetime.utcnow() - timedelta(days=days)
+        since = datetime.now(timezone.utc) - timedelta(days=days)
         stream = EntraEventStream()
         stream.signins = await self._get_signins(since)
         stream.audits = await self._get_audits(since)

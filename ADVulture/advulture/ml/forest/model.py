@@ -14,9 +14,16 @@ from typing import List, Dict, Tuple, Optional
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score
-from sklearn.preprocessing import StandardScaler
 
 log = logging.getLogger(__name__)
+
+# Check for SHAP availability (optional dependency for interaction analysis)
+try:
+    import shap
+    SHAP_AVAILABLE = True
+except ImportError:
+    SHAP_AVAILABLE = False
+    log.debug("SHAP not available — interaction detection will use rule-based fallback")
 
 
 @dataclass
@@ -73,16 +80,21 @@ class ADScenarioForest:
             random_state=42,
             n_jobs=-1,
         )
-        self.scaler = StandardScaler()
         self.trained = False
         self.feature_names = CONTROL_NAMES + [
             "domain_size_log", "esc_count", "unconstrained_deleg_count",
             "lpe_surface_score",
         ]
+        self._training_X: Optional[np.ndarray] = None  # For SHAP background
+        self._shap_explainer = None
+        self._shap_interactions: Optional[np.ndarray] = None
 
     def train(self, training_points: List[TrainingPoint]) -> float:
         """
         Train the RF model. Returns cross-validated R² score.
+        
+        Note: RF is split-based and invariant to monotonic feature transformations,
+        so we don't use StandardScaler here (it adds no benefit for tree models).
         """
         if len(training_points) < 20:
             log.warning("Insufficient training data (%d points) — RF predictions unreliable",
@@ -91,44 +103,90 @@ class ADScenarioForest:
         X = np.array([self._featurise(t) for t in training_points])
         y = np.array([t.tier0_probability for t in training_points])
 
-        X_scaled = self.scaler.fit_transform(X)
-        self.model.fit(X_scaled, y)
+        self.model.fit(X, y)
         self.trained = True
+        self._training_X = X  # Keep for SHAP background
+        
+        # Compute SHAP interactions if available
+        self._compute_shap_interactions(X)
 
         if len(training_points) >= 10:
-            cv_scores = cross_val_score(self.model, X_scaled, y, cv=min(5, len(training_points)))
+            cv_scores = cross_val_score(self.model, X, y, cv=min(5, len(training_points)))
             r2 = float(cv_scores.mean())
             log.info("RF trained. CV R²=%.3f ± %.3f", r2, cv_scores.std())
             return r2
         return 0.0
+    
+    def _compute_shap_interactions(self, X: np.ndarray) -> None:
+        """Compute SHAP interaction values to detect control synergies."""
+        if not SHAP_AVAILABLE:
+            return
+        
+        try:
+            # Use a sample of background data for efficiency
+            n_background = min(100, len(X))
+            background = X[np.random.choice(len(X), n_background, replace=False)]
+            
+            self._shap_explainer = shap.TreeExplainer(self.model, background)
+            
+            # Compute interaction values on a sample
+            n_interactions = min(50, len(X))
+            sample = X[np.random.choice(len(X), n_interactions, replace=False)]
+            self._shap_interactions = self._shap_explainer.shap_interaction_values(sample)
+            
+            log.info("SHAP interaction values computed for %d control pairs", 
+                     len(CONTROL_NAMES) * (len(CONTROL_NAMES) - 1) // 2)
+        except Exception as e:
+            log.debug("SHAP interaction computation failed: %s", e)
+            self._shap_interactions = None
 
     def generate_synthetic_training_data(
         self,
         markov_runner,
-        n_samples: int = 500,
+        n_samples: int = 2000,  # Increased from 500 for better interaction coverage
         env_features: Optional[Dict] = None,
     ) -> List[TrainingPoint]:
         """
         Generate training data by sampling random control configurations
         and computing their actual Markov steady-state probabilities.
         This is the ground-truth training signal for the RF.
+        
+        With 16 controls and potential pairwise interactions, we need
+        sufficient samples (>=2000) to capture three-way interactions
+        reliably.
         """
         import torch
         training_points = []
         env = env_features or {}
 
         log.info("Generating %d synthetic training points...", n_samples)
+        
         for i in range(n_samples):
-            # Sample random control deployment levels
+            # Use bimodal beta distribution that better matches real deployments
+            # Controls are typically either deployed (>=0.7) or not (<=0.2)
+            if np.random.random() < 0.5:
+                # Low deployment region
+                a, b = 0.3, 2.0
+            else:
+                # High deployment region
+                a, b = 2.0, 0.3
+            
             controls = {
-                ctrl: float(np.random.beta(a=1.5, b=1.5))  # beta skew toward middle
+                ctrl: float(np.random.beta(a=a, b=b))
                 for ctrl in CONTROL_NAMES
             }
 
-            # Force some extreme cases for better boundary learning
+            # Force some boundary cases for better edge learning
             if i < n_samples // 10:
                 for ctrl in CONTROL_NAMES:
                     controls[ctrl] = float(np.random.choice([0.0, 0.1, 0.9, 1.0]))
+            
+            # Generate some focused interaction samples
+            # (specific control pairs at high values together)
+            elif i < n_samples // 5:
+                pair = np.random.choice(CONTROL_NAMES, size=2, replace=False)
+                for ctrl in pair:
+                    controls[ctrl] = float(np.random.uniform(0.8, 1.0))
 
             # Compute actual Markov result for this control set
             try:
@@ -174,11 +232,9 @@ class ADScenarioForest:
             env.get("lpe_surface_score", 0.5),
         ]])
 
-        X_scaled = self.scaler.transform(features)
-
         # Per-tree predictions for uncertainty
         tree_preds = np.array([
-            tree.predict(X_scaled)[0]
+            tree.predict(features)[0]
             for tree in self.model.estimators_
         ])
         predicted = float(tree_preds.mean())
@@ -188,7 +244,12 @@ class ADScenarioForest:
         reduction = baseline_prob - predicted
         pct = (reduction / max(baseline_prob, 0.001)) * 100
 
-        interactions = self._detect_interactions(proposed_controls, merged)
+        # Detect interactions (SHAP-based if available, rule-based fallback)
+        interactions = self._detect_interactions(proposed_controls, merged, features)
+        
+        # Calibrated confidence based on out-of-distribution detection
+        # Higher std relative to typical training variance → lower confidence
+        confidence = self._compute_confidence(predicted_std, features)
 
         return ScenarioCandidate(
             controls=proposed_controls,
@@ -197,8 +258,29 @@ class ADScenarioForest:
             absolute_reduction=round(reduction, 4),
             pct_reduction=round(pct, 1),
             interaction_effects=interactions,
-            confidence=max(0.0, 1.0 - predicted_std * 5),
+            confidence=round(confidence, 3),
         )
+    
+    def _compute_confidence(self, predicted_std: float, features: np.ndarray) -> float:
+        """
+        Compute calibrated confidence score based on prediction variance
+        and distance from training distribution.
+        """
+        if self._training_X is None:
+            return max(0.0, 1.0 - predicted_std * 3)
+        
+        # Compute distance to nearest training point
+        dists = np.linalg.norm(self._training_X - features, axis=1)
+        min_dist = float(dists.min())
+        
+        # Typical training data spread
+        training_spread = float(np.std(dists))
+        
+        # Confidence decreases with distance and std
+        dist_factor = 1.0 / (1.0 + min_dist / max(training_spread, 0.1))
+        std_factor = 1.0 / (1.0 + predicted_std * 2)
+        
+        return max(0.0, min(1.0, dist_factor * std_factor))
 
     def top_scenarios(
         self,
@@ -210,34 +292,114 @@ class ADScenarioForest:
     ) -> List[ScenarioCandidate]:
         """
         Search for the best combination of `budget` control improvements.
-        Uses random sampling to explore the combinatorial space.
+        
+        Uses a hybrid approach:
+        1. Greedy hill-climbing: iteratively add the best single control
+        2. Random exploration: sample diverse combinations
+        3. Feature importance-weighted sampling: focus on high-impact controls
         """
         candidates = []
-
-        for _ in range(n_candidates):
-            # Sample `budget` controls to improve
-            improvable = [
-                c for c in CONTROL_NAMES
-                if current_controls.get(c, 0) < 0.9
-            ]
-            if not improvable:
-                break
+        improvable = [
+            c for c in CONTROL_NAMES
+            if current_controls.get(c, 0) < 0.9
+        ]
+        
+        if not improvable:
+            return []
+        
+        # Get feature importances to weight sampling
+        importances = dict(self.feature_importances()) if self.trained else {}
+        weights = np.array([importances.get(c, 1.0) for c in improvable])
+        weights = weights / weights.sum()
+        
+        # --- Strategy 1: Greedy hill-climbing ---
+        for _ in range(3):  # Multiple greedy runs with randomization
+            greedy_controls = {}
+            remaining_budget = budget
+            
+            while remaining_budget > 0 and improvable:
+                best_ctrl = None
+                best_reduction = -float('inf')
+                
+                for ctrl in improvable:
+                    if ctrl in greedy_controls:
+                        continue
+                    test_proposal = dict(greedy_controls)
+                    test_proposal[ctrl] = min(1.0, current_controls.get(ctrl, 0) + 0.7)
+                    
+                    candidate = self.predict(
+                        test_proposal, env_features, current_controls, baseline_prob
+                    )
+                    if candidate.absolute_reduction > best_reduction:
+                        best_reduction = candidate.absolute_reduction
+                        best_ctrl = ctrl
+                
+                if best_ctrl:
+                    improvement = np.random.uniform(0.5, 0.8)  # Add some randomness
+                    greedy_controls[best_ctrl] = min(1.0, current_controls.get(best_ctrl, 0) + improvement)
+                    remaining_budget -= 1
+                else:
+                    break
+            
+            if greedy_controls:
+                candidates.append(self.predict(
+                    greedy_controls, env_features, current_controls, baseline_prob
+                ))
+        
+        # --- Strategy 2: Random exploration with importance weighting ---
+        for _ in range(n_candidates - len(candidates)):
+            # Sample controls with importance-based probability
+            n_select = min(budget, len(improvable))
             selected = np.random.choice(
                 improvable,
-                size=min(budget, len(improvable)),
+                size=n_select,
                 replace=False,
+                p=weights,
             )
             proposed = {
-                ctrl: min(1.0, current_controls.get(ctrl, 0) + np.random.uniform(0.3, 0.7))
+                ctrl: min(1.0, current_controls.get(ctrl, 0) + np.random.uniform(0.3, 0.8))
                 for ctrl in selected
             }
             candidate = self.predict(
                 proposed, env_features, current_controls, baseline_prob
             )
             candidates.append(candidate)
+        
+        # --- Strategy 3: Known synergistic pairs ---
+        synergy_pairs = [
+            ("mfa_coverage", "laps_deployed"),
+            ("adcs_hardened", "mfa_coverage"),
+            ("edr_coverage", "laps_deployed"),
+            ("tiered_admin", "delegation_audit"),
+            ("mcp_scope_restriction", "agent_content_isolation"),
+        ]
+        for ctrl1, ctrl2 in synergy_pairs:
+            if ctrl1 in improvable and ctrl2 in improvable:
+                proposed = {
+                    ctrl1: min(1.0, current_controls.get(ctrl1, 0) + 0.7),
+                    ctrl2: min(1.0, current_controls.get(ctrl2, 0) + 0.7),
+                }
+                if budget > 2:
+                    # Add a third control with highest importance
+                    remaining = [c for c in improvable if c not in proposed]
+                    if remaining:
+                        third = max(remaining, key=lambda c: importances.get(c, 0))
+                        proposed[third] = min(1.0, current_controls.get(third, 0) + 0.5)
+                
+                candidates.append(self.predict(
+                    proposed, env_features, current_controls, baseline_prob
+                ))
 
-        candidates.sort(key=lambda c: c.absolute_reduction, reverse=True)
-        return candidates[:10]
+        # Deduplicate and sort
+        seen = set()
+        unique_candidates = []
+        for c in sorted(candidates, key=lambda x: x.absolute_reduction, reverse=True):
+            key = tuple(sorted(c.controls.items()))
+            if key not in seen:
+                seen.add(key)
+                unique_candidates.append(c)
+        
+        return unique_candidates[:10]
 
     def feature_importances(self) -> List[Tuple[str, float]]:
         """Return feature importances ranked by contribution."""
@@ -260,14 +422,24 @@ class ADScenarioForest:
         ])
 
     def _detect_interactions(
-        self, proposed: Dict[str, float], merged: Dict[str, float]
+        self, proposed: Dict[str, float], merged: Dict[str, float], 
+        features: Optional[np.ndarray] = None
     ) -> List[str]:
         """
-        Identify known synergistic control combinations in the proposal.
+        Identify synergistic control combinations in the proposal.
+        
+        Uses SHAP interaction values when available to surface data-driven
+        interactions. Falls back to domain knowledge rules.
         """
         synergies = []
         m = merged
 
+        # Try SHAP-based interaction detection first
+        if features is not None and SHAP_AVAILABLE and self._shap_interactions is not None:
+            shap_synergies = self._shap_interaction_analysis(proposed, features)
+            synergies.extend(shap_synergies)
+        
+        # Always include domain knowledge rules (complementary to SHAP)
         if m.get("mfa_coverage", 0) > 0.8 and m.get("laps_deployed", 0) > 0.8:
             synergies.append(
                 "MFA + LAPS synergy: combined suppression of credential theft chains "
@@ -293,7 +465,80 @@ class ADScenarioForest:
                 "MCP scope + content isolation: combined AI agent surface reduction — "
                 "scope limits blast radius; isolation prevents injection weaponisation"
             )
+        
+        # Deduplicate
+        return list(dict.fromkeys(synergies))
+    
+    def _shap_interaction_analysis(
+        self, proposed: Dict[str, float], features: np.ndarray
+    ) -> List[str]:
+        """
+        Analyze SHAP interaction values for the proposed control set.
+        Returns explanations of detected interaction effects.
+        """
+        if self._shap_interactions is None:
+            return []
+        
+        synergies = []
+        
+        try:
+            # Get indices of proposed controls
+            proposed_indices = [
+                CONTROL_NAMES.index(ctrl) 
+                for ctrl in proposed.keys() 
+                if ctrl in CONTROL_NAMES
+            ]
+            
+            if len(proposed_indices) < 2:
+                return []
+            
+            # Average interaction matrix across samples
+            # _shap_interactions shape: [n_samples, n_features, n_features]
+            avg_interactions = np.abs(self._shap_interactions).mean(axis=0)
+            
+            # Check interaction strength between proposed controls
+            for i, idx1 in enumerate(proposed_indices):
+                for idx2 in proposed_indices[i+1:]:
+                    interaction_strength = avg_interactions[idx1, idx2]
+                    
+                    # If interaction is significant (top 10% of all interactions)
+                    threshold = np.percentile(avg_interactions, 90)
+                    if interaction_strength > threshold:
+                        ctrl1 = CONTROL_NAMES[idx1]
+                        ctrl2 = CONTROL_NAMES[idx2]
+                        synergies.append(
+                            f"SHAP-detected synergy: {ctrl1} + {ctrl2} "
+                            f"(interaction strength: {interaction_strength:.3f})"
+                        )
+        except Exception as e:
+            log.debug("SHAP interaction analysis failed: %s", e)
+        
         return synergies
+    
+    def get_top_interactions(self, n: int = 10) -> List[Tuple[str, str, float]]:
+        """
+        Return the top N strongest control interactions learned by the model.
+        Requires SHAP to be available and model to be trained.
+        """
+        if self._shap_interactions is None:
+            return []
+        
+        try:
+            avg_interactions = np.abs(self._shap_interactions).mean(axis=0)
+            
+            # Get all unique pairs
+            n_controls = len(CONTROL_NAMES)
+            pairs = []
+            for i in range(n_controls):
+                for j in range(i + 1, n_controls):
+                    pairs.append((CONTROL_NAMES[i], CONTROL_NAMES[j], avg_interactions[i, j]))
+            
+            # Sort by interaction strength
+            pairs.sort(key=lambda x: x[2], reverse=True)
+            return pairs[:n]
+        except Exception as e:
+            log.debug("Failed to get top interactions: %s", e)
+            return []
 
     def _heuristic_estimate(
         self, proposed: Dict[str, float], baseline: float

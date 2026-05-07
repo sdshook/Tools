@@ -5,7 +5,7 @@ ADVulture — Audit Module Tests
 
 from __future__ import annotations
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
 import os
@@ -99,7 +99,7 @@ class TestOfflineUser:
             distinguished_name="CN=Recent,OU=Users,DC=corp,DC=local",
             sid="S-1-5-21-1234-5678-9012-1006",
             user_account_control=0x200,
-            pwd_last_set=datetime.utcnow() - timedelta(days=30),
+            pwd_last_set=datetime.now(timezone.utc) - timedelta(days=30),
         )
         assert recent_pwd.password_age_days is not None
         assert 29 <= recent_pwd.password_age_days <= 31
@@ -242,7 +242,7 @@ class TestAuditReport:
             domain_sid="S-1-5-21-1234-5678-9012",
             forest_name="corp.local",
             functional_level="2016",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             ntds_path="/test/ntds.dit",
         )
         
@@ -256,7 +256,7 @@ class TestAuditReport:
         ]
         
         report = AuditReport(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             snapshot=snapshot,
             findings=findings,
         )
@@ -276,7 +276,7 @@ class TestAuditReport:
             domain_sid="S-1-5-21-1234-5678-9012",
             forest_name="corp.local",
             functional_level="2016",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             ntds_path="/test/ntds.dit",
             users=[
                 OfflineUser(sam_account_name="user1", distinguished_name="", sid="", user_account_control=0x200),
@@ -285,7 +285,7 @@ class TestAuditReport:
         )
         
         report = AuditReport(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             snapshot=snapshot,
             findings=[],
         )
@@ -309,7 +309,7 @@ class TestOfflineAuditor:
             domain_sid="S-1-5-21-1234-5678-9012",
             forest_name="corp.local",
             functional_level="2016",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             ntds_path="/test/ntds.dit",
             users=[
                 # Privileged kerberoastable
@@ -367,7 +367,7 @@ class TestOfflineAuditor:
             domain_sid="S-1-5-21-1234-5678-9012",
             forest_name="corp.local",
             functional_level="2016",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             ntds_path="/test/ntds.dit",
             users=[
                 # AS-REP roastable
@@ -405,7 +405,7 @@ class TestOfflineAuditor:
             domain_sid="S-1-5-21-1234-5678-9012",
             forest_name="corp.local",
             functional_level="2016",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             ntds_path="/test/ntds.dit",
             computers=[
                 # Domain Controller (unconstrained delegation is expected)

@@ -10,7 +10,7 @@ authorisation grants not backed by AD group membership.
 from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict
 from pathlib import Path
 
@@ -198,7 +198,7 @@ class ADFSLogIngester:
         try:
             timestamp = datetime.fromisoformat(ts_str.rstrip("Z"))
         except ValueError:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
 
         comp_node = sys_node.find("e:Computer", ns)
         host = comp_node.text if comp_node is not None else ""

@@ -61,17 +61,10 @@ class AttackChainMarkov:
         LPE paths are added as additional transitions orthogonal to AD-based paths.
         
         IMPORTANT: This method preserves gradient tracking through theta parameters.
+        Avoids inplace operations to maintain autograd compatibility.
         """
-        # Start with zeros - we'll accumulate differentiable values
-        P = torch.zeros(self.n, self.n, dtype=torch.float32)
-        
-        # Ensure edge_probs supports gradients if needed
-        if not edge_probs.requires_grad:
-            edge_probs = edge_probs.clone().detach()
-
         # Standard AD graph transitions
         # Apply control suppression to edge probabilities
-        # Base suppression from MFA and other controls
         mfa = theta.get("mfa_coverage", torch.tensor(0.0, dtype=torch.float32))
         smb = theta.get("smb_signing", torch.tensor(0.0, dtype=torch.float32))
         tiered = theta.get("tiered_admin", torch.tensor(0.0, dtype=torch.float32))
@@ -80,66 +73,96 @@ class AttackChainMarkov:
         suppression = 1.0 - 0.3 * mfa - 0.2 * smb - 0.25 * tiered
         suppression = torch.clamp(suppression, min=0.1, max=1.0)
         
-        for idx in range(edge_index.shape[1]):
-            src = edge_index[0, idx].item()
-            dst = edge_index[1, idx].item()
-            # Apply suppression to edge probability (maintains gradient flow)
-            p = edge_probs[idx] * suppression
-            # Use in-place max operation while preserving gradients
-            if P[src, dst] < p:
-                P = P.clone()  # Avoid in-place modification issues
-                P[src, dst] = p
-
+        # Create sparse COO representation and convert to dense
+        # This avoids inplace operations that break autograd
+        src_nodes = edge_index[0]
+        dst_nodes = edge_index[1]
+        suppressed_probs = edge_probs * suppression
+        
+        # Build sparse tensor and convert to dense (no inplace ops)
+        indices = edge_index
+        values = suppressed_probs
+        P_sparse = torch.sparse_coo_tensor(indices, values, (self.n, self.n))
+        P = P_sparse.to_dense()
+        
         # LPE transitions (suppressed only by EDR, not AD controls)
+        # Build a separate tensor for LPE contributions
         if lpe_pairs:
             edr = theta.get("edr_coverage", torch.tensor(0.0, dtype=torch.float32))
+            lpe_values = []
+            lpe_indices = [[], []]
+            
             for lpe in lpe_pairs:
                 src_id = lpe.get("account_node_id")
                 sys_id = lpe.get("system_node_id")
                 if src_id is not None and sys_id is not None and src_id < self.n and sys_id < self.n:
                     base_prob = torch.tensor(lpe.get("probability", 0.5), dtype=torch.float32)
                     lpe_p = base_prob * (1.0 - 0.80 * edr)
-                    if P[src_id, sys_id] < lpe_p:
-                        P = P.clone()
-                        P[src_id, sys_id] = lpe_p
-                    # SYSTEM → cached credential nodes
+                    lpe_indices[0].append(src_id)
+                    lpe_indices[1].append(sys_id)
+                    lpe_values.append(lpe_p)
+                    
+                    # SYSTEM → cached credential nodes (also EDR-suppressed)
+                    cred_prob = 0.95 * (1.0 - 0.5 * edr)
                     for cred_node_id in lpe.get("credential_nodes", []):
                         if cred_node_id < self.n:
-                            P = P.clone()
-                            P[sys_id, cred_node_id] = torch.tensor(0.95, dtype=torch.float32)
+                            lpe_indices[0].append(sys_id)
+                            lpe_indices[1].append(cred_node_id)
+                            lpe_values.append(cred_prob)
+            
+            if lpe_values:
+                lpe_idx = torch.tensor(lpe_indices, dtype=torch.long)
+                lpe_vals = torch.stack(lpe_values)
+                P_lpe = torch.sparse_coo_tensor(lpe_idx, lpe_vals, (self.n, self.n)).to_dense()
+                # Take element-wise maximum (no inplace)
+                P = torch.maximum(P, P_lpe)
 
-        # Absorbing states: once Tier0 is reached, attacker stays
-        # Zero out rows for tier0 nodes, then set self-loop to 1
+        # Absorbing states: create mask for tier0 rows
+        # Build new tensor instead of inplace modification
+        tier0_mask = torch.zeros(self.n, dtype=torch.bool)
         for t in self.tier0_ids:
             if t < self.n:
-                P = P.clone()
-                P[t, :] = 0.0
-                P[t, t] = 1.0
+                tier0_mask[t] = True
+        
+        # Zero out tier0 rows and set self-loops
+        P_new = P.clone()
+        for t in self.tier0_ids:
+            if t < self.n:
+                # Create a new row with only self-loop
+                new_row = torch.zeros(self.n, dtype=torch.float32)
+                new_row[t] = 1.0
+                P_new = torch.cat([P_new[:t], new_row.unsqueeze(0), P_new[t+1:]], dim=0)
+        P = P_new
 
-        # Row-normalize to make it a valid stochastic matrix
-        # Add small self-loop probability for nodes with no outgoing edges
-        row_sums = P.sum(dim=1, keepdim=True)
-        
         # For rows with zero sum (no outgoing edges), add self-loop
-        zero_rows = (row_sums.squeeze() < 1e-10)
-        if zero_rows.any():
-            P = P.clone()
-            for i in range(self.n):
-                if zero_rows[i] and i not in self.tier0_ids:
-                    P[i, i] = 1.0
-            row_sums = P.sum(dim=1, keepdim=True)
+        row_sums = P.sum(dim=1, keepdim=True)
+        zero_mask = (row_sums.squeeze() < 1e-10) & ~tier0_mask
+        if zero_mask.any():
+            self_loops = torch.diag(zero_mask.float())
+            P = P + self_loops
         
-        # Normalize
+        # Row-normalize to make it a valid stochastic matrix
+        row_sums = P.sum(dim=1, keepdim=True)
         row_sums = row_sums.clamp(min=1e-10)
         P = P / row_sums
         
         return P
 
-    def steady_state(self, P: torch.Tensor) -> torch.Tensor:
+    def steady_state(
+        self, 
+        P: torch.Tensor, 
+        max_iterations: int = 150,
+        convergence_threshold: float = 1e-9,
+    ) -> torch.Tensor:
         """
-        Power iteration — converges in ~150 steps.
+        Power iteration for steady-state computation.
         Differentiable through autograd: gradients flow back through
         each iteration to all parameters that affect P.
+        
+        Args:
+            P: Transition matrix [N, N]
+            max_iterations: Maximum iteration count (default: 150)
+            convergence_threshold: Stop when ||π_new - π|| < threshold (default: 1e-9)
         
         Returns a valid probability distribution that sums to 1.0.
         """
@@ -147,12 +170,12 @@ class AttackChainMarkov:
         pi = torch.ones(self.n, dtype=P.dtype, device=P.device) / self.n
         
         # Power iteration
-        for iteration in range(200):
+        for iteration in range(max_iterations):
             pi_next = torch.matmul(pi, P)
             
             # Check convergence
             diff = torch.norm(pi_next - pi)
-            if diff < 1e-10:
+            if diff < convergence_threshold:
                 break
             pi = pi_next
         
@@ -375,6 +398,7 @@ class RemediationItem:
     weighted_priority: float
     explanation: str
     risk_classes_affected: List[str] = field(default_factory=list)
+    is_counterproductive: bool = False  # True if gradient is positive (control increases risk)
 
 
 # Phase-to-control relevance matrix [phase_idx, control_idx]
@@ -462,17 +486,28 @@ class GradientEngine:
         for ctrl in theta_values.keys():
             grad = grads.get(ctrl, 0.0)
             phase_rel = phase_weights.get(ctrl, 1.0)
+            # Negative gradient = deploying control reduces risk (good)
+            # Positive gradient = deploying control increases risk (counterproductive)
+            # We want to prioritize beneficial controls (negative gradients with high magnitude)
+            is_counterproductive = grad > 0
+            # For beneficial controls, use negative gradient (larger negative = higher priority)
+            # For counterproductive controls, still show them but flag them
+            weighted_priority = abs(grad) * phase_rel
+            
             items.append(RemediationItem(
                 control=ctrl,
                 gradient=grad,
                 current_value=theta_values[ctrl],
                 phase_relevance=phase_rel,
-                weighted_priority=abs(grad) * phase_rel,
+                weighted_priority=weighted_priority,
                 explanation=self._explain(ctrl, grad, phase_detection),
                 risk_classes_affected=self._classes_for_control(ctrl),
+                is_counterproductive=is_counterproductive,
             ))
 
-        return sorted(items, key=lambda x: x.weighted_priority, reverse=True)
+        # Sort: beneficial controls first (negative gradient), then by magnitude
+        # Counterproductive controls are flagged but still ranked by impact
+        return sorted(items, key=lambda x: (x.is_counterproductive, -x.weighted_priority))
     
     def _numerical_gradients(
         self,

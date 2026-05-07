@@ -221,13 +221,13 @@ def analyze(ctx, output: Path, evtx, fmt: str,
     gen = ReportGenerator()
     output.mkdir(parents=True, exist_ok=True)
     if fmt in ("html", "both"):
-        from datetime import datetime
-        html_path = output / f"advulture_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.html"
+        from datetime import datetime, timezone
+        html_path = output / f"advulture_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.html"
         gen.generate_html(report, html_path)
         console.print(f"\n[green]HTML report:[/green] {html_path}")
     if fmt in ("json", "both"):
-        from datetime import datetime
-        json_path = output / f"advulture_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+        from datetime import datetime, timezone
+        json_path = output / f"advulture_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
         gen.generate_json(report, json_path)
         console.print(f"[green]JSON report:[/green] {json_path}")
 
@@ -357,8 +357,8 @@ def audit(ctx, ntds: Path, system: Optional[Path], evtx, output: Path,
     
     # Generate reports
     output.mkdir(parents=True, exist_ok=True)
-    from datetime import datetime
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    from datetime import datetime, timezone
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     
     if fmt in ("json", "both"):
         import json
