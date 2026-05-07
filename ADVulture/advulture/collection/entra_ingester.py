@@ -469,15 +469,99 @@ class EntraEnumerator:
 
     async def _get_ca_policies(self) -> List[dict]:
         """Fetch Conditional Access policies — gaps are AuthN hygiene findings."""
-        return []  # GET /policies/conditionalAccessPolicies
+        if not self._token:
+            return []
+        
+        try:
+            url = f"{self.GRAPH_BASE}/policies/conditionalAccessPolicies"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers={"Authorization": f"Bearer {self._token}"},
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return data.get("value", [])
+                    else:
+                        log.debug("Failed to fetch CA policies: %s", resp.status)
+        except Exception as e:
+            log.debug("Error fetching CA policies: %s", e)
+        return []
 
     async def _get_pim_assignments(self) -> List[dict]:
-        """Fetch PIM eligible and active role assignments."""
-        return []  # GET /privilegedAccess/aadRoles/resources/...
+        """Fetch PIM eligible and active role assignments.
+        
+        Requires RoleManagement.Read.All or PrivilegedAccess.Read.AzureADGroup permissions.
+        """
+        if not self._token:
+            return []
+        
+        assignments = []
+        try:
+            # Get eligible role assignments
+            eligible_url = f"{self.GRAPH_BASE}/roleManagement/directory/roleEligibilityScheduleInstances"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    eligible_url,
+                    headers={"Authorization": f"Bearer {self._token}"},
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        for item in data.get("value", []):
+                            assignments.append({
+                                "principalId": item.get("principalId"),
+                                "roleDefinitionId": item.get("roleDefinitionId"),
+                                "assignmentType": "eligible",
+                                "startDateTime": item.get("startDateTime"),
+                                "endDateTime": item.get("endDateTime"),
+                            })
+                    elif resp.status == 403:
+                        log.debug("No permission for PIM eligible assignments")
+                    else:
+                        log.debug("Failed to fetch PIM eligible: %s", resp.status)
+            
+            # Get active role assignments
+            active_url = f"{self.GRAPH_BASE}/roleManagement/directory/roleAssignmentScheduleInstances"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    active_url,
+                    headers={"Authorization": f"Bearer {self._token}"},
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        for item in data.get("value", []):
+                            assignments.append({
+                                "principalId": item.get("principalId"),
+                                "roleDefinitionId": item.get("roleDefinitionId"),
+                                "assignmentType": "active",
+                                "startDateTime": item.get("startDateTime"),
+                                "endDateTime": item.get("endDateTime"),
+                            })
+        except Exception as e:
+            log.debug("Error fetching PIM assignments: %s", e)
+        
+        return assignments
 
     async def _get_org_config(self) -> dict:
         """Fetch organisation-level config including sync status."""
-        return {}  # GET /organization
+        if not self._token:
+            return {}
+        
+        try:
+            url = f"{self.GRAPH_BASE}/organization"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers={"Authorization": f"Bearer {self._token}"},
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        orgs = data.get("value", [])
+                        if orgs:
+                            return orgs[0]
+        except Exception as e:
+            log.debug("Error fetching org config: %s", e)
+        return {}
 
 
 class EntraLogIngester:

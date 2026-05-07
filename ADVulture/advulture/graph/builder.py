@@ -241,6 +241,66 @@ class GraphBuilder:
             data["Group", "MemberOf", "Group"].edge_index = torch.tensor(
                 [group_to_group_src, group_to_group_dst], dtype=torch.long
             )
+        
+        # ACL-based dangerous edges from security descriptor parsing
+        self._add_acl_edges(data)
+    
+    def _add_acl_edges(self, data) -> None:
+        """Add edges from parsed ACL security descriptors (GenericAll, WriteDacl, DCSync)."""
+        if not self.snapshot.acl_edges:
+            return
+        
+        # Group edges by type for efficient tensor construction
+        generic_all_src, generic_all_dst = [], []
+        write_dacl_src, write_dacl_dst = [], []
+        dcsync_src, dcsync_dst = [], []
+        
+        for edge in self.snapshot.acl_edges:
+            # Resolve source SID to node index
+            if edge.source_sid not in self.node_index:
+                continue
+            src_type, src_idx = self.node_index[edge.source_sid]
+            
+            # Resolve target DN to node index
+            if edge.target_dn not in self.node_index:
+                continue
+            dst_type, dst_idx = self.node_index[edge.target_dn]
+            
+            # Only handle User -> User edges for now
+            # (most dangerous attack paths)
+            if src_type != "User":
+                continue
+            
+            if edge.right_type == "GenericAll":
+                generic_all_src.append(src_idx)
+                generic_all_dst.append(dst_idx)
+            elif edge.right_type == "WriteDacl":
+                write_dacl_src.append(src_idx)
+                write_dacl_dst.append(dst_idx)
+            elif edge.right_type in ("DS-Replication-Get-Changes", "DS-Replication-Get-Changes-All"):
+                dcsync_src.append(src_idx)
+                dcsync_dst.append(dst_idx)
+        
+        # Add GenericAll edges
+        if generic_all_src:
+            data["User", "GenericAll", "User"].edge_index = torch.tensor(
+                [generic_all_src, generic_all_dst], dtype=torch.long
+            )
+            log.info("Added %d GenericAll edges", len(generic_all_src))
+        
+        # Add WriteDacl edges
+        if write_dacl_src:
+            data["User", "WriteDacl", "User"].edge_index = torch.tensor(
+                [write_dacl_src, write_dacl_dst], dtype=torch.long
+            )
+            log.info("Added %d WriteDacl edges", len(write_dacl_src))
+        
+        # Add DCSync edges (mark users with DCSync rights)
+        if dcsync_src:
+            data["User", "DCSync", "User"].edge_index = torch.tensor(
+                [dcsync_src, dcsync_src], dtype=torch.long  # Self-edge to mark capability
+            )
+            log.info("Added %d DCSync capable users", len(dcsync_src))
 
     def _add_authz_behavioural_edges(self, data) -> None:
         """Behavioural edges from event log analysis (Class C)."""

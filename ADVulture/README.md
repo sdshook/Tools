@@ -102,8 +102,8 @@ This classification borrows the ORDERED/CRITICAL/CHAOTIC vocabulary from dynamic
 ┌─────────────────────────────────────────────────────────────┐
 │                     COLLECTION LAYER                         │
 │  LDAP Enumerator    Windows Event Logs    Entra ID / AAD    │
-│  Cert Template Enum ADFS Federation       Service Principal │
-│  Event Stream       Sign-in Logs          OAuth Permissions │
+│  ACL Parser         ADFS Federation       Service Principal │
+│  Cert Template Enum Sign-in Logs          PIM Assignments   │
 └──────────────┬──────────────────────────────┬───────────────┘
                │                              │
                ▼                              ▼
@@ -112,6 +112,7 @@ This classification borrows the ORDERED/CRITICAL/CHAOTIC vocabulary from dynamic
 │  Heterogeneous AD Graph  +  Temporal Behavioral Tensors    │
 │  Node Types: User, Computer, Group, CertTemplate, Domain   │
 │  Edge Types: 28 relation types across 6 risk classes       │
+│  ACL Edges: GenericAll, WriteDacl, WriteOwner, DCSync      │
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                ▼
@@ -158,12 +159,9 @@ This classification borrows the ORDERED/CRITICAL/CHAOTIC vocabulary from dynamic
 
 - **Event Pre-Indexing:** Event streams are pre-indexed by event ID, subject SID, and source hostname at ingestion time, enabling O(1) lookups during graph construction instead of O(n) linear scans per query.
 
-**Not Yet Implemented:**
+- **ACL Parsing:** Security descriptors (nTSecurityDescriptor) are parsed using impacket to extract dangerous ACL edges including GenericAll, WriteDacl, WriteOwner, and DCSync rights.
 
-- **ACL Parsing:** Security descriptors (nTSecurityDescriptor) are collected but not parsed. GenericAll/WriteDacl edge detection requires impacket-based descriptor parsing.
-- **RBCD Edge Detection:** msDS-AllowedToActOnBehalfOfOtherIdentity collection is stubbed; requires security descriptor parsing.
-- **PIM Role Assignments:** Entra ID Privileged Identity Management queries are stubbed.
-- **Sysmon Integration:** Event IDs 7045/4698/Sysmon 10 are not currently ingested.
+- **RBCD Detection:** msDS-AllowedToActOnBehalfOfOtherIdentity attributes are parsed to identify Resource-Based Constrained Delegation relationships.
 
 ---
 

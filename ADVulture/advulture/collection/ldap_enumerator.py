@@ -16,9 +16,10 @@ from __future__ import annotations
 import logging
 import os
 import socket
+import struct
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional, List, Any, TYPE_CHECKING
+from typing import Optional, List, Any, Dict, Tuple, TYPE_CHECKING
 from ldap3 import Server, Connection, ALL, SUBTREE, ALL_ATTRIBUTES, SASL, NTLM
 from ldap3.core.exceptions import LDAPException
 
@@ -26,6 +27,31 @@ if TYPE_CHECKING:
     from advulture.config import LDAPConfig
 
 log = logging.getLogger(__name__)
+
+# Try to import impacket for ACL parsing
+try:
+    from impacket.ldap import ldaptypes
+    from impacket.uuid import bin_to_string
+    IMPACKET_AVAILABLE = True
+except ImportError:
+    IMPACKET_AVAILABLE = False
+    log.debug("impacket not available - ACL parsing will be limited")
+
+# Well-known dangerous rights GUIDs
+DANGEROUS_RIGHTS = {
+    "00000000-0000-0000-0000-000000000000": "GenericAll",
+    "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2": "DS-Replication-Get-Changes",
+    "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2": "DS-Replication-Get-Changes-All",
+    "89e95b76-444d-4c62-991a-0facbeda640c": "DS-Replication-Get-Changes-In-Filtered-Set",
+}
+
+# Access mask bits for GenericAll, WriteDacl, WriteOwner, etc.
+ADS_RIGHT_GENERIC_ALL = 0x10000000
+ADS_RIGHT_WRITE_DACL = 0x00040000
+ADS_RIGHT_WRITE_OWNER = 0x00080000
+ADS_RIGHT_GENERIC_WRITE = 0x40000000
+ADS_RIGHT_DS_WRITE_PROP = 0x00000020
+ADS_RIGHT_DS_CONTROL_ACCESS = 0x00000100
 
 
 @dataclass
@@ -118,6 +144,15 @@ class ADCertTemplate:
 
 
 @dataclass
+class ACLEdge:
+    """Represents a dangerous ACL-based edge between AD objects."""
+    source_sid: str          # Who has the right
+    target_dn: str           # Object the right applies to
+    right_type: str          # GenericAll, WriteDacl, DCSync, etc.
+    is_inherited: bool = False
+
+
+@dataclass
 class ADSnapshot:
     domain: str
     domain_sid: str
@@ -128,6 +163,7 @@ class ADSnapshot:
     groups: List[ADGroup] = field(default_factory=list)
     trusts: List[ADTrust] = field(default_factory=list)
     cert_templates: List[ADCertTemplate] = field(default_factory=list)
+    acl_edges: List[ACLEdge] = field(default_factory=list)  # Dangerous ACL edges
     gpo_links: dict = field(default_factory=dict)
     ou_structure: List[dict] = field(default_factory=list)
 
@@ -452,11 +488,75 @@ class LDAPEnumerator:
         snapshot.trusts = self._enumerate_trusts()
         snapshot.cert_templates = self._enumerate_cert_templates()
         snapshot.ou_structure = self._enumerate_ous()
+        
+        # Parse ACLs from security descriptors
+        snapshot.acl_edges = self._enumerate_acl_edges(snapshot)
+        if snapshot.acl_edges:
+            log.info("Collected %d dangerous ACL edges", len(snapshot.acl_edges))
 
         self._compute_tiers(snapshot)
         self._compute_esc_flags(snapshot)
 
         return snapshot
+    
+    def _enumerate_acl_edges(self, snapshot: ADSnapshot) -> List[ACLEdge]:
+        """Parse security descriptors from all objects to find dangerous ACL edges."""
+        if not IMPACKET_AVAILABLE:
+            log.debug("impacket not available - skipping ACL parsing")
+            return []
+        
+        all_edges = []
+        
+        # Parse user ACLs
+        for user in snapshot.users:
+            if user.security_descriptor:
+                edges = self._parse_security_descriptor(
+                    user.security_descriptor, user.distinguished_name
+                )
+                all_edges.extend(edges)
+        
+        # Parse computer ACLs
+        for computer in snapshot.computers:
+            if computer.security_descriptor:
+                edges = self._parse_security_descriptor(
+                    computer.security_descriptor, computer.distinguished_name
+                )
+                all_edges.extend(edges)
+        
+        # Parse group ACLs
+        for group in snapshot.groups:
+            if group.security_descriptor:
+                edges = self._parse_security_descriptor(
+                    group.security_descriptor, group.distinguished_name
+                )
+                all_edges.extend(edges)
+        
+        # Parse domain ACL for DCSync rights
+        domain_edges = self._enumerate_domain_acl()
+        all_edges.extend(domain_edges)
+        
+        return all_edges
+    
+    def _enumerate_domain_acl(self) -> List[ACLEdge]:
+        """Enumerate ACL on the domain object to find DCSync rights."""
+        edges = []
+        try:
+            self._conn.search(
+                self.base_dn,
+                "(objectClass=domain)",
+                search_scope=SUBTREE,
+                attributes=["nTSecurityDescriptor", "distinguishedName"],
+            )
+            if self._conn.entries:
+                entry = self._conn.entries[0]
+                if hasattr(entry, 'nTSecurityDescriptor') and entry.nTSecurityDescriptor:
+                    edges = self._parse_security_descriptor(
+                        bytes(entry.nTSecurityDescriptor),
+                        str(entry.distinguishedName)
+                    )
+        except Exception as e:
+            log.debug("Failed to enumerate domain ACL: %s", e)
+        return edges
 
     def _get_domain_info(self) -> tuple[str, str]:
         self._conn.search(
@@ -709,6 +809,122 @@ class LDAPEnumerator:
 
     @staticmethod
     def _parse_rbcd(raw_value: Any) -> List[str]:
-        """Parse msDS-AllowedToActOnBehalfOfOtherIdentity to principal SIDs."""
-        # In production: use impacket.ldap.ldaptypes to parse security descriptor
-        return []
+        """Parse msDS-AllowedToActOnBehalfOfOtherIdentity to principal SIDs.
+        
+        This attribute contains a security descriptor with ACEs that specify
+        which principals can delegate to this computer.
+        """
+        if not raw_value or not IMPACKET_AVAILABLE:
+            return []
+        
+        try:
+            # Convert to bytes if needed
+            if isinstance(raw_value, str):
+                raw_bytes = raw_value.encode('latin-1')
+            elif isinstance(raw_value, (bytes, bytearray)):
+                raw_bytes = bytes(raw_value)
+            else:
+                return []
+            
+            # Parse the security descriptor
+            sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=raw_bytes)
+            
+            principal_sids = []
+            if sd['Dacl']:
+                for ace in sd['Dacl']['Data']:
+                    # Get the SID from the ACE
+                    if hasattr(ace['Ace'], 'fields') and 'Sid' in ace['Ace'].fields:
+                        sid = ace['Ace']['Sid']
+                        sid_str = sid.formatCanonical()
+                        principal_sids.append(sid_str)
+            
+            return principal_sids
+        except Exception as e:
+            log.debug("Failed to parse RBCD attribute: %s", e)
+            return []
+    
+    @staticmethod
+    def _parse_security_descriptor(raw_value: Any, target_dn: str) -> List[ACLEdge]:
+        """Parse nTSecurityDescriptor to extract dangerous ACL edges.
+        
+        Looks for:
+        - GenericAll rights
+        - WriteDacl rights  
+        - WriteOwner rights
+        - DCSync rights (DS-Replication-Get-Changes + DS-Replication-Get-Changes-All)
+        - Write property rights
+        """
+        if not raw_value or not IMPACKET_AVAILABLE:
+            return []
+        
+        edges = []
+        try:
+            # Convert to bytes if needed
+            if isinstance(raw_value, str):
+                raw_bytes = raw_value.encode('latin-1')
+            elif isinstance(raw_value, (bytes, bytearray)):
+                raw_bytes = bytes(raw_value)
+            else:
+                return []
+            
+            # Parse the security descriptor
+            sd = ldaptypes.SR_SECURITY_DESCRIPTOR(data=raw_bytes)
+            
+            if not sd['Dacl']:
+                return []
+            
+            for ace in sd['Dacl']['Data']:
+                # Skip deny ACEs for now (focus on allow)
+                ace_type = ace['TypeName']
+                if 'DENIED' in ace_type:
+                    continue
+                
+                try:
+                    sid = ace['Ace']['Sid'].formatCanonical()
+                    mask = ace['Ace']['Mask']['Mask']
+                    is_inherited = bool(ace['AceFlags'] & 0x10)  # INHERITED_ACE
+                    
+                    # Check for dangerous rights
+                    if mask & ADS_RIGHT_GENERIC_ALL:
+                        edges.append(ACLEdge(
+                            source_sid=sid,
+                            target_dn=target_dn,
+                            right_type="GenericAll",
+                            is_inherited=is_inherited,
+                        ))
+                    elif mask & ADS_RIGHT_WRITE_DACL:
+                        edges.append(ACLEdge(
+                            source_sid=sid,
+                            target_dn=target_dn,
+                            right_type="WriteDacl",
+                            is_inherited=is_inherited,
+                        ))
+                    elif mask & ADS_RIGHT_WRITE_OWNER:
+                        edges.append(ACLEdge(
+                            source_sid=sid,
+                            target_dn=target_dn,
+                            right_type="WriteOwner",
+                            is_inherited=is_inherited,
+                        ))
+                    
+                    # Check for extended rights (like DCSync)
+                    if mask & ADS_RIGHT_DS_CONTROL_ACCESS:
+                        if 'ObjectType' in ace['Ace'].fields:
+                            obj_type = ace['Ace']['ObjectType']
+                            if obj_type:
+                                guid_str = bin_to_string(bytes(obj_type)).lower()
+                                if guid_str in DANGEROUS_RIGHTS:
+                                    edges.append(ACLEdge(
+                                        source_sid=sid,
+                                        target_dn=target_dn,
+                                        right_type=DANGEROUS_RIGHTS[guid_str],
+                                        is_inherited=is_inherited,
+                                    ))
+                except Exception as ace_err:
+                    log.debug("Failed to parse ACE: %s", ace_err)
+                    continue
+            
+            return edges
+        except Exception as e:
+            log.debug("Failed to parse security descriptor for %s: %s", target_dn, e)
+            return []
