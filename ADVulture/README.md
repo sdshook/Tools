@@ -151,6 +151,14 @@ This classification borrows the ORDERED/CRITICAL/CHAOTIC vocabulary from dynamic
 
 - **Edge Weights:** "Empirically weighted edges" refers to edge probabilities computed from event log frequencies and temporal patterns. Edges traversed more frequently in logs receive higher weights. This is deterministic frequency counting, not learned embeddings.
 
+**Technical Implementation:**
+
+- **Sparse Tensor Encoding:** The Markov transition matrix is constructed using PyTorch sparse COO tensors (`torch.sparse_coo_tensor`) to avoid in-place operations that would break autograd gradient tracking. This ensures differentiable end-to-end gradient flow from `π_tier0` through the transition matrix back to the control parameters `θ`.
+
+- **Neighborhood Attention:** The HGT convolution layers implement proper neighborhood attention where each destination node attends over its full set of incoming source nodes. Attention weights are normalized per-destination using a custom neighborhood softmax, with learned per-relation importance weights.
+
+- **Event Pre-Indexing:** Event streams are pre-indexed by event ID, subject SID, and source hostname at ingestion time, enabling O(1) lookups during graph construction instead of O(n) linear scans per query.
+
 ---
 
 ## Security Scenarios ADVulture Detects
