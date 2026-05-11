@@ -272,7 +272,7 @@ class PostureAnalyzer:
                 mitre_techniques=["T1558.004"],
                 controls=["preauth_enforcement"],
                 remediation_steps=[
-                    "Enable 'Do not require Kerberos preauthentication' on all user accounts",
+                    "Disable 'Do not require Kerberos preauthentication' on all user accounts",
                     "Audit accounts with DONT_REQ_PREAUTH UAC flag set",
                     "If required for application compatibility, isolate accounts and monitor 4768",
                 ],
@@ -507,10 +507,11 @@ class PostureAnalyzer:
         cfg = self.config.ldap
         
         # Determine if we should attempt LDAP collection
-        # Kerberos auth doesn't need username, other modes may need server/creds
+        # PROMPT and KERBEROS modes support auto-discovery (no server required)
+        # LDAPEnumerator.connect() handles DNS SRV lookup for DC discovery
         should_collect = (
             cfg.auth_mode == LDAPAuthMode.KERBEROS or
-            (cfg.server and cfg.auth_mode == LDAPAuthMode.PROMPT) or
+            cfg.auth_mode == LDAPAuthMode.PROMPT or
             (cfg.server and cfg.username and cfg.auth_mode in (LDAPAuthMode.SIMPLE, LDAPAuthMode.NTLM))
         )
         
@@ -541,8 +542,28 @@ class PostureAnalyzer:
         return EventStream([])
 
     def _collect_entra(self):
-        log.info("Entra ID collection configured but async — skipping in sync context")
-        return None
+        """Collect Entra ID data using async enumeration wrapped in asyncio.run()."""
+        import asyncio
+        from advulture.collection.entra_ingester import EntraEnumerator
+        
+        cfg = self.config.entra
+        if not cfg.enabled:
+            return None
+        
+        try:
+            enumerator = EntraEnumerator(
+                tenant_id=cfg.tenant_id,
+                client_id=cfg.client_id,
+                client_secret=cfg.client_secret or None,
+                certificate_path=cfg.certificate_path or None,
+                certificate_password=cfg.certificate_password or None,
+                auth_mode=cfg.auth_mode.value if hasattr(cfg.auth_mode, 'value') else cfg.auth_mode,
+            )
+            # Run async enumeration in sync context
+            return asyncio.run(enumerator.enumerate_all())
+        except Exception as e:
+            log.warning("Entra ID collection failed: %s — skipping cloud analysis", e)
+            return None
 
     def _collect_adfs(self, event_stream):
         from advulture.collection.adfs_ingester import ADFSLogIngester
@@ -567,9 +588,76 @@ class PostureAnalyzer:
         }
 
     def _build_graph_tensors(self, snapshot, events):
-        """Stub — in production: full graph builder from graph/builder.py."""
+        """Build graph tensors using GraphBuilder and optionally ADRiskGNN."""
+        from advulture.graph.builder import GraphBuilder
+        
         n = len(snapshot.users) + len(snapshot.computers) + len(snapshot.groups)
-        n = max(n, 2)
+        if n < 2:
+            # Fallback for empty snapshot
+            return torch.randint(0, 2, (2, 10)), torch.rand(10) * 0.5
+        
+        try:
+            builder = GraphBuilder(snapshot, events)
+            hetero_data = builder.build()
+            
+            # Try to use GNN for edge probability prediction
+            try:
+                from advulture.ml.gnn.model import ADRiskGNN
+                gnn = ADRiskGNN()
+                edge_probs_dict = gnn(hetero_data)
+                
+                # Flatten heterogeneous edges to single edge_index/probs tensor
+                edge_index_list = []
+                edge_probs_list = []
+                node_offset = {"User": 0, "Computer": len(snapshot.users),
+                               "Group": len(snapshot.users) + len(snapshot.computers)}
+                
+                for edge_type, probs in edge_probs_dict.items():
+                    src_type, _, dst_type = edge_type
+                    if hasattr(hetero_data[edge_type], 'edge_index'):
+                        ei = hetero_data[edge_type].edge_index
+                        src_offset = node_offset.get(src_type, 0)
+                        dst_offset = node_offset.get(dst_type, 0)
+                        adjusted_ei = ei.clone()
+                        adjusted_ei[0] += src_offset
+                        adjusted_ei[1] += dst_offset
+                        edge_index_list.append(adjusted_ei)
+                        edge_probs_list.append(probs)
+                
+                if edge_index_list:
+                    edge_index = torch.cat(edge_index_list, dim=1)
+                    edge_probs = torch.cat(edge_probs_list)
+                    return edge_index, edge_probs
+                    
+            except (ImportError, Exception) as e:
+                log.debug("GNN inference skipped: %s — using structural edges only", e)
+            
+            # Fallback: extract edges from hetero_data without GNN inference
+            edge_index_list = []
+            node_offset = {"User": 0, "Computer": len(snapshot.users),
+                           "Group": len(snapshot.users) + len(snapshot.computers)}
+            
+            for edge_type in hetero_data.edge_types:
+                if hasattr(hetero_data[edge_type], 'edge_index'):
+                    ei = hetero_data[edge_type].edge_index
+                    src_type, _, dst_type = edge_type
+                    src_offset = node_offset.get(src_type, 0)
+                    dst_offset = node_offset.get(dst_type, 0)
+                    adjusted_ei = ei.clone()
+                    adjusted_ei[0] += src_offset
+                    adjusted_ei[1] += dst_offset
+                    edge_index_list.append(adjusted_ei)
+            
+            if edge_index_list:
+                edge_index = torch.cat(edge_index_list, dim=1)
+                # Assign uniform probs for structural-only analysis
+                edge_probs = torch.ones(edge_index.shape[1]) * 0.5
+                return edge_index, edge_probs
+                
+        except Exception as e:
+            log.warning("Graph builder failed: %s — using synthetic edges", e)
+        
+        # Final fallback for any failure
         edge_count = min(n * 3, 100)
         edge_index = torch.randint(0, n, (2, edge_count))
         edge_probs = torch.rand(edge_count) * 0.5

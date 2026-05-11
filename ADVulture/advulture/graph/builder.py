@@ -353,7 +353,9 @@ class GraphBuilder:
         # Build index of computers with unconstrained delegation
         unc_deleg_computers = {}
         for c_idx, computer in enumerate(self.snapshot.computers):
-            if computer.unconstrained_delegation and not computer.is_domain_controller:
+            # Check if DC by OS name (ADComputer doesn't have is_domain_controller property)
+            is_dc = "domain controller" in computer.os.lower()
+            if computer.unconstrained_delegation and not is_dc:
                 hostname = (computer.dns_hostname or computer.sam_account_name).lower()
                 unc_deleg_computers[hostname] = c_idx
         

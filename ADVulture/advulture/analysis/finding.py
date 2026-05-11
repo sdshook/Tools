@@ -150,7 +150,7 @@ def make_kerberoast_finding(accounts: List[str], active: bool = False) -> Findin
         active_signal=active,
         mitre_techniques=["T1558.003"],
         historical_exploitation=True,
-        controls=["service_account_managed_passwords", "aes_encryption_enforcement"],
+        controls=["service_account_managed_passwords", "aes_enforcement"],
         remediation_steps=[
             "Rotate service account passwords (25+ chars)",
             "Enforce AES encryption for Kerberos (disable RC4)",

@@ -211,6 +211,8 @@ class ADFSLogIngester:
             self._parse_claim_rule_change(timestamp, host, data, surface)
         elif event_id in (500, 501):
             self._parse_trust_event(timestamp, host, data, event_id, surface)
+        elif event_id == 1007:
+            self._parse_cert_operation(timestamp, host, data, surface)
 
     def _parse_token_issued(self, timestamp: datetime, host: str,
                             data: Dict[str, str], surface: ADFSSurface) -> None:
@@ -273,6 +275,36 @@ class ADFSLogIngester:
             action="added" if event_id == 500 else "removed",
         )
         surface.trust_events.append(trust)
+
+    def _parse_cert_operation(self, timestamp: datetime, host: str,
+                              data: Dict[str, str], surface: ADFSSurface) -> None:
+        """Parse Event 1007: Token signing certificate operations.
+        
+        This is a critical Golden SAML indicator. Certificate operations
+        on the token signing cert can enable attackers to forge SAML tokens.
+        """
+        # Create a synthetic token event to flag cert operations
+        token = ADFSTokenEvent(
+            timestamp=timestamp,
+            event_id=1007,
+            source_host=host,
+            user_identifier=data.get("UserData", data.get("SubjectUserName", "")),
+            relying_party="",
+            auth_method="cert_operation",
+            client_ip=data.get("IpAddress", ""),
+            signing_cert_thumbprint=data.get("CertificateThumbprint", data.get("Thumbprint", "")),
+        )
+        
+        # Flag as potential Golden SAML indicator
+        operation_type = data.get("OperationType", data.get("Operation", "")).lower()
+        if any(op in operation_type for op in ["export", "add", "replace", "import"]):
+            token.golden_saml_flags.append("cert_operation_suspicious")
+            log.warning(
+                "GOLDEN SAML RISK: Certificate operation '%s' at %s on %s",
+                operation_type, timestamp, host
+            )
+        
+        surface.token_events.append(token)
 
     def _parse_claims_string(self, raw: str) -> List[ADFSClaim]:
         claims = []

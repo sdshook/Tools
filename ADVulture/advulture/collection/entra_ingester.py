@@ -432,25 +432,57 @@ class EntraEnumerator:
         return []  # Replace with: await self._paginate("/users", fields)
 
     async def _get_service_principals(self) -> List[EntraServicePrincipal]:
-        """Identify service principals including AI agent identities."""
+        """Identify service principals including AI agent identities.
+        
+        Uses the msgraph SDK to fetch service principals and identify
+        those with dangerous permissions or AI agent patterns.
+        """
         log.info("Fetching service principals...")
-        sps = []  # Replace with Graph API call
-        for sp in sps:
-            dangerous = [
-                p for p in sp.get("appRoles", [])
-                if p.get("value") in DANGEROUS_APP_PERMISSIONS
-            ]
-            display = sp.get("displayName", "").lower()
-            is_ai = any(pat in display for pat in self.AI_AGENT_PATTERNS)
-            sps.append(EntraServicePrincipal(
-                id=sp.get("id", ""),
-                display_name=sp.get("displayName", ""),
-                app_id=sp.get("appId", ""),
-                account_enabled=sp.get("accountEnabled", True),
-                dangerous_permissions=dangerous,
-                is_ai_agent=is_ai,
-            ))
-        return sps
+        result_sps = []
+        
+        try:
+            client = self._get_client()
+            # Fetch service principals from Graph API
+            result = await client.service_principals.get()
+            
+            if result and result.value:
+                for sp in result.value:
+                    # Check for dangerous app permissions
+                    dangerous = []
+                    if sp.app_roles:
+                        for role in sp.app_roles:
+                            if role.value in DANGEROUS_APP_PERMISSIONS:
+                                dangerous.append(role.value)
+                    
+                    # Check OAuth2 permission scopes
+                    oauth2_perms = []
+                    if sp.oauth2_permission_scopes:
+                        for scope in sp.oauth2_permission_scopes:
+                            oauth2_perms.append(scope.value or scope.id)
+                            if scope.value in DANGEROUS_APP_PERMISSIONS:
+                                dangerous.append(scope.value)
+                    
+                    # Check for AI agent patterns in display name
+                    display = (sp.display_name or "").lower()
+                    is_ai = any(pat in display for pat in self.AI_AGENT_PATTERNS)
+                    
+                    result_sps.append(EntraServicePrincipal(
+                        id=sp.id or "",
+                        display_name=sp.display_name or "",
+                        app_id=sp.app_id or "",
+                        account_enabled=sp.account_enabled if sp.account_enabled is not None else True,
+                        app_roles=[r.value for r in (sp.app_roles or []) if r.value],
+                        oauth2_permissions=oauth2_perms,
+                        dangerous_permissions=dangerous,
+                        is_ai_agent=is_ai,
+                    ))
+                    
+            log.info("Fetched %d service principals", len(result_sps))
+            
+        except Exception as e:
+            log.warning("Error fetching service principals: %s", e)
+        
+        return result_sps
 
     async def _get_critical_roles(self) -> List[dict]:
         """Fetch assignments to critical directory roles."""
@@ -468,97 +500,97 @@ class EntraEnumerator:
         return assignments
 
     async def _get_ca_policies(self) -> List[dict]:
-        """Fetch Conditional Access policies — gaps are AuthN hygiene findings."""
-        if not self._token:
-            return []
+        """Fetch Conditional Access policies — gaps are AuthN hygiene findings.
         
+        Uses the msgraph SDK to fetch policies via Graph API.
+        """
+        policies = []
         try:
-            url = f"{self.GRAPH_BASE}/policies/conditionalAccessPolicies"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url,
-                    headers={"Authorization": f"Bearer {self._token}"},
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        return data.get("value", [])
-                    else:
-                        log.debug("Failed to fetch CA policies: %s", resp.status)
+            client = self._get_client()
+            # Use the SDK's identity/conditionalAccess/policies endpoint
+            result = await client.identity.conditional_access.policies.get()
+            if result and result.value:
+                for policy in result.value:
+                    policies.append({
+                        "id": policy.id,
+                        "displayName": policy.display_name,
+                        "state": policy.state.value if policy.state else "unknown",
+                        "conditions": {
+                            "users": getattr(policy.conditions, 'users', None),
+                            "applications": getattr(policy.conditions, 'applications', None),
+                        } if policy.conditions else {},
+                        "grantControls": {
+                            "builtInControls": policy.grant_controls.built_in_controls 
+                                if policy.grant_controls else [],
+                        } if policy.grant_controls else {},
+                    })
         except Exception as e:
             log.debug("Error fetching CA policies: %s", e)
-        return []
+        return policies
 
     async def _get_pim_assignments(self) -> List[dict]:
         """Fetch PIM eligible and active role assignments.
         
         Requires RoleManagement.Read.All or PrivilegedAccess.Read.AzureADGroup permissions.
+        Uses the msgraph SDK for API calls.
         """
-        if not self._token:
-            return []
-        
         assignments = []
         try:
+            client = self._get_client()
+            
             # Get eligible role assignments
-            eligible_url = f"{self.GRAPH_BASE}/roleManagement/directory/roleEligibilityScheduleInstances"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    eligible_url,
-                    headers={"Authorization": f"Bearer {self._token}"},
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        for item in data.get("value", []):
-                            assignments.append({
-                                "principalId": item.get("principalId"),
-                                "roleDefinitionId": item.get("roleDefinitionId"),
-                                "assignmentType": "eligible",
-                                "startDateTime": item.get("startDateTime"),
-                                "endDateTime": item.get("endDateTime"),
-                            })
-                    elif resp.status == 403:
-                        log.debug("No permission for PIM eligible assignments")
-                    else:
-                        log.debug("Failed to fetch PIM eligible: %s", resp.status)
+            try:
+                eligible = await client.role_management.directory.role_eligibility_schedule_instances.get()
+                if eligible and eligible.value:
+                    for item in eligible.value:
+                        assignments.append({
+                            "principalId": item.principal_id,
+                            "roleDefinitionId": item.role_definition_id,
+                            "assignmentType": "eligible",
+                            "startDateTime": str(item.start_date_time) if item.start_date_time else None,
+                            "endDateTime": str(item.end_date_time) if item.end_date_time else None,
+                        })
+            except Exception as e:
+                log.debug("No permission for PIM eligible assignments: %s", e)
             
             # Get active role assignments
-            active_url = f"{self.GRAPH_BASE}/roleManagement/directory/roleAssignmentScheduleInstances"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    active_url,
-                    headers={"Authorization": f"Bearer {self._token}"},
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        for item in data.get("value", []):
-                            assignments.append({
-                                "principalId": item.get("principalId"),
-                                "roleDefinitionId": item.get("roleDefinitionId"),
-                                "assignmentType": "active",
-                                "startDateTime": item.get("startDateTime"),
-                                "endDateTime": item.get("endDateTime"),
-                            })
+            try:
+                active = await client.role_management.directory.role_assignment_schedule_instances.get()
+                if active and active.value:
+                    for item in active.value:
+                        assignments.append({
+                            "principalId": item.principal_id,
+                            "roleDefinitionId": item.role_definition_id,
+                            "assignmentType": "active",
+                            "startDateTime": str(item.start_date_time) if item.start_date_time else None,
+                            "endDateTime": str(item.end_date_time) if item.end_date_time else None,
+                        })
+            except Exception as e:
+                log.debug("No permission for PIM active assignments: %s", e)
+                
         except Exception as e:
             log.debug("Error fetching PIM assignments: %s", e)
         
         return assignments
 
     async def _get_org_config(self) -> dict:
-        """Fetch organisation-level config including sync status."""
-        if not self._token:
-            return {}
+        """Fetch organisation-level config including sync status.
         
+        Uses the msgraph SDK to fetch organization configuration.
+        """
         try:
-            url = f"{self.GRAPH_BASE}/organization"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url,
-                    headers={"Authorization": f"Bearer {self._token}"},
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        orgs = data.get("value", [])
-                        if orgs:
-                            return orgs[0]
+            client = self._get_client()
+            result = await client.organization.get()
+            if result and result.value and len(result.value) > 0:
+                org = result.value[0]
+                return {
+                    "id": org.id,
+                    "displayName": org.display_name,
+                    "onPremisesSyncEnabled": org.on_premises_sync_enabled or False,
+                    "onPremisesLastSyncDateTime": str(org.on_premises_last_sync_date_time) 
+                        if org.on_premises_last_sync_date_time else None,
+                    "verifiedDomains": [d.name for d in (org.verified_domains or [])],
+                }
         except Exception as e:
             log.debug("Error fetching org config: %s", e)
         return {}
