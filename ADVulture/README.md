@@ -553,6 +553,95 @@ ADVulture produces:
 - **Mean first passage time:** Expected steps for an attacker to reach Tier 0
 - **HTML executive and technical reports**
 - **JSON output** for SOAR/SIEM integration
+- **Chain of custody logs** for forensic and audit compliance
+
+---
+
+## Chain of Custody Logging
+
+ADVulture maintains forensic-grade chain of custody logs for all operations, satisfying audit and evidence handling requirements for security assessments and incident response.
+
+### Features
+
+- **Cryptographic integrity:** SHA-256 hash chaining with tamper detection
+- **JSON Lines format:** Compatible with forensic analysis tools (jq, Splunk, ELK)
+- **Comprehensive coverage:** Authentication, collection, analysis, findings, exports
+- **Session tracking:** Unique session IDs with case/ticket linking
+- **Automatic capture:** All tool operations logged without manual intervention
+
+### Usage
+
+```shell
+# Run analysis with case ID for audit tracking
+advulture --case-id CASE-2025-001 analyze --entra-only
+
+# Specify custom custody log directory
+advulture --custody-dir /secure/evidence/logs analyze --ad-only
+
+# Disable custody logging (not recommended for production)
+advulture --no-custody analyze --entra-only
+
+# Verify integrity of a custody log file
+advulture verify-custody custody_logs/custody_abc12345_20250512_183000.jsonl
+
+# List all custody logs with integrity status
+advulture list-custody
+advulture list-custody --case CASE-2025-001
+```
+
+### Log Entry Structure
+
+Each entry in the JSON Lines log contains:
+
+```json
+{
+  "entry_id": "uuid",
+  "session_id": "uuid",
+  "timestamp": "2025-05-12T18:30:00.000000+00:00",
+  "event_type": "COLLECTION",
+  "level": "INFO",
+  "action": "collect_active_directory",
+  "details": {"domain": "corp.local", "users": 1523},
+  "operator": "analyst",
+  "hostname": "workstation01",
+  "platform": "Windows 11",
+  "working_dir": "/assessments/case-001",
+  "previous_hash": "sha256...",
+  "entry_hash": "sha256...",
+  "record_count": 1523,
+  "duration_ms": 4521
+}
+```
+
+### Event Types
+
+| Type | Description |
+|------|-------------|
+| `SESSION_START` | Assessment session initiated |
+| `SESSION_END` | Assessment session completed |
+| `AUTH` | Authentication event (LDAP, Entra, etc.) |
+| `AUTH_FAILURE` | Failed authentication attempt |
+| `COLLECTION` | Data enumeration operation |
+| `ANALYSIS` | Posture analysis execution |
+| `FINDING` | Security finding generated |
+| `DOWNLOAD` | File or artifact retrieval |
+| `EXPORT` | Report generation |
+| `API_CALL` | External API invocation |
+| `DATA_ACCESS` | Data read/query operation |
+| `CONFIG` | Configuration change |
+| `ERROR` | Error condition |
+
+### Integrity Verification
+
+The hash chain can be verified programmatically:
+
+```python
+from advulture.custody import ChainOfCustodyLogger
+
+is_valid, errors = ChainOfCustodyLogger.verify_log_file(Path("custody.jsonl"))
+if not is_valid:
+    print(f"Tampering detected: {errors}")
+```
 
 ---
 

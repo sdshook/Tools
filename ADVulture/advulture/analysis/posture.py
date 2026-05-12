@@ -25,6 +25,7 @@ from advulture.ml.markov.chain import (
     PhaseDetection, RemediationItem, Phase,
 )
 from advulture.config import Config
+from advulture.custody import ChainOfCustodyLogger, CustodyEventType
 
 log = logging.getLogger(__name__)
 
@@ -504,6 +505,8 @@ class PostureAnalyzer:
         from advulture.collection.ldap_enumerator import LDAPEnumerator, ADSnapshot
         from advulture.config import LDAPAuthMode
         from datetime import datetime, timezone
+        
+        custody = ChainOfCustodyLogger.get_instance()
         cfg = self.config.ldap
         
         # Determine if we should attempt LDAP collection
@@ -517,6 +520,13 @@ class PostureAnalyzer:
         
         if should_collect:
             try:
+                start_time = datetime.now(timezone.utc)
+                custody.log_auth(
+                    method=cfg.auth_mode.value,
+                    details={"server": cfg.server or "auto-discover", "domain": cfg.domain or "auto-discover"},
+                    target="ldap"
+                )
+                
                 enum = LDAPEnumerator(
                     server=cfg.server or None,
                     username=cfg.username or None,
@@ -525,9 +535,34 @@ class PostureAnalyzer:
                     domain=cfg.domain or None,
                     auth_mode=cfg.auth_mode.value,
                 )
-                return enum.enumerate_all()
+                snapshot = enum.enumerate_all()
+                
+                duration_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+                custody.log_collection(
+                    source="active_directory",
+                    details={
+                        "domain": snapshot.domain,
+                        "domain_sid": snapshot.domain_sid,
+                    },
+                    record_count=len(snapshot.users) + len(snapshot.computers) + len(snapshot.groups),
+                    duration_ms=duration_ms
+                )
+                custody.log_data_access(
+                    data_type="ad_objects",
+                    operation="enumerate",
+                    record_count=len(snapshot.users) + len(snapshot.computers) + len(snapshot.groups),
+                    details={
+                        "users": len(snapshot.users),
+                        "computers": len(snapshot.computers),
+                        "groups": len(snapshot.groups),
+                        "cert_templates": len(snapshot.cert_templates),
+                        "trusts": len(snapshot.trusts),
+                    }
+                )
+                return snapshot
             except Exception as e:
                 log.warning("LDAP collection failed: %s — using empty snapshot", e)
+                custody.log_error("ldap_collection", str(e), {"server": cfg.server, "auth_mode": cfg.auth_mode.value})
         
         return ADSnapshot(
             domain="unknown.local", domain_sid="", base_dn="",
@@ -536,38 +571,94 @@ class PostureAnalyzer:
 
     def _collect_logs(self, evtx_paths):
         from advulture.collection.log_ingester import EVTXIngester, EventStream
+        from datetime import datetime, timezone
+        
+        custody = ChainOfCustodyLogger.get_instance()
         paths = evtx_paths or self.config.logs.evtx_paths
+        
         if paths:
-            return EVTXIngester(paths).ingest()
+            start_time = datetime.now(timezone.utc)
+            custody.log_collection(
+                source="evtx_files",
+                details={"paths": [str(p) for p in paths], "file_count": len(paths)}
+            )
+            
+            stream = EVTXIngester(paths).ingest()
+            duration_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+            
+            custody.log_data_access(
+                data_type="security_events",
+                operation="parse",
+                record_count=len(stream.events) if hasattr(stream, 'events') else 0,
+                details={"evtx_files": len(paths)}
+            )
+            return stream
         return EventStream([])
 
     def _collect_entra(self):
         """Collect Entra ID data using async enumeration wrapped in asyncio.run()."""
         import asyncio
         from advulture.collection.entra_ingester import EntraEnumerator
+        from datetime import datetime, timezone
         
+        custody = ChainOfCustodyLogger.get_instance()
         cfg = self.config.entra
+        
         if not cfg.enabled:
             return None
         
         try:
+            start_time = datetime.now(timezone.utc)
+            auth_mode = cfg.auth_mode.value if hasattr(cfg.auth_mode, 'value') else cfg.auth_mode
+            
+            custody.log_auth(
+                method=f"entra_{auth_mode}",
+                details={"tenant_id": cfg.tenant_id or "organizations", "auth_mode": auth_mode},
+                target="microsoft_graph"
+            )
+            
             enumerator = EntraEnumerator(
                 tenant_id=cfg.tenant_id,
                 client_id=cfg.client_id,
                 client_secret=cfg.client_secret or None,
                 certificate_path=cfg.certificate_path or None,
                 certificate_password=cfg.certificate_password or None,
-                auth_mode=cfg.auth_mode.value if hasattr(cfg.auth_mode, 'value') else cfg.auth_mode,
+                auth_mode=auth_mode,
             )
             # Run async enumeration in sync context
-            return asyncio.run(enumerator.enumerate_all())
+            snapshot = asyncio.run(enumerator.enumerate_all())
+            
+            duration_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+            custody.log_collection(
+                source="entra_id",
+                details={"tenant": snapshot.tenant_id if hasattr(snapshot, 'tenant_id') else "unknown"},
+                record_count=len(snapshot.users) + len(snapshot.service_principals),
+                duration_ms=duration_ms
+            )
+            custody.log_data_access(
+                data_type="entra_objects",
+                operation="enumerate",
+                record_count=len(snapshot.users) + len(snapshot.service_principals),
+                details={
+                    "users": len(snapshot.users),
+                    "service_principals": len(snapshot.service_principals),
+                    "role_assignments": len(snapshot.critical_role_assignments),
+                    "ca_policies": len(snapshot.ca_policies),
+                }
+            )
+            return snapshot
         except Exception as e:
             log.warning("Entra ID collection failed: %s — skipping cloud analysis", e)
+            custody.log_error("entra_collection", str(e), {"auth_mode": auth_mode})
             return None
 
     def _collect_adfs(self, event_stream):
         from advulture.collection.adfs_ingester import ADFSLogIngester
+        
+        custody = ChainOfCustodyLogger.get_instance()
         adfs_evtx = self.config.logs.evtx_paths  # filter ADFS channels in production
+        
+        custody.log_collection(source="adfs_events", details={"evtx_count": len(adfs_evtx)})
         ingester = ADFSLogIngester(evtx_paths=adfs_evtx)
         return ingester.ingest(auth_event_stream=event_stream)
 

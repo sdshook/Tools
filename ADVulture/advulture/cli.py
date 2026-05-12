@@ -14,8 +14,19 @@ from rich.table import Table
 from rich.panel import Panel
 from rich import box
 
+from advulture.custody import (
+    ChainOfCustodyLogger, 
+    CustodyEventType,
+    compute_file_hash,
+)
+
 console = Console()
 log = logging.getLogger("advulture")
+
+# Suppress verbose Azure SDK logging
+logging.getLogger("azure").setLevel(logging.WARNING)
+logging.getLogger("azure.core").setLevel(logging.WARNING)
+logging.getLogger("azure.identity").setLevel(logging.WARNING)
 
 
 @click.group()
@@ -23,8 +34,15 @@ log = logging.getLogger("advulture")
               help="Path to config.yaml")
 @click.option("--log-level", default="INFO",
               type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]))
+@click.option("--case-id", envvar="ADVULTURE_CASE_ID",
+              help="Case/ticket ID for chain of custody logging")
+@click.option("--custody-dir", type=Path, default=Path("custody_logs"),
+              help="Directory for chain of custody logs")
+@click.option("--no-custody", is_flag=True, default=False,
+              help="Disable chain of custody logging")
 @click.pass_context
-def main(ctx, config: Path, log_level: str):
+def main(ctx, config: Path, log_level: str, case_id: Optional[str], 
+         custody_dir: Path, no_custody: bool):
     """🦅 ADVulture — Active Directory Vulnerability Intelligence"""
     logging.basicConfig(
         level=getattr(logging, log_level),
@@ -32,6 +50,20 @@ def main(ctx, config: Path, log_level: str):
     )
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = config
+    ctx.obj["case_id"] = case_id
+    ctx.obj["custody_dir"] = custody_dir
+    ctx.obj["no_custody"] = no_custody
+    
+    # Initialize chain of custody logging
+    if not no_custody:
+        custody = ChainOfCustodyLogger.get_instance()
+        custody.configure(log_dir=custody_dir, enabled=True)
+        custody.start_session(case_id=case_id, assessment_type="advulture_analysis")
+        ctx.obj["custody"] = custody
+        
+        # Log config load
+        if config.exists():
+            custody.log_config("load", {"path": str(config), "exists": True})
 
 
 # Default EVTX paths on Windows DCs
@@ -103,16 +135,28 @@ def analyze(ctx, output: Path, evtx, fmt: str,
     EVTX files are auto-discovered from current directory or Windows default
     locations. Use --evtx to specify files explicitly.
     """
+    from datetime import datetime, timezone
     from advulture.config import Config, EntraAuthMode, LDAPAuthMode
     from advulture.analysis.posture import PostureAnalyzer
     from advulture.reporting.report import ReportGenerator
 
+    # Get custody logger
+    custody = ctx.obj.get("custody")
+
     config_path: Path = ctx.obj["config_path"]
     if config_path.exists():
         cfg = Config.from_file(config_path)
+        if custody:
+            custody.log_config("load", {
+                "path": str(config_path),
+                "entra_enabled": cfg.entra.enabled,
+                "ldap_server": cfg.ldap.server or "auto-discover",
+            })
     else:
         console.print("[dim]No config.yaml — using auto-discovery[/dim]")
         cfg = Config()
+        if custody:
+            custody.log_config("default", {"reason": "no config.yaml found"})
 
     # Handle EVTX files: use provided, or auto-discover
     if evtx:
@@ -176,8 +220,47 @@ def analyze(ctx, output: Path, evtx, fmt: str,
         border_style="cyan",
     ))
 
+    # Log analysis start
+    analysis_mode = "entra_only" if entra_only else ("ad_only" if ad_only else "hybrid")
+    if custody:
+        custody.log_analysis("posture_start", {
+            "mode": analysis_mode,
+            "entra_enabled": cfg.entra.enabled,
+            "entra_auth_mode": cfg.entra.auth_mode.value if cfg.entra.enabled else None,
+            "ldap_domain": cfg.ldap.domain or "auto-discover",
+            "evtx_count": len(cfg.logs.evtx_paths),
+        })
+
+    analysis_start = datetime.now(timezone.utc)
     analyzer = PostureAnalyzer(cfg)
     report = analyzer.analyze()
+    analysis_duration = int((datetime.now(timezone.utc) - analysis_start).total_seconds() * 1000)
+
+    # Log analysis completion
+    if custody:
+        custody.log_analysis("posture_complete", {
+            "regime": report.regime,
+            "tier0_probability": round(report.tier0_steady_state_probability, 4),
+            "mean_steps_to_tier0": round(report.mean_steps_to_tier0, 2),
+            "total_findings": len(report.findings),
+            "finding_counts": report.finding_counts,
+            "attacker_phase": report.attacker_phase.most_likely.name if report.attacker_phase else "UNKNOWN",
+            "phase_confidence": round(report.attacker_phase.confidence, 3) if report.attacker_phase else 0,
+        }, duration_ms=analysis_duration)
+        
+        # Log individual findings for audit trail
+        for finding in report.findings[:50]:  # Log top 50 findings
+            custody.log_finding(
+                finding_id=finding.id,
+                title=finding.title,
+                severity=finding.severity.value if hasattr(finding.severity, 'value') else str(finding.severity),
+                risk_class=finding.risk_class.value if hasattr(finding.risk_class, 'value') else str(finding.risk_class),
+                details={
+                    "gradient": round(finding.gradient_contribution, 4),
+                    "tier0_paths": finding.tier0_reachable_paths,
+                    "active_signal": finding.active_signal,
+                },
+            )
 
     # Print summary
     regime_color = {"ORDERED": "green", "CRITICAL": "yellow", "CHAOTIC": "red"}
@@ -220,16 +303,34 @@ def analyze(ctx, output: Path, evtx, fmt: str,
     # Generate reports
     gen = ReportGenerator()
     output.mkdir(parents=True, exist_ok=True)
+    
     if fmt in ("html", "both"):
-        from datetime import datetime, timezone
         html_path = output / f"advulture_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.html"
         gen.generate_html(report, html_path)
         console.print(f"\n[green]HTML report:[/green] {html_path}")
+        if custody:
+            file_hash = compute_file_hash(html_path)
+            custody.log_export("report", str(html_path), "html", 
+                             record_count=len(report.findings), file_hash=file_hash)
+    
     if fmt in ("json", "both"):
-        from datetime import datetime, timezone
         json_path = output / f"advulture_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
         gen.generate_json(report, json_path)
         console.print(f"[green]JSON report:[/green] {json_path}")
+        if custody:
+            file_hash = compute_file_hash(json_path)
+            custody.log_export("report", str(json_path), "json",
+                             record_count=len(report.findings), file_hash=file_hash)
+    
+    # End custody session with summary
+    if custody:
+        custody.end_session(summary={
+            "domain": report.domain,
+            "regime": report.regime,
+            "total_findings": len(report.findings),
+            "reports_generated": [str(p) for p in [html_path if fmt in ("html", "both") else None,
+                                                    json_path if fmt in ("json", "both") else None] if p],
+        })
 
 
 @main.command()
@@ -426,6 +527,115 @@ log_level: "INFO"
     example.write_text(content)
     console.print(f"[green]Written:[/green] {example}")
     console.print("This config is optional — for interactive use, just run: advulture analyze --ad-only")
+
+
+@main.command()
+@click.argument("log_file", type=Path)
+def verify_custody(log_file: Path):
+    """
+    Verify integrity of a chain of custody log file.
+    
+    Checks cryptographic hash chain to detect any tampering or corruption.
+    
+    \b
+    Example:
+      advulture verify-custody custody_logs/custody_abc12345_20250512_183000.jsonl
+    """
+    from advulture.custody import ChainOfCustodyLogger
+    
+    if not log_file.exists():
+        console.print(f"[red]Error:[/red] File not found: {log_file}")
+        raise SystemExit(1)
+    
+    console.print(f"[cyan]Verifying:[/cyan] {log_file}")
+    
+    is_valid, errors = ChainOfCustodyLogger.verify_log_file(log_file)
+    
+    if is_valid:
+        console.print("[bold green]✓ Chain of custody log is VALID[/bold green]")
+        console.print("  Hash chain integrity verified — no tampering detected.")
+        
+        # Count entries
+        with open(log_file, "r") as f:
+            entry_count = sum(1 for _ in f)
+        console.print(f"  Total entries: {entry_count}")
+    else:
+        console.print("[bold red]✗ Chain of custody log is INVALID[/bold red]")
+        console.print("  The following integrity errors were detected:")
+        for error in errors:
+            console.print(f"    [red]•[/red] {error}")
+        raise SystemExit(1)
+
+
+@main.command()
+@click.option("--dir", "-d", "log_dir", type=Path, default=Path("custody_logs"),
+              help="Directory containing custody logs")
+@click.option("--session", "-s", help="Filter by session ID prefix")
+@click.option("--case", "-c", help="Filter by case ID")
+def list_custody(log_dir: Path, session: Optional[str], case: Optional[str]):
+    """
+    List chain of custody log files.
+    
+    \b
+    Example:
+      advulture list-custody
+      advulture list-custody --dir /path/to/logs --case CASE-2025-001
+    """
+    import json
+    
+    if not log_dir.exists():
+        console.print(f"[yellow]No custody logs directory found:[/yellow] {log_dir}")
+        return
+    
+    log_files = sorted(log_dir.glob("custody_*.jsonl"), reverse=True)
+    
+    if not log_files:
+        console.print(f"[yellow]No custody logs found in:[/yellow] {log_dir}")
+        return
+    
+    table = Table(title="Chain of Custody Logs", box=box.ROUNDED)
+    table.add_column("File", style="cyan")
+    table.add_column("Session")
+    table.add_column("Case ID")
+    table.add_column("Entries", justify="right")
+    table.add_column("Started")
+    table.add_column("Status")
+    
+    for log_file in log_files:
+        try:
+            with open(log_file, "r") as f:
+                first_line = f.readline()
+                first_entry = json.loads(first_line) if first_line else {}
+                
+                # Count entries
+                entry_count = 1 + sum(1 for _ in f)
+            
+            session_id = first_entry.get("session_id", "")[:8]
+            case_id = first_entry.get("details", {}).get("case_id", "-")
+            timestamp = first_entry.get("timestamp", "")[:19]
+            
+            # Apply filters
+            if session and not session_id.startswith(session):
+                continue
+            if case and case_id != case:
+                continue
+            
+            # Verify integrity
+            is_valid, _ = ChainOfCustodyLogger.verify_log_file(log_file)
+            status = "[green]✓ Valid[/green]" if is_valid else "[red]✗ Invalid[/red]"
+            
+            table.add_row(
+                log_file.name,
+                session_id,
+                case_id or "-",
+                str(entry_count),
+                timestamp,
+                status,
+            )
+        except Exception as e:
+            table.add_row(log_file.name, "?", "?", "?", "?", f"[red]Error: {e}[/red]")
+    
+    console.print(table)
 
 
 if __name__ == "__main__":
