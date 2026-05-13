@@ -465,6 +465,38 @@ advulture analyze --config config.yaml
 
 ---
 
+## Security Considerations
+
+ADVulture implements security controls appropriate for forensic tooling that handles sensitive authentication data.
+
+### Token Handling
+
+**No persistent token caching:** Interactive authentication modes (`device_code`, `interactive`) explicitly disable MSAL's default disk-based token caching. Tokens are held in memory only for the duration of the analysis session.
+
+This prevents:
+- Token artifacts from contaminating forensic evidence archives
+- Cached credentials from persisting after analysis completes
+- Security risks from token theft on analysis workstations
+
+**Credential cleanup:** After analysis completes, ADVulture explicitly clears all credential and client references from memory. While Python's garbage collection would eventually reclaim these objects, explicit cleanup ensures tokens are not retained longer than necessary.
+
+### Single Authentication
+
+ADVulture uses a shared authentication context across all Entra ID collection operations. When running `--entra-only` or hybrid analysis, you will see only **one** device code prompt, regardless of how many Graph API operations are performed.
+
+If you encounter multiple authentication prompts during a single analysis run, please report this as a bug.
+
+### Evidence Integrity
+
+All collected data is preserved in compressed, SHA-256 hashed archives **before** analysis begins. This ensures:
+- Original data is preserved independent of analysis transformations
+- Evidence archives can be cryptographically verified for tampering
+- Chain of custody requirements are satisfied for forensic investigations
+
+See the [Evidence Preservation](#evidence-preservation) section for archive structure and verification commands.
+
+---
+
 ## Usage
 
 ### Full Analysis
