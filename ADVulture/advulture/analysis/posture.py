@@ -120,12 +120,280 @@ class PostureAnalyzer:
     """
     Main analysis orchestrator. Connects all subsystems and produces
     a unified PostureReport with findings from all six risk classes.
+    
+    Supports two modes:
+    - analyze(): Simple mode without progress indicators
+    - analyze_with_progress(): Download-first mode with rich progress bars
     """
 
     def __init__(self, config: Config):
         self.config = config
         self.hmm = KillChainHMM()
         self.gradient_engine = GradientEngine()
+        # Cached data from download phase
+        self._cached_snapshot = None
+        self._cached_event_stream = None
+        self._cached_entra_snapshot = None
+        self._cached_entra_events = None
+
+    def analyze_with_progress(
+        self,
+        progress,
+        controls: Optional[Dict[str, float]] = None,
+        evtx_paths: Optional[List] = None,
+    ) -> PostureReport:
+        """
+        Run complete posture analysis with progress indicators.
+        
+        Implements a download-first strategy:
+        1. DOWNLOAD PHASE: Collect all data from sources with progress
+        2. ANALYSIS PHASE: Process cached data with progress
+        
+        Args:
+            progress: rich.progress.Progress instance for displaying progress
+            controls: current deployment level for each security control [0,1]
+            evtx_paths: optional list of EVTX file paths
+            
+        Returns:
+            PostureReport with all findings and recommendations
+        """
+        if controls is None:
+            controls = self._default_controls()
+
+        log.info("Starting ADVulture posture analysis (download-first mode)")
+        
+        # ════════════════════════════════════════════════════════════════════
+        # PHASE 1: DOWNLOAD — Collect all data before processing
+        # ════════════════════════════════════════════════════════════════════
+        
+        # Determine collection tasks based on config
+        collection_tasks = []
+        if not self.config.entra.enabled or (self.config.ldap.server or self.config.ldap.domain):
+            collection_tasks.append(("ad", "Active Directory"))
+        if self.config.logs.evtx_paths or evtx_paths:
+            collection_tasks.append(("evtx", "Event Logs"))
+        if self.config.entra.enabled:
+            collection_tasks.append(("entra_objects", "Entra ID Objects"))
+            collection_tasks.append(("entra_logs", "Entra ID Logs"))
+        if self.config.adfs.enabled:
+            collection_tasks.append(("adfs", "ADFS Logs"))
+        
+        # Create download task
+        download_task = progress.add_task(
+            "[cyan]📥 Downloading data...", 
+            total=len(collection_tasks)
+        )
+        
+        # Collect AD
+        snapshot = None
+        if ("ad", "Active Directory") in collection_tasks:
+            progress.update(download_task, description="[cyan]📥 Collecting Active Directory...")
+            snapshot = self._collect_ad(evtx_paths)
+            progress.advance(download_task)
+            log.info("AD collection complete: %d users, %d computers, %d groups",
+                    len(snapshot.users), len(snapshot.computers), len(snapshot.groups))
+        
+        if snapshot is None:
+            from advulture.collection.ldap_enumerator import ADSnapshot
+            snapshot = ADSnapshot(
+                domain="unknown.local", domain_sid="", base_dn="",
+                timestamp=datetime.now(timezone.utc)
+            )
+        
+        # Collect EVTX logs
+        event_stream = None
+        if ("evtx", "Event Logs") in collection_tasks:
+            progress.update(download_task, description="[cyan]📥 Parsing event logs...")
+            event_stream = self._collect_logs(evtx_paths)
+            progress.advance(download_task)
+            event_count = len(event_stream.events) if hasattr(event_stream, 'events') else 0
+            log.info("EVTX collection complete: %d events", event_count)
+        
+        if event_stream is None:
+            from advulture.collection.log_ingester import EventStream
+            event_stream = EventStream([])
+        
+        # Collect Entra ID objects
+        entra_snapshot = None
+        if ("entra_objects", "Entra ID Objects") in collection_tasks:
+            progress.update(download_task, description="[cyan]📥 Collecting Entra ID objects...")
+            entra_snapshot = self._collect_entra()
+            progress.advance(download_task)
+            if entra_snapshot:
+                log.info("Entra objects complete: %d users, %d service principals",
+                        len(entra_snapshot.users), len(entra_snapshot.service_principals))
+        
+        # Collect Entra ID logs (sign-ins, audits, risk detections)
+        entra_events = None
+        if ("entra_logs", "Entra ID Logs") in collection_tasks:
+            progress.update(download_task, description="[cyan]📥 Collecting Entra ID logs...")
+            entra_events = self._collect_entra_logs()
+            progress.advance(download_task)
+            if entra_events:
+                log.info("Entra logs complete: %d sign-ins, %d audits, %d risk detections",
+                        len(entra_events.signins), len(entra_events.audits), 
+                        len(entra_events.risk_detections))
+        
+        # Collect ADFS
+        adfs_surface = None
+        if ("adfs", "ADFS Logs") in collection_tasks:
+            progress.update(download_task, description="[cyan]📥 Collecting ADFS logs...")
+            adfs_surface = self._collect_adfs(event_stream)
+            progress.advance(download_task)
+        
+        # Mark download complete
+        progress.update(download_task, description="[green]✓ Download complete", completed=len(collection_tasks))
+        
+        # ════════════════════════════════════════════════════════════════════
+        # PHASE 2: ANALYSIS — Process cached data
+        # ════════════════════════════════════════════════════════════════════
+        
+        analysis_steps = [
+            ("findings", "Security findings"),
+            ("phase", "Attack phase detection"),
+            ("markov", "Markov analysis"),
+            ("gradient", "Gradient ranking"),
+            ("regime", "Regime classification"),
+        ]
+        
+        analysis_task = progress.add_task(
+            "[yellow]🔍 Analyzing...", 
+            total=len(analysis_steps)
+        )
+        
+        # Generate findings from static analysis
+        progress.update(analysis_task, description="[yellow]🔍 Analyzing security findings...")
+        findings: List[Finding] = []
+        findings += self._analyze_authn_hygiene(snapshot, event_stream)
+        findings += self._analyze_authz_structure(snapshot)
+        findings += self._analyze_authz_behaviour(snapshot, event_stream, adfs_surface)
+        findings += self._analyze_lpe(event_stream)
+        findings += self._analyze_delegation(snapshot, event_stream)
+        if entra_snapshot:
+            findings += self._analyze_ai_agents(entra_snapshot)
+        progress.advance(analysis_task)
+        
+        # HMM phase detection
+        progress.update(analysis_task, description="[yellow]🔍 Detecting attack phase...")
+        event_sequence = self._build_event_sequence(event_stream)
+        graph_stats = self._compute_graph_stats(snapshot, findings)
+        phase_detection = self.hmm.viterbi(event_sequence, graph_stats)
+        progress.advance(analysis_task)
+        log.info(
+            "HMM: phase=%s confidence=%.0f%% velocity=%.2f",
+            phase_detection.most_likely.name,
+            phase_detection.confidence * 100,
+            phase_detection.threat_velocity,
+        )
+        
+        # Markov analysis
+        progress.update(analysis_task, description="[yellow]🔍 Running Markov analysis...")
+        num_nodes = len(snapshot.users) + len(snapshot.computers) + len(snapshot.groups)
+        tier0_ids = [i for i, u in enumerate(snapshot.users) if u.tier == 0]
+        markov = AttackChainMarkov(
+            num_nodes=max(num_nodes, 10),
+            tier0_node_ids=tier0_ids or [0],
+        )
+        edge_index, edge_probs = self._build_graph_tensors(snapshot, event_stream)
+        theta = {
+            k: torch.tensor(v, dtype=torch.float32, requires_grad=True)
+            for k, v in controls.items()
+        }
+        lpe_pairs = self._build_lpe_pairs(findings)
+        mc_result = markov.analyze(edge_index, edge_probs, theta, lpe_pairs)
+        progress.advance(analysis_task)
+        
+        # Gradient ranking
+        progress.update(analysis_task, description="[yellow]🔍 Computing gradient ranking...")
+        ranking = self.gradient_engine.compute_ranking(
+            edge_index, edge_probs, controls, phase_detection, markov, lpe_pairs
+        )
+        
+        # Attach gradient contributions to findings
+        ctrl_to_findings = self._map_controls_to_findings(findings)
+        for item in ranking:
+            for fid in ctrl_to_findings.get(item.control, []):
+                matching = [f for f in findings if f.id == fid]
+                for f in matching:
+                    f.gradient_contribution = max(f.gradient_contribution, item.gradient)
+        findings.sort(key=lambda f: f.gradient_contribution, reverse=True)
+        progress.advance(analysis_task)
+        
+        # Regime classification
+        progress.update(analysis_task, description="[yellow]🔍 Classifying regime...")
+        regime, regime_explanation = self._classify_regime(mc_result, ranking)
+        active_signals = self._extract_active_signals(findings, event_stream)
+        progress.advance(analysis_task)
+        
+        # Mark analysis complete
+        progress.update(analysis_task, description="[green]✓ Analysis complete", completed=len(analysis_steps))
+        
+        # Build final report
+        counts = {cls.value: 0 for cls in RiskClass}
+        for f in findings:
+            counts[f.risk_class.value] += 1
+
+        report = PostureReport(
+            timestamp=datetime.now(timezone.utc),
+            domain=snapshot.domain,
+            deployment_type="hybrid" if entra_snapshot else "on_prem",
+            regime=regime,
+            regime_explanation=regime_explanation,
+            tier0_steady_state_probability=mc_result.tier0_probability,
+            mean_steps_to_tier0=mc_result.mean_steps_to_tier0,
+            most_exposed_nodes=mc_result.most_exposed_nodes,
+            attacker_phase=phase_detection,
+            findings=findings,
+            remediation_ranking=ranking,
+            active_signals=active_signals,
+            finding_counts=counts,
+        )
+
+        log.info("Analysis complete. %d findings. Regime: %s. π_tier0: %.1f%%",
+                 len(findings), regime, mc_result.tier0_probability * 100)
+        return report
+
+    def _collect_entra_logs(self):
+        """Collect Entra ID sign-in logs, audit logs, and risk detections."""
+        import asyncio
+        from advulture.collection.entra_ingester import EntraLogIngester
+        
+        custody = ChainOfCustodyLogger.get_instance()
+        cfg = self.config.entra
+        
+        if not cfg.enabled:
+            return None
+        
+        try:
+            auth_mode = cfg.auth_mode.value if hasattr(cfg.auth_mode, 'value') else cfg.auth_mode
+            
+            ingester = EntraLogIngester(
+                tenant_id=cfg.tenant_id,
+                client_id=cfg.client_id,
+                client_secret=cfg.client_secret or None,
+                certificate_path=cfg.certificate_path or None,
+                certificate_password=cfg.certificate_password or None,
+                auth_mode=auth_mode,
+            )
+            
+            # Run async collection in sync context
+            events = asyncio.run(ingester.collect_window(days=self.config.logs.authn_window_days))
+            
+            custody.log_collection(
+                source="entra_logs",
+                details={
+                    "signins": len(events.signins),
+                    "audits": len(events.audits),
+                    "risk_detections": len(events.risk_detections),
+                },
+                record_count=len(events.signins) + len(events.audits) + len(events.risk_detections),
+            )
+            
+            return events
+        except Exception as e:
+            log.warning("Entra ID log collection failed: %s — skipping", e)
+            custody.log_error("entra_log_collection", str(e))
+            return None
 
     def analyze(
         self,
@@ -133,7 +401,7 @@ class PostureAnalyzer:
         evtx_paths: Optional[List] = None,
     ) -> PostureReport:
         """
-        Run complete posture analysis.
+        Run complete posture analysis (simple mode without progress indicators).
         Controls: current deployment level for each security control [0,1].
         """
         if controls is None:

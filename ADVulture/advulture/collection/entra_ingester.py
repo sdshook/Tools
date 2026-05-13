@@ -425,11 +425,73 @@ class EntraEnumerator:
         return snapshot
 
     async def _get_users(self) -> List[EntraUser]:
-        """Fetch all users with security-relevant attributes."""
-        # Production: use self._get_client() and make Graph API calls
-        # Returns paginated results from /v1.0/users with $select
+        """Fetch all users with security-relevant attributes.
+        
+        Uses msgraph SDK with pagination to fetch all users including
+        security-relevant attributes like MFA status, risk level, etc.
+        """
         log.info("Fetching Entra ID users...")
-        return []  # Replace with: await self._paginate("/users", fields)
+        users = []
+        
+        try:
+            client = self._get_client()
+            
+            # Build request with select for relevant fields
+            from msgraph.generated.users.users_request_builder import UsersRequestBuilder
+            from kiota_abstractions.base_request_configuration import RequestConfiguration
+            
+            query_params = UsersRequestBuilder.UsersRequestBuilderGetQueryParameters(
+                select=[
+                    "id", "userPrincipalName", "displayName", 
+                    "onPremisesSamAccountName", "onPremisesSecurityIdentifier",
+                    "onPremisesSyncEnabled", "accountEnabled",
+                    "signInActivity", "passwordPolicies",
+                ],
+                top=999,
+            )
+            request_config = RequestConfiguration(query_parameters=query_params)
+            
+            result = await client.users.get(request_configuration=request_config)
+            
+            while result:
+                if result.value:
+                    for u in result.value:
+                        try:
+                            # Parse last sign-in time
+                            last_signin = None
+                            if u.sign_in_activity and u.sign_in_activity.last_sign_in_date_time:
+                                last_signin = u.sign_in_activity.last_sign_in_date_time.replace(tzinfo=timezone.utc)
+                            
+                            user = EntraUser(
+                                id=u.id or "",
+                                user_principal_name=u.user_principal_name or "",
+                                display_name=u.display_name or "",
+                                on_prem_sam=u.on_premises_sam_account_name or "",
+                                on_prem_sid=u.on_premises_security_identifier or "",
+                                on_prem_sync=u.on_premises_sync_enabled or False,
+                                account_enabled=u.account_enabled if u.account_enabled is not None else True,
+                                last_signin=last_signin,
+                                password_policies=u.password_policies or "",
+                            )
+                            users.append(user)
+                        except Exception as parse_err:
+                            log.debug("Failed to parse user record: %s", parse_err)
+                            continue
+                
+                # Check for next page
+                if hasattr(result, 'odata_next_link') and result.odata_next_link:
+                    result = await client.users.with_url(result.odata_next_link).get()
+                else:
+                    break
+            
+            log.info("Fetched %d users from Entra ID", len(users))
+            
+        except ImportError as ie:
+            log.warning("msgraph-sdk not available: %s", ie)
+        except Exception as e:
+            log.warning("Failed to fetch users from Graph API: %s", e)
+            
+        return users
 
     async def _get_service_principals(self) -> List[EntraServicePrincipal]:
         """Identify service principals including AI agent identities.
@@ -485,18 +547,58 @@ class EntraEnumerator:
         return result_sps
 
     async def _get_critical_roles(self) -> List[dict]:
-        """Fetch assignments to critical directory roles."""
+        """Fetch assignments to critical directory roles.
+        
+        Uses msgraph SDK to enumerate role assignments for critical
+        Entra ID roles like Global Administrator.
+        """
+        log.info("Fetching critical role assignments...")
         assignments = []
-        for role_id, role_name in CRITICAL_ROLE_IDS.items():
-            # GET /directoryRoles(roleTemplateId='{id}')/members
-            members = []  # Replace with Graph API call
-            for member in members:
-                assignments.append({
-                    "role_id": role_id,
-                    "role_name": role_name,
-                    "member_id": member.get("id"),
-                    "member_upn": member.get("userPrincipalName"),
-                })
+        
+        try:
+            client = self._get_client()
+            
+            # First, get all directory roles (active role assignments)
+            result = await client.directory_roles.get()
+            
+            if result and result.value:
+                for role in result.value:
+                    # Check if this is a critical role
+                    role_template_id = role.role_template_id
+                    if role_template_id not in CRITICAL_ROLE_IDS:
+                        continue
+                    
+                    role_name = CRITICAL_ROLE_IDS[role_template_id]
+                    
+                    # Fetch members of this role
+                    try:
+                        members_result = await client.directory_roles.by_directory_role_id(role.id).members.get()
+                        
+                        if members_result and members_result.value:
+                            for member in members_result.value:
+                                # Extract UPN if available (users) or display name (service principals)
+                                member_upn = getattr(member, 'user_principal_name', None)
+                                if not member_upn:
+                                    member_upn = getattr(member, 'display_name', member.id)
+                                
+                                assignments.append({
+                                    "role_id": role_template_id,
+                                    "role_name": role_name,
+                                    "member_id": member.id,
+                                    "member_upn": member_upn,
+                                    "member_type": member.odata_type.split('.')[-1] if member.odata_type else "unknown",
+                                })
+                    except Exception as member_err:
+                        log.debug("Failed to fetch members for role %s: %s", role_name, member_err)
+                        continue
+            
+            log.info("Fetched %d critical role assignments", len(assignments))
+            
+        except ImportError as ie:
+            log.warning("msgraph-sdk not available: %s", ie)
+        except Exception as e:
+            log.warning("Failed to fetch critical roles from Graph API: %s", e)
+            
         return assignments
 
     async def _get_ca_policies(self) -> List[dict]:
@@ -669,12 +771,33 @@ class EntraLogIngester:
             )
         return self._enumerator
 
-    async def collect_window(self, days: int = 30) -> EntraEventStream:
+    async def collect_window(self, days: int = 30, progress_callback=None) -> EntraEventStream:
+        """
+        Collect sign-in logs, audit logs, and risk detections for the specified window.
+        
+        Args:
+            days: Number of days to look back
+            progress_callback: Optional callback(stage, current, total) for progress updates
+        """
         since = datetime.now(timezone.utc) - timedelta(days=days)
         stream = EntraEventStream()
+        
+        # Collect each data type with progress updates
+        if progress_callback:
+            progress_callback("sign-ins", 0, 3)
         stream.signins = await self._get_signins(since)
+        
+        if progress_callback:
+            progress_callback("audits", 1, 3)
         stream.audits = await self._get_audits(since)
+        
+        if progress_callback:
+            progress_callback("risk_detections", 2, 3)
         stream.risk_detections = await self._get_risk_detections(since)
+        
+        if progress_callback:
+            progress_callback("complete", 3, 3)
+            
         log.info(
             "Collected %d sign-ins, %d audits, %d risk events from Entra ID",
             len(stream.signins), len(stream.audits), len(stream.risk_detections)
@@ -684,41 +807,215 @@ class EntraLogIngester:
     async def _get_signins(self, since: datetime) -> List[EntraSignIn]:
         """
         GET /auditLogs/signIns?$filter=createdDateTime ge {since}
-        Returns up to 100,000 records per request with pagination.
+        Uses msgraph SDK with automatic pagination.
         """
         signins = []
-        raw = []  # Replace with Graph API paginated call
-        for s in raw:
-            error_code = s.get("status", {}).get("errorCode", 0)
-            result = ENTRA_RESULT_MAP.get(error_code, SignInResult.OTHER)
-            client_app = s.get("clientAppUsed", "").lower()
-            is_legacy = any(p in client_app for p in self.LEGACY_AUTH_PROTOCOLS)
-            signins.append(EntraSignIn(
-                id=s.get("id", ""),
-                timestamp=datetime.fromisoformat(
-                    s.get("createdDateTime", "").rstrip("Z")
-                ),
-                user_id=s.get("userId", ""),
-                user_principal_name=s.get("userPrincipalName", ""),
-                app_display_name=s.get("appDisplayName", ""),
-                ip_address=s.get("ipAddress", ""),
-                result_type=error_code,
-                result=result,
-                auth_requirement=s.get("authenticationRequirement", ""),
-                mfa_detail=s.get("mfaDetail"),
-                ca_policies_applied=s.get("appliedConditionalAccessPolicies", []),
-                risk_level_during=s.get("riskLevelDuringSignIn", "none"),
-                risk_level_aggregated=s.get("riskLevelAggregated", "none"),
-                token_issuer_type=s.get("tokenIssuerType", ""),
-                legacy_auth=is_legacy,
-                location=s.get("location"),
-            ))
+        try:
+            enumerator = self._get_enumerator()
+            client = enumerator._get_client()
+            
+            # Format datetime for OData filter
+            since_str = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+            
+            # Build request configuration
+            from msgraph.generated.audit_logs.sign_ins.sign_ins_request_builder import SignInsRequestBuilder
+            from kiota_abstractions.base_request_configuration import RequestConfiguration
+            
+            query_params = SignInsRequestBuilder.SignInsRequestBuilderGetQueryParameters(
+                filter=f"createdDateTime ge {since_str}",
+                orderby=["createdDateTime desc"],
+                top=999,  # Max per page
+            )
+            request_config = RequestConfiguration(query_parameters=query_params)
+            
+            # Fetch with pagination
+            result = await client.audit_logs.sign_ins.get(request_configuration=request_config)
+            
+            while result:
+                if result.value:
+                    for s in result.value:
+                        try:
+                            error_code = s.status.error_code if s.status else 0
+                            result_type = ENTRA_RESULT_MAP.get(error_code, SignInResult.OTHER)
+                            client_app = (s.client_app_used or "").lower()
+                            is_legacy = any(p in client_app for p in self.LEGACY_AUTH_PROTOCOLS)
+                            
+                            signin = EntraSignIn(
+                                id=s.id or "",
+                                timestamp=s.created_date_time.replace(tzinfo=timezone.utc) if s.created_date_time else datetime.now(timezone.utc),
+                                user_id=s.user_id or "",
+                                user_principal_name=s.user_principal_name or "",
+                                app_display_name=s.app_display_name or "",
+                                ip_address=s.ip_address or "",
+                                result_type=error_code,
+                                result=result_type,
+                                auth_requirement=s.authentication_requirement or "",
+                                mfa_detail={"method": s.mfa_detail.auth_method if s.mfa_detail and hasattr(s.mfa_detail, 'auth_method') else None} if s.mfa_detail else None,
+                                ca_policies_applied=[
+                                    {"displayName": p.display_name, "result": p.result.value if p.result else "unknown"}
+                                    for p in (s.applied_conditional_access_policies or [])
+                                ],
+                                risk_level_during=s.risk_level_during_sign_in.value if s.risk_level_during_sign_in else "none",
+                                risk_level_aggregated=s.risk_level_aggregated.value if s.risk_level_aggregated else "none",
+                                token_issuer_type=s.token_issuer_type.value if s.token_issuer_type else "",
+                                legacy_auth=is_legacy,
+                                location={"city": s.location.city, "country": s.location.country_or_region} if s.location else None,
+                            )
+                            signins.append(signin)
+                        except Exception as parse_err:
+                            log.debug("Failed to parse sign-in record: %s", parse_err)
+                            continue
+                
+                # Check for next page
+                if hasattr(result, 'odata_next_link') and result.odata_next_link:
+                    result = await client.audit_logs.sign_ins.with_url(result.odata_next_link).get()
+                else:
+                    break
+                    
+            log.info("Fetched %d sign-in records from Entra ID", len(signins))
+            
+        except ImportError as ie:
+            log.warning("msgraph-sdk not available: %s", ie)
+        except Exception as e:
+            log.warning("Failed to fetch sign-ins from Graph API: %s", e)
+            
         return signins
 
     async def _get_audits(self, since: datetime) -> List[EntraAuditEvent]:
-        """GET /auditLogs/directoryAudits"""
-        return []
+        """
+        GET /auditLogs/directoryAudits
+        Uses msgraph SDK with automatic pagination.
+        """
+        audits = []
+        try:
+            enumerator = self._get_enumerator()
+            client = enumerator._get_client()
+            
+            # Format datetime for OData filter
+            since_str = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+            
+            from msgraph.generated.audit_logs.directory_audits.directory_audits_request_builder import DirectoryAuditsRequestBuilder
+            from kiota_abstractions.base_request_configuration import RequestConfiguration
+            
+            query_params = DirectoryAuditsRequestBuilder.DirectoryAuditsRequestBuilderGetQueryParameters(
+                filter=f"activityDateTime ge {since_str}",
+                orderby=["activityDateTime desc"],
+                top=999,
+            )
+            request_config = RequestConfiguration(query_parameters=query_params)
+            
+            result = await client.audit_logs.directory_audits.get(request_configuration=request_config)
+            
+            while result:
+                if result.value:
+                    for a in result.value:
+                        try:
+                            # Extract initiator UPN
+                            initiated_by_upn = ""
+                            if a.initiated_by:
+                                if a.initiated_by.user:
+                                    initiated_by_upn = a.initiated_by.user.user_principal_name or a.initiated_by.user.display_name or ""
+                                elif a.initiated_by.app:
+                                    initiated_by_upn = f"app:{a.initiated_by.app.display_name or a.initiated_by.app.app_id}"
+                            
+                            audit = EntraAuditEvent(
+                                id=a.id or "",
+                                timestamp=a.activity_date_time.replace(tzinfo=timezone.utc) if a.activity_date_time else datetime.now(timezone.utc),
+                                activity_display_name=a.activity_display_name or "",
+                                category=a.category or "",
+                                initiated_by_upn=initiated_by_upn,
+                                target_resources=[
+                                    t.display_name or t.id or "" 
+                                    for t in (a.target_resources or [])
+                                ],
+                                result=a.result.value if a.result else "success",
+                            )
+                            audits.append(audit)
+                        except Exception as parse_err:
+                            log.debug("Failed to parse audit record: %s", parse_err)
+                            continue
+                
+                # Check for next page
+                if hasattr(result, 'odata_next_link') and result.odata_next_link:
+                    result = await client.audit_logs.directory_audits.with_url(result.odata_next_link).get()
+                else:
+                    break
+                    
+            log.info("Fetched %d audit records from Entra ID", len(audits))
+            
+        except ImportError as ie:
+            log.warning("msgraph-sdk not available: %s", ie)
+        except Exception as e:
+            log.warning("Failed to fetch audits from Graph API: %s", e)
+            
+        return audits
 
     async def _get_risk_detections(self, since: datetime) -> List[dict]:
-        """GET /identityProtection/riskDetections"""
-        return []
+        """
+        GET /identityProtection/riskDetections
+        Uses msgraph SDK with automatic pagination.
+        """
+        detections = []
+        try:
+            enumerator = self._get_enumerator()
+            client = enumerator._get_client()
+            
+            # Format datetime for OData filter
+            since_str = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+            
+            from msgraph.generated.identity_protection.risk_detections.risk_detections_request_builder import RiskDetectionsRequestBuilder
+            from kiota_abstractions.base_request_configuration import RequestConfiguration
+            
+            query_params = RiskDetectionsRequestBuilder.RiskDetectionsRequestBuilderGetQueryParameters(
+                filter=f"detectedDateTime ge {since_str}",
+                orderby=["detectedDateTime desc"],
+                top=999,
+            )
+            request_config = RequestConfiguration(query_parameters=query_params)
+            
+            result = await client.identity_protection.risk_detections.get(request_configuration=request_config)
+            
+            while result:
+                if result.value:
+                    for r in result.value:
+                        try:
+                            detection = {
+                                "id": r.id,
+                                "detectedDateTime": str(r.detected_date_time) if r.detected_date_time else None,
+                                "lastUpdatedDateTime": str(r.last_updated_date_time) if r.last_updated_date_time else None,
+                                "userId": r.user_id,
+                                "userPrincipalName": r.user_principal_name,
+                                "userDisplayName": r.user_display_name,
+                                "riskType": r.risk_type,
+                                "riskEventType": r.risk_event_type,
+                                "riskLevel": r.risk_level.value if r.risk_level else "none",
+                                "riskState": r.risk_state.value if r.risk_state else "none",
+                                "riskDetail": r.risk_detail.value if r.risk_detail else None,
+                                "source": r.source,
+                                "detectionTimingType": r.detection_timing_type.value if r.detection_timing_type else None,
+                                "activity": r.activity.value if r.activity else None,
+                                "ipAddress": r.ip_address,
+                                "location": {
+                                    "city": r.location.city if r.location else None,
+                                    "country": r.location.country_or_region if r.location else None,
+                                } if r.location else None,
+                            }
+                            detections.append(detection)
+                        except Exception as parse_err:
+                            log.debug("Failed to parse risk detection record: %s", parse_err)
+                            continue
+                
+                # Check for next page
+                if hasattr(result, 'odata_next_link') and result.odata_next_link:
+                    result = await client.identity_protection.risk_detections.with_url(result.odata_next_link).get()
+                else:
+                    break
+                    
+            log.info("Fetched %d risk detection records from Entra ID", len(detections))
+            
+        except ImportError as ie:
+            log.warning("msgraph-sdk not available: %s", ie)
+        except Exception as e:
+            log.warning("Failed to fetch risk detections from Graph API: %s", e)
+            
+        return detections

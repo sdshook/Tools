@@ -12,6 +12,10 @@ import click
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+from rich.progress import (
+    Progress, SpinnerColumn, TextColumn, BarColumn, 
+    TaskProgressColumn, TimeElapsedColumn, MofNCompleteColumn
+)
 from rich import box
 
 from advulture.custody import (
@@ -22,6 +26,19 @@ from advulture.custody import (
 
 console = Console()
 log = logging.getLogger("advulture")
+
+
+def create_progress() -> Progress:
+    """Create a rich Progress instance with ADVulture styling."""
+    return Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(bar_width=30),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        console=console,
+        transient=False,
+    )
 
 # Suppress verbose Azure SDK logging
 logging.getLogger("azure").setLevel(logging.WARNING)
@@ -233,7 +250,10 @@ def analyze(ctx, output: Path, evtx, fmt: str,
 
     analysis_start = datetime.now(timezone.utc)
     analyzer = PostureAnalyzer(cfg)
-    report = analyzer.analyze()
+    
+    # Run analysis with progress indicators
+    with create_progress() as progress:
+        report = analyzer.analyze_with_progress(progress)
     analysis_duration = int((datetime.now(timezone.utc) - analysis_start).total_seconds() * 1000)
 
     # Log analysis completion

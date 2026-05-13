@@ -557,6 +557,54 @@ ADVulture produces:
 
 ---
 
+## Progress Indicators and Download-First Architecture
+
+ADVulture provides real-time progress feedback during analysis, making it clear what the tool is doing at each stage.
+
+### Two-Phase Execution
+
+Analysis runs in two distinct phases:
+
+**Phase 1 — Download:** All data is collected from sources before any processing begins
+```
+📥 Collecting Active Directory...     [████████████████] 100%
+📥 Parsing event logs...              [████████████████] 100%
+📥 Collecting Entra ID objects...     [████████████████] 100%
+📥 Collecting Entra ID logs...        [████████████████] 100%
+✓ Download complete
+```
+
+**Phase 2 — Analysis:** Cached data is processed locally
+```
+🔍 Analyzing security findings...     [████████████████] 100%
+🔍 Detecting attack phase...          [████████████████] 100%
+🔍 Running Markov analysis...         [████████████████] 100%
+🔍 Computing gradient ranking...      [████████████████] 100%
+🔍 Classifying regime...              [████████████████] 100%
+✓ Analysis complete
+```
+
+### Benefits of Download-First
+
+- **Clear progress visibility:** Users see exactly what stage the tool is in
+- **Efficient resource usage:** Network connections aren't held during compute-heavy analysis
+- **Better error handling:** Collection failures are detected before analysis begins
+- **Forensic integrity:** All collected data can be cached for reproducible analysis
+
+### Entra ID Data Collection
+
+ADVulture collects the following from Microsoft Graph API:
+- **Users:** All user accounts with security attributes (MFA status, sign-in activity, sync status)
+- **Service Principals:** Including AI agent detection based on display name patterns
+- **Critical Role Assignments:** Global Administrator, Privileged Authentication Admin, etc.
+- **Conditional Access Policies:** For gap analysis
+- **PIM Assignments:** Eligible and active privileged role assignments
+- **Sign-in Logs:** Authentication events with MFA/CA details (30-90 days)
+- **Audit Logs:** Directory changes and administrative actions
+- **Risk Detections:** Identity Protection alerts and risky sign-ins
+
+---
+
 ## Chain of Custody Logging
 
 ADVulture maintains forensic-grade chain of custody logs for all operations, satisfying audit and evidence handling requirements for security assessments and incident response.
