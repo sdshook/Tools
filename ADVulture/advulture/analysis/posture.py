@@ -157,6 +157,8 @@ class PostureAnalyzer:
         # Evidence preservation
         self._evidence_preserver: Optional[EvidencePreserver] = None
         self._evidence_result: Optional[PreservationResult] = None
+        # Shared Entra authenticator to avoid double device-code prompts
+        self._shared_entra_enumerator = None
 
     def analyze_with_progress(
         self,
@@ -483,7 +485,30 @@ class PostureAnalyzer:
 
         log.info("Analysis complete. %d findings. Regime: %s. π_tier0: %.1f%%",
                  len(findings), regime, mc_result.tier0_probability * 100)
+        
+        # SECURITY: Clear credential references after analysis completes
+        # This ensures tokens are not retained in memory longer than necessary
+        self._clear_credentials()
+        
         return report
+
+    def _clear_credentials(self):
+        """
+        Clear cached credentials after analysis completes.
+        
+        Security measure to ensure authentication tokens are not retained
+        in memory longer than necessary. While tokens are already configured
+        to not persist to disk, this ensures they're also cleared from memory
+        when the analysis session ends.
+        """
+        if self._shared_entra_enumerator is not None:
+            # Clear the credential and client references
+            if hasattr(self._shared_entra_enumerator, '_credential'):
+                self._shared_entra_enumerator._credential = None
+            if hasattr(self._shared_entra_enumerator, '_client'):
+                self._shared_entra_enumerator._client = None
+            self._shared_entra_enumerator = None
+            log.debug("Cleared Entra credentials from memory")
 
     def _collect_entra_logs(self):
         """Collect Entra ID sign-in logs, audit logs, and risk detections."""
@@ -499,6 +524,10 @@ class PostureAnalyzer:
         try:
             auth_mode = cfg.auth_mode.value if hasattr(cfg.auth_mode, 'value') else cfg.auth_mode
             
+            # Reuse shared enumerator to avoid duplicate auth prompts
+            # EntraLogIngester wraps EntraEnumerator for client access
+            shared_enumerator = self._get_shared_entra_enumerator()
+            
             ingester = EntraLogIngester(
                 tenant_id=cfg.tenant_id,
                 client_id=cfg.client_id,
@@ -507,6 +536,8 @@ class PostureAnalyzer:
                 certificate_password=cfg.certificate_password or None,
                 auth_mode=auth_mode,
             )
+            # Inject the already-authenticated enumerator to avoid re-auth
+            ingester._enumerator = shared_enumerator
             
             # Run async collection in sync context
             events = asyncio.run(ingester.collect_window(days=self.config.logs.authn_window_days))
@@ -638,6 +669,10 @@ class PostureAnalyzer:
 
         log.info("Analysis complete. %d findings. Regime: %s. π_tier0: %.1f%%",
                  len(findings), regime, mc_result.tier0_probability * 100)
+        
+        # SECURITY: Clear credential references after analysis completes
+        self._clear_credentials()
+        
         return report
 
     # ── Risk class analyzers ───────────────────────────────────────────────────
@@ -995,10 +1030,29 @@ class PostureAnalyzer:
             return stream
         return EventStream([])
 
+    def _get_shared_entra_enumerator(self):
+        """Get or create a shared EntraEnumerator to avoid duplicate authentication prompts."""
+        if self._shared_entra_enumerator is not None:
+            return self._shared_entra_enumerator
+        
+        from advulture.collection.entra_ingester import EntraEnumerator
+        
+        cfg = self.config.entra
+        auth_mode = cfg.auth_mode.value if hasattr(cfg.auth_mode, 'value') else cfg.auth_mode
+        
+        self._shared_entra_enumerator = EntraEnumerator(
+            tenant_id=cfg.tenant_id,
+            client_id=cfg.client_id,
+            client_secret=cfg.client_secret or None,
+            certificate_path=cfg.certificate_path or None,
+            certificate_password=cfg.certificate_password or None,
+            auth_mode=auth_mode,
+        )
+        return self._shared_entra_enumerator
+
     def _collect_entra(self):
         """Collect Entra ID data using async enumeration wrapped in asyncio.run()."""
         import asyncio
-        from advulture.collection.entra_ingester import EntraEnumerator
         from datetime import datetime, timezone
         
         custody = ChainOfCustodyLogger.get_instance()
@@ -1017,14 +1071,9 @@ class PostureAnalyzer:
                 target="microsoft_graph"
             )
             
-            enumerator = EntraEnumerator(
-                tenant_id=cfg.tenant_id,
-                client_id=cfg.client_id,
-                client_secret=cfg.client_secret or None,
-                certificate_path=cfg.certificate_path or None,
-                certificate_password=cfg.certificate_password or None,
-                auth_mode=auth_mode,
-            )
+            # Use shared enumerator to avoid duplicate auth prompts
+            enumerator = self._get_shared_entra_enumerator()
+            
             # Run async enumeration in sync context
             snapshot = asyncio.run(enumerator.enumerate_all())
             

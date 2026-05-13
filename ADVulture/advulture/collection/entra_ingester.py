@@ -293,6 +293,11 @@ class EntraEnumerator:
         
         Returns appropriate credential for the configured authentication mode.
         For interactive modes, will prompt user for authentication.
+        
+        Security Note: Token persistence is explicitly disabled to prevent
+        sensitive credentials from being written to disk. This is critical
+        for forensic tooling where token artifacts could contaminate evidence
+        or create security risks if the analysis workstation is compromised.
         """
         if self._credential is not None:
             return self._credential
@@ -305,6 +310,7 @@ class EntraEnumerator:
                 InteractiveBrowserCredential,
                 ManagedIdentityCredential,
                 ChainedTokenCredential,
+                TokenCachePersistenceOptions,
             )
         except ImportError as e:
             log.error("azure-identity not installed: %s", e)
@@ -314,14 +320,25 @@ class EntraEnumerator:
             ) from e
 
         mode = self.auth_mode.lower() if isinstance(self.auth_mode, str) else self.auth_mode
+        
+        # SECURITY: Disable persistent token caching to prevent tokens from
+        # being written to disk. Tokens are held in memory only for this session.
+        # This prevents:
+        # 1. Token artifacts contaminating forensic evidence
+        # 2. Cached credentials persisting after analysis completes
+        # 3. Security risks from token theft on analysis workstations
+        #
+        # Note: cache_persistence_options=None explicitly disables MSAL's
+        # default disk-based token caching behavior.
+        no_persist_cache = None  # Explicitly disable persistence
 
         if mode == "device_code":
             log.info("Using device code authentication — check terminal for login URL")
             self._credential = DeviceCodeCredential(
                 tenant_id=self.tenant_id,
                 client_id=self.client_id,
-                # Callback to display device code message
                 prompt_callback=self._device_code_prompt,
+                cache_persistence_options=no_persist_cache,
             )
 
         elif mode == "interactive":
@@ -329,6 +346,7 @@ class EntraEnumerator:
             self._credential = InteractiveBrowserCredential(
                 tenant_id=self.tenant_id,
                 client_id=self.client_id,
+                cache_persistence_options=no_persist_cache,
             )
 
         elif mode == "client_secret":
@@ -339,6 +357,7 @@ class EntraEnumerator:
                 tenant_id=self.tenant_id,
                 client_id=self.client_id,
                 client_secret=self.client_secret,
+                # Note: ClientSecretCredential doesn't use token cache persistence
             )
 
         elif mode == "certificate":
@@ -350,12 +369,14 @@ class EntraEnumerator:
                 client_id=self.client_id,
                 certificate_path=self.certificate_path,
                 password=self.certificate_password,
+                # Note: CertificateCredential doesn't use token cache persistence
             )
 
         elif mode == "managed_identity":
             log.info("Using managed identity authentication")
             self._credential = ManagedIdentityCredential(
                 client_id=self.client_id if self.client_id else None,
+                # Note: ManagedIdentityCredential doesn't use token cache persistence
             )
 
         else:
@@ -367,6 +388,7 @@ class EntraEnumerator:
                     tenant_id=self.tenant_id,
                     client_id=self.client_id,
                     prompt_callback=self._device_code_prompt,
+                    cache_persistence_options=no_persist_cache,
                 ),
             )
 
