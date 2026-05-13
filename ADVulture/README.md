@@ -561,9 +561,9 @@ ADVulture produces:
 
 ADVulture provides real-time progress feedback during analysis, making it clear what the tool is doing at each stage.
 
-### Two-Phase Execution
+### Three-Phase Execution
 
-Analysis runs in two distinct phases:
+Analysis runs in three distinct phases:
 
 **Phase 1 — Download:** All data is collected from sources before any processing begins
 ```
@@ -574,7 +574,17 @@ Analysis runs in two distinct phases:
 ✓ Download complete
 ```
 
-**Phase 2 — Analysis:** Cached data is processed locally
+**Phase 2 — Evidence Preservation:** Raw data is compressed and hashed for chain of custody
+```
+🔒 Hashing AD snapshot...             [████████████████] 100%
+🔒 Hashing event stream...            [████████████████] 100%
+🔒 Hashing Entra snapshot...          [████████████████] 100%
+🔒 Hashing source files...            [████████████████] 100%
+🔒 Finalizing evidence archive...     [████████████████] 100%
+✓ Evidence preserved
+```
+
+**Phase 3 — Analysis:** Cached data is processed locally
 ```
 🔍 Analyzing security findings...     [████████████████] 100%
 🔍 Detecting attack phase...          [████████████████] 100%
@@ -584,12 +594,14 @@ Analysis runs in two distinct phases:
 ✓ Analysis complete
 ```
 
-### Benefits of Download-First
+### Benefits of Download-First with Evidence Preservation
 
 - **Clear progress visibility:** Users see exactly what stage the tool is in
 - **Efficient resource usage:** Network connections aren't held during compute-heavy analysis
 - **Better error handling:** Collection failures are detected before analysis begins
-- **Forensic integrity:** All collected data can be cached for reproducible analysis
+- **Forensic integrity:** All collected data is hashed and archived before analysis
+- **Chain of custody:** Evidence archives satisfy legal and audit requirements
+- **Reproducibility:** Analysis can be re-run against the exact same source data
 
 ### Entra ID Data Collection
 
@@ -689,6 +701,158 @@ from advulture.custody import ChainOfCustodyLogger
 is_valid, errors = ChainOfCustodyLogger.verify_log_file(Path("custody.jsonl"))
 if not is_valid:
     print(f"Tampering detected: {errors}")
+```
+
+---
+
+## Evidence Preservation
+
+ADVulture creates forensic "system of record" archives of all collected data **before analysis begins**. This ensures that the original, unmodified data is preserved with cryptographic integrity verification, independent of any transformation or analysis performed afterward.
+
+### Why Evidence Preservation?
+
+In security assessments and incident response, the chain of custody requires:
+
+1. **Original data preservation**: Raw collected data must be preserved before any processing
+2. **Tamper evidence**: Archives must be cryptographically verifiable
+3. **Reproducibility**: Analysis can be re-run against the same source data
+4. **Legal defensibility**: Evidence archives satisfy forensic evidence handling requirements
+
+### Three-Phase Execution Model
+
+ADVulture now operates in three phases:
+
+```
+📥 Phase 1: Download       Collect all data from sources
+🔒 Phase 2: Preserve       Compress and hash raw data (system of record)
+🔍 Phase 3: Analyze        Process preserved data for findings
+```
+
+Progress indicators show each phase:
+```
+📥 Collecting Active Directory...     [████████████████] 100%
+📥 Parsing event logs...              [████████████████] 100%
+📥 Collecting Entra ID objects...     [████████████████] 100%
+✓ Download complete
+
+🔒 Hashing AD snapshot...             [████████████████] 100%
+🔒 Hashing event stream...            [████████████████] 100%
+🔒 Hashing Entra snapshot...          [████████████████] 100%
+🔒 Finalizing evidence archive...     [████████████████] 100%
+✓ Evidence preserved
+
+🔍 Analyzing security findings...     [████████████████] 100%
+🔍 Detecting attack phase...          [████████████████] 100%
+✓ Analysis complete
+```
+
+### Evidence Archive Structure
+
+Each analysis creates a timestamped evidence archive:
+
+```
+evidence/
+└── CASE-2025-001_20250513_184500_abc12345/
+    ├── manifest.json           # Archive metadata and hashes
+    ├── ad_snapshot.json.gz     # Compressed AD enumeration data
+    ├── entra_snapshot.json.gz  # Compressed Entra ID objects
+    ├── entra_events.json.gz    # Compressed sign-in/audit logs
+    ├── event_stream.json.gz    # Compressed Windows events
+    └── source_hashes.json      # Original EVTX file hashes
+```
+
+### Manifest Contents
+
+The manifest.json provides complete archive metadata:
+
+```json
+{
+  "archive_id": "abc12345",
+  "case_id": "CASE-2025-001",
+  "created_at": "2025-05-13T18:45:00.000000+00:00",
+  "created_by": "analyst",
+  "hostname": "workstation01",
+  "advulture_version": "0.4.0",
+  "collection_started": "2025-05-13T18:44:30.000000+00:00",
+  "collection_completed": "2025-05-13T18:45:00.000000+00:00",
+  "collection_duration_ms": 30000,
+  "ad_snapshot_hash": "sha256:a1b2c3...",
+  "ad_snapshot_records": 1523,
+  "entra_snapshot_hash": "sha256:d4e5f6...",
+  "entra_snapshot_records": 850,
+  "source_file_hashes": {
+    "/path/to/Security.evtx": "sha256:789abc..."
+  },
+  "manifest_hash": "sha256:final..."
+}
+```
+
+### Usage
+
+Evidence preservation is **enabled by default**:
+
+```shell
+# Standard usage (evidence preserved automatically)
+advulture analyze --entra-only
+
+# With case ID for tracking
+advulture --case-id CASE-2025-001 analyze --ad-only
+
+# Custom evidence directory
+advulture analyze --evidence-dir /secure/evidence
+
+# Disable preservation (not recommended for production)
+advulture analyze --no-evidence
+```
+
+### Verification Commands
+
+```shell
+# Verify a specific evidence archive
+advulture verify-evidence evidence/CASE-2025-001_20250513_184500_abc12345/
+
+# List all evidence archives with integrity status
+advulture list-evidence
+
+# Filter by case ID
+advulture list-evidence --case CASE-2025-001
+```
+
+### Programmatic Access
+
+```python
+from advulture.evidence import EvidencePreserver
+
+# Verify an archive
+is_valid, errors = EvidencePreserver.verify_archive(Path("evidence/archive_name"))
+if not is_valid:
+    print(f"Tampering detected: {errors}")
+
+# Create a standalone evidence archive
+preserver = EvidencePreserver(evidence_dir=Path("evidence"))
+preserver.start_collection(case_id="CASE-2025-001")
+preserver.preserve_ad_snapshot(ad_snapshot)
+preserver.preserve_entra_snapshot(entra_snapshot)
+result = preserver.finalize()
+print(f"Archive: {result.archive_path}")
+print(f"Hash: {result.manifest.manifest_hash}")
+```
+
+### Integration with Chain of Custody
+
+Evidence archives are automatically logged to the chain of custody:
+
+```json
+{
+  "event_type": "EXPORT",
+  "action": "evidence_archive",
+  "details": {
+    "destination": "evidence/CASE-2025-001_20250513_184500_abc12345",
+    "format": "gzip+json",
+    "file_hash": "sha256:abc123..."
+  },
+  "record_count": 2373
+}
 ```
 
 ---

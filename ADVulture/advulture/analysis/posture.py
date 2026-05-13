@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional, List, Dict
 import torch
 
@@ -26,6 +27,7 @@ from advulture.ml.markov.chain import (
 )
 from advulture.config import Config
 from advulture.custody import ChainOfCustodyLogger, CustodyEventType
+from advulture.evidence import EvidencePreserver, PreservationResult
 
 log = logging.getLogger(__name__)
 
@@ -74,22 +76,27 @@ class PostureReport:
     # Per-class counts
     finding_counts: Dict[str, int] = field(default_factory=dict)
 
+    # Evidence preservation
+    evidence_archive_path: Optional[str] = None
+    evidence_manifest_hash: Optional[str] = None
+
     def summary(self) -> str:
         counts_str = "  ".join(
             f"[{cls}] {cnt}" for cls, cnt in self.finding_counts.items()
         )
+        evidence_str = f"  |  Evidence: {self.evidence_manifest_hash[:16]}..." if self.evidence_manifest_hash else ""
         return (
             f"ADVulture Posture Report — {self.domain}\n"
             f"{'=' * 60}\n"
             f"Regime: {self.regime}  |  π_tier0: {self.tier0_steady_state_probability:.1%}  "
             f"|  Mean steps to DA: {self.mean_steps_to_tier0:.1f}\n"
             f"Phase: {self.attacker_phase.most_likely.name if self.attacker_phase else 'UNKNOWN'}  "
-            f"|  Active signals: {len(self.active_signals)}\n"
+            f"|  Active signals: {len(self.active_signals)}{evidence_str}\n"
             f"Findings: {counts_str}  |  Total: {len(self.findings)}\n"
         )
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "timestamp": self.timestamp.isoformat(),
             "domain": self.domain,
             "regime": self.regime,
@@ -114,6 +121,13 @@ class PostureReport:
             ],
             "findings": [f.to_dict() for f in self.findings],
         }
+        # Add evidence preservation info if available
+        if self.evidence_archive_path:
+            result["evidence"] = {
+                "archive_path": self.evidence_archive_path,
+                "manifest_hash": self.evidence_manifest_hash,
+            }
+        return result
 
 
 class PostureAnalyzer:
@@ -124,6 +138,11 @@ class PostureAnalyzer:
     Supports two modes:
     - analyze(): Simple mode without progress indicators
     - analyze_with_progress(): Download-first mode with rich progress bars
+    
+    Evidence Preservation:
+    - When preserve_evidence=True, creates a compressed, hashed archive of all
+      collected data before analysis begins
+    - Archives serve as forensic "system of record" for chain of custody
     """
 
     def __init__(self, config: Config):
@@ -135,24 +154,34 @@ class PostureAnalyzer:
         self._cached_event_stream = None
         self._cached_entra_snapshot = None
         self._cached_entra_events = None
+        # Evidence preservation
+        self._evidence_preserver: Optional[EvidencePreserver] = None
+        self._evidence_result: Optional[PreservationResult] = None
 
     def analyze_with_progress(
         self,
         progress,
         controls: Optional[Dict[str, float]] = None,
         evtx_paths: Optional[List] = None,
+        preserve_evidence: bool = True,
+        evidence_dir: Optional[Path] = None,
+        case_id: Optional[str] = None,
     ) -> PostureReport:
         """
         Run complete posture analysis with progress indicators.
         
         Implements a download-first strategy:
         1. DOWNLOAD PHASE: Collect all data from sources with progress
-        2. ANALYSIS PHASE: Process cached data with progress
+        2. EVIDENCE PHASE: Compress and hash collected data for chain of custody
+        3. ANALYSIS PHASE: Process cached data with progress
         
         Args:
             progress: rich.progress.Progress instance for displaying progress
             controls: current deployment level for each security control [0,1]
             evtx_paths: optional list of EVTX file paths
+            preserve_evidence: if True, create compressed/hashed evidence archive
+            evidence_dir: directory for evidence archives (default: ./evidence)
+            case_id: optional case/ticket ID for evidence tracking
             
         Returns:
             PostureReport with all findings and recommendations
@@ -161,6 +190,14 @@ class PostureAnalyzer:
             controls = self._default_controls()
 
         log.info("Starting ADVulture posture analysis (download-first mode)")
+        
+        # Initialize evidence preserver if enabled
+        if preserve_evidence:
+            self._evidence_preserver = EvidencePreserver(
+                evidence_dir=evidence_dir or Path("evidence"),
+            )
+            self._evidence_preserver.start_collection(case_id=case_id)
+            log.info("Evidence preservation enabled: %s", self._evidence_preserver._archive_path)
         
         # ════════════════════════════════════════════════════════════════════
         # PHASE 1: DOWNLOAD — Collect all data before processing
@@ -243,6 +280,99 @@ class PostureAnalyzer:
         
         # Mark download complete
         progress.update(download_task, description="[green]✓ Download complete", completed=len(collection_tasks))
+        
+        # ════════════════════════════════════════════════════════════════════
+        # PHASE 1.5: EVIDENCE PRESERVATION — Hash and compress raw data
+        # ════════════════════════════════════════════════════════════════════
+        
+        evidence_archive_path = None
+        evidence_manifest_hash = None
+        
+        if self._evidence_preserver is not None:
+            # Count preservation steps
+            preservation_steps = []
+            if snapshot and snapshot.users:
+                preservation_steps.append("ad_snapshot")
+            if event_stream and hasattr(event_stream, 'events') and event_stream.events:
+                preservation_steps.append("event_stream")
+            if entra_snapshot:
+                preservation_steps.append("entra_snapshot")
+            if entra_events:
+                preservation_steps.append("entra_events")
+            # Add source file hashing
+            actual_evtx = evtx_paths or self.config.logs.evtx_paths
+            if actual_evtx:
+                preservation_steps.append("source_hashes")
+            preservation_steps.append("finalize")
+            
+            evidence_task = progress.add_task(
+                "[magenta]🔒 Preserving evidence...",
+                total=len(preservation_steps)
+            )
+            
+            # Preserve AD snapshot
+            if "ad_snapshot" in preservation_steps:
+                progress.update(evidence_task, description="[magenta]🔒 Hashing AD snapshot...")
+                self._evidence_preserver.preserve_ad_snapshot(snapshot)
+                progress.advance(evidence_task)
+            
+            # Preserve event stream  
+            if "event_stream" in preservation_steps:
+                progress.update(evidence_task, description="[magenta]🔒 Hashing event stream...")
+                self._evidence_preserver.preserve_event_stream(event_stream)
+                progress.advance(evidence_task)
+            
+            # Preserve Entra snapshot
+            if "entra_snapshot" in preservation_steps:
+                progress.update(evidence_task, description="[magenta]🔒 Hashing Entra snapshot...")
+                self._evidence_preserver.preserve_entra_snapshot(entra_snapshot)
+                progress.advance(evidence_task)
+            
+            # Preserve Entra events
+            if "entra_events" in preservation_steps:
+                progress.update(evidence_task, description="[magenta]🔒 Hashing Entra events...")
+                self._evidence_preserver.preserve_entra_events(entra_events)
+                progress.advance(evidence_task)
+            
+            # Hash source files (EVTX)
+            if "source_hashes" in preservation_steps:
+                progress.update(evidence_task, description="[magenta]🔒 Hashing source files...")
+                for evtx_path in (actual_evtx or []):
+                    if Path(evtx_path).exists():
+                        self._evidence_preserver.record_source_file_hash(Path(evtx_path))
+                progress.advance(evidence_task)
+            
+            # Finalize archive
+            progress.update(evidence_task, description="[magenta]🔒 Finalizing evidence archive...")
+            self._evidence_result = self._evidence_preserver.finalize()
+            progress.advance(evidence_task)
+            
+            # Update progress and log custody
+            progress.update(evidence_task, description="[green]✓ Evidence preserved", completed=len(preservation_steps))
+            
+            evidence_archive_path = str(self._evidence_result.archive_path)
+            evidence_manifest_hash = self._evidence_result.manifest.manifest_hash
+            
+            # Log to chain of custody
+            custody = ChainOfCustodyLogger.get_instance()
+            custody.log_export(
+                export_type="evidence_archive",
+                destination=evidence_archive_path,
+                format="gzip+json",
+                record_count=(
+                    self._evidence_result.manifest.ad_snapshot_records +
+                    self._evidence_result.manifest.entra_snapshot_records +
+                    self._evidence_result.manifest.entra_events_records +
+                    self._evidence_result.manifest.event_stream_records
+                ),
+                file_hash=evidence_manifest_hash,
+            )
+            
+            log.info(
+                "Evidence preserved: %s (hash=%s)",
+                self._evidence_result.archive_path.name,
+                evidence_manifest_hash[:16] + "...",
+            )
         
         # ════════════════════════════════════════════════════════════════════
         # PHASE 2: ANALYSIS — Process cached data
@@ -347,6 +477,8 @@ class PostureAnalyzer:
             remediation_ranking=ranking,
             active_signals=active_signals,
             finding_counts=counts,
+            evidence_archive_path=evidence_archive_path,
+            evidence_manifest_hash=evidence_manifest_hash,
         )
 
         log.info("Analysis complete. %d findings. Regime: %s. π_tier0: %.1f%%",

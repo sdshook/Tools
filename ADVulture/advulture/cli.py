@@ -23,6 +23,7 @@ from advulture.custody import (
     CustodyEventType,
     compute_file_hash,
 )
+from advulture.evidence import EvidencePreserver
 
 console = Console()
 log = logging.getLogger("advulture")
@@ -135,11 +136,17 @@ def _discover_evtx_files() -> list:
               help="Entra ID tenant ID (optional for interactive auth)")
 @click.option("--client-id", envvar="AZURE_CLIENT_ID",
               help="Entra ID client/app ID (optional for interactive auth)")
+# Evidence preservation options
+@click.option("--no-evidence", is_flag=True, default=False,
+              help="Disable evidence preservation (not recommended for production)")
+@click.option("--evidence-dir", type=Path, default=Path("evidence"),
+              help="Directory for evidence archives")
 @click.pass_context
 def analyze(ctx, output: Path, evtx, fmt: str, 
             ad_auth: Optional[str], domain: Optional[str], server: Optional[str],
             entra_auth: Optional[str], entra_only: bool, ad_only: bool,
-            tenant_id: Optional[str], client_id: Optional[str]):
+            tenant_id: Optional[str], client_id: Optional[str],
+            no_evidence: bool, evidence_dir: Path):
     """
     Run posture analysis and generate reports.
     
@@ -151,6 +158,12 @@ def analyze(ctx, output: Path, evtx, fmt: str,
     
     EVTX files are auto-discovered from current directory or Windows default
     locations. Use --evtx to specify files explicitly.
+    
+    \b
+    EVIDENCE PRESERVATION:
+    By default, collected data is compressed and hashed before analysis to
+    create a forensic "system of record" for chain of custody purposes.
+    Use --no-evidence to disable (not recommended for production).
     """
     from datetime import datetime, timezone
     from advulture.config import Config, EntraAuthMode, LDAPAuthMode
@@ -239,6 +252,9 @@ def analyze(ctx, output: Path, evtx, fmt: str,
 
     # Log analysis start
     analysis_mode = "entra_only" if entra_only else ("ad_only" if ad_only else "hybrid")
+    case_id = ctx.obj.get("case_id")
+    preserve_evidence = not no_evidence
+    
     if custody:
         custody.log_analysis("posture_start", {
             "mode": analysis_mode,
@@ -246,14 +262,26 @@ def analyze(ctx, output: Path, evtx, fmt: str,
             "entra_auth_mode": cfg.entra.auth_mode.value if cfg.entra.enabled else None,
             "ldap_domain": cfg.ldap.domain or "auto-discover",
             "evtx_count": len(cfg.logs.evtx_paths),
+            "evidence_preservation": preserve_evidence,
+            "evidence_dir": str(evidence_dir),
         })
+
+    if preserve_evidence:
+        console.print(f"[dim]Evidence preservation: enabled → {evidence_dir}/[/dim]")
+    else:
+        console.print("[yellow]Evidence preservation: disabled[/yellow]")
 
     analysis_start = datetime.now(timezone.utc)
     analyzer = PostureAnalyzer(cfg)
     
     # Run analysis with progress indicators
     with create_progress() as progress:
-        report = analyzer.analyze_with_progress(progress)
+        report = analyzer.analyze_with_progress(
+            progress,
+            preserve_evidence=preserve_evidence,
+            evidence_dir=evidence_dir,
+            case_id=case_id,
+        )
     analysis_duration = int((datetime.now(timezone.utc) - analysis_start).total_seconds() * 1000)
 
     # Log analysis completion
@@ -319,6 +347,12 @@ def analyze(ctx, output: Path, evtx, fmt: str,
         console.print(f"\n[bold yellow]Active Signals:[/bold yellow]")
         for sig in report.active_signals[:5]:
             console.print(f"  ⚠ {sig}")
+
+    # Print evidence preservation info
+    if report.evidence_archive_path:
+        console.print(f"\n[bold magenta]Evidence Archive:[/bold magenta]")
+        console.print(f"  📁 Path: {report.evidence_archive_path}")
+        console.print(f"  🔒 Hash: {report.evidence_manifest_hash}")
 
     # Generate reports
     gen = ReportGenerator()
@@ -654,6 +688,141 @@ def list_custody(log_dir: Path, session: Optional[str], case: Optional[str]):
             )
         except Exception as e:
             table.add_row(log_file.name, "?", "?", "?", "?", f"[red]Error: {e}[/red]")
+    
+    console.print(table)
+
+
+@main.command()
+@click.argument("archive_path", type=Path)
+def verify_evidence(archive_path: Path):
+    """
+    Verify integrity of an evidence archive.
+    
+    Checks that all archived data files match their recorded hashes
+    and that the manifest has not been tampered with.
+    
+    \b
+    Example:
+      advulture verify-evidence evidence/CASE-2025-001_20250513_184500_abc12345/
+    """
+    if not archive_path.exists():
+        console.print(f"[red]Error:[/red] Archive not found: {archive_path}")
+        raise SystemExit(1)
+    
+    if not archive_path.is_dir():
+        console.print(f"[red]Error:[/red] Not a directory: {archive_path}")
+        raise SystemExit(1)
+    
+    manifest_path = archive_path / "manifest.json"
+    if not manifest_path.exists():
+        console.print(f"[red]Error:[/red] No manifest.json found in archive")
+        raise SystemExit(1)
+    
+    console.print(f"[cyan]Verifying:[/cyan] {archive_path}")
+    
+    is_valid, errors = EvidencePreserver.verify_archive(archive_path)
+    
+    if is_valid:
+        console.print("[bold green]✓ Evidence archive is VALID[/bold green]")
+        console.print("  All data files match their recorded hashes — no tampering detected.")
+        
+        # Show manifest summary
+        import json
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        
+        console.print(f"\n  [dim]Archive ID:[/dim] {manifest.get('archive_id', 'N/A')}")
+        console.print(f"  [dim]Case ID:[/dim] {manifest.get('case_id') or 'N/A'}")
+        console.print(f"  [dim]Created:[/dim] {manifest.get('created_at', 'N/A')[:19]}")
+        console.print(f"  [dim]Operator:[/dim] {manifest.get('created_by', 'N/A')}")
+        
+        # Show record counts
+        total_records = (
+            manifest.get('ad_snapshot_records', 0) +
+            manifest.get('entra_snapshot_records', 0) +
+            manifest.get('entra_events_records', 0) +
+            manifest.get('event_stream_records', 0)
+        )
+        console.print(f"  [dim]Total records:[/dim] {total_records}")
+        console.print(f"  [dim]Manifest hash:[/dim] {manifest.get('manifest_hash', 'N/A')}")
+    else:
+        console.print("[bold red]✗ Evidence archive is INVALID[/bold red]")
+        console.print("  The following integrity errors were detected:")
+        for error in errors:
+            console.print(f"    [red]•[/red] {error}")
+        raise SystemExit(1)
+
+
+@main.command()
+@click.option("--dir", "-d", "evidence_dir", type=Path, default=Path("evidence"),
+              help="Directory containing evidence archives")
+@click.option("--case", "-c", help="Filter by case ID")
+def list_evidence(evidence_dir: Path, case: Optional[str]):
+    """
+    List evidence archives.
+    
+    \b
+    Example:
+      advulture list-evidence
+      advulture list-evidence --dir /path/to/evidence --case CASE-2025-001
+    """
+    import json
+    
+    if not evidence_dir.exists():
+        console.print(f"[yellow]No evidence directory found:[/yellow] {evidence_dir}")
+        return
+    
+    # Find all archives (directories with manifest.json)
+    archives = []
+    for item in evidence_dir.iterdir():
+        if item.is_dir() and (item / "manifest.json").exists():
+            archives.append(item)
+    
+    archives.sort(key=lambda p: p.name, reverse=True)
+    
+    if not archives:
+        console.print(f"[yellow]No evidence archives found in:[/yellow] {evidence_dir}")
+        return
+    
+    table = Table(title="Evidence Archives", box=box.ROUNDED)
+    table.add_column("Archive", style="cyan")
+    table.add_column("Case ID")
+    table.add_column("Created")
+    table.add_column("Records", justify="right")
+    table.add_column("Status")
+    
+    for archive in archives:
+        try:
+            with open(archive / "manifest.json") as f:
+                manifest = json.load(f)
+            
+            case_id = manifest.get("case_id") or "-"
+            
+            # Apply case filter
+            if case and case_id != case:
+                continue
+            
+            created = manifest.get("created_at", "")[:19]
+            total_records = (
+                manifest.get('ad_snapshot_records', 0) +
+                manifest.get('entra_snapshot_records', 0) +
+                manifest.get('entra_events_records', 0) +
+                manifest.get('event_stream_records', 0)
+            )
+            
+            # Verify integrity
+            is_valid, _ = EvidencePreserver.verify_archive(archive)
+            status = "[green]✓ Valid[/green]" if is_valid else "[red]✗ Invalid[/red]"
+            
+            table.add_row(
+                archive.name,
+                case_id,
+                created,
+                str(total_records),
+                status,
+            )
+        except Exception as e:
+            table.add_row(archive.name, "?", "?", "?", f"[red]Error: {e}[/red]")
     
     console.print(table)
 
