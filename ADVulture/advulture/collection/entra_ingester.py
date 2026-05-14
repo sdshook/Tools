@@ -104,13 +104,40 @@ class EntraUser:
     on_prem_sid: str = ""           # onPremisesSecurityIdentifier
     on_prem_sync: bool = False      # onPremisesSyncEnabled
     account_enabled: bool = True
-    mfa_methods: List[str] = field(default_factory=list)
+    mfa_methods: List[str] = field(default_factory=list)  # e.g., ["microsoftAuthenticator", "fido2", "phone"]
+    mfa_registered: bool = False    # True if ANY MFA method registered
+    mfa_capable: bool = False       # True if strong MFA (not just SMS/voice)
     last_signin: Optional[datetime] = None
     risk_level: str = "none"        # from Identity Protection
     risk_state: str = "none"
     password_policies: str = ""
     assigned_roles: List[str] = field(default_factory=list)
     is_critical_role: bool = False
+
+
+# MFA method categories for security assessment
+STRONG_MFA_METHODS = {
+    "microsoftAuthenticator",
+    "fido2SecurityKey",
+    "windowsHelloForBusiness",
+    "softwareOath",  # TOTP apps like Google Authenticator
+}
+
+WEAK_MFA_METHODS = {
+    "phone",         # SMS/Voice call
+    "email",         # Email OTP
+}
+
+ALL_MFA_METHOD_TYPES = {
+    "microsoftAuthenticator": "Microsoft Authenticator (Push/TOTP)",
+    "fido2SecurityKey": "FIDO2 Security Key",
+    "windowsHelloForBusiness": "Windows Hello for Business", 
+    "softwareOath": "TOTP App (Google Authenticator, etc.)",
+    "phone": "Phone (SMS/Voice) - WEAK",
+    "email": "Email OTP - WEAK",
+    "temporaryAccessPass": "Temporary Access Pass",
+    "password": "Password Only - NO MFA",
+}
 
 
 @dataclass
@@ -481,6 +508,9 @@ class EntraEnumerator:
         snapshot.role_definitions = await self._get_all_role_definitions()
         snapshot.all_role_assignments = await self._get_all_role_assignments(snapshot.role_definitions)
         snapshot.oauth_grants = await self._get_oauth_grants()
+        
+        # Enrich users with MFA method information
+        await self._enrich_users_with_mfa(snapshot.users)
 
         return snapshot
 
@@ -1049,6 +1079,122 @@ class EntraEnumerator:
             log.warning("Failed to fetch OAuth grants: %s", e)
             
         return grants
+
+    async def _enrich_users_with_mfa(self, users: List[EntraUser]) -> None:
+        """Fetch authentication methods for each user and enrich user objects.
+        
+        Requires UserAuthenticationMethod.Read.All permission.
+        Categorizes MFA methods as strong (Authenticator, FIDO2) or weak (SMS, Voice).
+        """
+        log.info("Enriching %d users with MFA method information...", len(users))
+        
+        try:
+            client = self._get_client()
+            enriched_count = 0
+            no_mfa_count = 0
+            weak_only_count = 0
+            
+            for user in users:
+                try:
+                    # Fetch authentication methods for this user
+                    result = await client.users.by_user_id(user.id).authentication.methods.get()
+                    
+                    if result and result.value:
+                        methods = []
+                        has_strong = False
+                        has_weak = False
+                        
+                        for method in result.value:
+                            # Extract method type from odata_type
+                            method_type = None
+                            if method.odata_type:
+                                # e.g., "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod"
+                                type_name = method.odata_type.split('.')[-1]
+                                # Convert to simpler name
+                                if "microsoftAuthenticator" in type_name:
+                                    method_type = "microsoftAuthenticator"
+                                elif "fido2" in type_name.lower():
+                                    method_type = "fido2SecurityKey"
+                                elif "windowsHello" in type_name.lower():
+                                    method_type = "windowsHelloForBusiness"
+                                elif "softwareOath" in type_name.lower():
+                                    method_type = "softwareOath"
+                                elif "phone" in type_name.lower():
+                                    method_type = "phone"
+                                elif "email" in type_name.lower():
+                                    method_type = "email"
+                                elif "temporaryAccessPass" in type_name.lower():
+                                    method_type = "temporaryAccessPass"
+                                elif "password" in type_name.lower():
+                                    method_type = "password"
+                                else:
+                                    method_type = type_name
+                            
+                            if method_type and method_type != "password":
+                                methods.append(method_type)
+                                if method_type in STRONG_MFA_METHODS:
+                                    has_strong = True
+                                elif method_type in WEAK_MFA_METHODS:
+                                    has_weak = True
+                        
+                        # Update user object
+                        user.mfa_methods = methods
+                        user.mfa_registered = len(methods) > 0
+                        user.mfa_capable = has_strong  # Strong MFA available
+                        
+                        if not methods:
+                            no_mfa_count += 1
+                        elif not has_strong and has_weak:
+                            weak_only_count += 1
+                        
+                        enriched_count += 1
+                        
+                except Exception as user_err:
+                    # Some users may not be accessible (guests, etc.)
+                    log.debug("Could not fetch MFA for user %s: %s", 
+                             user.user_principal_name, user_err)
+                    continue
+            
+            log.info(
+                "MFA enrichment complete: %d users enriched, %d without MFA, %d weak MFA only",
+                enriched_count, no_mfa_count, weak_only_count
+            )
+            
+        except Exception as e:
+            log.warning("Failed to enrich users with MFA data: %s", e)
+
+    async def _get_mfa_registration_report(self) -> dict:
+        """Get authentication methods registration summary.
+        
+        Uses the authenticationMethodsPolicy for tenant-wide MFA status.
+        Returns summary statistics.
+        """
+        summary = {
+            "total_users": 0,
+            "mfa_registered": 0,
+            "mfa_capable": 0,  # Strong MFA
+            "weak_mfa_only": 0,
+            "no_mfa": 0,
+            "by_method": {},
+        }
+        
+        try:
+            client = self._get_client()
+            
+            # Try to get registration details report
+            # This requires Reports.Read.All permission
+            result = await client.reports.authentication_methods.users_registered_by_method.get()
+            
+            if result and result.value:
+                for item in result.value:
+                    method = getattr(item, 'authentication_method', 'unknown')
+                    count = getattr(item, 'user_count', 0)
+                    summary["by_method"][method] = count
+                    
+        except Exception as e:
+            log.debug("Could not fetch MFA registration report: %s", e)
+            
+        return summary
 
 
 class EntraLogIngester:

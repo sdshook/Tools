@@ -597,6 +597,7 @@ class PostureAnalyzer:
             findings += self._analyze_ai_agents(entra_snapshot)
             findings += self._analyze_entra_privileged_access(entra_snapshot)
             findings += self._analyze_entra_role_hygiene(entra_snapshot)
+            findings += self._analyze_entra_mfa_posture(entra_snapshot)
 
         # ── HMM phase detection ────────────────────────────────────────────
         event_sequence = self._build_event_sequence(event_stream)
@@ -1219,6 +1220,152 @@ class PostureAnalyzer:
                         "sample_grants": risky_grants[:5],
                     },
                 ))
+        
+        return findings
+
+    def _analyze_entra_mfa_posture(self, entra_snapshot) -> List[Finding]:
+        """Analyze MFA registration and capability across users."""
+        findings = []
+        
+        users = getattr(entra_snapshot, 'users', [])
+        if not users:
+            return findings
+        
+        # Categorize users by MFA status
+        enabled_users = [u for u in users if u.account_enabled]
+        no_mfa = [u for u in enabled_users if not u.mfa_registered]
+        weak_mfa_only = [u for u in enabled_users if u.mfa_registered and not u.mfa_capable]
+        strong_mfa = [u for u in enabled_users if u.mfa_capable]
+        
+        # Get privileged users for cross-reference
+        role_assignments = getattr(entra_snapshot, 'all_role_assignments', [])
+        role_defs = {r.id: r for r in getattr(entra_snapshot, 'role_definitions', [])}
+        
+        privileged_user_ids = set()
+        for assignment in role_assignments:
+            if assignment.principal_type == "User":
+                role_def = role_defs.get(assignment.role_definition_id)
+                if role_def and role_def.is_privileged:
+                    privileged_user_ids.add(assignment.principal_id)
+        
+        privileged_no_mfa = [u for u in no_mfa if u.id in privileged_user_ids]
+        privileged_weak_mfa = [u for u in weak_mfa_only if u.id in privileged_user_ids]
+        
+        # Finding 1: CRITICAL - Privileged accounts without MFA
+        if privileged_no_mfa:
+            findings.append(Finding(
+                category="privileged_accounts_no_mfa",
+                title=f"Privileged Accounts Without MFA: {len(privileged_no_mfa)} accounts",
+                risk_class=RiskClass.AUTHN_HYGIENE,
+                severity=Severity.CRITICAL,
+                affected_resources=[u.user_principal_name for u in privileged_no_mfa],
+                evidence_sources=["entra_users", "authentication_methods"],
+                mitre_techniques=["T1078.004", "T1110"],
+                controls=["mfa_enforcement", "conditional_access"],
+                remediation_steps=[
+                    "IMMEDIATELY require MFA registration for all privileged accounts",
+                    "Create Conditional Access policy requiring MFA for admin roles",
+                    "Consider blocking sign-in until MFA is registered",
+                    "Enable Security Defaults if no CA policies exist",
+                ],
+                details={
+                    "affected_count": len(privileged_no_mfa),
+                    "accounts": [
+                        {"upn": u.user_principal_name, "display_name": u.display_name}
+                        for u in privileged_no_mfa
+                    ],
+                },
+            ))
+        
+        # Finding 2: HIGH - Privileged accounts with weak MFA only (SMS/Voice)
+        if privileged_weak_mfa:
+            findings.append(Finding(
+                category="privileged_accounts_weak_mfa",
+                title=f"Privileged Accounts with Weak MFA: {len(privileged_weak_mfa)} using SMS/Voice only",
+                risk_class=RiskClass.AUTHN_HYGIENE,
+                severity=Severity.HIGH,
+                affected_resources=[u.user_principal_name for u in privileged_weak_mfa],
+                evidence_sources=["entra_users", "authentication_methods"],
+                mitre_techniques=["T1078.004", "T1111"],  # MFA interception
+                controls=["strong_mfa", "phishing_resistant_mfa"],
+                remediation_steps=[
+                    "Require phishing-resistant MFA for privileged accounts",
+                    "Deploy FIDO2 security keys or Windows Hello for Business",
+                    "Migrate from SMS/Voice to Microsoft Authenticator at minimum",
+                    "Block SMS/Voice MFA via Authentication Methods Policy",
+                ],
+                details={
+                    "affected_count": len(privileged_weak_mfa),
+                    "accounts": [
+                        {"upn": u.user_principal_name, "mfa_methods": u.mfa_methods}
+                        for u in privileged_weak_mfa
+                    ],
+                },
+            ))
+        
+        # Finding 3: MEDIUM - General users without MFA
+        non_privileged_no_mfa = [u for u in no_mfa if u.id not in privileged_user_ids]
+        if len(non_privileged_no_mfa) > 10:
+            pct_no_mfa = round(len(non_privileged_no_mfa) / max(len(enabled_users), 1) * 100, 1)
+            findings.append(Finding(
+                category="users_without_mfa",
+                title=f"Users Without MFA: {len(non_privileged_no_mfa)} accounts ({pct_no_mfa}%)",
+                risk_class=RiskClass.AUTHN_HYGIENE,
+                severity=Severity.MEDIUM if pct_no_mfa > 20 else Severity.LOW,
+                affected_resources=[u.user_principal_name for u in non_privileged_no_mfa[:20]],
+                evidence_sources=["entra_users", "authentication_methods"],
+                mitre_techniques=["T1078.004"],
+                controls=["mfa_enforcement", "security_defaults"],
+                remediation_steps=[
+                    "Enable MFA registration campaign",
+                    "Create Conditional Access policy requiring MFA for all users",
+                    "Enable Security Defaults if no Conditional Access",
+                    "Set registration deadline with escalating notifications",
+                ],
+                details={
+                    "total_enabled_users": len(enabled_users),
+                    "users_without_mfa": len(non_privileged_no_mfa),
+                    "percentage": pct_no_mfa,
+                    "sample_accounts": [u.user_principal_name for u in non_privileged_no_mfa[:10]],
+                },
+            ))
+        
+        # Finding 4: LOW - Users relying on weak MFA only
+        non_privileged_weak_mfa = [u for u in weak_mfa_only if u.id not in privileged_user_ids]
+        if len(non_privileged_weak_mfa) > 20:
+            pct_weak = round(len(non_privileged_weak_mfa) / max(len(enabled_users), 1) * 100, 1)
+            findings.append(Finding(
+                category="users_weak_mfa_only",
+                title=f"Users with Weak MFA Only: {len(non_privileged_weak_mfa)} using SMS/Voice ({pct_weak}%)",
+                risk_class=RiskClass.AUTHN_HYGIENE,
+                severity=Severity.LOW,
+                affected_resources=[u.user_principal_name for u in non_privileged_weak_mfa[:15]],
+                evidence_sources=["entra_users", "authentication_methods"],
+                mitre_techniques=["T1111"],
+                controls=["strong_mfa"],
+                remediation_steps=[
+                    "Encourage migration to Microsoft Authenticator app",
+                    "Deploy FIDO2 security keys for high-value users",
+                    "Consider deprecating SMS/Voice MFA over time",
+                ],
+                details={
+                    "weak_mfa_count": len(non_privileged_weak_mfa),
+                    "percentage": pct_weak,
+                },
+            ))
+        
+        # MFA Summary for reporting
+        if enabled_users:
+            mfa_stats = {
+                "total_enabled_users": len(enabled_users),
+                "strong_mfa": len(strong_mfa),
+                "weak_mfa_only": len(weak_mfa_only),
+                "no_mfa": len(no_mfa),
+                "privileged_no_mfa": len(privileged_no_mfa),
+                "privileged_weak_mfa": len(privileged_weak_mfa),
+                "strong_mfa_pct": round(len(strong_mfa) / len(enabled_users) * 100, 1),
+            }
+            log.info("MFA Posture: %s", mfa_stats)
         
         return findings
 
