@@ -889,16 +889,105 @@ Evidence archives are automatically logged to the chain of custody:
 
 ---
 
+## Entra ID Analysis
+
+ADVulture provides comprehensive Entra ID (Azure AD) security posture analysis beyond basic enumeration.
+
+### Data Collection
+
+| Data Type | Description | API Endpoint |
+|-----------|-------------|--------------|
+| **Users** | All users with security attributes | `/users` |
+| **Service Principals** | Apps, managed identities, AI agents | `/servicePrincipals` |
+| **Role Definitions** | ALL Entra ID roles (built-in + custom) | `/roleManagement/directory/roleDefinitions` |
+| **Role Assignments** | Active and PIM-eligible assignments | `/roleManagement/directory/roleAssignments` |
+| **PIM Eligibility** | Just-In-Time access schedules | `/roleManagement/directory/roleEligibilitySchedules` |
+| **OAuth Grants** | User consent grants to applications | `/oauth2PermissionGrants` |
+| **CA Policies** | Conditional Access policy configuration | `/identity/conditionalAccess/policies` |
+| **Sign-in Logs** | 7-30 days of authentication events | `/auditLogs/signIns` |
+| **Audit Logs** | Directory change events | `/auditLogs/directoryAudits` |
+| **Risk Detections** | Identity Protection alerts | `/identityProtection/riskDetections` |
+| **MFA Methods** | Per-user authentication methods | `/users/{id}/authentication/methods` |
+
+### MFA Posture Analysis
+
+ADVulture categorizes MFA methods by security strength:
+
+| Category | Methods | Risk Level |
+|----------|---------|------------|
+| **Strong MFA** | Microsoft Authenticator, FIDO2 Security Keys, Windows Hello for Business, TOTP Apps | ✅ Phishing-resistant |
+| **Weak MFA** | SMS/Voice, Email OTP | ⚠️ Susceptible to SIM swap, interception |
+| **No MFA** | Password only | ❌ Critical risk |
+
+MFA findings generated:
+
+| Finding | Severity | Description |
+|---------|----------|-------------|
+| `privileged_accounts_no_mfa` | **CRITICAL** | Admins without any MFA registered |
+| `privileged_accounts_weak_mfa` | **HIGH** | Admins with only SMS/Voice MFA |
+| `users_without_mfa` | MEDIUM | >10 users without MFA |
+| `users_weak_mfa_only` | LOW | >20 users with only weak MFA |
+
+### Privileged Access Analysis
+
+ADVulture identifies 19 high-privilege roles for enhanced scrutiny:
+
+- Global Administrator
+- Privileged Role Administrator
+- Privileged Authentication Administrator
+- Security Administrator
+- User Administrator
+- Exchange/SharePoint/Teams Administrator
+- Application Administrator
+- Authentication Administrator
+- Conditional Access Administrator
+- And more...
+
+Privileged access findings:
+
+| Finding | Severity | Description |
+|---------|----------|-------------|
+| `excessive_role_stacking` | **HIGH** | Users with 3+ privileged roles |
+| `standing_privileged_access` | MEDIUM | Permanent vs JIT/PIM assignments |
+| `unscoped_privileged_access` | MEDIUM | Tenant-wide without AU scoping |
+| `service_principal_privileged_roles` | **HIGH** | Apps with admin roles |
+| `group_privileged_roles` | MEDIUM | Groups with role assignments |
+
+### Role Hygiene Analysis
+
+| Finding | Severity | Description |
+|---------|----------|-------------|
+| `role_sprawl` | LOW | >80 roles or >10 custom roles |
+| `unused_role_definitions` | INFO | Roles with no assignments |
+| `risky_oauth_consent` | MEDIUM | Apps with Mail/Files access |
+
+### Required Permissions
+
+For full Entra ID analysis, the authenticating identity needs:
+
+| Permission | Scope | Required For |
+|------------|-------|--------------|
+| `User.Read.All` | Delegated/Application | User enumeration |
+| `Directory.Read.All` | Delegated/Application | Service principals, roles |
+| `AuditLog.Read.All` | Delegated/Application | Sign-in and audit logs |
+| `RoleManagement.Read.Directory` | Delegated/Application | Role assignments |
+| `UserAuthenticationMethod.Read.All` | Delegated/Application | MFA method details |
+| `IdentityRiskEvent.Read.All` | Delegated/Application | Risk detections (requires Security Reader role) |
+
+**Note:** Device code authentication with the Microsoft Graph PowerShell client ID (`14d82eec-204b-4c2f-b7e8-296a70dab67e`) supports most of these permissions without requiring app registration.
+
+---
+
 ## Risk Class Reference
 
 | Class | Name | Primary Sources |
 |-------|------|-----------------|
-| A | AuthN Hygiene | LDAP (SPNs, UACFlags), 4624/4625/4769/4768/4771/4776 |
-| B | AuthZ Structure | LDAP (group membership, cert templates), ADCS template flags |
+| A | AuthN Hygiene | LDAP (SPNs, UACFlags), 4624/4625/4769/4768/4771/4776, Entra MFA status |
+| B | AuthZ Structure | LDAP (group membership, cert templates), ADCS template flags, Entra role assignments |
 | C | AuthZ Behavior | 5140/4663/4670/4732, ADFS events, Entra sign-in logs |
 | D | Privilege Escalation | 4672/4673 (special privileges) |
 | E | Delegation Override | LDAP msDS-AllowedToDelegateTo, unconstrained delegation flags |
-| F | AI Agent Surface | Entra service principal permissions, display name pattern matching |
+| F | AI Agent Surface | Entra service principal permissions, OAuth consent grants, display name pattern matching |
 
 ---
 
