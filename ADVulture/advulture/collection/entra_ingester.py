@@ -1131,22 +1131,108 @@ class EntraEnumerator:
         return grants
 
     async def _enrich_users_with_mfa(self, users: List[EntraUser]) -> None:
-        """Fetch authentication methods for each user and enrich user objects.
+        """Fetch MFA registration status and enrich user objects.
         
-        Requires UserAuthenticationMethod.Read.All permission.
-        Categorizes MFA methods as strong (Authenticator, FIDO2) or weak (SMS, Voice).
+        Uses the userRegistrationDetails report API which requires Reports Reader
+        role (less privileged than UserAuthenticationMethod.Read.All).
+        
+        Falls back to per-user authentication methods API if reports fail.
         """
-        log.info("Enriching %d users with MFA method information...", len(users))
+        log.info("Enriching %d users with MFA registration data...", len(users))
+        
+        # Build lookup by user ID and UPN for matching
+        user_lookup_by_id = {u.id: u for u in users}
+        user_lookup_by_upn = {u.user_principal_name.lower(): u for u in users if u.user_principal_name}
+        
+        enriched_count = 0
+        no_mfa_count = 0
+        weak_only_count = 0
         
         try:
             client = self._get_client()
-            enriched_count = 0
-            no_mfa_count = 0
-            weak_only_count = 0
             
+            # Try the reports API first (requires Reports Reader, more efficient)
+            try:
+                log.info("Fetching MFA registration report...")
+                result = await client.reports.authentication_methods.user_registration_details.get()
+                
+                if result and result.value:
+                    log.info("Found %d MFA registration records", len(result.value))
+                    
+                    for record in result.value:
+                        # Match to user by ID or UPN
+                        user = None
+                        record_id = getattr(record, 'id', None)
+                        record_upn = getattr(record, 'user_principal_name', None)
+                        
+                        if record_id and record_id in user_lookup_by_id:
+                            user = user_lookup_by_id[record_id]
+                        elif record_upn and record_upn.lower() in user_lookup_by_upn:
+                            user = user_lookup_by_upn[record_upn.lower()]
+                        
+                        if not user:
+                            continue
+                        
+                        # Extract MFA data from report
+                        is_mfa_registered = getattr(record, 'is_mfa_registered', False)
+                        is_mfa_capable = getattr(record, 'is_mfa_capable', False)
+                        methods_registered = getattr(record, 'methods_registered', []) or []
+                        
+                        # Map report method names to our standard names
+                        methods = []
+                        has_strong = False
+                        has_weak = False
+                        
+                        for method in methods_registered:
+                            method_lower = method.lower() if method else ""
+                            
+                            # Map to standard names and categorize
+                            if "authenticator" in method_lower or "microsoftauthenticator" in method_lower:
+                                methods.append("microsoftAuthenticator")
+                                has_strong = True
+                            elif "fido" in method_lower or "securitykey" in method_lower:
+                                methods.append("fido2SecurityKey")
+                                has_strong = True
+                            elif "windowshello" in method_lower:
+                                methods.append("windowsHelloForBusiness")
+                                has_strong = True
+                            elif "softwareonetimepasscode" in method_lower or "softwareoath" in method_lower:
+                                methods.append("softwareOath")
+                                has_strong = True
+                            elif "mobilephone" in method_lower or "phone" in method_lower:
+                                methods.append("phone")
+                                has_weak = True
+                            elif "email" in method_lower:
+                                methods.append("email")
+                                has_weak = True
+                            else:
+                                methods.append(method)
+                        
+                        # Update user object
+                        user.mfa_methods = methods
+                        user.mfa_registered = is_mfa_registered or len(methods) > 0
+                        user.mfa_capable = is_mfa_capable or has_strong
+                        
+                        if not methods:
+                            no_mfa_count += 1
+                        elif not has_strong and has_weak:
+                            weak_only_count += 1
+                        
+                        enriched_count += 1
+                    
+                    log.info(
+                        "MFA enrichment complete: %d users enriched, %d without MFA, %d weak MFA only",
+                        enriched_count, no_mfa_count, weak_only_count
+                    )
+                    return
+                    
+            except Exception as report_err:
+                log.debug("Reports API not available, trying per-user method: %s", report_err)
+            
+            # Fallback: per-user authentication methods (requires UserAuthenticationMethod.Read.All)
+            log.info("Falling back to per-user MFA method lookup...")
             for user in users:
                 try:
-                    # Fetch authentication methods for this user
                     result = await client.users.by_user_id(user.id).authentication.methods.get()
                     
                     if result and result.value:
@@ -1155,12 +1241,9 @@ class EntraEnumerator:
                         has_weak = False
                         
                         for method in result.value:
-                            # Extract method type from odata_type
                             method_type = None
                             if method.odata_type:
-                                # e.g., "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod"
                                 type_name = method.odata_type.split('.')[-1]
-                                # Convert to simpler name
                                 if "microsoftAuthenticator" in type_name:
                                     method_type = "microsoftAuthenticator"
                                 elif "fido2" in type_name.lower():
@@ -1173,24 +1256,21 @@ class EntraEnumerator:
                                     method_type = "phone"
                                 elif "email" in type_name.lower():
                                     method_type = "email"
-                                elif "temporaryAccessPass" in type_name.lower():
-                                    method_type = "temporaryAccessPass"
                                 elif "password" in type_name.lower():
-                                    method_type = "password"
+                                    continue  # Skip password method
                                 else:
                                     method_type = type_name
                             
-                            if method_type and method_type != "password":
+                            if method_type:
                                 methods.append(method_type)
                                 if method_type in STRONG_MFA_METHODS:
                                     has_strong = True
                                 elif method_type in WEAK_MFA_METHODS:
                                     has_weak = True
                         
-                        # Update user object
                         user.mfa_methods = methods
                         user.mfa_registered = len(methods) > 0
-                        user.mfa_capable = has_strong  # Strong MFA available
+                        user.mfa_capable = has_strong
                         
                         if not methods:
                             no_mfa_count += 1
@@ -1200,7 +1280,6 @@ class EntraEnumerator:
                         enriched_count += 1
                         
                 except Exception as user_err:
-                    # Some users may not be accessible (guests, etc.)
                     log.debug("Could not fetch MFA for user %s: %s", 
                              user.user_principal_name, user_err)
                     continue
