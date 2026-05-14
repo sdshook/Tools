@@ -160,17 +160,49 @@ class EntraAuditEvent:
 
 
 @dataclass
+class EntraRoleDefinition:
+    """Entra ID directory role definition."""
+    id: str
+    template_id: str
+    display_name: str
+    description: str = ""
+    is_built_in: bool = True
+    is_enabled: bool = True
+    is_privileged: bool = False  # We'll flag high-privilege roles
+
+
+@dataclass
+class EntraRoleAssignment:
+    """Entra ID role assignment (active or eligible)."""
+    id: str
+    role_definition_id: str
+    role_name: str
+    principal_id: str
+    principal_name: str
+    principal_type: str  # User, ServicePrincipal, Group
+    directory_scope_id: str = "/"  # "/" = tenant-wide, or AU ID
+    assignment_type: str = "active"  # active or eligible (PIM)
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None  # None = permanent
+    created_time: Optional[datetime] = None
+
+
+@dataclass
 class EntraSnapshot:
     timestamp: datetime
     tenant_id: str
     users: List[EntraUser] = field(default_factory=list)
     service_principals: List[EntraServicePrincipal] = field(default_factory=list)
-    critical_role_assignments: List[dict] = field(default_factory=list)
+    critical_role_assignments: List[dict] = field(default_factory=list)  # Legacy - kept for compatibility
     ca_policies: List[dict] = field(default_factory=list)
     pim_assignments: List[dict] = field(default_factory=list)
     sync_enabled: bool = False
     on_prem_sync_timestamp: Optional[datetime] = None
     federation_enabled: bool = False
+    # Enhanced role analysis
+    role_definitions: List[EntraRoleDefinition] = field(default_factory=list)
+    all_role_assignments: List[EntraRoleAssignment] = field(default_factory=list)
+    oauth_grants: List[dict] = field(default_factory=list)  # User consent grants
 
 
 @dataclass
@@ -436,8 +468,7 @@ class EntraEnumerator:
             tenant_id=self.tenant_id,
         )
 
-        # In production, these would be async Graph API calls
-        # Stubbed here for structure — implement with actual SDK calls
+        # Core enumeration
         snapshot.users = await self._get_users()
         snapshot.service_principals = await self._get_service_principals()
         snapshot.critical_role_assignments = await self._get_critical_roles()
@@ -445,6 +476,11 @@ class EntraEnumerator:
         snapshot.pim_assignments = await self._get_pim_assignments()
         org = await self._get_org_config()
         snapshot.sync_enabled = org.get("onPremisesSyncEnabled", False)
+        
+        # Enhanced role analysis - enumerate ALL roles and assignments
+        snapshot.role_definitions = await self._get_all_role_definitions()
+        snapshot.all_role_assignments = await self._get_all_role_assignments(snapshot.role_definitions)
+        snapshot.oauth_grants = await self._get_oauth_grants()
 
         return snapshot
 
@@ -720,6 +756,299 @@ class EntraEnumerator:
         except Exception as e:
             log.debug("Error fetching org config: %s", e)
         return {}
+
+    # =========================================================================
+    # Enhanced Role Analysis Methods
+    # =========================================================================
+    
+    # High-privilege roles that warrant extra scrutiny
+    HIGH_PRIVILEGE_ROLES = {
+        "Global Administrator",
+        "Privileged Role Administrator", 
+        "Privileged Authentication Administrator",
+        "Security Administrator",
+        "User Administrator",
+        "Exchange Administrator",
+        "SharePoint Administrator",
+        "Application Administrator",
+        "Cloud Application Administrator",
+        "Authentication Administrator",
+        "Helpdesk Administrator",
+        "Password Administrator",
+        "Groups Administrator",
+        "License Administrator",
+        "Intune Administrator",
+        "Azure DevOps Administrator",
+        "Hybrid Identity Administrator",
+        "Identity Governance Administrator",
+        "Conditional Access Administrator",
+    }
+
+    async def _get_all_role_definitions(self) -> List[EntraRoleDefinition]:
+        """Fetch ALL Entra ID role definitions (built-in and custom).
+        
+        Returns complete list of available roles in the tenant,
+        including custom roles if any exist.
+        """
+        log.info("Fetching all Entra ID role definitions...")
+        roles = []
+        
+        try:
+            client = self._get_client()
+            
+            # Use roleManagement/directory/roleDefinitions for complete list
+            result = await client.role_management.directory.role_definitions.get()
+            
+            while result:
+                if result.value:
+                    for role_def in result.value:
+                        is_privileged = role_def.display_name in self.HIGH_PRIVILEGE_ROLES
+                        
+                        roles.append(EntraRoleDefinition(
+                            id=role_def.id,
+                            template_id=getattr(role_def, 'template_id', role_def.id) or role_def.id,
+                            display_name=role_def.display_name or "",
+                            description=role_def.description or "",
+                            is_built_in=getattr(role_def, 'is_built_in', True) or True,
+                            is_enabled=getattr(role_def, 'is_enabled', True) or True,
+                            is_privileged=is_privileged,
+                        ))
+                
+                # Handle pagination
+                if hasattr(result, 'odata_next_link') and result.odata_next_link:
+                    result = await client.role_management.directory.role_definitions.with_url(
+                        result.odata_next_link
+                    ).get()
+                else:
+                    break
+            
+            log.info("Fetched %d role definitions (%d privileged)", 
+                     len(roles), len([r for r in roles if r.is_privileged]))
+                     
+        except Exception as e:
+            log.warning("Failed to fetch role definitions: %s", e)
+            
+        return roles
+
+    async def _get_all_role_assignments(
+        self, 
+        role_definitions: List[EntraRoleDefinition]
+    ) -> List[EntraRoleAssignment]:
+        """Fetch ALL role assignments (active and eligible).
+        
+        Correlates assignments with role definitions and principal names.
+        """
+        log.info("Fetching all Entra ID role assignments...")
+        assignments = []
+        
+        # Build role lookup
+        role_lookup = {r.id: r.display_name for r in role_definitions}
+        
+        try:
+            client = self._get_client()
+            
+            # Get active role assignments
+            result = await client.role_management.directory.role_assignments.get()
+            
+            while result:
+                if result.value:
+                    for assignment in result.value:
+                        role_name = role_lookup.get(
+                            assignment.role_definition_id, 
+                            "Unknown Role"
+                        )
+                        
+                        # Get principal name (requires additional lookup)
+                        principal_name = await self._resolve_principal_name(
+                            assignment.principal_id
+                        )
+                        
+                        assignments.append(EntraRoleAssignment(
+                            id=assignment.id,
+                            role_definition_id=assignment.role_definition_id,
+                            role_name=role_name,
+                            principal_id=assignment.principal_id,
+                            principal_name=principal_name,
+                            principal_type=await self._get_principal_type(assignment.principal_id),
+                            directory_scope_id=getattr(assignment, 'directory_scope_id', '/') or '/',
+                            assignment_type="active",
+                        ))
+                
+                # Handle pagination
+                if hasattr(result, 'odata_next_link') and result.odata_next_link:
+                    result = await client.role_management.directory.role_assignments.with_url(
+                        result.odata_next_link
+                    ).get()
+                else:
+                    break
+            
+            # Also get PIM eligible assignments if available
+            try:
+                eligible = await self._get_pim_eligible_assignments(role_lookup)
+                assignments.extend(eligible)
+            except Exception as pim_err:
+                log.debug("PIM eligible assignments not available: %s", pim_err)
+            
+            log.info("Fetched %d total role assignments", len(assignments))
+            
+        except Exception as e:
+            log.warning("Failed to fetch role assignments: %s", e)
+            
+        return assignments
+
+    async def _get_pim_eligible_assignments(
+        self, 
+        role_lookup: dict
+    ) -> List[EntraRoleAssignment]:
+        """Fetch PIM eligible role assignments (JIT access).
+        
+        These are roles that users CAN activate but aren't currently active.
+        """
+        eligible = []
+        
+        try:
+            client = self._get_client()
+            result = await client.role_management.directory.role_eligibility_schedules.get()
+            
+            while result:
+                if result.value:
+                    for schedule in result.value:
+                        role_name = role_lookup.get(
+                            schedule.role_definition_id,
+                            "Unknown Role"
+                        )
+                        
+                        principal_name = await self._resolve_principal_name(
+                            schedule.principal_id
+                        )
+                        
+                        eligible.append(EntraRoleAssignment(
+                            id=schedule.id,
+                            role_definition_id=schedule.role_definition_id,
+                            role_name=role_name,
+                            principal_id=schedule.principal_id,
+                            principal_name=principal_name,
+                            principal_type=await self._get_principal_type(schedule.principal_id),
+                            directory_scope_id=getattr(schedule, 'directory_scope_id', '/') or '/',
+                            assignment_type="eligible",
+                            start_time=getattr(schedule, 'start_date_time', None),
+                            end_time=getattr(schedule, 'end_date_time', None),
+                        ))
+                
+                if hasattr(result, 'odata_next_link') and result.odata_next_link:
+                    result = await client.role_management.directory.role_eligibility_schedules.with_url(
+                        result.odata_next_link
+                    ).get()
+                else:
+                    break
+                    
+            log.info("Fetched %d PIM eligible assignments", len(eligible))
+            
+        except Exception as e:
+            log.debug("PIM not available or no eligible assignments: %s", e)
+            
+        return eligible
+
+    async def _resolve_principal_name(self, principal_id: str) -> str:
+        """Resolve a principal ID to a display name or UPN."""
+        try:
+            client = self._get_client()
+            
+            # Try as user first
+            try:
+                user = await client.users.by_user_id(principal_id).get()
+                if user:
+                    return user.user_principal_name or user.display_name or principal_id
+            except:
+                pass
+            
+            # Try as service principal
+            try:
+                sp = await client.service_principals.by_service_principal_id(principal_id).get()
+                if sp:
+                    return sp.display_name or principal_id
+            except:
+                pass
+            
+            # Try as group
+            try:
+                group = await client.groups.by_group_id(principal_id).get()
+                if group:
+                    return f"[Group] {group.display_name}" or principal_id
+            except:
+                pass
+                
+        except Exception:
+            pass
+            
+        return principal_id
+
+    async def _get_principal_type(self, principal_id: str) -> str:
+        """Determine the type of a principal (User, ServicePrincipal, Group)."""
+        try:
+            client = self._get_client()
+            
+            try:
+                await client.users.by_user_id(principal_id).get()
+                return "User"
+            except:
+                pass
+            
+            try:
+                await client.service_principals.by_service_principal_id(principal_id).get()
+                return "ServicePrincipal"
+            except:
+                pass
+            
+            try:
+                await client.groups.by_group_id(principal_id).get()
+                return "Group"
+            except:
+                pass
+                
+        except Exception:
+            pass
+            
+        return "Unknown"
+
+    async def _get_oauth_grants(self) -> List[dict]:
+        """Fetch OAuth2 permission grants (user consent grants).
+        
+        These represent permissions users have granted to applications.
+        High-risk grants (Mail.Read, Files.ReadWrite) are security concerns.
+        """
+        log.info("Fetching OAuth permission grants...")
+        grants = []
+        
+        try:
+            client = self._get_client()
+            result = await client.oauth2_permission_grants.get()
+            
+            while result:
+                if result.value:
+                    for grant in result.value:
+                        grants.append({
+                            "id": grant.id,
+                            "client_id": grant.client_id,  # App that received consent
+                            "principal_id": grant.principal_id,  # User who consented (None = admin)
+                            "consent_type": grant.consent_type,  # AllPrincipals or Principal
+                            "scope": grant.scope,  # Permissions granted
+                            "resource_id": grant.resource_id,  # API being accessed
+                        })
+                
+                if hasattr(result, 'odata_next_link') and result.odata_next_link:
+                    result = await client.oauth2_permission_grants.with_url(
+                        result.odata_next_link
+                    ).get()
+                else:
+                    break
+            
+            log.info("Fetched %d OAuth permission grants", len(grants))
+            
+        except Exception as e:
+            log.warning("Failed to fetch OAuth grants: %s", e)
+            
+        return grants
 
 
 class EntraLogIngester:

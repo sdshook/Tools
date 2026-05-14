@@ -595,6 +595,8 @@ class PostureAnalyzer:
         findings += self._analyze_delegation(snapshot, event_stream)
         if entra_snapshot:
             findings += self._analyze_ai_agents(entra_snapshot)
+            findings += self._analyze_entra_privileged_access(entra_snapshot)
+            findings += self._analyze_entra_role_hygiene(entra_snapshot)
 
         # ── HMM phase detection ────────────────────────────────────────────
         event_sequence = self._build_event_sequence(event_stream)
@@ -932,6 +934,292 @@ class PostureAnalyzer:
                 agents=ai_agents,
                 vectors=["email_content", "document_content"],
             ))
+        return findings
+
+    # =========================================================================
+    # Enhanced Entra ID Privileged Access Analysis
+    # =========================================================================
+
+    def _analyze_entra_privileged_access(self, entra_snapshot) -> List[Finding]:
+        """Analyze Entra ID privileged role assignments for security risks."""
+        findings = []
+        
+        if not hasattr(entra_snapshot, 'all_role_assignments') or not entra_snapshot.all_role_assignments:
+            return findings
+        
+        assignments = entra_snapshot.all_role_assignments
+        role_defs = {r.id: r for r in getattr(entra_snapshot, 'role_definitions', [])}
+        
+        # Build user-to-roles mapping
+        user_roles = {}
+        for assignment in assignments:
+            if assignment.principal_type == "User":
+                if assignment.principal_id not in user_roles:
+                    user_roles[assignment.principal_id] = {
+                        "name": assignment.principal_name,
+                        "roles": [],
+                        "privileged_roles": [],
+                    }
+                user_roles[assignment.principal_id]["roles"].append(assignment.role_name)
+                
+                # Check if this is a high-privilege role
+                role_def = role_defs.get(assignment.role_definition_id)
+                if role_def and role_def.is_privileged:
+                    user_roles[assignment.principal_id]["privileged_roles"].append(assignment.role_name)
+        
+        # Finding 1: Excessive Role Stacking (users with 3+ privileged roles)
+        excessive_roles = [
+            (info["name"], info["privileged_roles"])
+            for user_id, info in user_roles.items()
+            if len(info["privileged_roles"]) >= 3
+        ]
+        if excessive_roles:
+            findings.append(Finding(
+                category="excessive_role_stacking",
+                title=f"Excessive Privileged Role Assignments: {len(excessive_roles)} users with 3+ roles",
+                risk_class=RiskClass.AUTHZ_STRUCTURE,
+                severity=Severity.HIGH,
+                affected_resources=[f"{name}: {', '.join(roles)}" for name, roles in excessive_roles],
+                evidence_sources=["entra_role_assignments"],
+                mitre_techniques=["T1078.004"],  # Valid Accounts: Cloud Accounts
+                controls=["privileged_access_management", "role_separation"],
+                remediation_steps=[
+                    "Review necessity of each role assignment",
+                    "Implement role separation - avoid stacking admin roles",
+                    "Use PIM (Just-In-Time) instead of permanent assignments",
+                    "Create custom roles with minimal necessary permissions",
+                ],
+                details={
+                    "affected_users": [
+                        {"user": name, "roles": roles, "role_count": len(roles)}
+                        for name, roles in excessive_roles
+                    ],
+                },
+            ))
+        
+        # Finding 2: Permanent privileged assignments (should use PIM/JIT)
+        active_privileged = [
+            a for a in assignments
+            if a.assignment_type == "active" 
+            and a.principal_type == "User"
+            and any(r.is_privileged for r in role_defs.values() if r.id == a.role_definition_id)
+        ]
+        eligible_privileged = [
+            a for a in assignments
+            if a.assignment_type == "eligible"
+        ]
+        
+        if active_privileged and len(eligible_privileged) < len(active_privileged) * 0.5:
+            findings.append(Finding(
+                category="standing_privileged_access",
+                title=f"Standing Privileged Access: {len(active_privileged)} permanent assignments",
+                risk_class=RiskClass.AUTHZ_STRUCTURE,
+                severity=Severity.MEDIUM,
+                affected_resources=[f"{a.principal_name}: {a.role_name}" for a in active_privileged[:20]],
+                evidence_sources=["entra_role_assignments", "pim_eligibility"],
+                mitre_techniques=["T1078.004"],
+                controls=["privileged_identity_management"],
+                remediation_steps=[
+                    "Convert permanent assignments to PIM eligible",
+                    "Implement Just-In-Time (JIT) access for privileged roles",
+                    "Require justification and approval for role activation",
+                    "Set maximum activation duration (e.g., 8 hours)",
+                ],
+                details={
+                    "permanent_assignments": len(active_privileged),
+                    "eligible_assignments": len(eligible_privileged),
+                    "pim_coverage_pct": round(len(eligible_privileged) / max(len(active_privileged), 1) * 100, 1),
+                },
+            ))
+        
+        # Finding 3: Tenant-wide privileged access without scope restriction
+        unscoped_privileged = [
+            a for a in assignments
+            if a.directory_scope_id == "/"
+            and a.principal_type == "User"
+            and any(r.is_privileged for r in role_defs.values() if r.id == a.role_definition_id)
+        ]
+        if len(unscoped_privileged) > 5:
+            findings.append(Finding(
+                category="unscoped_privileged_access",
+                title=f"Tenant-Wide Privileged Access: {len(unscoped_privileged)} unscoped assignments",
+                risk_class=RiskClass.AUTHZ_STRUCTURE,
+                severity=Severity.MEDIUM,
+                affected_resources=[f"{a.principal_name}: {a.role_name}" for a in unscoped_privileged[:15]],
+                evidence_sources=["entra_role_assignments"],
+                mitre_techniques=["T1078.004"],
+                controls=["administrative_units", "scoped_access"],
+                remediation_steps=[
+                    "Use Administrative Units to scope role assignments",
+                    "Assign roles at department/team level instead of tenant-wide",
+                    "Create tiered administration model",
+                    "Document justification for any tenant-wide assignments",
+                ],
+                details={
+                    "unscoped_count": len(unscoped_privileged),
+                },
+            ))
+        
+        # Finding 4: Service principals with privileged roles
+        sp_privileged = [
+            a for a in assignments
+            if a.principal_type == "ServicePrincipal"
+            and any(r.is_privileged for r in role_defs.values() if r.id == a.role_definition_id)
+        ]
+        if sp_privileged:
+            findings.append(Finding(
+                category="service_principal_privileged_roles",
+                title=f"Service Principals with Privileged Roles: {len(sp_privileged)} assignments",
+                risk_class=RiskClass.AI_AUTHZ,
+                severity=Severity.HIGH,
+                affected_resources=[f"{a.principal_name}: {a.role_name}" for a in sp_privileged],
+                evidence_sources=["entra_role_assignments"],
+                mitre_techniques=["T1078.004", "T1098.001"],
+                controls=["service_principal_governance"],
+                remediation_steps=[
+                    "Review necessity of each service principal's privileged access",
+                    "Use managed identities instead of service principals where possible",
+                    "Implement certificate-based auth instead of secrets",
+                    "Set credential expiration and rotation policies",
+                    "Enable continuous access evaluation (CAE)",
+                ],
+                details={
+                    "service_principals": [
+                        {"name": a.principal_name, "role": a.role_name}
+                        for a in sp_privileged
+                    ],
+                },
+            ))
+        
+        return findings
+
+    def _analyze_entra_role_hygiene(self, entra_snapshot) -> List[Finding]:
+        """Analyze Entra ID role configuration for hygiene issues."""
+        findings = []
+        
+        # Role sprawl analysis
+        role_defs = getattr(entra_snapshot, 'role_definitions', [])
+        assignments = getattr(entra_snapshot, 'all_role_assignments', [])
+        
+        if not role_defs:
+            return findings
+        
+        # Finding 1: Excessive number of roles defined
+        custom_roles = [r for r in role_defs if not r.is_built_in]
+        if len(role_defs) > 80 or len(custom_roles) > 10:
+            findings.append(Finding(
+                category="role_sprawl",
+                title=f"Role Sprawl: {len(role_defs)} roles defined ({len(custom_roles)} custom)",
+                risk_class=RiskClass.AUTHZ_STRUCTURE,
+                severity=Severity.LOW,
+                affected_resources=[r.display_name for r in custom_roles] if custom_roles else [],
+                evidence_sources=["entra_role_definitions"],
+                mitre_techniques=["T1078.004"],
+                controls=["role_governance"],
+                remediation_steps=[
+                    "Review and consolidate custom roles",
+                    "Remove unused or redundant role definitions",
+                    "Prefer built-in roles over custom where possible",
+                    "Document business justification for each custom role",
+                ],
+                details={
+                    "total_roles": len(role_defs),
+                    "builtin_roles": len(role_defs) - len(custom_roles),
+                    "custom_roles": len(custom_roles),
+                },
+            ))
+        
+        # Finding 2: Unused roles with assignments
+        roles_with_assignments = set(a.role_definition_id for a in assignments)
+        unused_roles = [r for r in role_defs if r.id not in roles_with_assignments and r.is_enabled]
+        if len(unused_roles) > 20:
+            findings.append(Finding(
+                category="unused_role_definitions",
+                title=f"Unused Role Definitions: {len(unused_roles)} roles with no assignments",
+                risk_class=RiskClass.AUTHZ_STRUCTURE,
+                severity=Severity.INFO,
+                affected_resources=[r.display_name for r in unused_roles[:20]],
+                evidence_sources=["entra_role_definitions", "entra_role_assignments"],
+                mitre_techniques=[],
+                controls=["role_governance"],
+                remediation_steps=[
+                    "Review unused roles for potential cleanup",
+                    "Document roles that are intentionally kept for future use",
+                ],
+                details={
+                    "unused_count": len(unused_roles),
+                },
+            ))
+        
+        # Finding 3: Groups with privileged roles (membership = instant privilege)
+        group_privileged = [
+            a for a in assignments
+            if a.principal_type == "Group"
+        ]
+        if group_privileged:
+            findings.append(Finding(
+                category="group_privileged_roles",
+                title=f"Groups with Privileged Roles: {len(group_privileged)} group assignments",
+                risk_class=RiskClass.AUTHZ_STRUCTURE,
+                severity=Severity.MEDIUM,
+                affected_resources=[f"{a.principal_name}: {a.role_name}" for a in group_privileged],
+                evidence_sources=["entra_role_assignments"],
+                mitre_techniques=["T1078.004", "T1098"],
+                controls=["privileged_access_groups"],
+                remediation_steps=[
+                    "Review group membership for each privileged group",
+                    "Consider using PIM for Groups instead of direct role assignment",
+                    "Enable access reviews for privileged group membership",
+                    "Require approval for group membership changes",
+                ],
+                details={
+                    "groups": [
+                        {"group": a.principal_name, "role": a.role_name}
+                        for a in group_privileged
+                    ],
+                },
+            ))
+        
+        # Finding 4: OAuth consent grant sprawl (risky app permissions)
+        oauth_grants = getattr(entra_snapshot, 'oauth_grants', [])
+        if oauth_grants:
+            risky_scopes = {"Mail.Read", "Mail.ReadWrite", "Files.Read", "Files.ReadWrite", 
+                          "Files.ReadWrite.All", "Sites.Read.All", "Sites.ReadWrite.All",
+                          "Calendars.Read", "Calendars.ReadWrite", "User.ReadWrite.All"}
+            risky_grants = []
+            for grant in oauth_grants:
+                scope = grant.get("scope", "")
+                granted_scopes = set(scope.split())
+                risky = granted_scopes & risky_scopes
+                if risky:
+                    risky_grants.append({
+                        "client_id": grant.get("client_id"),
+                        "consent_type": grant.get("consent_type"),
+                        "risky_scopes": list(risky),
+                    })
+            
+            if risky_grants:
+                findings.append(Finding(
+                    category="risky_oauth_consent",
+                    title=f"Risky OAuth Consent Grants: {len(risky_grants)} apps with sensitive permissions",
+                    risk_class=RiskClass.AI_AUTHZ,
+                    severity=Severity.MEDIUM,
+                    affected_resources=[f"App {g['client_id']}: {', '.join(g['risky_scopes'])}" for g in risky_grants[:10]],
+                    evidence_sources=["oauth2_permission_grants"],
+                    mitre_techniques=["T1550.001"],  # Use Alternate Authentication Material
+                    controls=["app_consent_policy", "admin_consent_workflow"],
+                    remediation_steps=[
+                        "Review and revoke unnecessary consent grants",
+                        "Implement admin consent workflow for sensitive permissions",
+                        "Block user consent for high-risk permissions",
+                        "Enable consent grant attack detection in Identity Protection",
+                    ],
+                    details={
+                        "risky_grant_count": len(risky_grants),
+                        "sample_grants": risky_grants[:5],
+                    },
+                ))
+        
         return findings
 
     # ── Helpers ───────────────────────────────────────────────────────────────
