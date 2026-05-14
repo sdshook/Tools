@@ -963,7 +963,15 @@ Privileged access findings:
 
 ### Required Permissions
 
-For full Entra ID analysis, the authenticating identity needs:
+For full Entra ID analysis, the authenticating identity requires these **Entra ID roles**:
+
+| Role | Required For |
+|------|--------------|
+| **Security Reader** | Risk detections, security alerts, Identity Protection data |
+| **Reports Reader** | Sign-in logs, audit logs, usage reports |
+| **Authentication Administrator** | User authentication methods (MFA registration status) |
+
+These roles grant the following API permissions automatically:
 
 | Permission | Scope | Required For |
 |------------|-------|--------------|
@@ -972,9 +980,9 @@ For full Entra ID analysis, the authenticating identity needs:
 | `AuditLog.Read.All` | Delegated/Application | Sign-in and audit logs |
 | `RoleManagement.Read.Directory` | Delegated/Application | Role assignments |
 | `UserAuthenticationMethod.Read.All` | Delegated/Application | MFA method details |
-| `IdentityRiskEvent.Read.All` | Delegated/Application | Risk detections (requires Security Reader role) |
+| `IdentityRiskEvent.Read.All` | Delegated/Application | Risk detections |
 
-**Note:** Device code authentication with the Microsoft Graph PowerShell client ID (`14d82eec-204b-4c2f-b7e8-296a70dab67e`) supports most of these permissions without requiring app registration.
+**Note:** Device code authentication with the Microsoft Graph PowerShell client ID (`14d82eec-204b-4c2f-b7e8-296a70dab67e`) supports these permissions without requiring app registration. Assign the three roles above to your user account in Entra ID admin center.
 
 ---
 
