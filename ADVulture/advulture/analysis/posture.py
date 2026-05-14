@@ -13,7 +13,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict
-import torch
+
+# ML imports are optional - gracefully degrade if not available
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
 
 from advulture.analysis.finding import Finding, RiskClass, Severity
 from advulture.analysis.finding import (
@@ -21,10 +28,23 @@ from advulture.analysis.finding import (
     make_unconstrained_delegation_finding, make_lpe_finding,
     make_shadow_admin_finding, make_ai_agent_finding,
 )
-from advulture.ml.markov.chain import (
-    AttackChainMarkov, KillChainHMM, GradientEngine,
-    PhaseDetection, RemediationItem, Phase,
-)
+
+# ML modules are optional
+try:
+    from advulture.ml.markov.chain import (
+        AttackChainMarkov, KillChainHMM, GradientEngine,
+        PhaseDetection, RemediationItem, Phase,
+    )
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+    AttackChainMarkov = None
+    KillChainHMM = None
+    GradientEngine = None
+    PhaseDetection = None
+    RemediationItem = None
+    Phase = None
+
 from advulture.config import Config
 from advulture.custody import ChainOfCustodyLogger, CustodyEventType
 from advulture.evidence import EvidencePreserver, PreservationResult

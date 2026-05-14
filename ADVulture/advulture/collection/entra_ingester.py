@@ -248,6 +248,7 @@ class EntraRoleAssignment:
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None  # None = permanent
     created_time: Optional[datetime] = None
+    is_privileged: bool = False  # High-privilege role flag
 
 
 @dataclass
