@@ -44,6 +44,42 @@ DEFAULT_CLIENT_ID = GRAPH_POWERSHELL_CLIENT_ID
 DEFAULT_TENANT = "organizations"
 
 
+class CachingCredentialWrapper:
+    """Wrapper that caches tokens from a DeviceCodeCredential to prevent re-prompting.
+    
+    The msgraph SDK may request tokens multiple times. This wrapper ensures
+    the device code flow only prompts once by caching the AccessToken.
+    """
+    
+    def __init__(self, inner_credential):
+        self._inner = inner_credential
+        self._cached_token = None
+        self._token_scope = None
+    
+    def get_token(self, *scopes, **kwargs):
+        """Get token, returning cached token if valid."""
+        import time
+        
+        # Check if we have a valid cached token
+        if self._cached_token is not None:
+            # Token is valid if it doesn't expire in the next 5 minutes
+            if self._cached_token.expires_on > time.time() + 300:
+                log.debug("Returning cached token (expires_on=%s)", self._cached_token.expires_on)
+                return self._cached_token
+            else:
+                log.debug("Cached token expiring soon, refreshing...")
+        
+        # Get fresh token from inner credential
+        log.debug("Requesting new token for scopes: %s", scopes)
+        self._cached_token = self._inner.get_token(*scopes, **kwargs)
+        self._token_scope = scopes
+        return self._cached_token
+    
+    async def get_token_async(self, *scopes, **kwargs):
+        """Async version - delegates to sync since DeviceCodeCredential is sync."""
+        return self.get_token(*scopes, **kwargs)
+
+
 class SignInResult(str, Enum):
     SUCCESS         = "success"
     MFA_REQUIRED    = "mfa_required"
@@ -471,7 +507,11 @@ class EntraEnumerator:
         ))
 
     def _get_client(self):
-        """Get or create Microsoft Graph client with configured authentication."""
+        """Get or create Microsoft Graph client with configured authentication.
+        
+        For device_code auth, wraps the credential in CachingCredentialWrapper
+        to prevent double authentication prompts from the msgraph SDK.
+        """
         if self._client is None:
             try:
                 from msgraph import GraphServiceClient
@@ -483,6 +523,16 @@ class EntraEnumerator:
                 ) from e
 
             credential = self._get_credential()
+            
+            # Wrap device_code credentials to cache tokens and prevent re-prompting
+            if self.auth_mode == "device_code":
+                log.info("Wrapping credential with token cache for device code flow")
+                credential = CachingCredentialWrapper(credential)
+                # Pre-authenticate to trigger device code prompt once
+                log.info("Authenticating (this will prompt for device code)...")
+                credential.get_token("https://graph.microsoft.com/.default")
+                log.info("Authentication successful, token cached")
+            
             self._client = GraphServiceClient(credentials=credential)
             log.info("Microsoft Graph client initialized (auth_mode=%s)", self.auth_mode)
 
