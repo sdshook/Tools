@@ -35,8 +35,10 @@ AZURE_CLI_CLIENT_ID = "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
 AZURE_POWERSHELL_CLIENT_ID = "1950a258-227b-4e31-a9cf-717495945fc2"
 GRAPH_POWERSHELL_CLIENT_ID = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
 
-# Default client ID for interactive auth (Azure CLI - widely trusted)
-DEFAULT_CLIENT_ID = AZURE_CLI_CLIENT_ID
+# Default client ID for interactive auth
+# Graph PowerShell supports AuditLog.Read.All for sign-in logs via delegated auth
+# This enables full security analysis without requiring app registration
+DEFAULT_CLIENT_ID = GRAPH_POWERSHELL_CLIENT_ID
 
 # Default tenant for multi-tenant auth (any work/school account)
 DEFAULT_TENANT = "organizations"
@@ -862,6 +864,15 @@ class EntraLogIngester:
                             client_app = (s.client_app_used or "").lower()
                             is_legacy = any(p in client_app for p in self.LEGACY_AUTH_PROTOCOLS)
                             
+                            # Handle optional attributes that may not exist in all SDK versions
+                            mfa_detail_obj = getattr(s, 'mfa_detail', None)
+                            mfa_detail = None
+                            if mfa_detail_obj:
+                                mfa_detail = {"method": getattr(mfa_detail_obj, 'auth_method', None)}
+                            
+                            token_issuer = getattr(s, 'token_issuer_type', None)
+                            token_issuer_str = token_issuer.value if token_issuer else ""
+                            
                             signin = EntraSignIn(
                                 id=s.id or "",
                                 timestamp=s.created_date_time.replace(tzinfo=timezone.utc) if s.created_date_time else datetime.now(timezone.utc),
@@ -871,15 +882,15 @@ class EntraLogIngester:
                                 ip_address=s.ip_address or "",
                                 result_type=error_code,
                                 result=result_type,
-                                auth_requirement=s.authentication_requirement or "",
-                                mfa_detail={"method": s.mfa_detail.auth_method if s.mfa_detail and hasattr(s.mfa_detail, 'auth_method') else None} if s.mfa_detail else None,
+                                auth_requirement=getattr(s, 'authentication_requirement', None) or "",
+                                mfa_detail=mfa_detail,
                                 ca_policies_applied=[
                                     {"displayName": p.display_name, "result": p.result.value if p.result else "unknown"}
                                     for p in (s.applied_conditional_access_policies or [])
                                 ],
                                 risk_level_during=s.risk_level_during_sign_in.value if s.risk_level_during_sign_in else "none",
                                 risk_level_aggregated=s.risk_level_aggregated.value if s.risk_level_aggregated else "none",
-                                token_issuer_type=s.token_issuer_type.value if s.token_issuer_type else "",
+                                token_issuer_type=token_issuer_str,
                                 legacy_auth=is_legacy,
                                 location={"city": s.location.city, "country": s.location.country_or_region} if s.location else None,
                             )
