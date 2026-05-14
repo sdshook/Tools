@@ -1607,7 +1607,7 @@ class EntraLogIngester:
             query_params = RiskDetectionsRequestBuilder.RiskDetectionsRequestBuilderGetQueryParameters(
                 filter=f"detectedDateTime ge {since_str}",
                 orderby=["detectedDateTime desc"],
-                top=999,
+                top=500,  # Max allowed for risk detections endpoint
             )
             request_config = RequestConfiguration(query_parameters=query_params)
             
