@@ -969,7 +969,9 @@ For full Entra ID analysis, the authenticating identity requires these **Entra I
 |------|--------------|
 | **Security Reader** | Risk detections, security alerts, Identity Protection data |
 | **Reports Reader** | Sign-in logs, audit logs, usage reports |
-| **Authentication Administrator** | User authentication methods (MFA registration status) |
+| **Authentication Administrator**¹ | User authentication methods (MFA registration status) |
+
+¹ *Authentication Administrator is only required to provide `UserAuthenticationMethod.Read.All` capability for MFA posture analysis. If granting this role raises concerns due to its write permissions, administrators can alternatively grant only the `UserAuthenticationMethod.Read.All` API permission directly via app registration or admin consent.*
 
 These roles grant the following API permissions automatically:
 
