@@ -1350,6 +1350,7 @@ class EntraLogIngester:
         certificate_path: Optional[str] = None,
         certificate_password: Optional[str] = None,
         auth_mode: str = "device_code",
+        enumerator: Optional["EntraEnumerator"] = None,
     ):
         """
         Initialize Entra ID log ingester with flexible authentication.
@@ -1366,6 +1367,8 @@ class EntraLogIngester:
             certificate_password: Optional certificate password
             auth_mode: One of: device_code, interactive, client_secret,
                        certificate, managed_identity
+            enumerator: Optional pre-authenticated EntraEnumerator to reuse.
+                        If provided, avoids a second device code prompt.
         """
         self.tenant_id = tenant_id
         self.client_id = client_id
@@ -1373,7 +1376,7 @@ class EntraLogIngester:
         self.certificate_path = certificate_path
         self.certificate_password = certificate_password
         self.auth_mode = auth_mode
-        self._enumerator: Optional[EntraEnumerator] = None
+        self._enumerator: Optional[EntraEnumerator] = enumerator
 
     @classmethod
     def from_config(cls, config: "EntraConfig") -> "EntraLogIngester":
@@ -1385,6 +1388,30 @@ class EntraLogIngester:
             certificate_path=config.certificate_path or None,
             certificate_password=config.certificate_password or None,
             auth_mode=config.auth_mode.value if hasattr(config.auth_mode, 'value') else config.auth_mode,
+        )
+
+    @classmethod
+    def from_enumerator(cls, enumerator: "EntraEnumerator") -> "EntraLogIngester":
+        """
+        Create log ingester from an existing EntraEnumerator.
+        
+        This reuses the enumerator's cached credential, avoiding a second
+        device code authentication prompt.
+        
+        Args:
+            enumerator: Pre-authenticated EntraEnumerator instance
+            
+        Returns:
+            EntraLogIngester that shares the enumerator's credential
+        """
+        return cls(
+            tenant_id=enumerator.tenant_id,
+            client_id=enumerator.client_id,
+            client_secret=enumerator.client_secret,
+            certificate_path=enumerator.certificate_path,
+            certificate_password=enumerator.certificate_password,
+            auth_mode=enumerator.auth_mode,
+            enumerator=enumerator,
         )
 
     def _get_enumerator(self) -> EntraEnumerator:
@@ -1657,3 +1684,154 @@ class EntraLogIngester:
             log.warning("Failed to fetch risk detections from Graph API: %s", e)
             
         return detections
+
+
+class EntraAnalysisRunner:
+    """
+    Unified runner for Entra ID collection and analysis with progress indicators.
+    
+    Performs enumeration and log collection with a single authentication,
+    displays real-time progress using rich console, and returns combined results.
+    
+    Usage:
+        runner = EntraAnalysisRunner(auth_mode='device_code')
+        snapshot, events = await runner.run(log_days=7)
+    """
+    
+    def __init__(
+        self,
+        tenant_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        certificate_path: Optional[str] = None,
+        certificate_password: Optional[str] = None,
+        auth_mode: str = "device_code",
+    ):
+        self.tenant_id = tenant_id
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.certificate_path = certificate_path
+        self.certificate_password = certificate_password
+        self.auth_mode = auth_mode
+        self._enumerator: Optional[EntraEnumerator] = None
+        self._log_ingester: Optional[EntraLogIngester] = None
+    
+    def _get_enumerator(self) -> EntraEnumerator:
+        """Get or create the enumerator (single auth point)."""
+        if self._enumerator is None:
+            self._enumerator = EntraEnumerator(
+                tenant_id=self.tenant_id,
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+                certificate_path=self.certificate_path,
+                certificate_password=self.certificate_password,
+                auth_mode=self.auth_mode,
+            )
+        return self._enumerator
+    
+    def _get_log_ingester(self) -> EntraLogIngester:
+        """Get log ingester that shares the enumerator's credential."""
+        if self._log_ingester is None:
+            enumerator = self._get_enumerator()
+            self._log_ingester = EntraLogIngester.from_enumerator(enumerator)
+        return self._log_ingester
+    
+    async def run(
+        self,
+        log_days: int = 7,
+        skip_logs: bool = False,
+        show_progress: bool = True,
+    ) -> tuple:
+        """
+        Run full Entra ID collection with progress indicators.
+        
+        Args:
+            log_days: Number of days of logs to collect (default 7)
+            skip_logs: If True, skip log collection (enumeration only)
+            show_progress: If True, display rich progress bars
+            
+        Returns:
+            Tuple of (EntraSnapshot, EntraEventStream or None)
+        """
+        from rich.console import Console
+        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+        from rich.panel import Panel
+        from rich.table import Table
+        
+        console = Console()
+        
+        console.print(Panel.fit(
+            "[bold blue]ADVulture Entra ID Analysis[/bold blue]\n"
+            "Collection and security posture assessment",
+            border_style="blue"
+        ))
+        
+        snapshot = None
+        events = None
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+            transient=False,
+        ) as progress:
+            
+            # Phase 1: Authentication
+            auth_task = progress.add_task("[cyan]Authenticating...", total=1)
+            enumerator = self._get_enumerator()
+            # Trigger auth by getting client
+            enumerator._get_client()
+            progress.update(auth_task, completed=1, description="[green]Authenticated")
+            
+            # Phase 2: Enumeration
+            enum_task = progress.add_task("[cyan]Enumerating tenant...", total=7)
+            
+            progress.update(enum_task, description="[cyan]Fetching users...")
+            snapshot = await enumerator.enumerate_all()
+            progress.update(enum_task, completed=7, description="[green]Enumeration complete")
+            
+            # Phase 3: Log Collection (if not skipped)
+            if not skip_logs:
+                log_task = progress.add_task(f"[cyan]Collecting logs ({log_days} days)...", total=3)
+                
+                log_ingester = self._get_log_ingester()
+                
+                def log_progress(stage, current, total):
+                    stage_names = {"sign-ins": 1, "audits": 2, "risk": 3}
+                    completed = stage_names.get(stage, current)
+                    progress.update(log_task, completed=completed, 
+                                   description=f"[cyan]Collecting {stage}...")
+                
+                events = await log_ingester.collect_window(days=log_days, progress_callback=log_progress)
+                progress.update(log_task, completed=3, description="[green]Log collection complete")
+        
+        # Summary table
+        console.print()
+        table = Table(title="Collection Summary", show_header=True, header_style="bold magenta")
+        table.add_column("Category", style="cyan")
+        table.add_column("Count", justify="right", style="green")
+        
+        if snapshot:
+            table.add_row("Users", str(len(snapshot.users)))
+            table.add_row("Service Principals", str(len(snapshot.service_principals)))
+            table.add_row("Role Definitions", str(len(snapshot.role_definitions)))
+            table.add_row("Role Assignments", str(len(snapshot.all_role_assignments)))
+            table.add_row("OAuth Grants", str(len(snapshot.oauth_grants)))
+            
+            # MFA stats
+            mfa_reg = sum(1 for u in snapshot.users if u.mfa_registered)
+            no_mfa = sum(1 for u in snapshot.users if not u.mfa_registered)
+            table.add_row("Users with MFA", str(mfa_reg))
+            table.add_row("Users without MFA", f"[red]{no_mfa}[/red]" if no_mfa > 0 else "0")
+        
+        if events:
+            table.add_row("Sign-in Events", str(len(events.signins)))
+            table.add_row("Audit Events", str(len(events.audits)))
+            table.add_row("Risk Detections", str(len(events.risk_detections)))
+        
+        console.print(table)
+        console.print()
+        
+        return snapshot, events
