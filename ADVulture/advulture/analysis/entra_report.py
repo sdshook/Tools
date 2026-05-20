@@ -92,9 +92,10 @@ class EntraReport:
     signin_count: int = 0
     audit_count: int = 0
     
-    # MFA stats - eligible users are interactive accounts (not room/service)
-    eligible_user_count: int = 0  # Users eligible for MFA (not room/service accounts)
-    ineligible_user_count: int = 0  # Room/service accounts (not expected to have MFA)
+    # MFA stats - eligible users are interactive member accounts (not room/service/guest)
+    eligible_user_count: int = 0  # Member users eligible for MFA
+    ineligible_user_count: int = 0  # Room/service accounts (MFA not required)
+    guest_user_count: int = 0  # External guests (MFA via home tenant)
     mfa_registered_count: int = 0  # Eligible users with any MFA
     mfa_capable_count: int = 0  # Eligible users with strong MFA (phishing-resistant)
     no_mfa_count: int = 0  # Eligible users without MFA
@@ -120,6 +121,7 @@ class EntraReport:
             "mfa_stats": {
                 "eligible_users": self.eligible_user_count,
                 "ineligible_users": self.ineligible_user_count,
+                "guest_users": self.guest_user_count,
                 "registered": self.mfa_registered_count,
                 "capable": self.mfa_capable_count,
                 "no_mfa": self.no_mfa_count,
@@ -166,12 +168,13 @@ class EntraReport:
             # Calculate percentages based on eligible users only
             eligible = self.eligible_user_count or 1  # Avoid division by zero
             lines.extend([
-                f"| **Eligible Users** | {self.eligible_user_count} | Interactive accounts expected to have MFA |",
-                f"| **Ineligible Users** | {self.ineligible_user_count} | Room/service accounts (MFA not required) |",
+                f"| **Eligible Members** | {self.eligible_user_count} | Interactive member accounts expected to have MFA |",
+                f"| **Room/Service Accounts** | {self.ineligible_user_count} | MFA not required (see finding for list) |",
+                f"| **External Guests** | {self.guest_user_count} | MFA handled by home tenant |",
                 f"|  |  |  |",
                 f"| Eligible with MFA | {self.mfa_registered_count} | {self.mfa_registered_count/eligible*100:.1f}% of eligible |",
                 f"| Eligible with Strong MFA | {self.mfa_capable_count} | {self.mfa_capable_count/eligible*100:.1f}% of eligible (FIDO2, Authenticator, WHfB) |",
-                f"| Eligible without MFA | {self.no_mfa_count} | {self.no_mfa_count/eligible*100:.1f}% of eligible - **action required** |",
+                f"| **Eligible without MFA** | {self.no_mfa_count} | {self.no_mfa_count/eligible*100:.1f}% of eligible - **see finding below** |",
                 f"| Eligible with Weak MFA | {self.weak_mfa_count} | {self.weak_mfa_count/eligible*100:.1f}% of eligible (SMS/email only) |",
             ])
         
@@ -364,9 +367,12 @@ class EntraReportGenerator:
         severity_order = {Severity.CRITICAL: 0, Severity.HIGH: 1, Severity.MEDIUM: 2, Severity.LOW: 3, Severity.INFO: 4}
         self.findings.sort(key=lambda f: severity_order[f.severity])
         
-        # Categorize users as eligible (interactive) vs ineligible (room/service) for MFA
-        def is_ineligible_for_mfa(user) -> bool:
-            """Determine if user is a room/service account that shouldn't require MFA."""
+        # Categorize users for MFA summary:
+        # - Eligible: interactive member accounts expected to have MFA
+        # - Ineligible: room/service accounts (MFA not required)
+        # - Guests: external accounts (MFA handled by home tenant, shown separately)
+        def is_room_service(user) -> bool:
+            """Determine if user is a room/service account."""
             upn = (user.user_principal_name or '').lower()
             patterns = [
                 'room', 'copier', 'printer', 'fax', 'scanner', 
@@ -376,9 +382,15 @@ class EntraReportGenerator:
             ]
             return any(p in upn for p in patterns)
         
+        def is_guest(user) -> bool:
+            """Determine if user is an external guest."""
+            return '#EXT#' in (user.user_principal_name or '')
+        
         enabled_users = [u for u in self.snapshot.users if u.account_enabled]
-        eligible_users = [u for u in enabled_users if not is_ineligible_for_mfa(u)]
-        ineligible_users = [u for u in enabled_users if is_ineligible_for_mfa(u)]
+        guest_users = [u for u in enabled_users if is_guest(u)]
+        room_service_users = [u for u in enabled_users if is_room_service(u) and not is_guest(u)]
+        eligible_users = [u for u in enabled_users if not is_room_service(u) and not is_guest(u)]
+        ineligible_users = room_service_users  # Room/service accounts shown as ineligible
         
         # Build report with eligible-only MFA stats
         report = EntraReport(
@@ -394,6 +406,7 @@ class EntraReportGenerator:
             audit_count=len(self.events.audits) if self.events else 0,
             eligible_user_count=len(eligible_users),
             ineligible_user_count=len(ineligible_users),
+            guest_user_count=len(guest_users),
             mfa_registered_count=sum(1 for u in eligible_users if u.mfa_registered),
             mfa_capable_count=sum(1 for u in eligible_users if u.mfa_capable),
             no_mfa_count=sum(1 for u in eligible_users if not u.mfa_registered),
@@ -407,6 +420,19 @@ class EntraReportGenerator:
         """Analyze MFA registration status with sign-in context."""
         users = self.snapshot.users
         enabled_users = [u for u in users if u.account_enabled]
+        
+        # Categorization patterns (same as used in summary)
+        def is_room_service(upn: str) -> bool:
+            upn_lower = upn.lower()
+            return any(p in upn_lower for p in [
+                'room', 'copier', 'printer', 'fax', 'scanner', 
+                'shared', 'noreply', 'donotreply', 'service', 
+                'mailbox', 'resource', 'conference', 'meeting',
+                'zoom', 'teams', 'webex', 'zoomroom'
+            ])
+        
+        def is_guest(upn: str) -> bool:
+            return '#EXT#' in upn
         
         # Users without MFA
         no_mfa = [u for u in enabled_users if not u.mfa_registered]
@@ -432,7 +458,7 @@ class EntraReportGenerator:
                             if not is_private:
                                 external_signin_users.add(s.user_principal_name)
             
-            # Categorize no-MFA users by risk level
+            # Categorize no-MFA users by type and risk level
             room_service_accounts = []
             guest_accounts = []
             active_external_users = []  # HIGH risk - signing in from public IPs without MFA
@@ -441,21 +467,10 @@ class EntraReportGenerator:
             
             for u in no_mfa:
                 upn = u.user_principal_name or ''
-                upn_lower = upn.lower()
                 
-                # Detect room/service/resource accounts by naming pattern
-                is_room_service = any(pattern in upn_lower for pattern in [
-                    'room', 'copier', 'printer', 'fax', 'scanner', 
-                    'shared', 'noreply', 'donotreply', 'service', 
-                    'mailbox', 'resource', 'conference', 'meeting',
-                    'zoom', 'teams', 'webex', 'zoomroom'
-                ])
-                
-                is_guest = '#EXT#' in upn
-                
-                if is_room_service:
+                if is_room_service(upn):
                     room_service_accounts.append(upn)
-                elif is_guest:
+                elif is_guest(upn):
                     guest_accounts.append(upn)
                 elif upn in external_signin_users:
                     active_external_users.append(upn)
@@ -464,51 +479,50 @@ class EntraReportGenerator:
                 else:
                     inactive_users.append(upn)
             
-            # HIGH RISK: Active external sign-ins without MFA
-            if active_external_users:
-                self.findings.append(Finding(
-                    id=self._next_finding_id(),
-                    severity=Severity.CRITICAL,
-                    category=Category.MFA_POSTURE,
-                    title=f"Active External Users Without MFA ({len(active_external_users)})",
-                    description=f"{len(active_external_users)} users have signed in from external/public IPs "
-                               f"during the analysis period but have no MFA. These are HIGH RISK - vulnerable to "
-                               f"credential theft and external attacks.",
-                    affected_count=len(active_external_users),
-                    affected_objects=active_external_users,
-                    recommendation="Immediately enable MFA for these accounts. They are actively used from "
-                                  "external networks and represent significant credential theft risk.",
-                ))
+            # Calculate eligible users (excluding room/service and guests) for summary reconciliation
+            eligible_no_mfa = active_external_users + active_internal_users + inactive_users
             
-            # MEDIUM RISK: Active but internal-only sign-ins without MFA
-            if active_internal_users:
+            # Create a summary finding that reconciles with the MFA Posture table
+            if eligible_no_mfa:
+                summary_lines = [
+                    f"**Summary of {len(eligible_no_mfa)} eligible users without MFA:**",
+                    f"",
+                ]
+                if active_external_users:
+                    summary_lines.append(f"**CRITICAL - Active External ({len(active_external_users)}):** signing in from public IPs")
+                    for u in sorted(active_external_users):
+                        summary_lines.append(f"  - {u}")
+                if active_internal_users:
+                    summary_lines.append(f"**MEDIUM - Active Internal ({len(active_internal_users)}):** signing in from private IPs only")
+                    for u in sorted(active_internal_users):
+                        summary_lines.append(f"  - {u}")
+                if inactive_users:
+                    summary_lines.append(f"**LOW - Inactive ({len(inactive_users)}):** no recent sign-in activity")
+                    for u in sorted(inactive_users):
+                        summary_lines.append(f"  - {u}")
+                
+                # Determine overall severity based on worst case
+                if active_external_users:
+                    severity = Severity.CRITICAL
+                elif active_internal_users:
+                    severity = Severity.MEDIUM
+                else:
+                    severity = Severity.LOW
+                
                 self.findings.append(Finding(
                     id=self._next_finding_id(),
-                    severity=Severity.MEDIUM,
+                    severity=severity,
                     category=Category.MFA_POSTURE,
-                    title=f"Active Internal-Only Users Without MFA ({len(active_internal_users)})",
-                    description=f"{len(active_internal_users)} users have signed in recently but only from "
-                               f"private/internal IPs. May be protected by Conditional Access location policies "
-                               f"or VPN requirements.",
-                    affected_count=len(active_internal_users),
-                    affected_objects=active_internal_users,
-                    recommendation="Verify these accounts are protected by Conditional Access trusted location "
-                                  "or compliant device policies. If not, enable MFA.",
-                ))
-            
-            # LOW RISK: Inactive accounts without MFA
-            if inactive_users:
-                self.findings.append(Finding(
-                    id=self._next_finding_id(),
-                    severity=Severity.LOW,
-                    category=Category.MFA_POSTURE,
-                    title=f"Inactive Users Without MFA ({len(inactive_users)})",
-                    description=f"{len(inactive_users)} enabled users have no MFA and no recent sign-in activity "
-                               f"in the analysis period. These may be provisioned but unused accounts.",
-                    affected_count=len(inactive_users),
-                    affected_objects=inactive_users,
-                    recommendation="Review if these accounts are needed. Consider disabling unused accounts "
-                                  "or require MFA enrollment before first use.",
+                    title=f"Eligible Users Without MFA ({len(eligible_no_mfa)})",
+                    description=f"{len(eligible_no_mfa)} interactive user accounts have no MFA registered. "
+                               f"Breakdown: {len(active_external_users)} active external (CRITICAL), "
+                               f"{len(active_internal_users)} active internal (MEDIUM), "
+                               f"{len(inactive_users)} inactive (LOW). "
+                               f"This reconciles with the MFA Posture summary table above.",
+                    affected_count=len(eligible_no_mfa),
+                    affected_objects=summary_lines,
+                    recommendation="Prioritize MFA enrollment: (1) Active external users immediately, "
+                                  "(2) Active internal users unless CA-protected, (3) Inactive users or disable.",
                 ))
             
             # INFO: Room/service accounts (often don't need MFA if properly secured)
