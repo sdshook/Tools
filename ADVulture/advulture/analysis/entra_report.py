@@ -64,7 +64,7 @@ class Finding:
             "title": self.title,
             "description": self.description,
             "affected_count": self.affected_count,
-            "affected_objects": self.affected_objects[:20],  # Limit for display
+            "affected_objects": self.affected_objects,
             "recommendation": self.recommendation,
             "references": self.references,
         }
@@ -126,7 +126,7 @@ class EntraReport:
         }
 
     def to_markdown(self) -> str:
-        """Generate markdown report."""
+        """Generate markdown report with all affected objects."""
         lines = [
             f"# Entra ID Security Assessment Report",
             f"",
@@ -188,11 +188,9 @@ class EntraReport:
                 f"",
             ])
             if finding.affected_objects:
-                lines.append("**Sample affected objects:**")
-                for obj in finding.affected_objects[:5]:
+                lines.append("**Affected objects:**")
+                for obj in finding.affected_objects:
                     lines.append(f"- {obj}")
-                if len(finding.affected_objects) > 5:
-                    lines.append(f"- ... and {len(finding.affected_objects) - 5} more")
                 lines.append("")
             if finding.recommendation:
                 lines.append(f"**Recommendation:** {finding.recommendation}")
@@ -369,7 +367,7 @@ class EntraReportGenerator:
                 description=f"{len(multi_priv)} principals hold 3 or more privileged roles. "
                            f"This violates the principle of least privilege and increases blast radius.",
                 affected_count=len(multi_priv),
-                affected_objects=[f"{k}: {len(v)} roles ({', '.join(v[:3])}...)" for k, v in list(multi_priv.items())[:10]],
+                affected_objects=[f"{k}: {len(v)} roles ({', '.join(v)})" for k, v in list(multi_priv.items())],
                 recommendation="Review and consolidate role assignments. Use PIM for just-in-time access.",
             ))
         
@@ -407,7 +405,7 @@ class EntraReportGenerator:
                 description=f"{len(sp_priv)} service principals have privileged directory roles. "
                            f"These automated accounts may have credentials stored in code or config files.",
                 affected_count=len(sp_priv),
-                affected_objects=[f"{a.principal_name}: {a.role_name}" for a in sp_priv[:10]],
+                affected_objects=[f"{a.principal_name}: {a.role_name}" for a in sp_priv],
                 recommendation="Review service principal permissions. Use managed identities where possible.",
             ))
     
@@ -438,7 +436,7 @@ class EntraReportGenerator:
                 description=f"{len(risky_grants)} OAuth grants include high-risk scopes that allow "
                            f"applications to read/write sensitive data (mail, files, directory).",
                 affected_count=len(risky_grants),
-                affected_objects=[f"{g['client_id']}: {g['scope']}" for g in risky_grants[:10]],
+                affected_objects=[f"{g['client_id']}: {g['scope']}" for g in risky_grants],
                 recommendation="Review and revoke unnecessary OAuth grants. Implement admin consent workflow.",
             ))
     
@@ -463,7 +461,7 @@ class EntraReportGenerator:
                 description=f"{len(legacy)} sign-ins used legacy authentication protocols which bypass MFA. "
                            f"{len(unique_users)} unique users affected.",
                 affected_count=len(unique_users),
-                affected_objects=unique_users[:10],
+                affected_objects=unique_users,
                 recommendation="Block legacy authentication via Conditional Access policy.",
             ))
         
@@ -480,7 +478,7 @@ class EntraReportGenerator:
                 description=f"{len(failed)} failed sign-in attempts from {len(unique_users)} unique accounts. "
                            f"Review for potential brute-force or credential stuffing attacks.",
                 affected_count=len(unique_users),
-                affected_objects=unique_users[:10],
+                affected_objects=unique_users,
                 recommendation="Investigate repeated failures. Consider smart lockout policies.",
             ))
 
@@ -526,11 +524,11 @@ class EntraReportGenerator:
                 category=Category.RISK_DETECTION,
                 title=f"High-Risk Identity Protection Alerts ({len(high_risk)} detections)",
                 description=f"Microsoft Identity Protection flagged {len(high_risk)} high-risk events "
-                           f"affecting {len(unique_users)} users. Risk types: {', '.join(risk_types[:5])}. "
+                           f"affecting {len(unique_users)} users. Risk types: {', '.join(risk_types)}. "
                            f"These indicate potential active compromise or credential theft.",
                 affected_count=len(unique_users),
                 affected_objects=[f"{r.get('userPrincipalName', 'N/A')}: {RISK_TYPE_DESCRIPTIONS.get(r.get('riskEventType'), r.get('riskEventType', 'unknown'))} "
-                                 f"from {r.get('ipAddress', 'N/A')}" for r in high_risk[:10]],
+                                 f"from {r.get('ipAddress', 'N/A')}" for r in high_risk],
                 recommendation="Immediately investigate all high-risk users. Reset credentials, revoke sessions, "
                               "and review audit logs for signs of compromise.",
                 references=["https://learn.microsoft.com/en-us/entra/id-protection/howto-identity-protection-investigate-risk"],
@@ -547,11 +545,11 @@ class EntraReportGenerator:
                 category=Category.RISK_DETECTION,
                 title=f"Medium-Risk Identity Protection Alerts ({len(medium_risk)} detections)",
                 description=f"{len(medium_risk)} medium-risk events affecting {len(unique_users)} users. "
-                           f"Risk types: {', '.join(risk_types[:5])}. "
+                           f"Risk types: {', '.join(risk_types)}. "
                            f"These may indicate attempted compromise or policy violations.",
                 affected_count=len(unique_users),
                 affected_objects=[f"{r.get('userPrincipalName', 'N/A')}: {RISK_TYPE_DESCRIPTIONS.get(r.get('riskEventType'), r.get('riskEventType', 'unknown'))}" 
-                                 for r in medium_risk[:10]],
+                                 for r in medium_risk],
                 recommendation="Review affected users and require MFA re-registration or password reset as appropriate.",
             ))
         
@@ -568,7 +566,7 @@ class EntraReportGenerator:
                            f"This typically indicates credential theft with attacker sign-in from a different location.",
                 affected_count=len(unique_users),
                 affected_objects=[f"{r.get('userPrincipalName', 'N/A')}: {r.get('location', {}).get('city', 'N/A')}, "
-                                 f"{r.get('location', {}).get('country', 'N/A')}" for r in impossible_travel[:10]],
+                                 f"{r.get('location', {}).get('country', 'N/A')}" for r in impossible_travel],
                 recommendation="Verify with users if travel is legitimate. If not, treat as credential compromise.",
             ))
         
@@ -583,7 +581,7 @@ class EntraReportGenerator:
                 description=f"Microsoft detected {len(unique_users)} users with credentials appearing in "
                            f"dark web dumps or public breaches. These accounts are at immediate risk of takeover.",
                 affected_count=len(unique_users),
-                affected_objects=unique_users[:20],
+                affected_objects=unique_users,
                 recommendation="Force immediate password reset for all affected accounts. Enable MFA if not already enabled.",
             ))
         
@@ -598,7 +596,7 @@ class EntraReportGenerator:
                 description=f"{len(anon_ip)} sign-ins from anonymized IPs (VPN/Tor/proxy) by {len(unique_users)} users. "
                            f"May indicate policy violation or attempt to hide malicious activity.",
                 affected_count=len(unique_users),
-                affected_objects=unique_users[:10],
+                affected_objects=unique_users,
                 recommendation="Review if VPN usage is authorized. Consider blocking anonymized IPs via Conditional Access.",
             ))
 
@@ -627,7 +625,7 @@ class EntraReportGenerator:
                            f"These passed authentication but exhibited risk indicators.",
                 affected_count=len(unique_users),
                 affected_objects=[f"{s.user_principal_name}: {s.risk_level_during} risk from {s.ip_address}" 
-                                 for s in risky_signins[:10]],
+                                 for s in risky_signins],
                 recommendation="Review risky sign-ins. Consider requiring reauthentication for elevated risk.",
             ))
         
@@ -660,7 +658,7 @@ class EntraReportGenerator:
                                f"(10pm-6am or weekends) from {len(suspicious_users)} users with 5+ events. "
                                f"While some may be legitimate, review for unauthorized access.",
                     affected_count=len(suspicious_users),
-                    affected_objects=[f"{u}: {len(e)} off-hours sign-ins" for u, e in list(suspicious_users.items())[:10]],
+                    affected_objects=[f"{u}: {len(e)} off-hours sign-ins" for u, e in list(suspicious_users.items())],
                     recommendation="Verify off-hours access aligns with user job requirements. "
                                   "Consider time-based Conditional Access for sensitive roles.",
                 ))
@@ -703,7 +701,7 @@ class EntraReportGenerator:
                            f"within 2 hours. Affects {len(unique_users)} users. This may indicate credential sharing or theft.",
                 affected_count=len(unique_users),
                 affected_objects=[f"{a['user']}: {a['from_country']} → {a['to_country']} in {a['time_diff_hours']}h" 
-                                 for a in geo_anomalies[:10]],
+                                 for a in geo_anomalies],
                 recommendation="Investigate each case. Legitimate travel is rare within 2 hours across countries.",
             ))
         
@@ -726,7 +724,7 @@ class EntraReportGenerator:
                            f"IP addresses during the analysis period. May indicate credential sharing, "
                            f"VPN rotation, or compromised credentials used by multiple actors.",
                 affected_count=len(diverse_users),
-                affected_objects=[f"{u}: {len(ips)} unique IPs" for u, ips in list(diverse_users.items())[:10]],
+                affected_objects=[f"{u}: {len(ips)} unique IPs" for u, ips in list(diverse_users.items())],
                 recommendation="Review if IP diversity is expected (mobile users, VPN). "
                               "Excessive diversity may indicate credential compromise.",
             ))
@@ -763,7 +761,7 @@ class EntraReportGenerator:
                            f"5+ different accounts each. Total {len(total_affected)} accounts targeted. "
                            f"This is a classic password spray pattern attempting to avoid account lockout.",
                 affected_count=len(total_affected),
-                affected_objects=[f"{ip}: {len(users)} accounts targeted" for ip, users in list(spray_ips.items())[:10]],
+                affected_objects=[f"{ip}: {len(users)} accounts targeted" for ip, users in list(spray_ips.items())],
                 recommendation="Block attacking IPs. Verify no accounts were compromised. "
                               "Review password policies and implement smart lockout.",
             ))
@@ -787,7 +785,7 @@ class EntraReportGenerator:
                            f"different IP addresses. This pattern suggests credentials may have been leaked "
                            f"and attackers are attempting to use them.",
                 affected_count=len(stuffing_targets),
-                affected_objects=[f"{u}: {len(ips)} attacking IPs" for u, ips in list(stuffing_targets.items())[:10]],
+                affected_objects=[f"{u}: {len(ips)} attacking IPs" for u, ips in list(stuffing_targets.items())],
                 recommendation="Force password reset for targeted accounts. Verify MFA is enabled. "
                               "Check if credentials appear in breach databases.",
             ))
@@ -826,7 +824,7 @@ class EntraReportGenerator:
                            f"user recovering from typos, but requires investigation.",
                 affected_count=len(brute_force_success),
                 affected_objects=[f"{b['user']}: {b['failures_before_success']} failures → success from {b['success_ip']}" 
-                                 for b in brute_force_success[:10]],
+                                 for b in brute_force_success],
                 recommendation="Contact affected users to verify login was legitimate. "
                               "If not confirmed, treat as compromised and reset credentials.",
             ))
@@ -863,7 +861,7 @@ class EntraReportGenerator:
                            f"typically only use API/automation flows, not interactive logins.",
                 affected_count=len(unique_svc),
                 affected_objects=[f"{s.user_principal_name}: {s.app_display_name} from {s.ip_address}" 
-                                 for s in service_interactive[:10]],
+                                 for s in service_interactive],
                 recommendation="Verify if interactive access is expected. Consider blocking interactive "
                               "sign-ins for service accounts via Conditional Access.",
             ))
@@ -887,7 +885,7 @@ class EntraReportGenerator:
                 if recent_signins:
                     reactivated_accounts.append({
                         "user": user.user_principal_name,
-                        "last_known_signin": user.last_signin.isoformat()[:10],
+                        "last_known_signin": user.last_signin.isoformat(),
                         "recent_signin_count": len(recent_signins),
                     })
         
@@ -902,7 +900,7 @@ class EntraReportGenerator:
                            f"targets for attackers as unusual activity may go unnoticed.",
                 affected_count=len(reactivated_accounts),
                 affected_objects=[f"{a['user']}: last seen {a['last_known_signin']}, {a['recent_signin_count']} recent sign-ins" 
-                                 for a in reactivated_accounts[:10]],
+                                 for a in reactivated_accounts],
                 recommendation="Contact account owners to verify reactivation is legitimate. "
                               "Consider disabling accounts dormant for extended periods.",
             ))
@@ -964,7 +962,7 @@ class EntraReportGenerator:
                            f"MFA fatigue/push bombing attacks where users approve out of frustration.",
                 affected_count=len(fatigue_victims),
                 affected_objects=[f"{v['user']}: {v['mfa_prompts']} prompts in {v['time_window_min']}min → approved" 
-                                 for v in fatigue_victims[:10]],
+                                 for v in fatigue_victims],
                 recommendation="Contact affected users immediately. If they did not initiate the MFA requests, "
                               "treat as compromised. Consider switching to phishing-resistant MFA (FIDO2/passkeys).",
                 references=["https://learn.microsoft.com/en-us/entra/identity/authentication/concepts-mfa-fatigue"],
@@ -1020,7 +1018,7 @@ class EntraReportGenerator:
                            f"This may indicate stolen tokens being replayed by an attacker.",
                 affected_count=len(unique_users),
                 affected_objects=[f"{a['user']} ({a['app']}): {a['ip1']} → {a['ip2']} in {a['time_diff_sec']}s" 
-                                 for a in token_anomalies[:10]],
+                                 for a in token_anomalies],
                 recommendation="Review if users were using VPN or mobile networks. If not, "
                               "revoke sessions and investigate for token theft.",
             ))
@@ -1052,7 +1050,7 @@ class EntraReportGenerator:
                     risky_consents.append({
                         "user": event.initiated_by_upn,
                         "activity": event.activity_display_name,
-                        "target": str(target)[:100],
+                        "target": str(target),
                         "timestamp": event.timestamp.isoformat()[:19],
                     })
         
@@ -1067,7 +1065,7 @@ class EntraReportGenerator:
                            f"(Mail, Files, Directory access) from {len(unique_users)} users. "
                            f"Attackers use consent phishing to gain persistent access.",
                 affected_count=len(unique_users),
-                affected_objects=[f"{c['user']}: {c['activity']}" for c in risky_consents[:10]],
+                affected_objects=[f"{c['user']}: {c['activity']}" for c in risky_consents],
                 recommendation="Review all consent grants. Revoke unauthorized app permissions. "
                               "Consider enabling admin consent workflow.",
                 references=["https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/configure-admin-consent-workflow"],
@@ -1107,7 +1105,7 @@ class EntraReportGenerator:
                     "user": user,
                     "issue": "high_app_diversity",
                     "app_count": len(apps),
-                    "apps": list(apps)[:10],
+                    "apps": list(apps),
                 })
             
             # Check for admin tool + data access combination
@@ -1151,7 +1149,7 @@ class EntraReportGenerator:
                                f"for admins, it's a common pattern during account compromise.",
                     affected_count=len(admin_combo),
                     affected_objects=[f"{s['user']}: {s['admin_apps']} + {s['data_apps']}" 
-                                     for s in admin_combo[:10]],
+                                     for s in admin_combo],
                     recommendation="Verify these users require both admin and data access. "
                                   "Consider separating admin and user accounts.",
                 ))
@@ -1183,11 +1181,11 @@ class EntraReportGenerator:
                 category=Category.SECURITY_ALERT,
                 title=f"Microsoft Defender High/Critical Alerts ({len(critical_alerts)})",
                 description=f"Microsoft Defender detected {len(critical_alerts)} high or critical severity alerts "
-                           f"affecting {len(unique_users)} users. Categories: {', '.join(categories[:5])}. "
+                           f"affecting {len(unique_users)} users. Categories: {', '.join(categories)}. "
                            f"These require immediate investigation.",
                 affected_count=len(unique_users),
                 affected_objects=[f"[{a.severity.upper()}] {a.title}: {a.user_principal_name or 'N/A'}" 
-                                 for a in critical_alerts[:10]],
+                                 for a in critical_alerts],
                 recommendation="Investigate all critical alerts immediately. Follow Defender recommended actions.",
             ))
         
@@ -1207,7 +1205,7 @@ class EntraReportGenerator:
                 description=f"Detected {len(phishing_alerts)} phishing or business email compromise alerts "
                            f"from Microsoft Defender for Office 365. {len(unique_users)} users targeted.",
                 affected_count=len(unique_users),
-                affected_objects=[f"{a.title}: {a.user_principal_name}" for a in phishing_alerts[:10]],
+                affected_objects=[f"{a.title}: {a.user_principal_name}" for a in phishing_alerts],
                 recommendation="Quarantine affected messages. Check if users clicked links or provided credentials. "
                               "Consider security awareness training.",
             ))
@@ -1234,7 +1232,7 @@ class EntraReportGenerator:
                            f"data exfiltration attacks.",
                 affected_count=len(external_fwd),
                 affected_objects=[f"{r.user_principal_name}: '{r.display_name}' → {r.forwards_to + r.redirects_to}" 
-                                 for r in external_fwd[:10]],
+                                 for r in external_fwd],
                 recommendation="Immediately review and disable unauthorized forwarding rules. "
                               "Block external auto-forwarding at the transport level.",
                 references=["https://learn.microsoft.com/en-us/exchange/policy-and-compliance/mail-flow-rules/mail-flow-rules"],
@@ -1252,7 +1250,7 @@ class EntraReportGenerator:
                            f"Attackers use these to hide evidence like password reset notifications "
                            f"or security alerts from compromised users.",
                 affected_count=len(delete_rules),
-                affected_objects=[f"{r.user_principal_name}: '{r.display_name}'" for r in delete_rules[:10]],
+                affected_objects=[f"{r.user_principal_name}: '{r.display_name}'" for r in delete_rules],
                 recommendation="Review deletion rules. Legitimate rules are rare - investigate any you find.",
             ))
 
@@ -1284,7 +1282,7 @@ class EntraReportGenerator:
                            f"mail, files, or directory data.",
                 affected_count=len(by_app),
                 affected_objects=[f"{app}: {', '.join(perms[:3])}{'...' if len(perms) > 3 else ''}" 
-                                 for app, perms in list(by_app.items())[:10]],
+                                 for app, perms in list(by_app.items())],
                 recommendation="Review if each application requires these permissions. "
                               "Remove unnecessary grants. Prefer delegated over application permissions.",
             ))
@@ -1302,7 +1300,7 @@ class EntraReportGenerator:
                            f"to send email on behalf of users. If compromised, these apps could be used "
                            f"for phishing or BEC attacks.",
                 affected_count=len(apps_with_send),
-                affected_objects=apps_with_send[:10],
+                affected_objects=apps_with_send,
                 recommendation="Verify each app requires Mail.Send. Consider using send-on-behalf-of with "
                               "specific mailboxes instead of tenant-wide permission.",
             ))
@@ -1329,7 +1327,7 @@ class EntraReportGenerator:
                            f"across {len(sites)} SharePoint sites. These links can be forwarded to "
                            f"unintended recipients without tracking.",
                 affected_count=len(sites),
-                affected_objects=[f"Site: {e.get('site_name', 'Unknown')}" for e in anon_links[:10]],
+                affected_objects=[f"Site: {e.get('site_name', 'Unknown')}" for e in anon_links],
                 recommendation="Review anonymous links for sensitive content. Consider restricting "
                               "to 'People in your organization' or specific people.",
             ))
@@ -1364,6 +1362,6 @@ class EntraReportGenerator:
                                f"geographic locations. While this may be normal for traveling users, "
                                f"verify if access patterns are expected.",
                     affected_count=len(multi_location),
-                    affected_objects=[f"{u}: {len(locs)} locations" for u, locs in list(multi_location.items())[:10]],
+                    affected_objects=[f"{u}: {len(locs)} locations" for u, locs in list(multi_location.items())],
                     recommendation="Review if geographic diversity is expected for these users.",
                 ))
