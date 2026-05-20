@@ -92,11 +92,13 @@ class EntraReport:
     signin_count: int = 0
     audit_count: int = 0
     
-    # MFA stats
-    mfa_registered_count: int = 0
-    mfa_capable_count: int = 0
-    no_mfa_count: int = 0
-    weak_mfa_count: int = 0
+    # MFA stats - eligible users are interactive accounts (not room/service)
+    eligible_user_count: int = 0  # Users eligible for MFA (not room/service accounts)
+    ineligible_user_count: int = 0  # Room/service accounts (not expected to have MFA)
+    mfa_registered_count: int = 0  # Eligible users with any MFA
+    mfa_capable_count: int = 0  # Eligible users with strong MFA (phishing-resistant)
+    no_mfa_count: int = 0  # Eligible users without MFA
+    weak_mfa_count: int = 0  # Eligible users with only weak MFA (SMS/email)
     
     # Findings
     findings: List[Finding] = field(default_factory=list)
@@ -116,6 +118,8 @@ class EntraReport:
                 "audits": self.audit_count,
             },
             "mfa_stats": {
+                "eligible_users": self.eligible_user_count,
+                "ineligible_users": self.ineligible_user_count,
                 "registered": self.mfa_registered_count,
                 "capable": self.mfa_capable_count,
                 "no_mfa": self.no_mfa_count,
@@ -154,16 +158,21 @@ class EntraReport:
             f"",
             f"## MFA Posture",
             f"",
-            f"| Metric | Count | Percentage |",
-            f"|--------|-------|------------|",
+            f"| Category | Count | Notes |",
+            f"|----------|-------|-------|",
         ]
         
         if self.user_count > 0:
+            # Calculate percentages based on eligible users only
+            eligible = self.eligible_user_count or 1  # Avoid division by zero
             lines.extend([
-                f"| Users with MFA | {self.mfa_registered_count} | {self.mfa_registered_count/self.user_count*100:.1f}% |",
-                f"| Users with Strong MFA | {self.mfa_capable_count} | {self.mfa_capable_count/self.user_count*100:.1f}% |",
-                f"| Users without MFA | {self.no_mfa_count} | {self.no_mfa_count/self.user_count*100:.1f}% |",
-                f"| Users with Weak MFA Only | {self.weak_mfa_count} | {self.weak_mfa_count/self.user_count*100:.1f}% |",
+                f"| **Eligible Users** | {self.eligible_user_count} | Interactive accounts expected to have MFA |",
+                f"| **Ineligible Users** | {self.ineligible_user_count} | Room/service accounts (MFA not required) |",
+                f"|  |  |  |",
+                f"| Eligible with MFA | {self.mfa_registered_count} | {self.mfa_registered_count/eligible*100:.1f}% of eligible |",
+                f"| Eligible with Strong MFA | {self.mfa_capable_count} | {self.mfa_capable_count/eligible*100:.1f}% of eligible (FIDO2, Authenticator, WHfB) |",
+                f"| Eligible without MFA | {self.no_mfa_count} | {self.no_mfa_count/eligible*100:.1f}% of eligible - **action required** |",
+                f"| Eligible with Weak MFA | {self.weak_mfa_count} | {self.weak_mfa_count/eligible*100:.1f}% of eligible (SMS/email only) |",
             ])
         
         lines.extend([
@@ -355,7 +364,23 @@ class EntraReportGenerator:
         severity_order = {Severity.CRITICAL: 0, Severity.HIGH: 1, Severity.MEDIUM: 2, Severity.LOW: 3, Severity.INFO: 4}
         self.findings.sort(key=lambda f: severity_order[f.severity])
         
-        # Build report
+        # Categorize users as eligible (interactive) vs ineligible (room/service) for MFA
+        def is_ineligible_for_mfa(user) -> bool:
+            """Determine if user is a room/service account that shouldn't require MFA."""
+            upn = (user.user_principal_name or '').lower()
+            patterns = [
+                'room', 'copier', 'printer', 'fax', 'scanner', 
+                'shared', 'noreply', 'donotreply', 'service', 
+                'mailbox', 'resource', 'conference', 'meeting',
+                'zoom', 'teams', 'webex', 'zoomroom'
+            ]
+            return any(p in upn for p in patterns)
+        
+        enabled_users = [u for u in self.snapshot.users if u.account_enabled]
+        eligible_users = [u for u in enabled_users if not is_ineligible_for_mfa(u)]
+        ineligible_users = [u for u in enabled_users if is_ineligible_for_mfa(u)]
+        
+        # Build report with eligible-only MFA stats
         report = EntraReport(
             timestamp=datetime.now(timezone.utc),
             tenant_id=self.snapshot.tenant_id,
@@ -367,10 +392,12 @@ class EntraReportGenerator:
             oauth_grant_count=len(self.snapshot.oauth_grants),
             signin_count=len(self.events.signins) if self.events else 0,
             audit_count=len(self.events.audits) if self.events else 0,
-            mfa_registered_count=sum(1 for u in self.snapshot.users if u.mfa_registered),
-            mfa_capable_count=sum(1 for u in self.snapshot.users if u.mfa_capable),
-            no_mfa_count=sum(1 for u in self.snapshot.users if not u.mfa_registered),
-            weak_mfa_count=sum(1 for u in self.snapshot.users if u.mfa_registered and not u.mfa_capable),
+            eligible_user_count=len(eligible_users),
+            ineligible_user_count=len(ineligible_users),
+            mfa_registered_count=sum(1 for u in eligible_users if u.mfa_registered),
+            mfa_capable_count=sum(1 for u in eligible_users if u.mfa_capable),
+            no_mfa_count=sum(1 for u in eligible_users if not u.mfa_registered),
+            weak_mfa_count=sum(1 for u in eligible_users if u.mfa_registered and not u.mfa_capable),
             findings=self.findings,
         )
         
@@ -956,11 +983,31 @@ class EntraReportGenerator:
             suspicious_users = {u: events for u, events in user_off_hours.items() if len(events) >= 5}
             
             if suspicious_users:
-                # Build detailed list with timestamps
-                detailed_objects = []
-                for u, events in list(suspicious_users.items()):
-                    times = sorted([e.timestamp.strftime("%Y-%m-%d %H:%M") for e in events])
-                    detailed_objects.append(f"{u}: {len(events)} off-hours sign-ins at: {', '.join(times)}")
+                # Build table per user with timestamp, IP+location, device, app
+                user_tables = []
+                for u, events in sorted(suspicious_users.items(), key=lambda x: -len(x[1])):
+                    user_tables.append(f"**{u}** ({len(events)} off-hours sign-ins):")
+                    # Sort by time and show up to 10
+                    sorted_events = sorted(events, key=lambda e: e.timestamp)[:10]
+                    for e in sorted_events:
+                        time_str = e.timestamp.strftime("%Y-%m-%d %H:%M")
+                        ip_str = self._format_ip(e.ip_address) if e.ip_address else "N/A"
+                        app_str = e.app_display_name or "Unknown"
+                        # Get device details
+                        device_detail = getattr(e, 'device_detail', None)
+                        if device_detail:
+                            if isinstance(device_detail, dict):
+                                os_name = device_detail.get('operatingSystem', '')
+                                browser = device_detail.get('browser', '')
+                            else:
+                                os_name = getattr(device_detail, 'operating_system', '')
+                                browser = getattr(device_detail, 'browser', '')
+                            device_str = f"{os_name} / {browser}".strip(' /') or "Unknown device"
+                        else:
+                            device_str = "Unknown device"
+                        user_tables.append(f"  - {time_str} | {ip_str} | {device_str} | {app_str}")
+                    if len(events) > 10:
+                        user_tables.append(f"  - ... and {len(events) - 10} more")
                 
                 self.findings.append(Finding(
                     id=self._next_finding_id(),
@@ -971,7 +1018,7 @@ class EntraReportGenerator:
                                f"(10pm-6am or weekends) from {len(suspicious_users)} users with 5+ events. "
                                f"While some may be legitimate, review for unauthorized access.",
                     affected_count=len(suspicious_users),
-                    affected_objects=detailed_objects,
+                    affected_objects=user_tables,
                     recommendation="Verify off-hours access aligns with user job requirements. "
                                   "Consider time-based Conditional Access for sensitive roles.",
                 ))
