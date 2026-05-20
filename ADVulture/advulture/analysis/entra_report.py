@@ -34,6 +34,13 @@ class Category(str, Enum):
     AUTHENTICATION = "AUTHENTICATION"
     LEGACY_AUTH = "LEGACY_AUTH"
     RISK_DETECTION = "RISK_DETECTION"
+    SUSPICIOUS_LOGIN = "SUSPICIOUS_LOGIN"
+    CREDENTIAL_MISUSE = "CREDENTIAL_MISUSE"
+    # New categories for O365/Defender
+    SECURITY_ALERT = "SECURITY_ALERT"
+    EMAIL_SECURITY = "EMAIL_SECURITY"
+    APP_PERMISSIONS = "APP_PERMISSIONS"
+    SHAREPOINT_SECURITY = "SHAREPOINT_SECURITY"
 
 
 @dataclass
@@ -257,6 +264,19 @@ class EntraReportGenerator:
         self._analyze_oauth_grants()
         if self.events:
             self._analyze_authentication_logs()
+            self._analyze_risk_detections()
+            self._analyze_suspicious_signins()
+            self._analyze_credential_misuse()
+            # Advanced analysis
+            self._analyze_mfa_fatigue()
+            self._analyze_token_anomalies()
+            self._analyze_consent_anomalies()
+            self._analyze_cross_app_movement()
+            # O365/Defender analysis
+            self._analyze_security_alerts()
+            self._analyze_email_security()
+            self._analyze_app_permissions()
+            self._analyze_sharepoint_security()
         
         # Sort findings by severity
         severity_order = {Severity.CRITICAL: 0, Severity.HIGH: 1, Severity.MEDIUM: 2, Severity.LOW: 3, Severity.INFO: 4}
@@ -463,3 +483,887 @@ class EntraReportGenerator:
                 affected_objects=unique_users[:10],
                 recommendation="Investigate repeated failures. Consider smart lockout policies.",
             ))
+
+    def _analyze_risk_detections(self):
+        """Analyze Identity Protection risk detections."""
+        if not self.events or not self.events.risk_detections:
+            return
+        
+        detections = self.events.risk_detections
+        
+        # Map risk event types to human-readable descriptions
+        RISK_TYPE_DESCRIPTIONS = {
+            "unfamiliarFeatures": "Unfamiliar sign-in properties",
+            "impossibleTravel": "Impossible travel (geographically impossible)",
+            "maliciousIPAddress": "Sign-in from known malicious IP",
+            "suspiciousIPAddress": "Sign-in from suspicious IP",
+            "leakedCredentials": "Leaked credentials detected",
+            "anonymizedIPAddress": "Sign-in from anonymized IP (VPN/Tor)",
+            "malwareInfectedIPAddress": "Sign-in from malware-infected IP",
+            "suspiciousBrowser": "Suspicious browser fingerprint",
+            "passwordSpray": "Password spray attack detected",
+            "anomalousToken": "Anomalous token activity",
+            "tokenIssuerAnomaly": "Token issuer anomaly",
+            "suspiciousInboxForwardingRules": "Suspicious inbox forwarding rules",
+            "anomalousUserActivity": "Anomalous user activity",
+            "investigationsThreatIntelligence": "Microsoft threat intelligence",
+            "riskyIPAddress": "Sign-in from risky IP",
+            "mcasSuspiciousInboxManipulationRules": "Suspicious inbox manipulation",
+        }
+        
+        # Group by risk level
+        high_risk = [r for r in detections if r.get("riskLevel") == "high"]
+        medium_risk = [r for r in detections if r.get("riskLevel") == "medium"]
+        
+        # High-risk detections - CRITICAL
+        if high_risk:
+            unique_users = list(set(r.get("userPrincipalName", "unknown") for r in high_risk))
+            risk_types = list(set(r.get("riskEventType", "unknown") for r in high_risk))
+            
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.CRITICAL,
+                category=Category.RISK_DETECTION,
+                title=f"High-Risk Identity Protection Alerts ({len(high_risk)} detections)",
+                description=f"Microsoft Identity Protection flagged {len(high_risk)} high-risk events "
+                           f"affecting {len(unique_users)} users. Risk types: {', '.join(risk_types[:5])}. "
+                           f"These indicate potential active compromise or credential theft.",
+                affected_count=len(unique_users),
+                affected_objects=[f"{r.get('userPrincipalName', 'N/A')}: {RISK_TYPE_DESCRIPTIONS.get(r.get('riskEventType'), r.get('riskEventType', 'unknown'))} "
+                                 f"from {r.get('ipAddress', 'N/A')}" for r in high_risk[:10]],
+                recommendation="Immediately investigate all high-risk users. Reset credentials, revoke sessions, "
+                              "and review audit logs for signs of compromise.",
+                references=["https://learn.microsoft.com/en-us/entra/id-protection/howto-identity-protection-investigate-risk"],
+            ))
+        
+        # Medium-risk detections - HIGH
+        if medium_risk:
+            unique_users = list(set(r.get("userPrincipalName", "unknown") for r in medium_risk))
+            risk_types = list(set(r.get("riskEventType", "unknown") for r in medium_risk))
+            
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.RISK_DETECTION,
+                title=f"Medium-Risk Identity Protection Alerts ({len(medium_risk)} detections)",
+                description=f"{len(medium_risk)} medium-risk events affecting {len(unique_users)} users. "
+                           f"Risk types: {', '.join(risk_types[:5])}. "
+                           f"These may indicate attempted compromise or policy violations.",
+                affected_count=len(unique_users),
+                affected_objects=[f"{r.get('userPrincipalName', 'N/A')}: {RISK_TYPE_DESCRIPTIONS.get(r.get('riskEventType'), r.get('riskEventType', 'unknown'))}" 
+                                 for r in medium_risk[:10]],
+                recommendation="Review affected users and require MFA re-registration or password reset as appropriate.",
+            ))
+        
+        # Analyze by specific high-concern risk types
+        impossible_travel = [r for r in detections if r.get("riskEventType") == "impossibleTravel"]
+        if impossible_travel:
+            unique_users = list(set(r.get("userPrincipalName", "unknown") for r in impossible_travel))
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.RISK_DETECTION,
+                title=f"Impossible Travel Detected ({len(impossible_travel)} events)",
+                description=f"Sign-ins from geographically impossible locations detected for {len(unique_users)} users. "
+                           f"This typically indicates credential theft with attacker sign-in from a different location.",
+                affected_count=len(unique_users),
+                affected_objects=[f"{r.get('userPrincipalName', 'N/A')}: {r.get('location', {}).get('city', 'N/A')}, "
+                                 f"{r.get('location', {}).get('country', 'N/A')}" for r in impossible_travel[:10]],
+                recommendation="Verify with users if travel is legitimate. If not, treat as credential compromise.",
+            ))
+        
+        leaked_creds = [r for r in detections if r.get("riskEventType") == "leakedCredentials"]
+        if leaked_creds:
+            unique_users = list(set(r.get("userPrincipalName", "unknown") for r in leaked_creds))
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.CRITICAL,
+                category=Category.RISK_DETECTION,
+                title=f"Leaked Credentials Detected ({len(leaked_creds)} users)",
+                description=f"Microsoft detected {len(unique_users)} users with credentials appearing in "
+                           f"dark web dumps or public breaches. These accounts are at immediate risk of takeover.",
+                affected_count=len(unique_users),
+                affected_objects=unique_users[:20],
+                recommendation="Force immediate password reset for all affected accounts. Enable MFA if not already enabled.",
+            ))
+        
+        anon_ip = [r for r in detections if r.get("riskEventType") == "anonymizedIPAddress"]
+        if len(anon_ip) > 5:
+            unique_users = list(set(r.get("userPrincipalName", "unknown") for r in anon_ip))
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.MEDIUM,
+                category=Category.RISK_DETECTION,
+                title=f"Anonymized IP Sign-ins ({len(anon_ip)} events)",
+                description=f"{len(anon_ip)} sign-ins from anonymized IPs (VPN/Tor/proxy) by {len(unique_users)} users. "
+                           f"May indicate policy violation or attempt to hide malicious activity.",
+                affected_count=len(unique_users),
+                affected_objects=unique_users[:10],
+                recommendation="Review if VPN usage is authorized. Consider blocking anonymized IPs via Conditional Access.",
+            ))
+
+    def _analyze_suspicious_signins(self):
+        """Analyze sign-in patterns for suspicious behavior."""
+        if not self.events or not self.events.signins:
+            return
+        
+        signins = self.events.signins
+        from collections import defaultdict
+        from datetime import timedelta
+        
+        # 1. Risky sign-ins (risk level during sign-in)
+        risky_signins = [s for s in signins if s.risk_level_during in ("high", "medium")]
+        if risky_signins:
+            unique_users = list(set(s.user_principal_name for s in risky_signins))
+            high_risk = [s for s in risky_signins if s.risk_level_during == "high"]
+            
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH if high_risk else Severity.MEDIUM,
+                category=Category.SUSPICIOUS_LOGIN,
+                title=f"Risky Sign-ins Detected ({len(risky_signins)} events)",
+                description=f"{len(risky_signins)} sign-ins flagged as risky ({len(high_risk)} high, "
+                           f"{len(risky_signins) - len(high_risk)} medium) affecting {len(unique_users)} users. "
+                           f"These passed authentication but exhibited risk indicators.",
+                affected_count=len(unique_users),
+                affected_objects=[f"{s.user_principal_name}: {s.risk_level_during} risk from {s.ip_address}" 
+                                 for s in risky_signins[:10]],
+                recommendation="Review risky sign-ins. Consider requiring reauthentication for elevated risk.",
+            ))
+        
+        # 2. Off-hours authentication (weekdays 10pm-6am, or weekends)
+        off_hours = []
+        for s in signins:
+            if s.result == "success" or (hasattr(s.result, 'value') and s.result.value == "success"):
+                hour = s.timestamp.hour
+                weekday = s.timestamp.weekday()
+                # Off hours: 10pm-6am or weekends
+                if hour < 6 or hour >= 22 or weekday >= 5:
+                    off_hours.append(s)
+        
+        if len(off_hours) > 20:
+            # Group by user to find unusual patterns
+            user_off_hours = defaultdict(list)
+            for s in off_hours:
+                user_off_hours[s.user_principal_name].append(s)
+            
+            # Flag users with significant off-hours activity
+            suspicious_users = {u: events for u, events in user_off_hours.items() if len(events) >= 5}
+            
+            if suspicious_users:
+                self.findings.append(Finding(
+                    id=self._next_finding_id(),
+                    severity=Severity.LOW,
+                    category=Category.SUSPICIOUS_LOGIN,
+                    title=f"Off-Hours Authentication Activity ({len(off_hours)} events)",
+                    description=f"{len(off_hours)} successful sign-ins occurred outside business hours "
+                               f"(10pm-6am or weekends) from {len(suspicious_users)} users with 5+ events. "
+                               f"While some may be legitimate, review for unauthorized access.",
+                    affected_count=len(suspicious_users),
+                    affected_objects=[f"{u}: {len(e)} off-hours sign-ins" for u, e in list(suspicious_users.items())[:10]],
+                    recommendation="Verify off-hours access aligns with user job requirements. "
+                                  "Consider time-based Conditional Access for sensitive roles.",
+                ))
+        
+        # 3. Multi-geography sign-ins (same user, different countries in short window)
+        user_signins = defaultdict(list)
+        for s in signins:
+            if s.location and s.location.get("countryOrRegion"):
+                user_signins[s.user_principal_name].append(s)
+        
+        geo_anomalies = []
+        for user, user_events in user_signins.items():
+            if len(user_events) < 2:
+                continue
+            # Sort by time
+            sorted_events = sorted(user_events, key=lambda x: x.timestamp)
+            for i in range(1, len(sorted_events)):
+                prev, curr = sorted_events[i-1], sorted_events[i]
+                prev_country = prev.location.get("countryOrRegion", "") if prev.location else ""
+                curr_country = curr.location.get("countryOrRegion", "") if curr.location else ""
+                time_diff = (curr.timestamp - prev.timestamp).total_seconds() / 3600  # hours
+                
+                # Different countries within 2 hours is suspicious
+                if prev_country and curr_country and prev_country != curr_country and time_diff < 2:
+                    geo_anomalies.append({
+                        "user": user,
+                        "from_country": prev_country,
+                        "to_country": curr_country,
+                        "time_diff_hours": round(time_diff, 1),
+                    })
+        
+        if geo_anomalies:
+            unique_users = list(set(a["user"] for a in geo_anomalies))
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.SUSPICIOUS_LOGIN,
+                title=f"Rapid Geography Changes ({len(geo_anomalies)} events)",
+                description=f"{len(geo_anomalies)} instances of users signing in from different countries "
+                           f"within 2 hours. Affects {len(unique_users)} users. This may indicate credential sharing or theft.",
+                affected_count=len(unique_users),
+                affected_objects=[f"{a['user']}: {a['from_country']} → {a['to_country']} in {a['time_diff_hours']}h" 
+                                 for a in geo_anomalies[:10]],
+                recommendation="Investigate each case. Legitimate travel is rare within 2 hours across countries.",
+            ))
+        
+        # 4. Unusual IP diversity (one user, many IPs in short period)
+        user_ips = defaultdict(set)
+        for s in signins:
+            if s.ip_address:
+                user_ips[s.user_principal_name].add(s.ip_address)
+        
+        ip_diversity_threshold = 10
+        diverse_users = {u: ips for u, ips in user_ips.items() if len(ips) >= ip_diversity_threshold}
+        
+        if diverse_users:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.MEDIUM,
+                category=Category.SUSPICIOUS_LOGIN,
+                title=f"High IP Address Diversity ({len(diverse_users)} users)",
+                description=f"{len(diverse_users)} users authenticated from {ip_diversity_threshold}+ distinct "
+                           f"IP addresses during the analysis period. May indicate credential sharing, "
+                           f"VPN rotation, or compromised credentials used by multiple actors.",
+                affected_count=len(diverse_users),
+                affected_objects=[f"{u}: {len(ips)} unique IPs" for u, ips in list(diverse_users.items())[:10]],
+                recommendation="Review if IP diversity is expected (mobile users, VPN). "
+                              "Excessive diversity may indicate credential compromise.",
+            ))
+
+    def _analyze_credential_misuse(self):
+        """Analyze patterns indicating credential misuse or compromise."""
+        if not self.events:
+            return
+        
+        signins = self.events.signins or []
+        audits = self.events.audits or []
+        from collections import defaultdict
+        
+        # 1. Password spray detection (many failed logins to many accounts from same IP)
+        ip_failed_users = defaultdict(set)
+        for s in signins:
+            result_val = s.result.value if hasattr(s.result, 'value') else str(s.result)
+            if result_val == "invalid_credentials" and s.ip_address:
+                ip_failed_users[s.ip_address].add(s.user_principal_name)
+        
+        spray_ips = {ip: users for ip, users in ip_failed_users.items() if len(users) >= 5}
+        
+        if spray_ips:
+            total_affected = set()
+            for users in spray_ips.values():
+                total_affected.update(users)
+            
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.CRITICAL,
+                category=Category.CREDENTIAL_MISUSE,
+                title=f"Password Spray Attack Detected ({len(spray_ips)} source IPs)",
+                description=f"Detected {len(spray_ips)} IP addresses attempting failed logins against "
+                           f"5+ different accounts each. Total {len(total_affected)} accounts targeted. "
+                           f"This is a classic password spray pattern attempting to avoid account lockout.",
+                affected_count=len(total_affected),
+                affected_objects=[f"{ip}: {len(users)} accounts targeted" for ip, users in list(spray_ips.items())[:10]],
+                recommendation="Block attacking IPs. Verify no accounts were compromised. "
+                              "Review password policies and implement smart lockout.",
+            ))
+        
+        # 2. Credential stuffing (same account, many failed attempts from different IPs)
+        user_failed_ips = defaultdict(set)
+        for s in signins:
+            result_val = s.result.value if hasattr(s.result, 'value') else str(s.result)
+            if result_val == "invalid_credentials" and s.ip_address:
+                user_failed_ips[s.user_principal_name].add(s.ip_address)
+        
+        stuffing_targets = {u: ips for u, ips in user_failed_ips.items() if len(ips) >= 5}
+        
+        if stuffing_targets:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.CREDENTIAL_MISUSE,
+                title=f"Credential Stuffing Targets ({len(stuffing_targets)} accounts)",
+                description=f"{len(stuffing_targets)} accounts received failed login attempts from 5+ "
+                           f"different IP addresses. This pattern suggests credentials may have been leaked "
+                           f"and attackers are attempting to use them.",
+                affected_count=len(stuffing_targets),
+                affected_objects=[f"{u}: {len(ips)} attacking IPs" for u, ips in list(stuffing_targets.items())[:10]],
+                recommendation="Force password reset for targeted accounts. Verify MFA is enabled. "
+                              "Check if credentials appear in breach databases.",
+            ))
+        
+        # 3. Successful login after many failures (potential successful brute force)
+        user_login_sequence = defaultdict(list)
+        for s in sorted(signins, key=lambda x: x.timestamp):
+            user_login_sequence[s.user_principal_name].append(s)
+        
+        brute_force_success = []
+        for user, events in user_login_sequence.items():
+            consecutive_failures = 0
+            for event in events:
+                result_val = event.result.value if hasattr(event.result, 'value') else str(event.result)
+                if result_val == "invalid_credentials":
+                    consecutive_failures += 1
+                elif result_val == "success" and consecutive_failures >= 5:
+                    brute_force_success.append({
+                        "user": user,
+                        "failures_before_success": consecutive_failures,
+                        "success_ip": event.ip_address,
+                        "success_time": event.timestamp.isoformat(),
+                    })
+                    consecutive_failures = 0
+                else:
+                    consecutive_failures = 0
+        
+        if brute_force_success:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.CRITICAL,
+                category=Category.CREDENTIAL_MISUSE,
+                title=f"Successful Login After Multiple Failures ({len(brute_force_success)} accounts)",
+                description=f"{len(brute_force_success)} accounts had successful logins immediately after "
+                           f"5+ consecutive failed attempts. This may indicate successful password guessing or "
+                           f"user recovering from typos, but requires investigation.",
+                affected_count=len(brute_force_success),
+                affected_objects=[f"{b['user']}: {b['failures_before_success']} failures → success from {b['success_ip']}" 
+                                 for b in brute_force_success[:10]],
+                recommendation="Contact affected users to verify login was legitimate. "
+                              "If not confirmed, treat as compromised and reset credentials.",
+            ))
+        
+        # 4. Service account behavioral anomalies (service accounts signing in interactively)
+        service_principals = {sp.display_name.lower() for sp in self.snapshot.service_principals}
+        service_patterns = ["svc_", "svc-", "service", "_sa", "-sa", "automation", "api_", "api-"]
+        
+        potential_service_accounts = []
+        for user in self.snapshot.users:
+            upn_lower = user.user_principal_name.lower()
+            name_lower = user.display_name.lower()
+            if any(p in upn_lower or p in name_lower for p in service_patterns):
+                potential_service_accounts.append(user.user_principal_name)
+        
+        # Check if these "service accounts" have interactive sign-ins
+        service_interactive = []
+        for s in signins:
+            result_val = s.result.value if hasattr(s.result, 'value') else str(s.result)
+            if s.user_principal_name in potential_service_accounts and result_val == "success":
+                # Check if it's an interactive sign-in (not API/service)
+                if s.app_display_name and "Azure Portal" in s.app_display_name or "Office" in s.app_display_name:
+                    service_interactive.append(s)
+        
+        if service_interactive:
+            unique_svc = list(set(s.user_principal_name for s in service_interactive))
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.MEDIUM,
+                category=Category.CREDENTIAL_MISUSE,
+                title=f"Service Accounts with Interactive Sign-ins ({len(unique_svc)} accounts)",
+                description=f"{len(unique_svc)} accounts with service-account naming patterns have "
+                           f"interactive sign-ins (Azure Portal, Office apps). Service accounts should "
+                           f"typically only use API/automation flows, not interactive logins.",
+                affected_count=len(unique_svc),
+                affected_objects=[f"{s.user_principal_name}: {s.app_display_name} from {s.ip_address}" 
+                                 for s in service_interactive[:10]],
+                recommendation="Verify if interactive access is expected. Consider blocking interactive "
+                              "sign-ins for service accounts via Conditional Access.",
+            ))
+        
+        # 5. Dormant accounts suddenly active
+        dormant_threshold_days = 90
+        recent_threshold_days = 7
+        from datetime import datetime, timezone, timedelta
+        
+        now = datetime.now(timezone.utc)
+        dormant_cutoff = now - timedelta(days=dormant_threshold_days)
+        recent_cutoff = now - timedelta(days=recent_threshold_days)
+        
+        reactivated_accounts = []
+        for user in self.snapshot.users:
+            if user.last_signin and user.last_signin < dormant_cutoff:
+                # Account was dormant - check if there are recent sign-ins
+                recent_signins = [s for s in signins 
+                                 if s.user_principal_name == user.user_principal_name 
+                                 and s.timestamp > recent_cutoff]
+                if recent_signins:
+                    reactivated_accounts.append({
+                        "user": user.user_principal_name,
+                        "last_known_signin": user.last_signin.isoformat()[:10],
+                        "recent_signin_count": len(recent_signins),
+                    })
+        
+        if reactivated_accounts:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.CREDENTIAL_MISUSE,
+                title=f"Dormant Accounts Reactivated ({len(reactivated_accounts)} accounts)",
+                description=f"{len(reactivated_accounts)} accounts that were dormant for 90+ days "
+                           f"have new sign-in activity in the past week. Dormant accounts are common "
+                           f"targets for attackers as unusual activity may go unnoticed.",
+                affected_count=len(reactivated_accounts),
+                affected_objects=[f"{a['user']}: last seen {a['last_known_signin']}, {a['recent_signin_count']} recent sign-ins" 
+                                 for a in reactivated_accounts[:10]],
+                recommendation="Contact account owners to verify reactivation is legitimate. "
+                              "Consider disabling accounts dormant for extended periods.",
+            ))
+
+    def _analyze_mfa_fatigue(self):
+        """Detect MFA fatigue/push bombing attacks."""
+        if not self.events or not self.events.signins:
+            return
+        
+        signins = self.events.signins
+        from collections import defaultdict
+        from datetime import timedelta
+        
+        # Look for pattern: many MFA_REQUIRED followed by success
+        user_mfa_events = defaultdict(list)
+        for s in signins:
+            result_val = s.result.value if hasattr(s.result, 'value') else str(s.result)
+            if result_val in ("mfa_required", "mfa_completed", "success"):
+                user_mfa_events[s.user_principal_name].append(s)
+        
+        fatigue_victims = []
+        for user, events in user_mfa_events.items():
+            sorted_events = sorted(events, key=lambda x: x.timestamp)
+            
+            # Look for bursts of MFA prompts
+            mfa_burst_count = 0
+            burst_start = None
+            for i, event in enumerate(sorted_events):
+                result_val = event.result.value if hasattr(event.result, 'value') else str(event.result)
+                
+                if result_val == "mfa_required":
+                    if burst_start is None:
+                        burst_start = event.timestamp
+                    mfa_burst_count += 1
+                elif result_val in ("mfa_completed", "success") and mfa_burst_count >= 3:
+                    # Success after multiple MFA prompts
+                    time_window = (event.timestamp - burst_start).total_seconds() / 60  # minutes
+                    if time_window < 30:  # 3+ MFA prompts within 30 minutes
+                        fatigue_victims.append({
+                            "user": user,
+                            "mfa_prompts": mfa_burst_count,
+                            "time_window_min": round(time_window, 1),
+                            "success_time": event.timestamp.isoformat()[:19],
+                        })
+                    mfa_burst_count = 0
+                    burst_start = None
+                else:
+                    mfa_burst_count = 0
+                    burst_start = None
+        
+        if fatigue_victims:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.CRITICAL,
+                category=Category.CREDENTIAL_MISUSE,
+                title=f"Potential MFA Fatigue Attacks ({len(fatigue_victims)} users)",
+                description=f"{len(fatigue_victims)} users received multiple MFA push notifications "
+                           f"in rapid succession followed by approval. This pattern indicates possible "
+                           f"MFA fatigue/push bombing attacks where users approve out of frustration.",
+                affected_count=len(fatigue_victims),
+                affected_objects=[f"{v['user']}: {v['mfa_prompts']} prompts in {v['time_window_min']}min → approved" 
+                                 for v in fatigue_victims[:10]],
+                recommendation="Contact affected users immediately. If they did not initiate the MFA requests, "
+                              "treat as compromised. Consider switching to phishing-resistant MFA (FIDO2/passkeys).",
+                references=["https://learn.microsoft.com/en-us/entra/identity/authentication/concepts-mfa-fatigue"],
+            ))
+
+    def _analyze_token_anomalies(self):
+        """Detect anomalous token usage patterns (potential token theft/replay)."""
+        if not self.events or not self.events.signins:
+            return
+        
+        signins = self.events.signins
+        from collections import defaultdict
+        
+        # Look for same user, same app, different IPs in short succession
+        user_app_signins = defaultdict(list)
+        for s in signins:
+            result_val = s.result.value if hasattr(s.result, 'value') else str(s.result)
+            if result_val == "success":
+                key = (s.user_principal_name, s.app_display_name)
+                user_app_signins[key].append(s)
+        
+        token_anomalies = []
+        for (user, app), events in user_app_signins.items():
+            if len(events) < 2:
+                continue
+            
+            sorted_events = sorted(events, key=lambda x: x.timestamp)
+            for i in range(1, len(sorted_events)):
+                prev, curr = sorted_events[i-1], sorted_events[i]
+                if not prev.ip_address or not curr.ip_address:
+                    continue
+                
+                # Different IPs within 5 minutes is suspicious for same app
+                time_diff = (curr.timestamp - prev.timestamp).total_seconds()
+                if prev.ip_address != curr.ip_address and time_diff < 300:
+                    token_anomalies.append({
+                        "user": user,
+                        "app": app,
+                        "ip1": prev.ip_address,
+                        "ip2": curr.ip_address,
+                        "time_diff_sec": int(time_diff),
+                    })
+        
+        if token_anomalies:
+            unique_users = list(set(a["user"] for a in token_anomalies))
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.CREDENTIAL_MISUSE,
+                title=f"Token Replay Indicators ({len(token_anomalies)} events)",
+                description=f"Detected {len(token_anomalies)} instances where the same user accessed "
+                           f"the same application from different IP addresses within 5 minutes. "
+                           f"This may indicate stolen tokens being replayed by an attacker.",
+                affected_count=len(unique_users),
+                affected_objects=[f"{a['user']} ({a['app']}): {a['ip1']} → {a['ip2']} in {a['time_diff_sec']}s" 
+                                 for a in token_anomalies[:10]],
+                recommendation="Review if users were using VPN or mobile networks. If not, "
+                              "revoke sessions and investigate for token theft.",
+            ))
+
+    def _analyze_consent_anomalies(self):
+        """Detect suspicious OAuth consent grants."""
+        if not self.events:
+            return
+        
+        audits = self.events.audits or []
+        
+        # Look for consent grant events
+        consent_events = [a for a in audits if "consent" in a.activity_display_name.lower() 
+                         or "permission" in a.activity_display_name.lower()]
+        
+        # High-risk permissions to flag
+        RISKY_SCOPES = {
+            "Mail.Read", "Mail.ReadWrite", "Mail.Send",
+            "Files.ReadWrite.All", "Files.Read.All",
+            "Directory.ReadWrite.All", "User.ReadWrite.All",
+            "offline_access",  # Can refresh tokens indefinitely
+        }
+        
+        risky_consents = []
+        for event in consent_events:
+            # Check if any risky scopes in target resources
+            for target in event.target_resources:
+                if any(scope in str(target) for scope in RISKY_SCOPES):
+                    risky_consents.append({
+                        "user": event.initiated_by_upn,
+                        "activity": event.activity_display_name,
+                        "target": str(target)[:100],
+                        "timestamp": event.timestamp.isoformat()[:19],
+                    })
+        
+        if risky_consents:
+            unique_users = list(set(c["user"] for c in risky_consents))
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.APP_PERMISSIONS,
+                title=f"Risky OAuth Consent Events ({len(risky_consents)} grants)",
+                description=f"Detected {len(risky_consents)} consent grants for high-risk permissions "
+                           f"(Mail, Files, Directory access) from {len(unique_users)} users. "
+                           f"Attackers use consent phishing to gain persistent access.",
+                affected_count=len(unique_users),
+                affected_objects=[f"{c['user']}: {c['activity']}" for c in risky_consents[:10]],
+                recommendation="Review all consent grants. Revoke unauthorized app permissions. "
+                              "Consider enabling admin consent workflow.",
+                references=["https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/configure-admin-consent-workflow"],
+            ))
+
+    def _analyze_cross_app_movement(self):
+        """Detect unusual cross-application access patterns (lateral movement via apps)."""
+        if not self.events or not self.events.signins:
+            return
+        
+        signins = self.events.signins
+        from collections import defaultdict
+        
+        # Track apps accessed per user
+        user_apps = defaultdict(set)
+        user_app_times = defaultdict(list)
+        
+        for s in signins:
+            result_val = s.result.value if hasattr(s.result, 'value') else str(s.result)
+            if result_val == "success" and s.app_display_name:
+                user_apps[s.user_principal_name].add(s.app_display_name)
+                user_app_times[s.user_principal_name].append((s.timestamp, s.app_display_name))
+        
+        # Define sensitive app combinations (accessing both in short time is suspicious)
+        SENSITIVE_COMBOS = [
+            ({"Azure Portal", "Microsoft Azure CLI", "Azure PowerShell"}, 
+             {"Exchange Online", "SharePoint Online", "Microsoft Teams"}),
+            ({"Microsoft Graph Explorer", "Graph API"}, 
+             {"Exchange Online", "SharePoint Online"}),
+        ]
+        
+        cross_app_suspects = []
+        for user, apps in user_apps.items():
+            # Check for unusual app diversity
+            if len(apps) > 15:
+                cross_app_suspects.append({
+                    "user": user,
+                    "issue": "high_app_diversity",
+                    "app_count": len(apps),
+                    "apps": list(apps)[:10],
+                })
+            
+            # Check for admin tool + data access combination
+            admin_apps = {"Azure Portal", "Microsoft Azure CLI", "Azure PowerShell", 
+                         "Entra Admin Center", "Microsoft 365 admin center"}
+            data_apps = {"SharePoint Online", "OneDrive", "Exchange Online", "Microsoft Teams"}
+            
+            accessed_admin = apps & admin_apps
+            accessed_data = apps & data_apps
+            
+            if accessed_admin and accessed_data:
+                # Check timing - both accessed in same session?
+                times = sorted(user_app_times[user], key=lambda x: x[0])
+                admin_times = [t for t, app in times if app in admin_apps]
+                data_times = [t for t, app in times if app in data_apps]
+                
+                if admin_times and data_times:
+                    min_gap = min(abs((a - d).total_seconds()) 
+                                 for a in admin_times for d in data_times)
+                    if min_gap < 600:  # Within 10 minutes
+                        cross_app_suspects.append({
+                            "user": user,
+                            "issue": "admin_data_combo",
+                            "admin_apps": list(accessed_admin),
+                            "data_apps": list(accessed_data),
+                            "min_gap_sec": int(min_gap),
+                        })
+        
+        if cross_app_suspects:
+            high_diversity = [s for s in cross_app_suspects if s["issue"] == "high_app_diversity"]
+            admin_combo = [s for s in cross_app_suspects if s["issue"] == "admin_data_combo"]
+            
+            if admin_combo:
+                self.findings.append(Finding(
+                    id=self._next_finding_id(),
+                    severity=Severity.MEDIUM,
+                    category=Category.SUSPICIOUS_LOGIN,
+                    title=f"Admin + Data Access Patterns ({len(admin_combo)} users)",
+                    description=f"{len(admin_combo)} users accessed both admin portals and data applications "
+                               f"(SharePoint/Exchange/Teams) within short time windows. While this may be legitimate "
+                               f"for admins, it's a common pattern during account compromise.",
+                    affected_count=len(admin_combo),
+                    affected_objects=[f"{s['user']}: {s['admin_apps']} + {s['data_apps']}" 
+                                     for s in admin_combo[:10]],
+                    recommendation="Verify these users require both admin and data access. "
+                                  "Consider separating admin and user accounts.",
+                ))
+
+    def _analyze_security_alerts(self):
+        """Analyze Microsoft Defender / Security alerts."""
+        if not self.events or not hasattr(self.events, 'security_alerts'):
+            return
+        
+        alerts = self.events.security_alerts or []
+        if not alerts:
+            return
+        
+        # Group by category
+        from collections import defaultdict
+        by_category = defaultdict(list)
+        for alert in alerts:
+            by_category[alert.category].append(alert)
+        
+        # Critical/High severity alerts
+        critical_alerts = [a for a in alerts if a.severity in ("high", "critical")]
+        if critical_alerts:
+            unique_users = list(set(a.user_principal_name for a in critical_alerts if a.user_principal_name))
+            categories = list(set(a.category for a in critical_alerts))
+            
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.CRITICAL,
+                category=Category.SECURITY_ALERT,
+                title=f"Microsoft Defender High/Critical Alerts ({len(critical_alerts)})",
+                description=f"Microsoft Defender detected {len(critical_alerts)} high or critical severity alerts "
+                           f"affecting {len(unique_users)} users. Categories: {', '.join(categories[:5])}. "
+                           f"These require immediate investigation.",
+                affected_count=len(unique_users),
+                affected_objects=[f"[{a.severity.upper()}] {a.title}: {a.user_principal_name or 'N/A'}" 
+                                 for a in critical_alerts[:10]],
+                recommendation="Investigate all critical alerts immediately. Follow Defender recommended actions.",
+            ))
+        
+        # Phishing-specific alerts
+        phishing_keywords = ["phish", "credential", "bec", "business email", "impersonation"]
+        phishing_alerts = [a for a in alerts 
+                          if any(kw in a.title.lower() or kw in a.category.lower() 
+                                for kw in phishing_keywords)]
+        
+        if phishing_alerts:
+            unique_users = list(set(a.user_principal_name for a in phishing_alerts if a.user_principal_name))
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.EMAIL_SECURITY,
+                title=f"Phishing/BEC Alerts ({len(phishing_alerts)} detections)",
+                description=f"Detected {len(phishing_alerts)} phishing or business email compromise alerts "
+                           f"from Microsoft Defender for Office 365. {len(unique_users)} users targeted.",
+                affected_count=len(unique_users),
+                affected_objects=[f"{a.title}: {a.user_principal_name}" for a in phishing_alerts[:10]],
+                recommendation="Quarantine affected messages. Check if users clicked links or provided credentials. "
+                              "Consider security awareness training.",
+            ))
+
+    def _analyze_email_security(self):
+        """Analyze email security: forwarding rules, inbox manipulation."""
+        if not self.events or not hasattr(self.events, 'mailbox_rules'):
+            return
+        
+        rules = self.events.mailbox_rules or []
+        if not rules:
+            return
+        
+        # External forwarding rules - HIGH RISK
+        external_fwd = [r for r in rules if r.is_external_forward and r.is_enabled]
+        if external_fwd:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.CRITICAL,
+                category=Category.EMAIL_SECURITY,
+                title=f"External Email Forwarding Rules ({len(external_fwd)} rules)",
+                description=f"Found {len(external_fwd)} active inbox rules forwarding or redirecting email "
+                           f"to external addresses. This is a common persistence technique for BEC and "
+                           f"data exfiltration attacks.",
+                affected_count=len(external_fwd),
+                affected_objects=[f"{r.user_principal_name}: '{r.display_name}' → {r.forwards_to + r.redirects_to}" 
+                                 for r in external_fwd[:10]],
+                recommendation="Immediately review and disable unauthorized forwarding rules. "
+                              "Block external auto-forwarding at the transport level.",
+                references=["https://learn.microsoft.com/en-us/exchange/policy-and-compliance/mail-flow-rules/mail-flow-rules"],
+            ))
+        
+        # Rules that delete messages (hiding tracks)
+        delete_rules = [r for r in rules if r.delete_message and r.is_enabled]
+        if delete_rules:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.EMAIL_SECURITY,
+                title=f"Email Deletion Rules ({len(delete_rules)} rules)",
+                description=f"Found {len(delete_rules)} inbox rules that automatically delete messages. "
+                           f"Attackers use these to hide evidence like password reset notifications "
+                           f"or security alerts from compromised users.",
+                affected_count=len(delete_rules),
+                affected_objects=[f"{r.user_principal_name}: '{r.display_name}'" for r in delete_rules[:10]],
+                recommendation="Review deletion rules. Legitimate rules are rare - investigate any you find.",
+            ))
+
+    def _analyze_app_permissions(self):
+        """Analyze application permission grants."""
+        if not self.events or not hasattr(self.events, 'app_permission_grants'):
+            return
+        
+        grants = self.events.app_permission_grants or []
+        if not grants:
+            return
+        
+        # High-risk permission grants
+        high_risk = [g for g in grants if g.is_high_risk]
+        if high_risk:
+            # Group by app
+            from collections import defaultdict
+            by_app = defaultdict(list)
+            for g in high_risk:
+                by_app[g.app_display_name].append(g.permission)
+            
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.APP_PERMISSIONS,
+                title=f"High-Risk Application Permissions ({len(high_risk)} grants)",
+                description=f"Found {len(high_risk)} high-risk Graph API permissions granted to "
+                           f"{len(by_app)} applications. These permissions allow reading/writing "
+                           f"mail, files, or directory data.",
+                affected_count=len(by_app),
+                affected_objects=[f"{app}: {', '.join(perms[:3])}{'...' if len(perms) > 3 else ''}" 
+                                 for app, perms in list(by_app.items())[:10]],
+                recommendation="Review if each application requires these permissions. "
+                              "Remove unnecessary grants. Prefer delegated over application permissions.",
+            ))
+        
+        # Apps with Mail.Send (can send as users)
+        mail_send = [g for g in grants if "Mail.Send" in g.permission]
+        if mail_send:
+            apps_with_send = list(set(g.app_display_name for g in mail_send))
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.MEDIUM,
+                category=Category.APP_PERMISSIONS,
+                title=f"Applications with Mail.Send Permission ({len(apps_with_send)} apps)",
+                description=f"{len(apps_with_send)} applications have Mail.Send permission, allowing them "
+                           f"to send email on behalf of users. If compromised, these apps could be used "
+                           f"for phishing or BEC attacks.",
+                affected_count=len(apps_with_send),
+                affected_objects=apps_with_send[:10],
+                recommendation="Verify each app requires Mail.Send. Consider using send-on-behalf-of with "
+                              "specific mailboxes instead of tenant-wide permission.",
+            ))
+
+    def _analyze_sharepoint_security(self):
+        """Analyze SharePoint/OneDrive security indicators."""
+        if not self.events or not hasattr(self.events, 'unified_audit_logs'):
+            return
+        
+        audit_logs = self.events.unified_audit_logs or []
+        if not audit_logs:
+            return
+        
+        # Anonymous sharing links
+        anon_links = [e for e in audit_logs if e.get("type") == "SharePointAnonymousLink"]
+        if anon_links:
+            sites = list(set(e.get("site_name", "Unknown") for e in anon_links))
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.MEDIUM,
+                category=Category.SHAREPOINT_SECURITY,
+                title=f"SharePoint Anonymous Sharing Links ({len(anon_links)} links)",
+                description=f"Found {len(anon_links)} anonymous (anyone with the link) sharing permissions "
+                           f"across {len(sites)} SharePoint sites. These links can be forwarded to "
+                           f"unintended recipients without tracking.",
+                affected_count=len(sites),
+                affected_objects=[f"Site: {e.get('site_name', 'Unknown')}" for e in anon_links[:10]],
+                recommendation="Review anonymous links for sensitive content. Consider restricting "
+                              "to 'People in your organization' or specific people.",
+            ))
+        
+        # Unusual SharePoint access patterns (many different sites in short time)
+        sp_access = [e for e in audit_logs if e.get("type") == "SharePointAccess"]
+        if sp_access:
+            from collections import defaultdict
+            user_access = defaultdict(set)
+            for e in sp_access:
+                if e.get("status") == "success":
+                    user_access[e.get("user", "")].add(e.get("app", ""))
+            
+            # Users accessing from many different locations
+            from collections import Counter
+            user_locations = defaultdict(set)
+            for e in sp_access:
+                location = e.get("location", {})
+                if location and e.get("user"):
+                    loc_key = f"{location.get('city', '')}, {location.get('country', '')}"
+                    if loc_key != ", ":
+                        user_locations[e.get("user")].add(loc_key)
+            
+            multi_location = {u: locs for u, locs in user_locations.items() if len(locs) >= 3}
+            if multi_location:
+                self.findings.append(Finding(
+                    id=self._next_finding_id(),
+                    severity=Severity.LOW,
+                    category=Category.SHAREPOINT_SECURITY,
+                    title=f"SharePoint Access from Multiple Locations ({len(multi_location)} users)",
+                    description=f"{len(multi_location)} users accessed SharePoint from 3+ different "
+                               f"geographic locations. While this may be normal for traveling users, "
+                               f"verify if access patterns are expected.",
+                    affected_count=len(multi_location),
+                    affected_objects=[f"{u}: {len(locs)} locations" for u, locs in list(multi_location.items())[:10]],
+                    recommendation="Review if geographic diversity is expected for these users.",
+                ))

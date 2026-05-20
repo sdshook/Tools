@@ -891,9 +891,11 @@ Evidence archives are automatically logged to the chain of custody:
 
 ## Entra ID Analysis
 
-ADVulture provides comprehensive Entra ID (Azure AD) security posture analysis beyond basic enumeration.
+ADVulture provides comprehensive Entra ID (Azure AD) and Microsoft 365 security posture analysis, combining identity configuration review with behavioral analysis of authentication logs, security alerts, and application permissions.
 
 ### Data Collection
+
+#### Identity & Configuration Data
 
 | Data Type | Description | API Endpoint |
 |-----------|-------------|--------------|
@@ -904,10 +906,40 @@ ADVulture provides comprehensive Entra ID (Azure AD) security posture analysis b
 | **PIM Eligibility** | Just-In-Time access schedules | `/roleManagement/directory/roleEligibilitySchedules` |
 | **OAuth Grants** | User consent grants to applications | `/oauth2PermissionGrants` |
 | **CA Policies** | Conditional Access policy configuration | `/identity/conditionalAccess/policies` |
+| **MFA Methods** | Per-user authentication methods | `/users/{id}/authentication/methods` |
+
+#### Behavioral & Security Event Data
+
+| Data Type | Description | API Endpoint |
+|-----------|-------------|--------------|
 | **Sign-in Logs** | 7-30 days of authentication events | `/auditLogs/signIns` |
 | **Audit Logs** | Directory change events | `/auditLogs/directoryAudits` |
 | **Risk Detections** | Identity Protection alerts | `/identityProtection/riskDetections` |
-| **MFA Methods** | Per-user authentication methods | `/users/{id}/authentication/methods` |
+| **Security Alerts** | Microsoft Defender / M365 alerts | `/security/alerts_v2` |
+| **App Permission Grants** | Application role assignments | `/servicePrincipals/{id}/appRoleAssignments` |
+| **Mailbox Rules** | Inbox forwarding and deletion rules | `/users/{id}/mailFolders/inbox/messageRules` |
+| **SharePoint Access** | SharePoint/OneDrive sign-in patterns | `/auditLogs/signIns` (filtered) |
+
+### Finding Categories
+
+ADVulture generates findings across 14 security categories:
+
+| Category | Description |
+|----------|-------------|
+| `MFA_POSTURE` | MFA registration status, strong vs weak methods |
+| `PRIVILEGED_ACCESS` | Admin role assignments, privilege stacking |
+| `ROLE_HYGIENE` | Role sprawl, unused roles, custom role review |
+| `SERVICE_PRINCIPAL` | App admin privileges, credential hygiene |
+| `OAUTH_CONSENT` | Risky user consent grants |
+| `AUTHENTICATION` | Failed sign-ins, authentication patterns |
+| `LEGACY_AUTH` | Legacy protocol usage bypassing MFA |
+| `RISK_DETECTION` | Identity Protection alerts (impossible travel, leaked creds, etc.) |
+| `SUSPICIOUS_LOGIN` | Behavioral anomalies in sign-in patterns |
+| `CREDENTIAL_MISUSE` | Attack patterns (spray, stuffing, brute force, MFA fatigue) |
+| `SECURITY_ALERT` | Microsoft Defender critical/high alerts |
+| `EMAIL_SECURITY` | External forwarding, inbox manipulation rules |
+| `APP_PERMISSIONS` | High-risk Graph API permissions |
+| `SHAREPOINT_SECURITY` | Anonymous sharing, external access |
 
 ### MFA Posture Analysis
 
@@ -927,6 +959,96 @@ MFA findings generated:
 | `privileged_accounts_weak_mfa` | **HIGH** | Admins with only SMS/Voice MFA |
 | `users_without_mfa` | MEDIUM | >10 users without MFA |
 | `users_weak_mfa_only` | LOW | >20 users with only weak MFA |
+
+### Credential Misuse & Attack Detection
+
+ADVulture detects active credential attacks and misuse patterns:
+
+| Finding | Severity | Detection Logic |
+|---------|----------|-----------------|
+| **Password Spray Detected** | CRITICAL | Same IP → failed logins to 5+ accounts |
+| **Credential Stuffing Targets** | HIGH | Same account ← failed logins from 5+ IPs |
+| **Brute Force Success** | CRITICAL | 5+ failures immediately followed by success |
+| **MFA Fatigue Attack** | CRITICAL | 3+ MFA prompts in 30 min → approval (push bombing) |
+| **Token Replay Indicators** | HIGH | Same user+app from different IPs within 5 min |
+| **Dormant Account Reactivation** | HIGH | 90+ day dormant accounts with new activity |
+
+### Identity Protection Integration
+
+ADVulture analyzes Microsoft Identity Protection risk detections:
+
+| Risk Type | Severity | Description |
+|-----------|----------|-------------|
+| **Impossible Travel** | HIGH | Sign-ins from geographically impossible locations |
+| **Leaked Credentials** | CRITICAL | Credentials found in dark web/breach dumps |
+| **Anonymized IP** | MEDIUM | Sign-ins from VPN/Tor/proxy (5+ events) |
+| **Malicious IP** | HIGH | Sign-ins from known threat actor IPs |
+| **Unfamiliar Sign-in Properties** | MEDIUM | Unusual device/browser/location combinations |
+| **Password Spray (MS-detected)** | HIGH | Microsoft's detection of spray attacks |
+
+### Suspicious Sign-in Behavioral Analysis
+
+| Finding | Severity | Detection Logic |
+|---------|----------|-----------------|
+| **Risky Sign-ins** | HIGH/MEDIUM | Sign-ins flagged with `risk_level_during` = high/medium |
+| **Off-Hours Authentication** | LOW | Sign-ins 10pm-6am or weekends (5+ per user) |
+| **Rapid Geography Changes** | HIGH | Same user, different countries within 2 hours |
+| **High IP Diversity** | MEDIUM | Users authenticating from 10+ distinct IPs |
+| **Admin + Data Access Combo** | MEDIUM | Admin portal + SharePoint/Exchange access together |
+
+### Microsoft Defender / Security Alerts
+
+ADVulture ingests alerts from Microsoft 365 Defender:
+
+| Alert Source | Categories Analyzed |
+|--------------|---------------------|
+| **Defender for Office 365** | Phishing, BEC, malicious attachments/URLs |
+| **Microsoft Cloud App Security (MCAS)** | Impossible travel, mass download, suspicious app activity |
+| **Entra ID Protection** | Risk detections (also available separately) |
+| **Defender for Identity** | Lateral movement, reconnaissance, credential theft |
+
+Findings generated:
+
+| Finding | Severity | Description |
+|---------|----------|-------------|
+| `defender_critical_alerts` | **CRITICAL** | High/Critical severity Defender alerts |
+| `phishing_bec_alerts` | **HIGH** | Phishing or BEC detection alerts |
+
+### Email Security Analysis
+
+ADVulture detects email-based persistence and exfiltration:
+
+| Finding | Severity | Description |
+|---------|----------|-------------|
+| **External Forwarding Rules** | CRITICAL | Inbox rules forwarding to external addresses |
+| **Email Deletion Rules** | HIGH | Rules that auto-delete messages (hiding evidence) |
+| **Risky Consent Events** | HIGH | OAuth consent to apps with Mail/Files access |
+
+### Application Permission Analysis
+
+ADVulture evaluates Graph API permissions granted to applications:
+
+**High-Risk Permissions Flagged:**
+
+```
+Mail.ReadWrite, Mail.ReadWrite.All, Mail.Send, Mail.Send.All
+Files.ReadWrite.All, Sites.ReadWrite.All, Sites.FullControl.All
+Directory.ReadWrite.All, User.ReadWrite.All, Group.ReadWrite.All
+RoleManagement.ReadWrite.Directory, Application.ReadWrite.All
+AppRoleAssignment.ReadWrite.All, DelegatedPermissionGrant.ReadWrite.All
+```
+
+| Finding | Severity | Description |
+|---------|----------|-------------|
+| `high_risk_app_permissions` | **HIGH** | Apps with Mail/Files/Directory write access |
+| `apps_with_mail_send` | MEDIUM | Apps that can send email as users |
+
+### SharePoint/OneDrive Security
+
+| Finding | Severity | Description |
+|---------|----------|-------------|
+| `anonymous_sharing_links` | MEDIUM | "Anyone with the link" permissions |
+| `multi_location_access` | LOW | Users accessing from 3+ geographic locations |
 
 ### Privileged Access Analysis
 
@@ -953,17 +1075,9 @@ Privileged access findings:
 | `service_principal_privileged_roles` | **HIGH** | Apps with admin roles |
 | `group_privileged_roles` | MEDIUM | Groups with role assignments |
 
-### Role Hygiene Analysis
-
-| Finding | Severity | Description |
-|---------|----------|-------------|
-| `role_sprawl` | LOW | >80 roles or >10 custom roles |
-| `unused_role_definitions` | INFO | Roles with no assignments |
-| `risky_oauth_consent` | MEDIUM | Apps with Mail/Files access |
-
 ### Required Permissions
 
-For full Entra ID analysis, the authenticating identity requires these **Entra ID roles**:
+For full Entra ID and M365 analysis, the authenticating identity requires these **Entra ID roles**:
 
 | Role | Required For |
 |------|--------------|
@@ -984,7 +1098,36 @@ These roles grant the following API permissions automatically:
 | `UserAuthenticationMethod.Read.All` | Delegated/Application | MFA method details |
 | `IdentityRiskEvent.Read.All` | Delegated/Application | Risk detections |
 
-**Note:** Device code authentication with the Microsoft Graph PowerShell client ID (`14d82eec-204b-4c2f-b7e8-296a70dab67e`) supports these permissions without requiring app registration. Assign the three roles above to your user account in Entra ID admin center.
+**Additional permissions for full M365 security analysis:**
+
+| Permission | Scope | Required For |
+|------------|-------|--------------|
+| `SecurityEvents.Read.All` | Delegated/Application | Microsoft Defender alerts |
+| `Application.Read.All` | Delegated/Application | App permission grants |
+| `MailboxSettings.Read` | Delegated/Application | Mailbox forwarding rules |
+| `Mail.Read` | Delegated/Application | Inbox rules |
+| `Sites.Read.All` | Delegated/Application | SharePoint access patterns |
+
+**Note:** Device code authentication with the Microsoft Graph PowerShell client ID (`14d82eec-204b-4c2f-b7e8-296a70dab67e`) supports these permissions without requiring app registration. Assign the roles above to your user account in Entra ID admin center.
+
+### What ADVulture Covers vs. Unified Audit Logs
+
+ADVulture's Graph API collection covers all **authentication and authorization/permissions abuse** detection. The Microsoft 365 Unified Audit Log (via Office 365 Management Activity API) provides additional detail for **data-level forensics**:
+
+| ADVulture Covers | Unified Audit Logs Add |
+|------------------|------------------------|
+| All sign-in events and patterns | — |
+| All permission grants and changes | — |
+| All role assignments | — |
+| All security alerts | — |
+| All mailbox forwarding rules | — |
+| Identity Protection risk events | — |
+| — | Specific emails accessed/sent |
+| — | Specific files downloaded/shared |
+| — | eDiscovery searches performed |
+| — | DLP policy matches |
+
+For security posture assessment and credential/permissions abuse detection, ADVulture provides comprehensive coverage. Unified audit logs are primarily needed for post-compromise data exfiltration investigation.
 
 ---
 

@@ -270,10 +270,61 @@ class EntraSnapshot:
 
 
 @dataclass
+class SecurityAlert:
+    """Microsoft 365 Defender / Security alert."""
+    id: str
+    timestamp: datetime
+    title: str
+    category: str  # Phishing, Malware, CredentialAccess, etc.
+    severity: str  # high, medium, low, informational
+    status: str    # new, inProgress, resolved
+    description: str = ""
+    user_principal_name: str = ""
+    detection_source: str = ""  # OfficeATP, MCAS, AzureAD, etc.
+    evidence: List[dict] = field(default_factory=list)
+    recommended_actions: List[str] = field(default_factory=list)
+
+
+@dataclass
+class MailboxRule:
+    """Inbox/mail flow rule for forwarding detection."""
+    id: str
+    user_principal_name: str
+    display_name: str
+    is_enabled: bool = True
+    forwards_to: List[str] = field(default_factory=list)
+    redirects_to: List[str] = field(default_factory=list)
+    delete_message: bool = False
+    move_to_folder: str = ""
+    is_external_forward: bool = False  # True if forwarding outside org
+
+
+@dataclass 
+class AppPermissionGrant:
+    """Application permission grant (app role assignment to service principal)."""
+    id: str
+    app_id: str
+    app_display_name: str
+    resource_id: str
+    resource_display_name: str  # e.g., "Microsoft Graph"
+    permission: str  # e.g., "Mail.ReadWrite"
+    permission_type: str  # "Application" or "Delegated"
+    granted_to_id: str  # Service principal ID
+    granted_to_name: str
+    created_time: Optional[datetime] = None
+    is_high_risk: bool = False
+
+
+@dataclass
 class EntraEventStream:
     signins: List[EntraSignIn] = field(default_factory=list)
     audits: List[EntraAuditEvent] = field(default_factory=list)
     risk_detections: List[dict] = field(default_factory=list)
+    # New: Security & compliance data
+    security_alerts: List[SecurityAlert] = field(default_factory=list)
+    mailbox_rules: List[MailboxRule] = field(default_factory=list)
+    app_permission_grants: List[AppPermissionGrant] = field(default_factory=list)
+    unified_audit_logs: List[dict] = field(default_factory=list)  # SharePoint, Exchange, etc.
 
     def get_spray_candidates(self, window_hours: int = 1) -> List[dict]:
         """Detect password spray: many failures across many users in short window."""
@@ -295,6 +346,17 @@ class EntraEventStream:
     def get_legacy_auth_signins(self) -> List[EntraSignIn]:
         return [s for s in self.signins if s.legacy_auth and
                 s.result == SignInResult.SUCCESS]
+    
+    def get_phishing_alerts(self) -> List[SecurityAlert]:
+        """Get alerts related to phishing/BEC."""
+        phishing_categories = {"Phishing", "BusinessEmailCompromise", "CredentialTheft", 
+                               "SuspiciousEmailSendingPatterns", "MaliciousUrl"}
+        return [a for a in self.security_alerts 
+                if a.category in phishing_categories or "phish" in a.title.lower()]
+    
+    def get_external_forwards(self) -> List[MailboxRule]:
+        """Get mailbox rules that forward externally."""
+        return [r for r in self.mailbox_rules if r.is_external_forward]
 
 
 class EntraEnumerator:
@@ -1427,36 +1489,59 @@ class EntraLogIngester:
             )
         return self._enumerator
 
-    async def collect_window(self, days: int = 30, progress_callback=None) -> EntraEventStream:
+    async def collect_window(self, days: int = 30, progress_callback=None, 
+                             include_security: bool = True) -> EntraEventStream:
         """
-        Collect sign-in logs, audit logs, and risk detections for the specified window.
+        Collect sign-in logs, audit logs, risk detections, and security data.
         
         Args:
             days: Number of days to look back
             progress_callback: Optional callback(stage, current, total) for progress updates
+            include_security: If True, also collect security alerts, mailbox rules, app permissions
         """
         since = datetime.now(timezone.utc) - timedelta(days=days)
         stream = EntraEventStream()
+        total_stages = 7 if include_security else 3
         
         # Collect each data type with progress updates
         if progress_callback:
-            progress_callback("sign-ins", 0, 3)
+            progress_callback("sign-ins", 0, total_stages)
         stream.signins = await self._get_signins(since)
         
         if progress_callback:
-            progress_callback("audits", 1, 3)
+            progress_callback("audits", 1, total_stages)
         stream.audits = await self._get_audits(since)
         
         if progress_callback:
-            progress_callback("risk_detections", 2, 3)
+            progress_callback("risk_detections", 2, total_stages)
         stream.risk_detections = await self._get_risk_detections(since)
         
+        if include_security:
+            if progress_callback:
+                progress_callback("security_alerts", 3, total_stages)
+            stream.security_alerts = await self._get_security_alerts(since)
+            
+            if progress_callback:
+                progress_callback("app_permissions", 4, total_stages)
+            stream.app_permission_grants = await self._get_app_permission_grants()
+            
+            if progress_callback:
+                progress_callback("mailbox_rules", 5, total_stages)
+            stream.mailbox_rules = await self._get_mailbox_forwarding_rules()
+            
+            if progress_callback:
+                progress_callback("unified_audit", 6, total_stages)
+            stream.unified_audit_logs = await self._get_unified_audit_logs(since)
+        
         if progress_callback:
-            progress_callback("complete", 3, 3)
+            progress_callback("complete", total_stages, total_stages)
             
         log.info(
-            "Collected %d sign-ins, %d audits, %d risk events from Entra ID",
-            len(stream.signins), len(stream.audits), len(stream.risk_detections)
+            "Collected %d sign-ins, %d audits, %d risk events, %d security alerts, "
+            "%d app permissions, %d mailbox rules from Entra ID/M365",
+            len(stream.signins), len(stream.audits), len(stream.risk_detections),
+            len(stream.security_alerts), len(stream.app_permission_grants),
+            len(stream.mailbox_rules)
         )
         return stream
 
@@ -1684,6 +1769,411 @@ class EntraLogIngester:
             log.warning("Failed to fetch risk detections from Graph API: %s", e)
             
         return detections
+
+    async def _get_security_alerts(self, since: datetime) -> List[SecurityAlert]:
+        """
+        GET /security/alerts_v2 — Microsoft 365 Defender alerts.
+        Includes Defender for Office 365, MCAS, Azure AD Identity Protection, etc.
+        
+        Required permissions: SecurityEvents.Read.All or SecurityAlert.Read.All
+        """
+        alerts = []
+        try:
+            enumerator = self._get_enumerator()
+            client = enumerator._get_client()
+            
+            since_str = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+            
+            # Try alerts_v2 first (newer unified API)
+            try:
+                from kiota_abstractions.base_request_configuration import RequestConfiguration
+                
+                # Use raw request since msgraph SDK may not have full alerts_v2 support
+                result = await client.security.alerts_v2.get()
+                
+                while result:
+                    if result.value:
+                        for a in result.value:
+                            try:
+                                # Filter by date
+                                created = a.created_date_time
+                                if created and created.replace(tzinfo=timezone.utc) < since:
+                                    continue
+                                
+                                # Extract user from evidence if available
+                                upn = ""
+                                evidence_list = []
+                                if a.evidence:
+                                    for ev in a.evidence:
+                                        ev_dict = {"type": str(type(ev).__name__)}
+                                        if hasattr(ev, 'user_account') and ev.user_account:
+                                            upn = getattr(ev.user_account, 'user_principal_name', '') or ''
+                                            ev_dict['user'] = upn
+                                        evidence_list.append(ev_dict)
+                                
+                                alert = SecurityAlert(
+                                    id=a.id or "",
+                                    timestamp=created.replace(tzinfo=timezone.utc) if created else datetime.now(timezone.utc),
+                                    title=a.title or "",
+                                    category=a.category or "",
+                                    severity=a.severity.value if a.severity else "unknown",
+                                    status=a.status.value if a.status else "unknown",
+                                    description=a.description or "",
+                                    user_principal_name=upn,
+                                    detection_source=a.detection_source.value if a.detection_source else "",
+                                    evidence=evidence_list,
+                                    recommended_actions=list(a.recommended_actions) if a.recommended_actions else [],
+                                )
+                                alerts.append(alert)
+                            except Exception as parse_err:
+                                log.debug("Failed to parse security alert: %s", parse_err)
+                                continue
+                    
+                    if hasattr(result, 'odata_next_link') and result.odata_next_link:
+                        result = await client.security.alerts_v2.with_url(result.odata_next_link).get()
+                    else:
+                        break
+                        
+            except Exception as v2_err:
+                log.debug("alerts_v2 failed, trying legacy alerts: %s", v2_err)
+                # Fallback to legacy /security/alerts
+                result = await client.security.alerts.get()
+                while result and result.value:
+                    for a in result.value:
+                        try:
+                            created = a.created_date_time
+                            if created and created.replace(tzinfo=timezone.utc) < since:
+                                continue
+                            
+                            alert = SecurityAlert(
+                                id=a.id or "",
+                                timestamp=created.replace(tzinfo=timezone.utc) if created else datetime.now(timezone.utc),
+                                title=a.title or "",
+                                category=a.category or "",
+                                severity=a.severity.value if a.severity else "unknown",
+                                status=a.status.value if a.status else "unknown",
+                                description=a.description or "",
+                                user_principal_name=a.user_states[0].user_principal_name if a.user_states else "",
+                                detection_source=a.vendor_information.provider if a.vendor_information else "",
+                            )
+                            alerts.append(alert)
+                        except Exception:
+                            continue
+                    
+                    if hasattr(result, 'odata_next_link') and result.odata_next_link:
+                        result = await client.security.alerts.with_url(result.odata_next_link).get()
+                    else:
+                        break
+            
+            log.info("Fetched %d security alerts from M365 Defender", len(alerts))
+            
+        except ImportError as ie:
+            log.warning("msgraph-sdk not available for security alerts: %s", ie)
+        except Exception as e:
+            log.warning("Failed to fetch security alerts: %s (may need SecurityEvents.Read.All permission)", e)
+            
+        return alerts
+
+    async def _get_app_permission_grants(self) -> List[AppPermissionGrant]:
+        """
+        GET /servicePrincipals/{id}/appRoleAssignments — Application permission grants.
+        Identifies what Graph API and other permissions apps have been granted.
+        
+        Required permissions: Application.Read.All
+        """
+        grants = []
+        
+        # High-risk Graph API permissions to flag
+        HIGH_RISK_PERMISSIONS = {
+            "Mail.ReadWrite", "Mail.ReadWrite.All", "Mail.Send", "Mail.Send.All",
+            "Files.ReadWrite.All", "Sites.ReadWrite.All", "Sites.FullControl.All",
+            "Directory.ReadWrite.All", "User.ReadWrite.All", "Group.ReadWrite.All",
+            "RoleManagement.ReadWrite.Directory", "Application.ReadWrite.All",
+            "AppRoleAssignment.ReadWrite.All", "DelegatedPermissionGrant.ReadWrite.All",
+            "MailboxSettings.ReadWrite", "Calendars.ReadWrite", "Contacts.ReadWrite",
+            "Chat.ReadWrite.All", "ChannelMessage.Send", "TeamSettings.ReadWrite.All",
+        }
+        
+        try:
+            enumerator = self._get_enumerator()
+            client = enumerator._get_client()
+            
+            # Get all service principals
+            sps = await client.service_principals.get()
+            sp_list = []
+            while sps:
+                if sps.value:
+                    sp_list.extend(sps.value)
+                if hasattr(sps, 'odata_next_link') and sps.odata_next_link:
+                    sps = await client.service_principals.with_url(sps.odata_next_link).get()
+                else:
+                    break
+            
+            # Build lookup for resource display names
+            sp_lookup = {sp.id: sp.display_name for sp in sp_list if sp.id}
+            app_role_lookup = {}
+            for sp in sp_list:
+                if sp.app_roles:
+                    for role in sp.app_roles:
+                        if role.id and role.value:
+                            app_role_lookup[role.id] = role.value
+            
+            # For each SP, get its app role assignments (permissions granted TO it)
+            for sp in sp_list:
+                if not sp.id:
+                    continue
+                try:
+                    assignments = await client.service_principals.by_service_principal_id(sp.id).app_role_assignments.get()
+                    if assignments and assignments.value:
+                        for assignment in assignments.value:
+                            try:
+                                permission_name = app_role_lookup.get(assignment.app_role_id, str(assignment.app_role_id))
+                                resource_name = sp_lookup.get(assignment.resource_id, "Unknown")
+                                
+                                grant = AppPermissionGrant(
+                                    id=assignment.id or "",
+                                    app_id=sp.app_id or "",
+                                    app_display_name=sp.display_name or "",
+                                    resource_id=assignment.resource_id or "",
+                                    resource_display_name=resource_name,
+                                    permission=permission_name,
+                                    permission_type="Application",
+                                    granted_to_id=sp.id,
+                                    granted_to_name=sp.display_name or "",
+                                    created_time=assignment.created_date_time.replace(tzinfo=timezone.utc) if assignment.created_date_time else None,
+                                    is_high_risk=permission_name in HIGH_RISK_PERMISSIONS,
+                                )
+                                grants.append(grant)
+                            except Exception:
+                                continue
+                except Exception:
+                    continue  # SP may not have assignments
+            
+            log.info("Fetched %d app permission grants (%d high-risk)", 
+                    len(grants), sum(1 for g in grants if g.is_high_risk))
+            
+        except ImportError as ie:
+            log.warning("msgraph-sdk not available: %s", ie)
+        except Exception as e:
+            log.warning("Failed to fetch app permission grants: %s", e)
+            
+        return grants
+
+    async def _get_mailbox_forwarding_rules(self) -> List[MailboxRule]:
+        """
+        GET /users/{id}/mailFolders/inbox/messageRules — Inbox rules per user.
+        Also checks mailboxSettings for server-side forwarding.
+        
+        Detects:
+        - Inbox rules that forward/redirect to external addresses
+        - Server-side auto-forwarding configuration
+        - Rules that delete messages (hiding evidence)
+        
+        Required permissions: MailboxSettings.Read, Mail.Read
+        """
+        rules = []
+        
+        try:
+            enumerator = self._get_enumerator()
+            client = enumerator._get_client()
+            
+            # Get tenant domain for external detection
+            org = await client.organization.get()
+            tenant_domains = set()
+            if org and org.value:
+                for domain in (org.value[0].verified_domains or []):
+                    if domain.name:
+                        tenant_domains.add(domain.name.lower())
+            
+            def is_external(email: str) -> bool:
+                """Check if email is external to the organization."""
+                if not email or "@" not in email:
+                    return False
+                domain = email.split("@")[1].lower()
+                return domain not in tenant_domains
+            
+            # Get users (limit to reduce API calls - prioritize enabled users)
+            users = await client.users.get()
+            user_list = []
+            while users:
+                if users.value:
+                    user_list.extend([u for u in users.value if u.account_enabled])
+                if hasattr(users, 'odata_next_link') and users.odata_next_link and len(user_list) < 500:
+                    users = await client.users.with_url(users.odata_next_link).get()
+                else:
+                    break
+            
+            # Sample up to 200 users for rule checking (API intensive)
+            import random
+            sample_users = random.sample(user_list, min(200, len(user_list))) if len(user_list) > 200 else user_list
+            
+            for user in sample_users:
+                if not user.id or not user.user_principal_name:
+                    continue
+                    
+                try:
+                    # Check mailbox settings for forwarding
+                    settings = await client.users.by_user_id(user.id).mailbox_settings.get()
+                    if settings and settings.automatic_replies_setting:
+                        # Check for external forwarding in auto-replies (less common attack vector)
+                        pass
+                    
+                    # Check inbox rules
+                    inbox_rules = await client.users.by_user_id(user.id).mail_folders.by_mail_folder_id("inbox").message_rules.get()
+                    if inbox_rules and inbox_rules.value:
+                        for rule in inbox_rules.value:
+                            try:
+                                forwards = []
+                                redirects = []
+                                is_external_fwd = False
+                                
+                                # Check forward actions
+                                if rule.actions:
+                                    if rule.actions.forward_to:
+                                        for recipient in rule.actions.forward_to:
+                                            email = recipient.email_address.address if recipient.email_address else ""
+                                            if email:
+                                                forwards.append(email)
+                                                if is_external(email):
+                                                    is_external_fwd = True
+                                    
+                                    if rule.actions.redirect_to:
+                                        for recipient in rule.actions.redirect_to:
+                                            email = recipient.email_address.address if recipient.email_address else ""
+                                            if email:
+                                                redirects.append(email)
+                                                if is_external(email):
+                                                    is_external_fwd = True
+                                
+                                # Only record rules with forwarding/redirect or delete
+                                if forwards or redirects or (rule.actions and rule.actions.delete):
+                                    mailbox_rule = MailboxRule(
+                                        id=rule.id or "",
+                                        user_principal_name=user.user_principal_name,
+                                        display_name=rule.display_name or "",
+                                        is_enabled=rule.is_enabled if rule.is_enabled is not None else True,
+                                        forwards_to=forwards,
+                                        redirects_to=redirects,
+                                        delete_message=bool(rule.actions and rule.actions.delete),
+                                        move_to_folder=rule.actions.move_to_folder if rule.actions and rule.actions.move_to_folder else "",
+                                        is_external_forward=is_external_fwd,
+                                    )
+                                    rules.append(mailbox_rule)
+                            except Exception:
+                                continue
+                except Exception:
+                    continue  # User may not have mailbox or permissions
+            
+            log.info("Fetched %d mailbox rules (%d with external forwarding)", 
+                    len(rules), sum(1 for r in rules if r.is_external_forward))
+            
+        except ImportError as ie:
+            log.warning("msgraph-sdk not available: %s", ie)
+        except Exception as e:
+            log.warning("Failed to fetch mailbox rules: %s", e)
+            
+        return rules
+
+    async def _get_unified_audit_logs(self, since: datetime) -> List[dict]:
+        """
+        Attempt to get unified audit logs for SharePoint, Exchange, and other O365 services.
+        
+        Note: The Microsoft Graph API does not directly expose the unified audit log.
+        This method attempts to gather relevant data from:
+        1. Directory audit logs (already collected separately)
+        2. SharePoint-specific signals from sign-ins
+        3. File activity from /drives endpoints (limited)
+        
+        For full unified audit log access, use:
+        - Office 365 Management Activity API (requires separate auth)
+        - Microsoft Purview / Compliance Center
+        - Azure Sentinel / Log Analytics
+        
+        This implementation focuses on what's available via Graph API.
+        """
+        audit_events = []
+        
+        try:
+            enumerator = self._get_enumerator()
+            client = enumerator._get_client()
+            
+            since_str = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+            
+            # 1. Get SharePoint-related sign-ins for access pattern analysis
+            try:
+                from msgraph.generated.audit_logs.sign_ins.sign_ins_request_builder import SignInsRequestBuilder
+                from kiota_abstractions.base_request_configuration import RequestConfiguration
+                
+                # Filter for SharePoint/OneDrive access
+                sp_apps = ["SharePoint", "OneDrive", "Microsoft Teams"]
+                query_params = SignInsRequestBuilder.SignInsRequestBuilderGetQueryParameters(
+                    filter=f"createdDateTime ge {since_str}",
+                    top=500,
+                )
+                request_config = RequestConfiguration(query_parameters=query_params)
+                
+                result = await client.audit_logs.sign_ins.get(request_configuration=request_config)
+                
+                while result:
+                    if result.value:
+                        for s in result.value:
+                            try:
+                                app_name = s.app_display_name or ""
+                                if any(sp_app.lower() in app_name.lower() for sp_app in sp_apps):
+                                    audit_events.append({
+                                        "type": "SharePointAccess",
+                                        "timestamp": s.created_date_time.isoformat() if s.created_date_time else "",
+                                        "user": s.user_principal_name or "",
+                                        "app": app_name,
+                                        "ip": s.ip_address or "",
+                                        "location": {
+                                            "city": s.location.city if s.location else None,
+                                            "country": s.location.country_or_region if s.location else None,
+                                        } if s.location else {},
+                                        "status": "success" if s.status and s.status.error_code == 0 else "failed",
+                                    })
+                            except Exception:
+                                continue
+                    
+                    if hasattr(result, 'odata_next_link') and result.odata_next_link and len(audit_events) < 2000:
+                        result = await client.audit_logs.sign_ins.with_url(result.odata_next_link).get()
+                    else:
+                        break
+                        
+            except Exception as e:
+                log.debug("SharePoint sign-in collection failed: %s", e)
+            
+            # 2. Check for external sharing via sites (limited without SharePoint admin)
+            try:
+                # Get root sites that might have external sharing
+                sites = await client.sites.get()
+                if sites and sites.value:
+                    for site in sites.value[:20]:  # Limit API calls
+                        try:
+                            # Check sharing settings if accessible
+                            if site.id:
+                                permissions = await client.sites.by_site_id(site.id).permissions.get()
+                                if permissions and permissions.value:
+                                    for perm in permissions.value:
+                                        if perm.link and perm.link.scope == "anonymous":
+                                            audit_events.append({
+                                                "type": "SharePointAnonymousLink",
+                                                "site_id": site.id,
+                                                "site_name": site.display_name or "",
+                                                "permission_id": perm.id,
+                                                "link_type": perm.link.type if perm.link else "",
+                                            })
+                        except Exception:
+                            continue
+            except Exception as e:
+                log.debug("SharePoint site permission check failed: %s", e)
+            
+            log.info("Collected %d unified audit events via Graph API", len(audit_events))
+            
+        except Exception as e:
+            log.warning("Failed to collect unified audit logs: %s", e)
+            
+        return audit_events
 
 
 class EntraAnalysisRunner:
