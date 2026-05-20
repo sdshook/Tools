@@ -1,6 +1,6 @@
 # Entra ID Security Assessment Report
 
-**Generated:** 2026-05-20 22:02:00 UTC
+**Generated:** 2026-05-20 22:13:06 UTC
 **Tenant ID:** organizations
 **Organization:** N/A
 
@@ -13,7 +13,7 @@
 | Role Definitions | 143 |
 | Role Assignments | 97 |
 | OAuth Grants | 107 |
-| Sign-in Events | 756 |
+| Sign-in Events | 760 |
 | Audit Events | 75 |
 
 ## MFA Posture
@@ -30,53 +30,14 @@
 | Severity | Count |
 |----------|-------|
 | CRITICAL | 0 |
-| HIGH | 6 |
+| HIGH | 5 |
 | MEDIUM | 4 |
-| LOW | 3 |
-| INFO | 2 |
+| LOW | 5 |
+| INFO | 3 |
 
 ## Detailed Findings
 
-### 1. [HIGH] Users Without MFA (27 users, 26%)
-
-**Category:** MFA_POSTURE
-
-27 enabled users have no MFA methods registered. These accounts are protected only by passwords and are vulnerable to phishing, credential stuffing, and password spray attacks.
-
-**Affected:** 27 objects
-
-**Affected objects:**
-- andrea.cooley_opusagency.com#EXT#@forgepointcap.onmicrosoft.com
-- anna.tantoco_pwc.com#EXT#@forgepointcap.onmicrosoft.com
-- ap@forgepointcap.com
-- azalearoom@forgepointcap.com
-- copier@forgepointcap.com
-- deallog@forgepointcap.com
-- demoriecrowe_microsoft.com#EXT#@forgepointcap.onmicrosoft.com
-- Forgepoint@forgepointcap.com
-- glau@forgepointcap.com
-- jackie.day_pwc.com#EXT#@forgepointcap.onmicrosoft.com
-- jobs@forgepointcap.com
-- katherine.cage_pwc.com#EXT#@forgepointcap.onmicrosoft.com
-- louise.northam_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
-- madroneroom@forgepointcap.com
-- maggie.y.piper_pwc.com#EXT#@forgepointcap.onmicrosoft.com
-- mapleroom@forgepointcap.com
-- matthew.owen_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
-- matthew.peacock_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
-- pauline.guenot_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
-- pbotas@forgepointcap.com
-- priscilla.truong_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
-- redwoodroom@forgepointcap.com
-- rosie.johnstone_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
-- talent@forgepointcap.com
-- tristan.peniston-bird_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
-- v-acooley_microsoft.com#EXT#@forgepointcap.onmicrosoft.com
-- zoomroomuser@forgepointcap.com
-
-**Recommendation:** Implement mandatory MFA enrollment. Use Conditional Access to require MFA for all sign-ins.
-
-### 2. [HIGH] Global Administrator Count (4)
+### 1. [HIGH] Global Administrator Count (4)
 
 **Category:** PRIVILEGED_ACCESS
 
@@ -92,7 +53,7 @@ Found 4 Global Administrator assignments. Microsoft recommends 2-4 Global Admins
 
 **Recommendation:** Reduce Global Admin count to 2-4. Use PIM for eligible (not permanent) assignments. Ensure at least 2 cloud-only break-glass accounts exist.
 
-### 3. [HIGH] High-Risk OAuth Consent Grants (12)
+### 2. [HIGH] High-Risk OAuth Consent Grants (12)
 
 **Category:** OAUTH_CONSENT
 
@@ -116,7 +77,7 @@ Found 4 Global Administrator assignments. Microsoft recommends 2-4 Global Admins
 
 **Recommendation:** Review and revoke unnecessary OAuth grants. Implement admin consent workflow.
 
-### 4. [HIGH] No Conditional Access Policies Found
+### 3. [HIGH] No Conditional Access Policies Found
 
 **Category:** CONDITIONAL_ACCESS
 
@@ -129,20 +90,21 @@ No Conditional Access policies were retrieved. This could mean: (1) No policies 
 
 **Recommendation:** Configure Conditional Access policies for: MFA enforcement, device compliance, trusted locations, risky sign-in blocking, and legacy auth blocking.
 
-### 5. [HIGH] Token Replay Indicators (1 events)
+### 4. [HIGH] Token Replay Indicators (2 events)
 
 **Category:** CREDENTIAL_MISUSE
 
-Detected 1 instances where the same user accessed the same application from different IP addresses within 5 minutes. This may indicate stolen tokens being replayed by an attacker.
+Detected 2 instances where the same user accessed the same application from different IP addresses within 5 minutes. This may indicate stolen tokens being replayed by an attacker.
 
-**Affected:** 1 objects
+**Affected:** 2 objects
 
 **Affected objects:**
+- sshook@forgepointcap.com (Microsoft Graph Command Line Tools): 208.250.98.39 → 34.29.175.97 in 228s
 - amcclure@forgepointcap.com (Microsoft Authentication Broker): 2601:647:6700:4060:788f:89ba:4f60:f2b3 → 2601:647:6700:4060:e9b8:9961:6702:8e in 80s
 
 **Recommendation:** Review if users were using VPN or mobile networks. If not, revoke sessions and investigate for token theft.
 
-### 6. [HIGH] High-Risk Application Permissions (28 grants)
+### 5. [HIGH] High-Risk Application Permissions (28 grants)
 
 **Category:** APP_PERMISSIONS
 
@@ -161,7 +123,7 @@ Found 28 high-risk Graph API permissions granted to 7 applications. These permis
 
 **Recommendation:** Review if each application requires these permissions. Remove unnecessary grants. Prefer delegated over application permissions.
 
-### 7. [MEDIUM] Email Domain Security (SPF/DKIM/DMARC) for 1 domain(s)
+### 6. [MEDIUM] Email Domain Security (SPF/DKIM/DMARC) for 1 domain(s)
 
 **Category:** DOMAIN_SECURITY
 
@@ -174,7 +136,7 @@ Analyzed email authentication records for 1 domain(s). Missing or weak SPF/DKIM/
 
 **Recommendation:** Implement SPF with -all (hard fail), DKIM signing via M365/Google, and DMARC p=reject. This is critical given the Mail.Send permissions in this tenant.
 
-### 8. [MEDIUM] Legacy Authentication Usage (3 events, 0.4%)
+### 7. [MEDIUM] Legacy Authentication Usage (3 events, 0.4%)
 
 **Category:** LEGACY_AUTH
 
@@ -187,7 +149,7 @@ Analyzed email authentication records for 1 domain(s). Missing or weak SPF/DKIM/
 
 **Recommendation:** Block legacy authentication via Conditional Access policy.
 
-### 9. [MEDIUM] High IP Address Diversity (1 users)
+### 8. [MEDIUM] High IP Address Diversity (1 users)
 
 **Category:** SUSPICIOUS_LOGIN
 
@@ -200,7 +162,7 @@ Analyzed email authentication records for 1 domain(s). Missing or weak SPF/DKIM/
 
 **Recommendation:** Review if IP diversity is expected (mobile users, VPN). Excessive diversity may indicate credential compromise.
 
-### 10. [MEDIUM] Applications with Mail.Send Permission (3 apps)
+### 9. [MEDIUM] Applications with Mail.Send Permission (3 apps)
 
 **Category:** APP_PERMISSIONS
 
@@ -209,13 +171,58 @@ Analyzed email authentication records for 1 domain(s). Missing or weak SPF/DKIM/
 **Affected:** 3 objects
 
 **Affected objects:**
-- Custom-CinchyMail
 - CTD.ai - Metadata, Send
 - CloudAlly V2
+- Custom-CinchyMail
 
 **Recommendation:** Verify each app requires Mail.Send. Consider using send-on-behalf-of with specific mailboxes instead of tenant-wide permission.
 
-### 11. [LOW] External Guest Users (15 accounts from 4 domains)
+### 10. [LOW] Inactive Users Without MFA (7)
+
+**Category:** MFA_POSTURE
+
+7 enabled users have no MFA and no recent sign-in activity in the analysis period. These may be provisioned but unused accounts.
+
+**Affected:** 7 objects
+
+**Affected objects:**
+- ap@forgepointcap.com
+- deallog@forgepointcap.com
+- Forgepoint@forgepointcap.com
+- glau@forgepointcap.com
+- jobs@forgepointcap.com
+- pbotas@forgepointcap.com
+- talent@forgepointcap.com
+
+**Recommendation:** Review if these accounts are needed. Consider disabling unused accounts or require MFA enrollment before first use.
+
+### 11. [LOW] Guest Accounts Without Local MFA (14)
+
+**Category:** MFA_POSTURE
+
+14 external guest accounts have no MFA registered in your tenant. Guest MFA is typically enforced by their home tenant's policies, not your tenant's MFA registration.
+
+**Affected:** 14 objects
+
+**Affected objects:**
+- andrea.cooley_opusagency.com#EXT#@forgepointcap.onmicrosoft.com
+- anna.tantoco_pwc.com#EXT#@forgepointcap.onmicrosoft.com
+- demoriecrowe_microsoft.com#EXT#@forgepointcap.onmicrosoft.com
+- jackie.day_pwc.com#EXT#@forgepointcap.onmicrosoft.com
+- katherine.cage_pwc.com#EXT#@forgepointcap.onmicrosoft.com
+- louise.northam_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
+- maggie.y.piper_pwc.com#EXT#@forgepointcap.onmicrosoft.com
+- matthew.owen_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
+- matthew.peacock_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
+- pauline.guenot_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
+- priscilla.truong_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
+- rosie.johnstone_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
+- tristan.peniston-bird_portland-communications.com#EXT#@forgepointcap.onmicrosoft.com
+- v-acooley_microsoft.com#EXT#@forgepointcap.onmicrosoft.com
+
+**Recommendation:** Configure Conditional Access to require MFA for guest access to sensitive apps. MFA challenge will be handled by guest's home tenant or your tenant as fallback.
+
+### 12. [LOW] External Guest Users (15 accounts from 4 domains)
 
 **Category:** GUEST_ACCESS
 
@@ -231,7 +238,7 @@ Found 15 guest/external user accounts from 4 external domains. Guest accounts ca
 
 **Recommendation:** Implement guest access reviews. Configure B2B collaboration settings. Consider blocking guest access to sensitive apps via Conditional Access.
 
-### 12. [LOW] Off-Hours Authentication Activity (139 events)
+### 13. [LOW] Off-Hours Authentication Activity (139 events)
 
 **Category:** SUSPICIOUS_LOGIN
 
@@ -253,7 +260,7 @@ Found 15 guest/external user accounts from 4 external domains. Guest accounts ca
 
 **Recommendation:** Verify off-hours access aligns with user job requirements. Consider time-based Conditional Access for sensitive roles.
 
-### 13. [LOW] SharePoint Access from Multiple Locations (3 users)
+### 14. [LOW] SharePoint Access from Multiple Locations (3 users)
 
 **Category:** SHAREPOINT_SECURITY
 
@@ -268,18 +275,37 @@ Found 15 guest/external user accounts from 4 external domains. Guest accounts ca
 
 **Recommendation:** Review if geographic diversity is expected for these users.
 
-### 14. [INFO] Critical Role Assignment Summary (12 roles in use)
+### 15. [INFO] Room/Service Accounts Without MFA (6)
+
+**Category:** MFA_POSTURE
+
+6 accounts appear to be room resources or service accounts based on naming patterns. These often don't require MFA if secured via Conditional Access (block external) or used non-interactively.
+
+**Affected:** 6 objects
+
+**Affected objects:**
+- azalearoom@forgepointcap.com
+- copier@forgepointcap.com
+- madroneroom@forgepointcap.com
+- mapleroom@forgepointcap.com
+- redwoodroom@forgepointcap.com
+- zoomroomuser@forgepointcap.com
+
+**Recommendation:** Verify these accounts are secured via CA policies blocking external access, or are non-interactive with strong passwords. Consider converting to resource mailboxes where appropriate.
+
+### 16. [INFO] Critical Role Assignment Summary (15 roles in use)
 
 **Category:** PRIVILEGED_ACCESS
 
 Summary of assignments to critical administrative roles. Review each role to ensure assignments follow least-privilege principles.
 
-**Affected:** 12 objects
+**Affected:** 15 objects
 
 **Affected objects:**
 - Global Administrator (4): hsharafali@forgepointcap.com, llee.admin@forgepointcap.com, cloudally-admin@forgepointcap.onmicrosoft.com, admin.sshook@forgepointcap.com
 - Privileged Role Administrator (1): admin.sshook@forgepointcap.com
 - Privileged Authentication Administrator (1): admin.sshook@forgepointcap.com
+- Authentication Administrator (2): admin.sshook@forgepointcap.com, sshook@forgepointcap.com
 - User Administrator (2): llee.admin@forgepointcap.com, admin.sshook@forgepointcap.com
 - Exchange Administrator (3): llee.admin@forgepointcap.com, admin.sshook@forgepointcap.com, SkyKick Cloud Manager - Exchange Online
 - SharePoint Administrator (2): llee.admin@forgepointcap.com, admin.sshook@forgepointcap.com
@@ -289,19 +315,21 @@ Summary of assignments to critical administrative roles. Review each role to ens
 - Security Administrator (1): admin.sshook@forgepointcap.com
 - Compliance Administrator (1): admin.sshook@forgepointcap.com
 - Billing Administrator (1): admin.sshook@forgepointcap.com
+- Helpdesk Administrator (2): llee.admin@forgepointcap.com, admin.sshook@forgepointcap.com
+- Password Administrator (1): admin.sshook@forgepointcap.com
 
 **Recommendation:** Document business justification for each privileged assignment. Consider using PIM for just-in-time activation.
 
-### 15. [INFO] Failed Sign-in Attempts (123 events)
+### 17. [INFO] Failed Sign-in Attempts (125 events)
 
 **Category:** AUTHENTICATION
 
-123 failed sign-in attempts from 14 unique accounts. Review for potential brute-force or credential stuffing attacks.
+125 failed sign-in attempts from 14 unique accounts. Review for potential brute-force or credential stuffing attacks.
 
 **Affected:** 14 objects
 
 **Affected objects:**
-- sshook@forgepointcap.com: 75 failures - 2026-05-20 21:50 from 34.29.175.97 (other); 2026-05-20 21:37 from 34.29.175.97 (other); 2026-05-20 21:28 from 34.29.175.97 (other); 2026-05-20 21:19 from 208.250.98.39 (other); 2026-05-20 21:18 from 34.29.175.97 (other); 2026-05-20 21:12 from 208.250.98.39 (other); 2026-05-20 20:55 from 34.29.175.97 (other); 2026-05-20 20:45 from 34.29.175.97 (other); 2026-05-20 20:44 from 34.29.175.97 (other); 2026-05-20 20:37 from 34.29.175.97 (other); 2026-05-20 19:43 from 208.250.98.39 (other); 2026-05-19 16:26 from 208.250.98.39 (other); 2026-05-15 18:00 from 34.136.162.246 (other); 2026-05-15 17:53 from 34.136.162.246 (other); 2026-05-15 17:48 from 34.136.162.246 (other); 2026-05-15 17:32 from 34.136.162.246 (other); 2026-05-15 17:08 from 34.136.162.246 (other); 2026-05-15 17:01 from 34.136.162.246 (other); 2026-05-15 16:56 from 34.136.162.246 (other); 2026-05-15 16:53 from 34.136.162.246 (other); 2026-05-15 16:23 from 67.180.226.228 (other); 2026-05-14 22:02 from 34.29.175.97 (other); 2026-05-14 22:00 from 34.29.175.97 (other); 2026-05-14 21:58 from 34.29.175.97 (other); 2026-05-14 21:56 from 34.29.175.97 (other); 2026-05-14 21:49 from 34.29.175.97 (other); 2026-05-14 21:46 from 34.29.175.97 (other); 2026-05-14 21:45 from 34.29.175.97 (other); 2026-05-14 21:42 from 34.29.175.97 (other); 2026-05-14 21:38 from 34.29.175.97 (other); 2026-05-14 21:37 from 34.29.175.97 (other); 2026-05-14 21:36 from 34.29.175.97 (other); 2026-05-14 21:35 from 34.29.175.97 (other); 2026-05-14 21:19 from 34.29.175.97 (other); 2026-05-14 21:14 from 34.29.175.97 (other); 2026-05-14 21:04 from 34.29.175.97 (other); 2026-05-14 20:59 from 34.29.175.97 (other); 2026-05-14 20:58 from 34.29.175.97 (other); 2026-05-14 19:55 from 34.29.175.97 (other); 2026-05-14 19:53 from 34.29.175.97 (other); 2026-05-14 19:50 from 34.29.175.97 (other); 2026-05-14 19:48 from 34.29.175.97 (other); 2026-05-14 19:46 from 34.29.175.97 (other); 2026-05-14 19:44 from 34.29.175.97 (other); 2026-05-14 19:41 from 34.29.175.97 (other); 2026-05-14 19:36 from 34.29.175.97 (other); 2026-05-14 19:31 from 34.29.175.97 (other); 2026-05-14 19:30 from 34.29.175.97 (other); 2026-05-14 19:28 from 34.29.175.97 (other); 2026-05-14 19:26 from 34.29.175.97 (other); 2026-05-14 19:22 from 34.29.175.97 (other); 2026-05-14 19:21 from 34.29.175.97 (other); 2026-05-14 19:19 from 34.29.175.97 (other); 2026-05-14 19:18 from 34.29.175.97 (other); 2026-05-14 18:30 from 34.70.174.52 (other); 2026-05-14 18:30 from 34.70.174.52 (other); 2026-05-14 18:19 from 34.70.174.52 (other); 2026-05-14 18:17 from 34.70.174.52 (other); 2026-05-14 18:15 from 34.70.174.52 (other); 2026-05-14 18:13 from 34.70.174.52 (other); 2026-05-14 18:12 from 34.70.174.52 (other); 2026-05-14 18:10 from 34.70.174.52 (other); 2026-05-14 18:09 from 34.70.174.52 (other); 2026-05-14 18:08 from 34.70.174.52 (other); 2026-05-14 18:07 from 34.70.174.52 (other); 2026-05-14 17:58 from 2606:40c6:5990:5ccd:d62f:e572:2554:b895 (invalid_credentials); 2026-05-14 17:57 from 2606:40c6:516f:d2e9:6e16:ced:ad3e:b4e8 (invalid_credentials); 2026-05-14 17:57 from 2606:40c6:f7d3:37bb:162f:cc8e:3f78:33a2 (invalid_credentials); 2026-05-14 17:27 from 34.70.174.52 (other); 2026-05-14 17:16 from 34.70.174.52 (other); 2026-05-14 16:41 from 34.45.0.142 (other); 2026-05-14 15:38 from 67.180.226.228 (other); 2026-05-14 15:37 from 67.180.226.228 (invalid_credentials); 2026-05-13 22:38 from 35.222.133.153 (other); 2026-05-13 22:14 from 35.222.133.153 (other)
+- sshook@forgepointcap.com: 77 failures - 2026-05-20 21:59 from 34.29.175.97 (other); 2026-05-20 21:55 from 208.250.98.39 (other); 2026-05-20 21:50 from 34.29.175.97 (other); 2026-05-20 21:37 from 34.29.175.97 (other); 2026-05-20 21:28 from 34.29.175.97 (other); 2026-05-20 21:19 from 208.250.98.39 (other); 2026-05-20 21:18 from 34.29.175.97 (other); 2026-05-20 21:12 from 208.250.98.39 (other); 2026-05-20 20:55 from 34.29.175.97 (other); 2026-05-20 20:45 from 34.29.175.97 (other); 2026-05-20 20:44 from 34.29.175.97 (other); 2026-05-20 20:37 from 34.29.175.97 (other); 2026-05-20 19:43 from 208.250.98.39 (other); 2026-05-19 16:26 from 208.250.98.39 (other); 2026-05-15 18:00 from 34.136.162.246 (other); 2026-05-15 17:53 from 34.136.162.246 (other); 2026-05-15 17:48 from 34.136.162.246 (other); 2026-05-15 17:32 from 34.136.162.246 (other); 2026-05-15 17:08 from 34.136.162.246 (other); 2026-05-15 17:01 from 34.136.162.246 (other); 2026-05-15 16:56 from 34.136.162.246 (other); 2026-05-15 16:53 from 34.136.162.246 (other); 2026-05-15 16:23 from 67.180.226.228 (other); 2026-05-14 22:02 from 34.29.175.97 (other); 2026-05-14 22:00 from 34.29.175.97 (other); 2026-05-14 21:58 from 34.29.175.97 (other); 2026-05-14 21:56 from 34.29.175.97 (other); 2026-05-14 21:49 from 34.29.175.97 (other); 2026-05-14 21:46 from 34.29.175.97 (other); 2026-05-14 21:45 from 34.29.175.97 (other); 2026-05-14 21:42 from 34.29.175.97 (other); 2026-05-14 21:38 from 34.29.175.97 (other); 2026-05-14 21:37 from 34.29.175.97 (other); 2026-05-14 21:36 from 34.29.175.97 (other); 2026-05-14 21:35 from 34.29.175.97 (other); 2026-05-14 21:19 from 34.29.175.97 (other); 2026-05-14 21:14 from 34.29.175.97 (other); 2026-05-14 21:04 from 34.29.175.97 (other); 2026-05-14 20:59 from 34.29.175.97 (other); 2026-05-14 20:58 from 34.29.175.97 (other); 2026-05-14 19:55 from 34.29.175.97 (other); 2026-05-14 19:53 from 34.29.175.97 (other); 2026-05-14 19:50 from 34.29.175.97 (other); 2026-05-14 19:48 from 34.29.175.97 (other); 2026-05-14 19:46 from 34.29.175.97 (other); 2026-05-14 19:44 from 34.29.175.97 (other); 2026-05-14 19:41 from 34.29.175.97 (other); 2026-05-14 19:36 from 34.29.175.97 (other); 2026-05-14 19:31 from 34.29.175.97 (other); 2026-05-14 19:30 from 34.29.175.97 (other); 2026-05-14 19:28 from 34.29.175.97 (other); 2026-05-14 19:26 from 34.29.175.97 (other); 2026-05-14 19:22 from 34.29.175.97 (other); 2026-05-14 19:21 from 34.29.175.97 (other); 2026-05-14 19:19 from 34.29.175.97 (other); 2026-05-14 19:18 from 34.29.175.97 (other); 2026-05-14 18:30 from 34.70.174.52 (other); 2026-05-14 18:30 from 34.70.174.52 (other); 2026-05-14 18:19 from 34.70.174.52 (other); 2026-05-14 18:17 from 34.70.174.52 (other); 2026-05-14 18:15 from 34.70.174.52 (other); 2026-05-14 18:13 from 34.70.174.52 (other); 2026-05-14 18:12 from 34.70.174.52 (other); 2026-05-14 18:10 from 34.70.174.52 (other); 2026-05-14 18:09 from 34.70.174.52 (other); 2026-05-14 18:08 from 34.70.174.52 (other); 2026-05-14 18:07 from 34.70.174.52 (other); 2026-05-14 17:58 from 2606:40c6:5990:5ccd:d62f:e572:2554:b895 (invalid_credentials); 2026-05-14 17:57 from 2606:40c6:516f:d2e9:6e16:ced:ad3e:b4e8 (invalid_credentials); 2026-05-14 17:57 from 2606:40c6:f7d3:37bb:162f:cc8e:3f78:33a2 (invalid_credentials); 2026-05-14 17:27 from 34.70.174.52 (other); 2026-05-14 17:16 from 34.70.174.52 (other); 2026-05-14 16:41 from 34.45.0.142 (other); 2026-05-14 15:38 from 67.180.226.228 (other); 2026-05-14 15:37 from 67.180.226.228 (invalid_credentials); 2026-05-13 22:38 from 35.222.133.153 (other); 2026-05-13 22:14 from 35.222.133.153 (other)
 - schung@forgepointcap.com: 16 failures - 2026-05-20 16:39 from 2600:1700:8fda:56b0:1ca2:9797:e091:bd28 (other); 2026-05-20 15:50 from 2600:1700:8fda:56b0:3cf0:3ec1:519a:7715 (other); 2026-05-19 22:58 from 2600:1700:8fda:56b0:3cf0:3ec1:519a:7715 (other); 2026-05-19 16:28 from 108.223.47.93 (other); 2026-05-19 15:42 from 2600:1700:8fda:56b0:f056:a2d1:220c:ad5f (other); 2026-05-19 00:31 from 2600:1700:8fda:56b0:f056:a2d1:220c:ad5f (other); 2026-05-18 16:14 from 108.223.47.93 (other); 2026-05-17 19:51 from 2600:1700:8fda:56b0:a56c:8406:fcdc:259c (other); 2026-05-15 15:03 from 2600:1700:8fda:56b0:a56c:8406:fcdc:259c (other); 2026-05-15 03:45 from 2600:1700:8fda:56b0:a56c:8406:fcdc:259c (other); 2026-05-14 18:32 from 108.223.47.93 (mfa_completed); 2026-05-14 18:32 from 108.223.47.93 (mfa_completed); 2026-05-14 16:15 from 108.223.47.93 (other); 2026-05-14 14:30 from 2600:1700:8fda:56b0:ec5d:9900:dac1:6048 (other); 2026-05-14 04:50 from 2600:1700:8fda:56b0:ec5d:9900:dac1:6048 (other); 2026-05-14 03:20 from 2600:1700:8fda:56b0:ec5d:9900:dac1:6048 (other)
 - ayepez@forgepointcap.com: 8 failures - 2026-05-20 16:42 from 4.4.89.67 (invalid_credentials); 2026-05-20 16:41 from 4.4.89.67 (invalid_credentials); 2026-05-20 16:40 from 4.4.89.67 (invalid_credentials); 2026-05-20 12:20 from 2606:40c6:c918:5533:b698:8869:e705:ce73 (invalid_credentials); 2026-05-20 01:16 from 4.4.89.67 (other); 2026-05-20 01:16 from 4.4.89.67 (other); 2026-05-20 01:16 from 4.4.89.67 (other); 2026-05-16 22:33 from 24.130.254.240 (other)
 - amcclure@forgepointcap.com: 6 failures - 2026-05-18 14:31 from 2601:647:6700:4060:60d8:e27e:2309:c2bc (other); 2026-05-18 14:30 from 2601:647:6700:4060:60d8:e27e:2309:c2bc (invalid_credentials); 2026-05-16 02:35 from 2601:647:6700:4060:788f:89ba:4f60:f2b3 (other); 2026-05-16 02:30 from 2601:647:6700:4060:e9b8:9961:6702:8e (other); 2026-05-16 02:30 from 2601:647:6700:4060:e9b8:9961:6702:8e (other); 2026-05-14 17:54 from 2606:40c6:9a9f:6565:3d3e:deff:2602:f6b (invalid_credentials)

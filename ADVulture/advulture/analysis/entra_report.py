@@ -251,6 +251,70 @@ class EntraReportGenerator:
         self.events = events
         self.findings: List[Finding] = []
         self._finding_id = 0
+        # Build IP-to-location and device lookup tables from sign-in logs
+        self._ip_locations = {}  # ip -> "City, Country"
+        self._device_details = {}  # (user, device_id) -> "OS Browser/App"
+        self._build_lookup_tables()
+    
+    def _build_lookup_tables(self):
+        """Build lookup tables for IP geolocation and device details from sign-ins."""
+        if not self.events or not self.events.signins:
+            return
+        
+        for s in self.events.signins:
+            # IP to location mapping
+            if s.ip_address and s.ip_address not in self._ip_locations:
+                location = getattr(s, 'location', None)
+                if location:
+                    city = location.get('city', '') if isinstance(location, dict) else getattr(location, 'city', '')
+                    country = location.get('countryOrRegion', '') if isinstance(location, dict) else getattr(location, 'country_or_region', '')
+                    if city or country:
+                        self._ip_locations[s.ip_address] = f"{city}, {country}".strip(', ')
+            
+            # Device details mapping
+            device_detail = getattr(s, 'device_detail', None)
+            if device_detail and s.user_principal_name:
+                device_id = None
+                if isinstance(device_detail, dict):
+                    device_id = device_detail.get('deviceId', device_detail.get('displayName', ''))
+                    os_name = device_detail.get('operatingSystem', '')
+                    browser = device_detail.get('browser', '')
+                else:
+                    device_id = getattr(device_detail, 'device_id', getattr(device_detail, 'display_name', ''))
+                    os_name = getattr(device_detail, 'operating_system', '')
+                    browser = getattr(device_detail, 'browser', '')
+                
+                if device_id or os_name or browser:
+                    key = (s.user_principal_name, device_id or 'unknown')
+                    if key not in self._device_details:
+                        parts = []
+                        if os_name:
+                            parts.append(os_name)
+                        if browser:
+                            parts.append(browser)
+                        self._device_details[key] = ' / '.join(parts) if parts else 'Unknown device'
+    
+    def _format_ip(self, ip: str) -> str:
+        """Format IP with geolocation if available."""
+        if not ip:
+            return "Unknown IP"
+        location = self._ip_locations.get(ip, '')
+        if location:
+            return f"{ip} ({location})"
+        return ip
+    
+    def _format_device(self, user: str, device_id: str = None) -> str:
+        """Format device with details if available."""
+        if device_id:
+            details = self._device_details.get((user, device_id), '')
+            if details:
+                return f"{device_id}: {details}"
+            return device_id
+        # Try to find any device for this user
+        for (u, d), details in self._device_details.items():
+            if u == user:
+                return f"{d}: {details}"
+        return "Unknown device"
     
     def _next_finding_id(self) -> str:
         self._finding_id += 1
@@ -437,22 +501,8 @@ class EntraReportGenerator:
                                   "resource mailboxes where appropriate.",
                 ))
             
-            # LOW: Guest accounts without MFA
-            if guest_accounts:
-                self.findings.append(Finding(
-                    id=self._next_finding_id(),
-                    severity=Severity.LOW,
-                    category=Category.MFA_POSTURE,
-                    title=f"Guest Accounts Without Local MFA ({len(guest_accounts)})",
-                    description=f"{len(guest_accounts)} external guest accounts have no MFA registered in your "
-                               f"tenant. Guest MFA is typically enforced by their home tenant's policies, "
-                               f"not your tenant's MFA registration.",
-                    affected_count=len(guest_accounts),
-                    affected_objects=guest_accounts,
-                    recommendation="Configure Conditional Access to require MFA for guest access to sensitive "
-                                  "apps. MFA challenge will be handled by guest's home tenant or your tenant "
-                                  "as fallback.",
-                ))
+            # Note: Guest accounts are NOT flagged for MFA here - their MFA is handled by their
+            # home tenant during B2B authentication. Guest governance is handled in _analyze_guest_access()
         
         # Users with weak MFA
         weak_mfa = [u for u in enabled_users if u.mfa_registered and not u.mfa_capable]
@@ -713,16 +763,19 @@ class EntraReportGenerator:
                     'time': s.timestamp.strftime("%Y-%m-%d %H:%M"),
                     'reason': result_val,
                     'ip': s.ip_address or 'N/A',
-                    'app': s.app_display_name or 'N/A'
+                    'app': s.app_display_name or 'Unknown'
                 })
             
-            # Build detailed output
-            detailed_objects = []
+            # Build table format per user
+            user_tables = []
             for user, failures in sorted(user_failures.items(), key=lambda x: -len(x[1])):
-                failure_summary = []
-                for f in failures:
-                    failure_summary.append(f"{f['time']} from {f['ip']} ({f['reason']})")
-                detailed_objects.append(f"{user}: {len(failures)} failures - {'; '.join(failure_summary)}")
+                user_tables.append(f"**{user}** ({len(failures)} failures):")
+                # Show up to 10 most recent failures per user
+                for f in failures[:10]:
+                    ip_formatted = self._format_ip(f['ip']) if f['ip'] != 'N/A' else 'N/A'
+                    user_tables.append(f"  - {f['time']} | {ip_formatted} | {f['reason']} | {f['app']}")
+                if len(failures) > 10:
+                    user_tables.append(f"  - ... and {len(failures) - 10} more")
             
             self.findings.append(Finding(
                 id=self._next_finding_id(),
@@ -732,7 +785,7 @@ class EntraReportGenerator:
                 description=f"{len(failed)} failed sign-in attempts from {len(user_failures)} unique accounts. "
                            f"Review for potential brute-force or credential stuffing attacks.",
                 affected_count=len(user_failures),
-                affected_objects=detailed_objects,
+                affected_objects=user_tables,
                 recommendation="Investigate repeated failures. Consider smart lockout policies.",
             ))
 
@@ -975,6 +1028,13 @@ class EntraReportGenerator:
         diverse_users = {u: ips for u, ips in user_ips.items() if len(ips) >= ip_diversity_threshold}
         
         if diverse_users:
+            # Build table per user with IP + geolocation
+            user_tables = []
+            for user, ips in diverse_users.items():
+                user_tables.append(f"**{user}** ({len(ips)} IPs):")
+                for ip in sorted(ips):
+                    user_tables.append(f"  - {self._format_ip(ip)}")
+            
             self.findings.append(Finding(
                 id=self._next_finding_id(),
                 severity=Severity.MEDIUM,
@@ -984,7 +1044,7 @@ class EntraReportGenerator:
                            f"IP addresses during the analysis period. May indicate credential sharing, "
                            f"VPN rotation, or compromised credentials used by multiple actors.",
                 affected_count=len(diverse_users),
-                affected_objects=[f"{u}: {len(ips)} unique IPs - {', '.join(sorted(ips))}" for u, ips in list(diverse_users.items())],
+                affected_objects=user_tables,
                 recommendation="Review if IP diversity is expected (mobile users, VPN). "
                               "Excessive diversity may indicate credential compromise.",
             ))
@@ -1268,6 +1328,13 @@ class EntraReportGenerator:
         
         if token_anomalies:
             unique_users = list(set(a["user"] for a in token_anomalies))
+            # Build table with IP geolocation
+            anomaly_details = []
+            for a in token_anomalies:
+                ip1_fmt = self._format_ip(a['ip1'])
+                ip2_fmt = self._format_ip(a['ip2'])
+                anomaly_details.append(f"**{a['user']}** ({a['app']}): {ip1_fmt} → {ip2_fmt} in {a['time_diff_sec']}s")
+            
             self.findings.append(Finding(
                 id=self._next_finding_id(),
                 severity=Severity.HIGH,
@@ -1277,8 +1344,7 @@ class EntraReportGenerator:
                            f"the same application from different IP addresses within 5 minutes. "
                            f"This may indicate stolen tokens being replayed by an attacker.",
                 affected_count=len(unique_users),
-                affected_objects=[f"{a['user']} ({a['app']}): {a['ip1']} → {a['ip2']} in {a['time_diff_sec']}s" 
-                                 for a in token_anomalies],
+                affected_objects=anomaly_details,
                 recommendation="Review if users were using VPN or mobile networks. If not, "
                               "revoke sessions and investigate for token theft.",
             ))
