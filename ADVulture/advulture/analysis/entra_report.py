@@ -41,6 +41,12 @@ class Category(str, Enum):
     EMAIL_SECURITY = "EMAIL_SECURITY"
     APP_PERMISSIONS = "APP_PERMISSIONS"
     SHAREPOINT_SECURITY = "SHAREPOINT_SECURITY"
+    # Configuration and governance categories
+    GUEST_ACCESS = "GUEST_ACCESS"
+    CONDITIONAL_ACCESS = "CONDITIONAL_ACCESS"
+    IDENTITY_PROTECTION = "IDENTITY_PROTECTION"
+    PASSWORD_POLICY = "PASSWORD_POLICY"
+    DOMAIN_SECURITY = "DOMAIN_SECURITY"
 
 
 @dataclass
@@ -255,11 +261,16 @@ class EntraReportGenerator:
         self.findings = []
         self._finding_id = 0
         
-        # Analyze each area
+        # Core identity analysis
         self._analyze_mfa_posture()
         self._analyze_privileged_access()
         self._analyze_service_principals()
+        self._analyze_service_principal_credentials()
         self._analyze_oauth_grants()
+        self._analyze_guest_access()
+        self._analyze_conditional_access()
+        self._analyze_domain_security()
+        
         if self.events:
             self._analyze_authentication_logs()
             self._analyze_risk_detections()
@@ -342,13 +353,30 @@ class EntraReportGenerator:
             ))
     
     def _analyze_privileged_access(self):
-        """Analyze privileged role assignments."""
+        """Analyze privileged role assignments and governance."""
         assignments = self.snapshot.all_role_assignments
+        users = self.snapshot.users
+        
+        # Critical admin roles to track
+        CRITICAL_ROLES = {
+            "Global Administrator": "highest privilege - full tenant control",
+            "Privileged Role Administrator": "can assign any role including Global Admin",
+            "Privileged Authentication Administrator": "can reset any user's MFA/password",
+            "User Administrator": "can reset passwords for non-admins",
+            "Exchange Administrator": "full Exchange/mail control",
+            "SharePoint Administrator": "full SharePoint/OneDrive control",
+            "Application Administrator": "can create apps with any permission",
+            "Cloud Application Administrator": "can manage enterprise apps",
+            "Intune Administrator": "full device management control",
+            "Security Administrator": "can manage security settings",
+            "Compliance Administrator": "can manage compliance settings",
+            "Billing Administrator": "financial access",
+        }
         
         # Find privileged assignments
         priv_assignments = [a for a in assignments if a.is_privileged]
         
-        # Group by principal
+        # Group by principal with role details
         principals_with_priv: Dict[str, List[str]] = {}
         for a in priv_assignments:
             key = a.principal_name or a.principal_id
@@ -356,7 +384,80 @@ class EntraReportGenerator:
                 principals_with_priv[key] = []
             principals_with_priv[key].append(a.role_name)
         
-        # Check for users with multiple privileged roles
+        # 1. Global Administrator Analysis
+        global_admins = [a for a in assignments if a.role_name == "Global Administrator"]
+        ga_principals = []
+        for a in global_admins:
+            principal_name = a.principal_name or a.principal_id
+            principal_type = a.principal_type or "unknown"
+            assignment_type = "permanent"  # Default - would be 'eligible' if PIM
+            if hasattr(a, 'assignment_type'):
+                assignment_type = a.assignment_type
+            
+            # Check if user is cloud-only or synced
+            source = "unknown"
+            for u in users:
+                if u.user_principal_name == principal_name or u.id == a.principal_id:
+                    source = "cloud-only" if not getattr(u, 'on_premises_sync_enabled', False) else "synced from on-premises"
+                    break
+            
+            ga_principals.append(f"{principal_name} ({principal_type}, {assignment_type}, {source})")
+        
+        if global_admins:
+            severity = Severity.CRITICAL if len(global_admins) > 5 else Severity.HIGH if len(global_admins) > 2 else Severity.MEDIUM
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=severity,
+                category=Category.PRIVILEGED_ACCESS,
+                title=f"Global Administrator Count ({len(global_admins)})",
+                description=f"Found {len(global_admins)} Global Administrator assignments. "
+                           f"Microsoft recommends 2-4 Global Admins maximum. "
+                           f"Best practice: use cloud-only accounts, PIM eligible assignments, and break-glass procedures.",
+                affected_count=len(global_admins),
+                affected_objects=ga_principals,
+                recommendation="Reduce Global Admin count to 2-4. Use PIM for eligible (not permanent) assignments. "
+                              "Ensure at least 2 cloud-only break-glass accounts exist.",
+            ))
+        
+        # 2. Analyze each critical role
+        role_summary = []
+        for role_name, role_desc in CRITICAL_ROLES.items():
+            role_assignments = [a for a in assignments if a.role_name == role_name]
+            if role_assignments:
+                principals = [a.principal_name or a.principal_id for a in role_assignments]
+                role_summary.append(f"{role_name} ({len(role_assignments)}): {', '.join(principals)}")
+        
+        if role_summary:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.INFO,
+                category=Category.PRIVILEGED_ACCESS,
+                title=f"Critical Role Assignment Summary ({len(role_summary)} roles in use)",
+                description="Summary of assignments to critical administrative roles. "
+                           "Review each role to ensure assignments follow least-privilege principles.",
+                affected_count=len(role_summary),
+                affected_objects=role_summary,
+                recommendation="Document business justification for each privileged assignment. "
+                              "Consider using PIM for just-in-time activation.",
+            ))
+        
+        # 3. Standing (permanent) vs eligible assignments
+        permanent_priv = [a for a in priv_assignments if not getattr(a, 'is_eligible', False)]
+        if len(permanent_priv) > 5:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.PRIVILEGED_ACCESS,
+                title=f"Standing Privileged Access ({len(permanent_priv)} permanent assignments)",
+                description=f"{len(permanent_priv)} privileged role assignments are permanent (always-on) rather than "
+                           f"eligible (just-in-time via PIM). Standing access increases exposure window for compromised accounts.",
+                affected_count=len(permanent_priv),
+                affected_objects=[f"{a.principal_name or a.principal_id}: {a.role_name} (permanent)" for a in permanent_priv],
+                recommendation="Enable Privileged Identity Management (PIM) and convert permanent assignments to eligible. "
+                              "Require justification and approval for activation.",
+            ))
+        
+        # 4. Check for users with multiple privileged roles
         multi_priv = {k: v for k, v in principals_with_priv.items() if len(v) >= 3}
         if multi_priv:
             self.findings.append(Finding(
@@ -371,7 +472,7 @@ class EntraReportGenerator:
                 recommendation="Review and consolidate role assignments. Use PIM for just-in-time access.",
             ))
         
-        # Check for privileged users without MFA
+        # 5. Check for privileged users without MFA
         priv_user_names = set(principals_with_priv.keys())
         priv_users_no_mfa = [
             u for u in self.snapshot.users 
@@ -413,6 +514,18 @@ class EntraReportGenerator:
         """Analyze OAuth consent grants."""
         grants = self.snapshot.oauth_grants
         
+        # Build a map of client_id -> app name from service principals
+        sp_name_map = {}
+        for sp in self.snapshot.service_principals:
+            if isinstance(sp, dict):
+                sp_id = sp.get("appId", sp.get("id", ""))
+                sp_name = sp.get("displayName", "Unknown App")
+            else:
+                sp_id = getattr(sp, "app_id", getattr(sp, "id", ""))
+                sp_name = getattr(sp, "display_name", "Unknown App")
+            if sp_id:
+                sp_name_map[sp_id] = sp_name
+        
         # Find high-risk grants (grants are stored as dicts)
         risky_grants = []
         for g in grants:
@@ -420,12 +533,15 @@ class EntraReportGenerator:
             if isinstance(g, dict):
                 scope = g.get("scope", "") or ""
                 client_id = g.get("clientId", g.get("client_id", "unknown"))
+                principal_id = g.get("principalId", "")
             else:
                 scope = getattr(g, "scope", "") or ""
                 client_id = getattr(g, "client_id", "unknown")
+                principal_id = getattr(g, "principal_id", "")
             
             if any(risk_scope in scope for risk_scope in self.HIGH_RISK_SCOPES):
-                risky_grants.append({"client_id": client_id, "scope": scope})
+                app_name = sp_name_map.get(client_id, client_id)
+                risky_grants.append({"client_id": client_id, "app_name": app_name, "scope": scope})
         
         if risky_grants:
             self.findings.append(Finding(
@@ -436,7 +552,7 @@ class EntraReportGenerator:
                 description=f"{len(risky_grants)} OAuth grants include high-risk scopes that allow "
                            f"applications to read/write sensitive data (mail, files, directory).",
                 affected_count=len(risky_grants),
-                affected_objects=[f"{g['client_id']}: {g['scope']}" for g in risky_grants],
+                affected_objects=[f"{g['app_name']} ({g['client_id']}): {g['scope']}" for g in risky_grants],
                 recommendation="Review and revoke unnecessary OAuth grants. Implement admin consent workflow.",
             ))
     
@@ -468,17 +584,35 @@ class EntraReportGenerator:
         # Failed sign-ins
         failed = [s for s in signins if s.result != "success"]
         if len(failed) > 50:
-            unique_users = list(set(s.user_principal_name for s in failed))
+            # Group by user with failure details
+            from collections import defaultdict
+            user_failures = defaultdict(list)
+            for s in failed:
+                result_val = s.result.value if hasattr(s.result, 'value') else str(s.result)
+                user_failures[s.user_principal_name].append({
+                    'time': s.timestamp.strftime("%Y-%m-%d %H:%M"),
+                    'reason': result_val,
+                    'ip': s.ip_address or 'N/A',
+                    'app': s.app_display_name or 'N/A'
+                })
+            
+            # Build detailed output
+            detailed_objects = []
+            for user, failures in sorted(user_failures.items(), key=lambda x: -len(x[1])):
+                failure_summary = []
+                for f in failures:
+                    failure_summary.append(f"{f['time']} from {f['ip']} ({f['reason']})")
+                detailed_objects.append(f"{user}: {len(failures)} failures - {'; '.join(failure_summary)}")
             
             self.findings.append(Finding(
                 id=self._next_finding_id(),
                 severity=Severity.INFO,
                 category=Category.AUTHENTICATION,
                 title=f"Failed Sign-in Attempts ({len(failed)} events)",
-                description=f"{len(failed)} failed sign-in attempts from {len(unique_users)} unique accounts. "
+                description=f"{len(failed)} failed sign-in attempts from {len(user_failures)} unique accounts. "
                            f"Review for potential brute-force or credential stuffing attacks.",
-                affected_count=len(unique_users),
-                affected_objects=unique_users,
+                affected_count=len(user_failures),
+                affected_objects=detailed_objects,
                 recommendation="Investigate repeated failures. Consider smart lockout policies.",
             ))
 
@@ -649,6 +783,12 @@ class EntraReportGenerator:
             suspicious_users = {u: events for u, events in user_off_hours.items() if len(events) >= 5}
             
             if suspicious_users:
+                # Build detailed list with timestamps
+                detailed_objects = []
+                for u, events in list(suspicious_users.items()):
+                    times = sorted([e.timestamp.strftime("%Y-%m-%d %H:%M") for e in events])
+                    detailed_objects.append(f"{u}: {len(events)} off-hours sign-ins at: {', '.join(times)}")
+                
                 self.findings.append(Finding(
                     id=self._next_finding_id(),
                     severity=Severity.LOW,
@@ -658,7 +798,7 @@ class EntraReportGenerator:
                                f"(10pm-6am or weekends) from {len(suspicious_users)} users with 5+ events. "
                                f"While some may be legitimate, review for unauthorized access.",
                     affected_count=len(suspicious_users),
-                    affected_objects=[f"{u}: {len(e)} off-hours sign-ins" for u, e in list(suspicious_users.items())],
+                    affected_objects=detailed_objects,
                     recommendation="Verify off-hours access aligns with user job requirements. "
                                   "Consider time-based Conditional Access for sensitive roles.",
                 ))
@@ -724,7 +864,7 @@ class EntraReportGenerator:
                            f"IP addresses during the analysis period. May indicate credential sharing, "
                            f"VPN rotation, or compromised credentials used by multiple actors.",
                 affected_count=len(diverse_users),
-                affected_objects=[f"{u}: {len(ips)} unique IPs" for u, ips in list(diverse_users.items())],
+                affected_objects=[f"{u}: {len(ips)} unique IPs - {', '.join(sorted(ips))}" for u, ips in list(diverse_users.items())],
                 recommendation="Review if IP diversity is expected (mobile users, VPN). "
                               "Excessive diversity may indicate credential compromise.",
             ))
@@ -1362,6 +1502,431 @@ class EntraReportGenerator:
                                f"geographic locations. While this may be normal for traveling users, "
                                f"verify if access patterns are expected.",
                     affected_count=len(multi_location),
-                    affected_objects=[f"{u}: {len(locs)} locations" for u, locs in list(multi_location.items())],
+                    affected_objects=[f"{u}: {len(locs)} locations - {', '.join(sorted(locs))}" for u, locs in list(multi_location.items())],
                     recommendation="Review if geographic diversity is expected for these users.",
                 ))
+
+    def _analyze_guest_access(self):
+        """Analyze guest/external user governance."""
+        users = self.snapshot.users
+        
+        # Identify guest users
+        guests = [u for u in users if '#EXT#' in (u.user_principal_name or '') or 
+                  getattr(u, 'user_type', '') == 'Guest']
+        
+        if guests:
+            # Group by source domain
+            from collections import defaultdict
+            domain_guests = defaultdict(list)
+            for g in guests:
+                upn = g.user_principal_name or ''
+                if '#EXT#' in upn:
+                    # Extract original domain from UPN like user_domain.com#EXT#@tenant.onmicrosoft.com
+                    original = upn.split('#EXT#')[0]
+                    if '_' in original:
+                        domain = original.rsplit('_', 1)[-1]
+                    else:
+                        domain = 'unknown'
+                else:
+                    domain = upn.split('@')[-1] if '@' in upn else 'unknown'
+                domain_guests[domain].append(g.user_principal_name)
+            
+            # Build summary
+            domain_summary = [f"{domain}: {len(users)} guests ({', '.join(users)})" 
+                            for domain, users in sorted(domain_guests.items(), key=lambda x: -len(x[1]))]
+            
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.MEDIUM if len(guests) > 20 else Severity.LOW,
+                category=Category.GUEST_ACCESS,
+                title=f"External Guest Users ({len(guests)} accounts from {len(domain_guests)} domains)",
+                description=f"Found {len(guests)} guest/external user accounts from {len(domain_guests)} external domains. "
+                           f"Guest accounts can access shared resources and should be governed via access reviews.",
+                affected_count=len(guests),
+                affected_objects=domain_summary,
+                recommendation="Implement guest access reviews. Configure B2B collaboration settings. "
+                              "Consider blocking guest access to sensitive apps via Conditional Access.",
+            ))
+            
+            # Check for guests with privileged roles
+            guest_upns = set(g.user_principal_name for g in guests)
+            assignments = self.snapshot.all_role_assignments
+            guest_priv = [a for a in assignments if a.is_privileged and 
+                         (a.principal_name in guest_upns)]
+            
+            if guest_priv:
+                self.findings.append(Finding(
+                    id=self._next_finding_id(),
+                    severity=Severity.CRITICAL,
+                    category=Category.GUEST_ACCESS,
+                    title=f"Guest Users with Privileged Roles ({len(guest_priv)})",
+                    description=f"{len(guest_priv)} guest/external users have privileged directory roles. "
+                               f"This is extremely high-risk as external identities are outside your control.",
+                    affected_count=len(guest_priv),
+                    affected_objects=[f"{a.principal_name}: {a.role_name}" for a in guest_priv],
+                    recommendation="Remove privileged roles from guest accounts immediately. "
+                                  "External users should never have admin access to your tenant.",
+                ))
+
+    def _analyze_conditional_access(self):
+        """Analyze Conditional Access policy coverage and configuration."""
+        ca_policies = getattr(self.snapshot, 'ca_policies', []) or []
+        
+        if not ca_policies:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.CONDITIONAL_ACCESS,
+                title="No Conditional Access Policies Found",
+                description="No Conditional Access policies were retrieved. This could mean: "
+                           "(1) No policies are configured - critical security gap, or "
+                           "(2) Insufficient permissions to read CA policies (Policy.Read.All required).",
+                affected_count=0,
+                affected_objects=["Unable to enumerate CA policies"],
+                recommendation="Configure Conditional Access policies for: MFA enforcement, "
+                              "device compliance, trusted locations, risky sign-in blocking, "
+                              "and legacy auth blocking.",
+            ))
+            return
+        
+        # Categorize policies by state
+        enabled = [p for p in ca_policies if p.get('state') == 'enabled']
+        report_only = [p for p in ca_policies if p.get('state') == 'enabledForReportingButNotEnforced']
+        disabled = [p for p in ca_policies if p.get('state') == 'disabled']
+        
+        # Analyze what controls are covered
+        has_mfa_policy = False
+        has_device_compliance = False
+        has_trusted_location = False
+        has_legacy_auth_block = False
+        has_risky_signin_block = False
+        has_admin_protection = False
+        
+        policy_details = []
+        for p in ca_policies:
+            name = p.get('displayName', 'Unknown')
+            state = p.get('state', 'unknown')
+            grant_controls = p.get('grantControls', {})
+            conditions = p.get('conditions', {})
+            
+            controls = grant_controls.get('builtInControls', []) if grant_controls else []
+            
+            # Check what's covered
+            if 'mfa' in controls:
+                has_mfa_policy = True
+            if 'compliantDevice' in controls or 'domainJoinedDevice' in controls:
+                has_device_compliance = True
+            if 'block' in controls:
+                # Check if it's blocking risky sign-ins or legacy auth
+                apps = conditions.get('applications', {}) or {}
+                client_app_types = conditions.get('clientAppTypes', []) or []
+                
+                if 'exchangeActiveSync' in str(client_app_types) or 'other' in str(client_app_types):
+                    has_legacy_auth_block = True
+            
+            # Check for admin protection
+            users = conditions.get('users', {}) or {}
+            include_roles = users.get('includeRoles', []) if isinstance(users, dict) else []
+            if include_roles:
+                has_admin_protection = True
+            
+            control_str = ', '.join(controls) if controls else 'no controls'
+            policy_details.append(f"{name}: [{state}] - Controls: {control_str}")
+        
+        # Generate finding for CA policy overview
+        self.findings.append(Finding(
+            id=self._next_finding_id(),
+            severity=Severity.INFO,
+            category=Category.CONDITIONAL_ACCESS,
+            title=f"Conditional Access Policy Summary ({len(ca_policies)} policies)",
+            description=f"Found {len(enabled)} enabled, {len(report_only)} report-only, "
+                       f"and {len(disabled)} disabled policies.",
+            affected_count=len(ca_policies),
+            affected_objects=policy_details,
+            recommendation="Review policy coverage. Ensure all critical controls are enforced, not report-only.",
+        ))
+        
+        # Check for gaps
+        gaps = []
+        if not has_mfa_policy:
+            gaps.append("No MFA enforcement policy found")
+        if not has_legacy_auth_block:
+            gaps.append("No legacy authentication blocking policy found")
+        if not has_admin_protection:
+            gaps.append("No policy specifically protecting admin roles")
+        if len(report_only) > len(enabled):
+            gaps.append(f"{len(report_only)} policies in report-only mode vs {len(enabled)} enforced")
+        
+        if gaps:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH if len(gaps) >= 2 else Severity.MEDIUM,
+                category=Category.CONDITIONAL_ACCESS,
+                title=f"Conditional Access Coverage Gaps ({len(gaps)} issues)",
+                description="Conditional Access policy stack has gaps that may leave users or scenarios unprotected.",
+                affected_count=len(gaps),
+                affected_objects=gaps,
+                recommendation="Address each gap: (1) Require MFA for all users, "
+                              "(2) Block legacy auth, (3) Protect admin accounts with stricter controls, "
+                              "(4) Move report-only policies to enforced after testing.",
+            ))
+
+    def _analyze_service_principal_credentials(self):
+        """Analyze service principal credential hygiene."""
+        sps = self.snapshot.service_principals
+        
+        # Check for SPs with credentials (secrets/certs)
+        sps_with_creds = []
+        expired_creds = []
+        expiring_soon = []
+        
+        from datetime import timedelta
+        now = datetime.now(timezone.utc)
+        soon = now + timedelta(days=30)
+        
+        for sp in sps:
+            if isinstance(sp, dict):
+                sp_name = sp.get('displayName', sp.get('appId', 'Unknown'))
+                sp_id = sp.get('id', '')
+                key_creds = sp.get('keyCredentials', [])
+                pwd_creds = sp.get('passwordCredentials', [])
+            else:
+                sp_name = getattr(sp, 'display_name', getattr(sp, 'app_id', 'Unknown'))
+                sp_id = getattr(sp, 'id', '')
+                key_creds = getattr(sp, 'key_credentials', []) or []
+                pwd_creds = getattr(sp, 'password_credentials', []) or []
+            
+            creds = []
+            for cred in key_creds:
+                cred_type = 'certificate'
+                end_date = cred.get('endDateTime') if isinstance(cred, dict) else getattr(cred, 'end_date_time', None)
+                if end_date:
+                    if isinstance(end_date, str):
+                        try:
+                            end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                        except:
+                            end_date = None
+                    if end_date:
+                        if end_date < now:
+                            expired_creds.append(f"{sp_name}: {cred_type} expired {end_date.date()}")
+                        elif end_date < soon:
+                            expiring_soon.append(f"{sp_name}: {cred_type} expires {end_date.date()}")
+                        creds.append(f"{cred_type} (expires {end_date.date()})")
+                else:
+                    creds.append(cred_type)
+            
+            for cred in pwd_creds:
+                cred_type = 'secret'
+                end_date = cred.get('endDateTime') if isinstance(cred, dict) else getattr(cred, 'end_date_time', None)
+                if end_date:
+                    if isinstance(end_date, str):
+                        try:
+                            end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                        except:
+                            end_date = None
+                    if end_date:
+                        if end_date < now:
+                            expired_creds.append(f"{sp_name}: {cred_type} expired {end_date.date()}")
+                        elif end_date < soon:
+                            expiring_soon.append(f"{sp_name}: {cred_type} expires {end_date.date()}")
+                        creds.append(f"{cred_type} (expires {end_date.date()})")
+                else:
+                    creds.append(cred_type)
+            
+            if creds:
+                sps_with_creds.append(f"{sp_name}: {', '.join(creds)}")
+        
+        if expired_creds:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.MEDIUM,
+                category=Category.SERVICE_PRINCIPAL,
+                title=f"Service Principals with Expired Credentials ({len(expired_creds)})",
+                description=f"{len(expired_creds)} service principal credentials have expired. "
+                           f"While expired creds can't be used, they indicate poor lifecycle management "
+                           f"and the apps may be orphaned or abandoned.",
+                affected_count=len(expired_creds),
+                affected_objects=expired_creds,
+                recommendation="Review expired credentials. Remove orphaned service principals. "
+                              "Implement credential rotation policies.",
+            ))
+        
+        if expiring_soon:
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.SERVICE_PRINCIPAL,
+                title=f"Service Principal Credentials Expiring Soon ({len(expiring_soon)})",
+                description=f"{len(expiring_soon)} service principal credentials will expire within 30 days. "
+                           f"If not rotated, dependent applications will break.",
+                affected_count=len(expiring_soon),
+                affected_objects=expiring_soon,
+                recommendation="Rotate credentials before expiry. Consider using managed identities "
+                              "to eliminate credential management overhead.",
+            ))
+        
+        if sps_with_creds:
+            # Count secrets vs certs
+            secrets = sum(1 for s in sps_with_creds if 'secret' in s.lower())
+            certs = sum(1 for s in sps_with_creds if 'certificate' in s.lower())
+            
+            if secrets > certs:
+                self.findings.append(Finding(
+                    id=self._next_finding_id(),
+                    severity=Severity.LOW,
+                    category=Category.SERVICE_PRINCIPAL,
+                    title=f"Service Principals Using Secrets vs Certificates",
+                    description=f"Found {secrets} service principals using client secrets vs {certs} using certificates. "
+                               f"Certificates are more secure than secrets and should be preferred.",
+                    affected_count=len(sps_with_creds),
+                    affected_objects=sps_with_creds,
+                    recommendation="Migrate from client secrets to certificates where possible. "
+                                  "Best practice: use managed identities to eliminate credentials entirely.",
+                ))
+
+    def _analyze_domain_security(self):
+        """Analyze email domain security (SPF, DKIM, DMARC)."""
+        try:
+            import dns.resolver
+        except ImportError:
+            # dnspython not installed, skip this analysis
+            return
+        
+        # Get primary domain from users or tenant
+        domains = set()
+        for u in self.snapshot.users:
+            upn = u.user_principal_name or ''
+            if '@' in upn and '#EXT#' not in upn:
+                domain = upn.split('@')[-1]
+                if not domain.endswith('.onmicrosoft.com'):
+                    domains.add(domain)
+        
+        if not domains:
+            return
+        
+        domain_findings = []
+        
+        resolver = dns.resolver.Resolver()
+        resolver.timeout = 5
+        resolver.lifetime = 5
+        
+        for domain in list(domains)[:5]:  # Check up to 5 domains
+            spf_ok = False
+            dkim_ok = False
+            dmarc_ok = False
+            dmarc_policy = None
+            spf_record = None
+            dmarc_record = None
+            issues = []
+            
+            try:
+                # Check SPF
+                try:
+                    answers = resolver.resolve(domain, 'TXT')
+                    for rdata in answers:
+                        txt = str(rdata).strip('"')
+                        if 'v=spf1' in txt:
+                            spf_ok = True
+                            spf_record = txt
+                            if '-all' in txt:
+                                pass  # strict SPF - good
+                            elif '~all' in txt:
+                                issues.append("SPF soft-fail (~all) - consider -all for strict enforcement")
+                            elif '?all' in txt:
+                                issues.append("SPF neutral (?all) - provides no protection")
+                            elif '+all' in txt:
+                                issues.append("SPF +all allows anyone to send - CRITICAL misconfiguration")
+                            break
+                except dns.resolver.NXDOMAIN:
+                    issues.append("Domain does not exist in DNS")
+                except dns.resolver.NoAnswer:
+                    issues.append("No SPF record found")
+                except Exception:
+                    issues.append("No SPF record found")
+                
+                if not spf_ok and "Domain does not exist" not in str(issues):
+                    issues.append("No SPF record found")
+                
+                # Check DMARC
+                try:
+                    answers = resolver.resolve(f'_dmarc.{domain}', 'TXT')
+                    for rdata in answers:
+                        txt = str(rdata).strip('"')
+                        if 'v=DMARC1' in txt:
+                            dmarc_ok = True
+                            dmarc_record = txt
+                            if 'p=reject' in txt:
+                                dmarc_policy = 'reject'
+                            elif 'p=quarantine' in txt:
+                                dmarc_policy = 'quarantine'
+                                issues.append("DMARC quarantine - consider p=reject for full protection")
+                            elif 'p=none' in txt:
+                                dmarc_policy = 'none'
+                                issues.append("DMARC p=none provides monitoring only, no enforcement")
+                            break
+                except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                    pass
+                except Exception:
+                    pass
+                
+                if not dmarc_ok:
+                    issues.append("No DMARC record - emails can be spoofed without detection")
+                
+                # Check DKIM (common selectors for M365 and Google)
+                dkim_selectors = ['selector1', 'selector2', 'google', 'default', 's1', 's2']
+                for selector in dkim_selectors:
+                    try:
+                        answers = resolver.resolve(f'{selector}._domainkey.{domain}', 'TXT')
+                        for rdata in answers:
+                            txt = str(rdata).strip('"')
+                            if 'v=DKIM1' in txt or 'k=rsa' in txt or 'p=' in txt:
+                                dkim_ok = True
+                                break
+                        if dkim_ok:
+                            break
+                    except Exception:
+                        continue
+                
+                if not dkim_ok:
+                    issues.append("No DKIM record found (checked: selector1, selector2, google, default)")
+                
+            except Exception as e:
+                issues.append(f"DNS lookup error: {str(e)}")
+            
+            # Build status line
+            status = []
+            status.append(f"SPF: {'✓' if spf_ok else '✗'}")
+            status.append(f"DKIM: {'✓' if dkim_ok else '✗'}")
+            status.append(f"DMARC: {'✓ p=' + dmarc_policy if dmarc_ok else '✗'}")
+            
+            finding_line = f"{domain}: {' | '.join(status)}"
+            if issues:
+                finding_line += f" — {'; '.join(issues)}"
+            domain_findings.append(finding_line)
+        
+        # Determine severity based on findings
+        has_missing_dmarc = any('DMARC: ✗' in d for d in domain_findings)
+        has_missing_spf = any('SPF: ✗' in d for d in domain_findings)
+        has_weak_dmarc = any('p=none' in d for d in domain_findings)
+        
+        if domain_findings:
+            if has_missing_dmarc or has_missing_spf:
+                severity = Severity.HIGH
+            elif has_weak_dmarc:
+                severity = Severity.MEDIUM
+            else:
+                severity = Severity.LOW
+            
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=severity,
+                category=Category.DOMAIN_SECURITY,
+                title=f"Email Domain Security (SPF/DKIM/DMARC) for {len(domains)} domain(s)",
+                description=f"Analyzed email authentication records for {len(domain_findings)} domain(s). "
+                           f"Missing or weak SPF/DKIM/DMARC enables email spoofing and phishing attacks "
+                           f"impersonating your organization.",
+                affected_count=len(domain_findings),
+                affected_objects=domain_findings,
+                recommendation="Implement SPF with -all (hard fail), DKIM signing via M365/Google, "
+                              "and DMARC p=reject. This is critical given the Mail.Send permissions in this tenant.",
+            ))
