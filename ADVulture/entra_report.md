@@ -1,6 +1,6 @@
 # Entra ID Security Assessment Report
 
-**Generated:** 2026-05-20 21:53:13 UTC
+**Generated:** 2026-05-20 22:02:00 UTC
 **Tenant ID:** organizations
 **Organization:** N/A
 
@@ -13,7 +13,7 @@
 | Role Definitions | 143 |
 | Role Assignments | 97 |
 | OAuth Grants | 107 |
-| Sign-in Events | 758 |
+| Sign-in Events | 756 |
 | Audit Events | 75 |
 
 ## MFA Posture
@@ -31,7 +31,7 @@
 |----------|-------|
 | CRITICAL | 0 |
 | HIGH | 6 |
-| MEDIUM | 3 |
+| MEDIUM | 4 |
 | LOW | 3 |
 | INFO | 2 |
 
@@ -116,18 +116,18 @@ Found 4 Global Administrator assignments. Microsoft recommends 2-4 Global Admins
 
 **Recommendation:** Review and revoke unnecessary OAuth grants. Implement admin consent workflow.
 
-### 4. [HIGH] Email Domain Security (SPF/DKIM/DMARC) for 1 domains
+### 4. [HIGH] No Conditional Access Policies Found
 
-**Category:** DOMAIN_SECURITY
+**Category:** CONDITIONAL_ACCESS
 
-Analyzed email authentication records for 1 domains. Missing or weak SPF/DKIM/DMARC enables email spoofing and phishing attacks impersonating your organization.
+No Conditional Access policies were retrieved. This could mean: (1) No policies are configured - critical security gap, or (2) Insufficient permissions to read CA policies (Policy.Read.All required).
 
-**Affected:** 1 objects
+**Affected:** 0 objects
 
 **Affected objects:**
-- forgepointcap.com: SPF: ✗ | DKIM: ? | DMARC: ✗ - Issues: DNS lookup failed: [Errno 2] No such file or directory: 'dig'
+- Unable to enumerate CA policies
 
-**Recommendation:** Implement SPF with -all (hard fail), DKIM signing, and DMARC p=reject. This is critical given the Mail.Send permissions found in this tenant.
+**Recommendation:** Configure Conditional Access policies for: MFA enforcement, device compliance, trusted locations, risky sign-in blocking, and legacy auth blocking.
 
 ### 5. [HIGH] Token Replay Indicators (1 events)
 
@@ -161,7 +161,20 @@ Found 28 high-risk Graph API permissions granted to 7 applications. These permis
 
 **Recommendation:** Review if each application requires these permissions. Remove unnecessary grants. Prefer delegated over application permissions.
 
-### 7. [MEDIUM] Legacy Authentication Usage (3 events, 0.4%)
+### 7. [MEDIUM] Email Domain Security (SPF/DKIM/DMARC) for 1 domain(s)
+
+**Category:** DOMAIN_SECURITY
+
+Analyzed email authentication records for 1 domain(s). Missing or weak SPF/DKIM/DMARC enables email spoofing and phishing attacks impersonating your organization.
+
+**Affected:** 1 objects
+
+**Affected objects:**
+- forgepointcap.com: SPF: ✓ | DKIM: ✓ | DMARC: ✓ p=none — DMARC p=none provides monitoring only, no enforcement
+
+**Recommendation:** Implement SPF with -all (hard fail), DKIM signing via M365/Google, and DMARC p=reject. This is critical given the Mail.Send permissions in this tenant.
+
+### 8. [MEDIUM] Legacy Authentication Usage (3 events, 0.4%)
 
 **Category:** LEGACY_AUTH
 
@@ -174,7 +187,7 @@ Found 28 high-risk Graph API permissions granted to 7 applications. These permis
 
 **Recommendation:** Block legacy authentication via Conditional Access policy.
 
-### 8. [MEDIUM] High IP Address Diversity (1 users)
+### 9. [MEDIUM] High IP Address Diversity (1 users)
 
 **Category:** SUSPICIOUS_LOGIN
 
@@ -187,7 +200,7 @@ Found 28 high-risk Graph API permissions granted to 7 applications. These permis
 
 **Recommendation:** Review if IP diversity is expected (mobile users, VPN). Excessive diversity may indicate credential compromise.
 
-### 9. [MEDIUM] Applications with Mail.Send Permission (3 apps)
+### 10. [MEDIUM] Applications with Mail.Send Permission (3 apps)
 
 **Category:** APP_PERMISSIONS
 
@@ -196,13 +209,13 @@ Found 28 high-risk Graph API permissions granted to 7 applications. These permis
 **Affected:** 3 objects
 
 **Affected objects:**
+- Custom-CinchyMail
 - CTD.ai - Metadata, Send
 - CloudAlly V2
-- Custom-CinchyMail
 
 **Recommendation:** Verify each app requires Mail.Send. Consider using send-on-behalf-of with specific mailboxes instead of tenant-wide permission.
 
-### 10. [LOW] External Guest Users (15 accounts from 4 domains)
+### 11. [LOW] External Guest Users (15 accounts from 4 domains)
 
 **Category:** GUEST_ACCESS
 
@@ -218,11 +231,11 @@ Found 15 guest/external user accounts from 4 external domains. Guest accounts ca
 
 **Recommendation:** Implement guest access reviews. Configure B2B collaboration settings. Consider blocking guest access to sensitive apps via Conditional Access.
 
-### 11. [LOW] Off-Hours Authentication Activity (144 events)
+### 12. [LOW] Off-Hours Authentication Activity (139 events)
 
 **Category:** SUSPICIOUS_LOGIN
 
-144 successful sign-ins occurred outside business hours (10pm-6am or weekends) from 10 users with 5+ events. While some may be legitimate, review for unauthorized access.
+139 successful sign-ins occurred outside business hours (10pm-6am or weekends) from 10 users with 5+ events. While some may be legitimate, review for unauthorized access.
 
 **Affected:** 10 objects
 
@@ -236,11 +249,11 @@ Found 15 guest/external user accounts from 4 external domains. Guest accounts ca
 - hsharafali@forgepointcap.com: 14 off-hours sign-ins at: 2026-05-16 02:19, 2026-05-16 02:19, 2026-05-16 02:20, 2026-05-16 02:20, 2026-05-16 02:20, 2026-05-16 02:30, 2026-05-16 02:35, 2026-05-16 02:35, 2026-05-16 02:35, 2026-05-16 02:35, 2026-05-16 02:53, 2026-05-18 02:15, 2026-05-18 22:29, 2026-05-19 01:42
 - jlau@forgepointcap.com: 10 off-hours sign-ins at: 2026-05-13 22:36, 2026-05-13 22:36, 2026-05-13 22:36, 2026-05-13 22:36, 2026-05-13 22:48, 2026-05-13 22:52, 2026-05-14 22:07, 2026-05-15 22:34, 2026-05-15 22:37, 2026-05-18 23:00
 - jpark@forgepointcap.com: 6 off-hours sign-ins at: 2026-05-14 02:48, 2026-05-15 03:07, 2026-05-15 23:29, 2026-05-16 04:47, 2026-05-17 22:51, 2026-05-18 04:10
-- sshook@forgepointcap.com: 12 off-hours sign-ins at: 2026-05-13 22:00, 2026-05-13 22:00, 2026-05-13 22:00, 2026-05-13 22:00, 2026-05-13 22:00, 2026-05-13 22:14, 2026-05-13 22:38, 2026-05-13 23:32, 2026-05-13 23:34, 2026-05-13 23:34, 2026-05-14 22:00, 2026-05-14 22:02
+- sshook@forgepointcap.com: 7 off-hours sign-ins at: 2026-05-13 22:14, 2026-05-13 22:38, 2026-05-13 23:32, 2026-05-13 23:34, 2026-05-13 23:34, 2026-05-14 22:00, 2026-05-14 22:02
 
 **Recommendation:** Verify off-hours access aligns with user job requirements. Consider time-based Conditional Access for sensitive roles.
 
-### 12. [LOW] SharePoint Access from Multiple Locations (3 users)
+### 13. [LOW] SharePoint Access from Multiple Locations (3 users)
 
 **Category:** SHAREPOINT_SECURITY
 
@@ -255,7 +268,7 @@ Found 15 guest/external user accounts from 4 external domains. Guest accounts ca
 
 **Recommendation:** Review if geographic diversity is expected for these users.
 
-### 13. [INFO] Critical Role Assignment Summary (12 roles in use)
+### 14. [INFO] Critical Role Assignment Summary (12 roles in use)
 
 **Category:** PRIVILEGED_ACCESS
 
@@ -279,16 +292,16 @@ Summary of assignments to critical administrative roles. Review each role to ens
 
 **Recommendation:** Document business justification for each privileged assignment. Consider using PIM for just-in-time activation.
 
-### 14. [INFO] Failed Sign-in Attempts (122 events)
+### 15. [INFO] Failed Sign-in Attempts (123 events)
 
 **Category:** AUTHENTICATION
 
-122 failed sign-in attempts from 14 unique accounts. Review for potential brute-force or credential stuffing attacks.
+123 failed sign-in attempts from 14 unique accounts. Review for potential brute-force or credential stuffing attacks.
 
 **Affected:** 14 objects
 
 **Affected objects:**
-- sshook@forgepointcap.com: 74 failures - 2026-05-20 21:37 from 34.29.175.97 (other); 2026-05-20 21:28 from 34.29.175.97 (other); 2026-05-20 21:19 from 208.250.98.39 (other); 2026-05-20 21:18 from 34.29.175.97 (other); 2026-05-20 21:12 from 208.250.98.39 (other); 2026-05-20 20:55 from 34.29.175.97 (other); 2026-05-20 20:45 from 34.29.175.97 (other); 2026-05-20 20:44 from 34.29.175.97 (other); 2026-05-20 20:37 from 34.29.175.97 (other); 2026-05-20 19:43 from 208.250.98.39 (other); 2026-05-19 16:26 from 208.250.98.39 (other); 2026-05-15 18:00 from 34.136.162.246 (other); 2026-05-15 17:53 from 34.136.162.246 (other); 2026-05-15 17:48 from 34.136.162.246 (other); 2026-05-15 17:32 from 34.136.162.246 (other); 2026-05-15 17:08 from 34.136.162.246 (other); 2026-05-15 17:01 from 34.136.162.246 (other); 2026-05-15 16:56 from 34.136.162.246 (other); 2026-05-15 16:53 from 34.136.162.246 (other); 2026-05-15 16:23 from 67.180.226.228 (other); 2026-05-14 22:02 from 34.29.175.97 (other); 2026-05-14 22:00 from 34.29.175.97 (other); 2026-05-14 21:58 from 34.29.175.97 (other); 2026-05-14 21:56 from 34.29.175.97 (other); 2026-05-14 21:49 from 34.29.175.97 (other); 2026-05-14 21:46 from 34.29.175.97 (other); 2026-05-14 21:45 from 34.29.175.97 (other); 2026-05-14 21:42 from 34.29.175.97 (other); 2026-05-14 21:38 from 34.29.175.97 (other); 2026-05-14 21:37 from 34.29.175.97 (other); 2026-05-14 21:36 from 34.29.175.97 (other); 2026-05-14 21:35 from 34.29.175.97 (other); 2026-05-14 21:19 from 34.29.175.97 (other); 2026-05-14 21:14 from 34.29.175.97 (other); 2026-05-14 21:04 from 34.29.175.97 (other); 2026-05-14 20:59 from 34.29.175.97 (other); 2026-05-14 20:58 from 34.29.175.97 (other); 2026-05-14 19:55 from 34.29.175.97 (other); 2026-05-14 19:53 from 34.29.175.97 (other); 2026-05-14 19:50 from 34.29.175.97 (other); 2026-05-14 19:48 from 34.29.175.97 (other); 2026-05-14 19:46 from 34.29.175.97 (other); 2026-05-14 19:44 from 34.29.175.97 (other); 2026-05-14 19:41 from 34.29.175.97 (other); 2026-05-14 19:36 from 34.29.175.97 (other); 2026-05-14 19:31 from 34.29.175.97 (other); 2026-05-14 19:30 from 34.29.175.97 (other); 2026-05-14 19:28 from 34.29.175.97 (other); 2026-05-14 19:26 from 34.29.175.97 (other); 2026-05-14 19:22 from 34.29.175.97 (other); 2026-05-14 19:21 from 34.29.175.97 (other); 2026-05-14 19:19 from 34.29.175.97 (other); 2026-05-14 19:18 from 34.29.175.97 (other); 2026-05-14 18:30 from 34.70.174.52 (other); 2026-05-14 18:30 from 34.70.174.52 (other); 2026-05-14 18:19 from 34.70.174.52 (other); 2026-05-14 18:17 from 34.70.174.52 (other); 2026-05-14 18:15 from 34.70.174.52 (other); 2026-05-14 18:13 from 34.70.174.52 (other); 2026-05-14 18:12 from 34.70.174.52 (other); 2026-05-14 18:10 from 34.70.174.52 (other); 2026-05-14 18:09 from 34.70.174.52 (other); 2026-05-14 18:08 from 34.70.174.52 (other); 2026-05-14 18:07 from 34.70.174.52 (other); 2026-05-14 17:58 from 2606:40c6:5990:5ccd:d62f:e572:2554:b895 (invalid_credentials); 2026-05-14 17:57 from 2606:40c6:516f:d2e9:6e16:ced:ad3e:b4e8 (invalid_credentials); 2026-05-14 17:57 from 2606:40c6:f7d3:37bb:162f:cc8e:3f78:33a2 (invalid_credentials); 2026-05-14 17:27 from 34.70.174.52 (other); 2026-05-14 17:16 from 34.70.174.52 (other); 2026-05-14 16:41 from 34.45.0.142 (other); 2026-05-14 15:38 from 67.180.226.228 (other); 2026-05-14 15:37 from 67.180.226.228 (invalid_credentials); 2026-05-13 22:38 from 35.222.133.153 (other); 2026-05-13 22:14 from 35.222.133.153 (other)
+- sshook@forgepointcap.com: 75 failures - 2026-05-20 21:50 from 34.29.175.97 (other); 2026-05-20 21:37 from 34.29.175.97 (other); 2026-05-20 21:28 from 34.29.175.97 (other); 2026-05-20 21:19 from 208.250.98.39 (other); 2026-05-20 21:18 from 34.29.175.97 (other); 2026-05-20 21:12 from 208.250.98.39 (other); 2026-05-20 20:55 from 34.29.175.97 (other); 2026-05-20 20:45 from 34.29.175.97 (other); 2026-05-20 20:44 from 34.29.175.97 (other); 2026-05-20 20:37 from 34.29.175.97 (other); 2026-05-20 19:43 from 208.250.98.39 (other); 2026-05-19 16:26 from 208.250.98.39 (other); 2026-05-15 18:00 from 34.136.162.246 (other); 2026-05-15 17:53 from 34.136.162.246 (other); 2026-05-15 17:48 from 34.136.162.246 (other); 2026-05-15 17:32 from 34.136.162.246 (other); 2026-05-15 17:08 from 34.136.162.246 (other); 2026-05-15 17:01 from 34.136.162.246 (other); 2026-05-15 16:56 from 34.136.162.246 (other); 2026-05-15 16:53 from 34.136.162.246 (other); 2026-05-15 16:23 from 67.180.226.228 (other); 2026-05-14 22:02 from 34.29.175.97 (other); 2026-05-14 22:00 from 34.29.175.97 (other); 2026-05-14 21:58 from 34.29.175.97 (other); 2026-05-14 21:56 from 34.29.175.97 (other); 2026-05-14 21:49 from 34.29.175.97 (other); 2026-05-14 21:46 from 34.29.175.97 (other); 2026-05-14 21:45 from 34.29.175.97 (other); 2026-05-14 21:42 from 34.29.175.97 (other); 2026-05-14 21:38 from 34.29.175.97 (other); 2026-05-14 21:37 from 34.29.175.97 (other); 2026-05-14 21:36 from 34.29.175.97 (other); 2026-05-14 21:35 from 34.29.175.97 (other); 2026-05-14 21:19 from 34.29.175.97 (other); 2026-05-14 21:14 from 34.29.175.97 (other); 2026-05-14 21:04 from 34.29.175.97 (other); 2026-05-14 20:59 from 34.29.175.97 (other); 2026-05-14 20:58 from 34.29.175.97 (other); 2026-05-14 19:55 from 34.29.175.97 (other); 2026-05-14 19:53 from 34.29.175.97 (other); 2026-05-14 19:50 from 34.29.175.97 (other); 2026-05-14 19:48 from 34.29.175.97 (other); 2026-05-14 19:46 from 34.29.175.97 (other); 2026-05-14 19:44 from 34.29.175.97 (other); 2026-05-14 19:41 from 34.29.175.97 (other); 2026-05-14 19:36 from 34.29.175.97 (other); 2026-05-14 19:31 from 34.29.175.97 (other); 2026-05-14 19:30 from 34.29.175.97 (other); 2026-05-14 19:28 from 34.29.175.97 (other); 2026-05-14 19:26 from 34.29.175.97 (other); 2026-05-14 19:22 from 34.29.175.97 (other); 2026-05-14 19:21 from 34.29.175.97 (other); 2026-05-14 19:19 from 34.29.175.97 (other); 2026-05-14 19:18 from 34.29.175.97 (other); 2026-05-14 18:30 from 34.70.174.52 (other); 2026-05-14 18:30 from 34.70.174.52 (other); 2026-05-14 18:19 from 34.70.174.52 (other); 2026-05-14 18:17 from 34.70.174.52 (other); 2026-05-14 18:15 from 34.70.174.52 (other); 2026-05-14 18:13 from 34.70.174.52 (other); 2026-05-14 18:12 from 34.70.174.52 (other); 2026-05-14 18:10 from 34.70.174.52 (other); 2026-05-14 18:09 from 34.70.174.52 (other); 2026-05-14 18:08 from 34.70.174.52 (other); 2026-05-14 18:07 from 34.70.174.52 (other); 2026-05-14 17:58 from 2606:40c6:5990:5ccd:d62f:e572:2554:b895 (invalid_credentials); 2026-05-14 17:57 from 2606:40c6:516f:d2e9:6e16:ced:ad3e:b4e8 (invalid_credentials); 2026-05-14 17:57 from 2606:40c6:f7d3:37bb:162f:cc8e:3f78:33a2 (invalid_credentials); 2026-05-14 17:27 from 34.70.174.52 (other); 2026-05-14 17:16 from 34.70.174.52 (other); 2026-05-14 16:41 from 34.45.0.142 (other); 2026-05-14 15:38 from 67.180.226.228 (other); 2026-05-14 15:37 from 67.180.226.228 (invalid_credentials); 2026-05-13 22:38 from 35.222.133.153 (other); 2026-05-13 22:14 from 35.222.133.153 (other)
 - schung@forgepointcap.com: 16 failures - 2026-05-20 16:39 from 2600:1700:8fda:56b0:1ca2:9797:e091:bd28 (other); 2026-05-20 15:50 from 2600:1700:8fda:56b0:3cf0:3ec1:519a:7715 (other); 2026-05-19 22:58 from 2600:1700:8fda:56b0:3cf0:3ec1:519a:7715 (other); 2026-05-19 16:28 from 108.223.47.93 (other); 2026-05-19 15:42 from 2600:1700:8fda:56b0:f056:a2d1:220c:ad5f (other); 2026-05-19 00:31 from 2600:1700:8fda:56b0:f056:a2d1:220c:ad5f (other); 2026-05-18 16:14 from 108.223.47.93 (other); 2026-05-17 19:51 from 2600:1700:8fda:56b0:a56c:8406:fcdc:259c (other); 2026-05-15 15:03 from 2600:1700:8fda:56b0:a56c:8406:fcdc:259c (other); 2026-05-15 03:45 from 2600:1700:8fda:56b0:a56c:8406:fcdc:259c (other); 2026-05-14 18:32 from 108.223.47.93 (mfa_completed); 2026-05-14 18:32 from 108.223.47.93 (mfa_completed); 2026-05-14 16:15 from 108.223.47.93 (other); 2026-05-14 14:30 from 2600:1700:8fda:56b0:ec5d:9900:dac1:6048 (other); 2026-05-14 04:50 from 2600:1700:8fda:56b0:ec5d:9900:dac1:6048 (other); 2026-05-14 03:20 from 2600:1700:8fda:56b0:ec5d:9900:dac1:6048 (other)
 - ayepez@forgepointcap.com: 8 failures - 2026-05-20 16:42 from 4.4.89.67 (invalid_credentials); 2026-05-20 16:41 from 4.4.89.67 (invalid_credentials); 2026-05-20 16:40 from 4.4.89.67 (invalid_credentials); 2026-05-20 12:20 from 2606:40c6:c918:5533:b698:8869:e705:ce73 (invalid_credentials); 2026-05-20 01:16 from 4.4.89.67 (other); 2026-05-20 01:16 from 4.4.89.67 (other); 2026-05-20 01:16 from 4.4.89.67 (other); 2026-05-16 22:33 from 24.130.254.240 (other)
 - amcclure@forgepointcap.com: 6 failures - 2026-05-18 14:31 from 2601:647:6700:4060:60d8:e27e:2309:c2bc (other); 2026-05-18 14:30 from 2601:647:6700:4060:60d8:e27e:2309:c2bc (invalid_credentials); 2026-05-16 02:35 from 2601:647:6700:4060:788f:89ba:4f60:f2b3 (other); 2026-05-16 02:30 from 2601:647:6700:4060:e9b8:9961:6702:8e (other); 2026-05-16 02:30 from 2601:647:6700:4060:e9b8:9961:6702:8e (other); 2026-05-14 17:54 from 2606:40c6:9a9f:6565:3d3e:deff:2602:f6b (invalid_credentials)

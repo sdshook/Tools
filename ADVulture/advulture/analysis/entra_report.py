@@ -313,29 +313,146 @@ class EntraReportGenerator:
         return report
     
     def _analyze_mfa_posture(self):
-        """Analyze MFA registration status."""
+        """Analyze MFA registration status with sign-in context."""
         users = self.snapshot.users
         enabled_users = [u for u in users if u.account_enabled]
         
         # Users without MFA
         no_mfa = [u for u in enabled_users if not u.mfa_registered]
+        
         if no_mfa:
-            pct = len(no_mfa) / len(users) * 100 if users else 0
-            severity = Severity.CRITICAL if pct > 50 else Severity.HIGH if pct > 20 else Severity.MEDIUM
+            # Cross-reference with sign-in activity to provide context
+            signin_users = set()
+            external_signin_users = set()  # Users signing in from external/public IPs
             
-            self.findings.append(Finding(
-                id=self._next_finding_id(),
-                severity=severity,
-                category=Category.MFA_POSTURE,
-                title=f"Users Without MFA ({len(no_mfa)} users, {pct:.0f}%)",
-                description=f"{len(no_mfa)} enabled users have no MFA methods registered. "
-                           f"These accounts are protected only by passwords and are vulnerable to "
-                           f"phishing, credential stuffing, and password spray attacks.",
-                affected_count=len(no_mfa),
-                affected_objects=[u.user_principal_name for u in no_mfa],
-                recommendation="Implement mandatory MFA enrollment. Use Conditional Access to require MFA for all sign-ins.",
-                references=["https://docs.microsoft.com/en-us/azure/active-directory/authentication/howto-mfa-getstarted"],
-            ))
+            if self.events and self.events.signins:
+                for s in self.events.signins:
+                    if s.result == "success" or (hasattr(s.result, 'value') and s.result.value == "success"):
+                        signin_users.add(s.user_principal_name)
+                        # Heuristic: public IPs (non-RFC1918) suggest external access
+                        if s.ip_address:
+                            ip = s.ip_address
+                            is_private = (ip.startswith('10.') or 
+                                         ip.startswith('172.16.') or ip.startswith('172.17.') or 
+                                         ip.startswith('172.18.') or ip.startswith('172.19.') or
+                                         ip.startswith('172.2') or ip.startswith('172.30.') or ip.startswith('172.31.') or
+                                         ip.startswith('192.168.') or ip.startswith('127.') or
+                                         ip.startswith('fc') or ip.startswith('fd'))  # IPv6 private
+                            if not is_private:
+                                external_signin_users.add(s.user_principal_name)
+            
+            # Categorize no-MFA users by risk level
+            room_service_accounts = []
+            guest_accounts = []
+            active_external_users = []  # HIGH risk - signing in from public IPs without MFA
+            active_internal_users = []  # MEDIUM risk - signing in but only from private IPs
+            inactive_users = []  # LOWER risk - not signing in recently
+            
+            for u in no_mfa:
+                upn = u.user_principal_name or ''
+                upn_lower = upn.lower()
+                
+                # Detect room/service/resource accounts by naming pattern
+                is_room_service = any(pattern in upn_lower for pattern in [
+                    'room', 'copier', 'printer', 'fax', 'scanner', 
+                    'shared', 'noreply', 'donotreply', 'service', 
+                    'mailbox', 'resource', 'conference', 'meeting',
+                    'zoom', 'teams', 'webex', 'zoomroom'
+                ])
+                
+                is_guest = '#EXT#' in upn
+                
+                if is_room_service:
+                    room_service_accounts.append(upn)
+                elif is_guest:
+                    guest_accounts.append(upn)
+                elif upn in external_signin_users:
+                    active_external_users.append(upn)
+                elif upn in signin_users:
+                    active_internal_users.append(upn)
+                else:
+                    inactive_users.append(upn)
+            
+            # HIGH RISK: Active external sign-ins without MFA
+            if active_external_users:
+                self.findings.append(Finding(
+                    id=self._next_finding_id(),
+                    severity=Severity.CRITICAL,
+                    category=Category.MFA_POSTURE,
+                    title=f"Active External Users Without MFA ({len(active_external_users)})",
+                    description=f"{len(active_external_users)} users have signed in from external/public IPs "
+                               f"during the analysis period but have no MFA. These are HIGH RISK - vulnerable to "
+                               f"credential theft and external attacks.",
+                    affected_count=len(active_external_users),
+                    affected_objects=active_external_users,
+                    recommendation="Immediately enable MFA for these accounts. They are actively used from "
+                                  "external networks and represent significant credential theft risk.",
+                ))
+            
+            # MEDIUM RISK: Active but internal-only sign-ins without MFA
+            if active_internal_users:
+                self.findings.append(Finding(
+                    id=self._next_finding_id(),
+                    severity=Severity.MEDIUM,
+                    category=Category.MFA_POSTURE,
+                    title=f"Active Internal-Only Users Without MFA ({len(active_internal_users)})",
+                    description=f"{len(active_internal_users)} users have signed in recently but only from "
+                               f"private/internal IPs. May be protected by Conditional Access location policies "
+                               f"or VPN requirements.",
+                    affected_count=len(active_internal_users),
+                    affected_objects=active_internal_users,
+                    recommendation="Verify these accounts are protected by Conditional Access trusted location "
+                                  "or compliant device policies. If not, enable MFA.",
+                ))
+            
+            # LOW RISK: Inactive accounts without MFA
+            if inactive_users:
+                self.findings.append(Finding(
+                    id=self._next_finding_id(),
+                    severity=Severity.LOW,
+                    category=Category.MFA_POSTURE,
+                    title=f"Inactive Users Without MFA ({len(inactive_users)})",
+                    description=f"{len(inactive_users)} enabled users have no MFA and no recent sign-in activity "
+                               f"in the analysis period. These may be provisioned but unused accounts.",
+                    affected_count=len(inactive_users),
+                    affected_objects=inactive_users,
+                    recommendation="Review if these accounts are needed. Consider disabling unused accounts "
+                                  "or require MFA enrollment before first use.",
+                ))
+            
+            # INFO: Room/service accounts (often don't need MFA if properly secured)
+            if room_service_accounts:
+                self.findings.append(Finding(
+                    id=self._next_finding_id(),
+                    severity=Severity.INFO,
+                    category=Category.MFA_POSTURE,
+                    title=f"Room/Service Accounts Without MFA ({len(room_service_accounts)})",
+                    description=f"{len(room_service_accounts)} accounts appear to be room resources or service "
+                               f"accounts based on naming patterns. These often don't require MFA if secured via "
+                               f"Conditional Access (block external) or used non-interactively.",
+                    affected_count=len(room_service_accounts),
+                    affected_objects=room_service_accounts,
+                    recommendation="Verify these accounts are secured via CA policies blocking external access, "
+                                  "or are non-interactive with strong passwords. Consider converting to "
+                                  "resource mailboxes where appropriate.",
+                ))
+            
+            # LOW: Guest accounts without MFA
+            if guest_accounts:
+                self.findings.append(Finding(
+                    id=self._next_finding_id(),
+                    severity=Severity.LOW,
+                    category=Category.MFA_POSTURE,
+                    title=f"Guest Accounts Without Local MFA ({len(guest_accounts)})",
+                    description=f"{len(guest_accounts)} external guest accounts have no MFA registered in your "
+                               f"tenant. Guest MFA is typically enforced by their home tenant's policies, "
+                               f"not your tenant's MFA registration.",
+                    affected_count=len(guest_accounts),
+                    affected_objects=guest_accounts,
+                    recommendation="Configure Conditional Access to require MFA for guest access to sensitive "
+                                  "apps. MFA challenge will be handled by guest's home tenant or your tenant "
+                                  "as fallback.",
+                ))
         
         # Users with weak MFA
         weak_mfa = [u for u in enabled_users if u.mfa_registered and not u.mfa_capable]
@@ -362,6 +479,7 @@ class EntraReportGenerator:
             "Global Administrator": "highest privilege - full tenant control",
             "Privileged Role Administrator": "can assign any role including Global Admin",
             "Privileged Authentication Administrator": "can reset any user's MFA/password",
+            "Authentication Administrator": "can reset MFA/password for non-admins",
             "User Administrator": "can reset passwords for non-admins",
             "Exchange Administrator": "full Exchange/mail control",
             "SharePoint Administrator": "full SharePoint/OneDrive control",
@@ -371,6 +489,8 @@ class EntraReportGenerator:
             "Security Administrator": "can manage security settings",
             "Compliance Administrator": "can manage compliance settings",
             "Billing Administrator": "financial access",
+            "Helpdesk Administrator": "can reset passwords for non-admins",
+            "Password Administrator": "can reset passwords for non-admins",
         }
         
         # Find privileged assignments
