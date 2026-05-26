@@ -1,0 +1,11 @@
+# Entra Security Posture Assessment — Python Dependencies
+#
+# These are installed automatically on first run if missing.
+# To install manually beforehand:
+#
+#   pip install -r requirements.txt
+#
+# Python 3.8+ required.
+
+msal>=1.28.0
+requests>=2.31.0

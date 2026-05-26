@@ -1,0 +1,547 @@
+// Cyber Risk Assessment Master Queries for MDR Platforms
+// (c) 2026, Shane D. Shook, PhD
+
+These are queries to elicit security risk and posture history from SentinelOne Singularity.  
+Export results to the indicated files for offline review.  
+Note that queries should be tailored on use according to the estate under evaluation.
+They can be modified to be used with Crowdstrike or varied SIEM platforms.
+They are categorized by LVL1-5 that indicate highest to lowest risk levels as:
+1 - Data Transfer or Tools Use that might indicate posture or exigent risks of data loss
+2 - User Activities including Profile Propagation among endpoints that might indicate compromised credentials
+3 - Network Activities that might indicate backdoors or other posture and hygiene issues to resolve
+4 - Service Configurations and Activities that might indicate backdoors or service intrusions and compromises
+5 - Build Configurations that might indicate posture and hygiene issues such as dissimilar key software and os builds and endpoint encryption status
+
+LVL1 = Cloud Storage Users (CloudUsers.csv, CloudSync.csv)
+----------------------------------------------------------
+
+#Users
+filter event.type = "IP Connect"
+| filter src.process.image.path contains:anycase ("Dropbox", "BoxSync", "BoxDrive", "GoogleDrive", "BackupAndSync", "iCloud", "pCloud", "MegaSync", "Tresorit", "Egnyte", "SyncApp")
+    OR src.process.name contains:anycase ("dropbox", "boxsync", "googledrivefs", "googledrivesync", "megasync", "pcloud", "tresorit")
+| filter event.network.direction = "OUTGOING"
+| filter NOT (src.process.image.path contains:anycase ("Microsoft", "Windows"))
+| group lookups = count() by src.process.name, src.process.user
+|| sort -unique_users
+
+#Synched with desktop
+filter event.type in ("Process Creation", "Process Modification")
+| filter src.process.cmdline contains:anycase ("box.com", "dropbox.com", "drive.google.com", "mega.nz", "wetransfer.com", "pcloud.com", "egnyte.com", "mediafire.com", "gofile.io", "transfer.sh", "pastebin.com", "rclone", "curl -T", "curl -F", "curl -d", "-Method PUT", "-Method POST", "Invoke-WebRequest", "aws s3", "gsutil", "azcopy")
+| filter NOT (src.process.name contains:anycase ("chrome", "msedge", "firefox"))
+| columns endpoint.name, event.time, src.process.name, src.process.cmdline, src.process.user
+| sort endpoint.name, event.time
+
+
+LVL1 = AI Users, potential for data exfil (AIUsers.csv, AIWebUse.csv)
+---------------------------------------------------------------------
+
+#installed
+filter event.type = "Process Creation"
+| filter tgt.process.name contains:anycase ("claude", "perplexity", "notion", "cursor", "ollama", "lmstudio", "gpt4all", "koboldcpp", "llama", "whisper", "krisp", "otter", "fathom", "fireflies", "elevenlabs", "runway", "grammarly", "jasper", "codeium", "tabnine", "windsurf", "gemini", "chatgpt", "copilot", "zed")
+| filter NOT (tgt.process.name contains:anycase ("update", "updater", "setup", "install", "uninstall", "helper", "native-host", "crash", "proxy", "autostarter"))
+| group launches = count() by tgt.process.name, src.process.user
+| sort tgt.process.name, -launches
+
+#web uses
+filter event.type = "DNS Resolved"
+| filter event.dns.request contains:anycase ("claude", "anthropic", "openai", "chatgpt", "perplexity", "gemini", "copilot.microsoft", "grok.x", "mistral", "huggingface", "character.ai", "poe.com", "pi.ai", "together.ai", "replicate.com", "jasper.ai", "copy.ai", "writesonic.com", "grammarly.com", "notion.so", "cursor.sh")
+| filter NOT (src.process.name contains:anycase ("MsMpEng", "SentinelAgent", "svchost"))
+| group lookups = count() by event.dns.request, src.process.user
+| group unique_users = count() by event.dns.request
+| sort -unique_users
+
+
+LVL1 = USB use (USBConnected.csv, USBUse.csv)
+-----------------------------------------
+
+# USB Drive Connection
+filter event.type in ("Registry Key Create")
+| filter registry.keyPath contains "USBSTOR"
+| filter registry.keyPath contains "Disk"
+| columns endpoint.name, event.time, registry.value, registry.keyPath
+| sort endpoint.name, event.time
+
+# USB Drive Use
+filter event.type in ("Process Creation", "Process Modification")
+|  filter src.process.cmdline contains "D:\\"
+    OR src.process.cmdline contains "E:\\"
+    OR src.process.cmdline contains "F:\\"
+    OR src.process.cmdline contains "G:\\"
+    OR src.process.cmdline contains "H:\\"
+    OR src.process.cmdline contains "I:\\"
+    OR src.process.cmdline contains "J:\\"
+    OR src.process.cmdline contains "K:\\"
+    OR src.process.cmdline contains "L:\\"
+    OR src.process.cmdline contains "M:\\"
+    OR src.process.cmdline contains "N:\\"
+    OR src.process.cmdline contains "O:\\"
+    OR src.process.cmdline contains "Q:\\"
+    OR src.process.cmdline contains "R:\\"
+    OR src.process.cmdline contains "S:\\"
+    OR src.process.cmdline contains "T:\\"
+    OR src.process.cmdline contains "U:\\"
+    OR src.process.cmdline contains "V:\\"
+    OR src.process.cmdline contains "W:\\"
+    OR src.process.cmdline contains "X:\\"
+    OR src.process.cmdline contains "Y:\\"
+    OR src.process.cmdline contains "Z:\\"
+| filter NOT (src.process.cmdline contains "HostGUID" 
+    OR src.process.cmdline contains "HKLM:" 
+    OR src.process.cmdline contains "HTTP")
+| filter NOT (src.process.name contains "edge" OR src.process.name contains "chrome")
+| columns endpoint.name, event.time, src.process.name, osSrc.process.cmdline, src.process.cmdline
+| sort endpoint.name, event.time
+
+
+LVL2 = User Profile Propagation (UPPCount.csv, UPPActivity.csv)
+---------------------------------------------------------------
+
+#counts
+filter event.type = "Login"
+| group total_logons = count() by event.login.userName, event.login.type, endpoint.name
+| group unique_computers = count(), total_logons = sum(total_logons) by event.login.userName, event.login.type
+| filter unique_computers > 1 AND unique_computers < 42
+| sort -unique_computers
+
+#activities
+filter event.type = "Login"
+| filter event.login.userName in ("administrator", "admin", "Administrator", "jmartin@cpfounders.com", "csuttora@cpfounders.com", "Admin", "tstoch@cpfounders.com")
+| columns event.login.userName, event.login.type, endpoint.name, timestamp
+| sort event.login.userName, timestamp
+
+
+LVL2 = User Services (UserServices.csv)
+---------------------------------------
+
+filter event.type = "IP Connect"
+| filter src.process.image.path contains "Users"
+| filter NOT (src.process.image.path contains "Microsoft")
+| filter NOT (src.process.image.path contains "Zoom")
+| filter NOT (src.process.image.path contains "GoToMeeting")
+| filter NOT (src.process.image.path contains "Grammarly")
+| filter NOT (src.process.image.path contains "Notion")
+| filter NOT (src.process.image.path contains "Creative")
+| columns endpoint.name, event.time, src.process.name, src.process.image.path, src.ip.address, dst.ip.address, dst.port.number, event.network.direction, src.process.user
+| sort endpoint.name, event.time
+
+
+LVL2 = LSASS Credential Theft (CredentialTheft.csv)
+---------------------------------------------------
+
+filter event.type = "Open Remote Process Handle"
+| filter tgt.process.name = "lsass.exe"
+| filter NOT (src.process.name in ("MsMpEng.exe", "SentinelAgent.exe", "SentinelServiceHost.exe", "tphkload.exe", "MBAMService.exe", "AdobeARM.exe", "Taskmgr.exe", "msiexec.exe", "MRT.exe"))
+| columns endpoint.name, event.time, src.process.name, src.process.image.path, src.process.user, tgt.process.name, tgt.process.cmdline, src.process.cmdline
+| sort endpoint.name, event.time
+
+
+LVL2 = WMI Lateral Movement (WMILateral.csv)
+--------------------------------------------
+
+filter event.type = "Process Creation"
+| filter src.process.name contains:anycase ("wmiprvse.exe", "WmiPrvSE.exe")
+| filter NOT (tgt.process.name contains:anycase ("WmiPrvSE.exe", "WerFault.exe"))
+| columns endpoint.name, event.time, src.process.name, tgt.process.name, tgt.process.cmdline, src.process.user
+| sort endpoint.name, event.time
+
+
+LVL2 = Local Privilege Escalation (LPE.csv)
+-------------------------------------------
+
+filter event.type = "Process Creation"
+| filter NOT (src.process.user contains:anycase ("SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE", "NETWORK", "DWM", "UMFD"))
+| filter tgt.process.name contains:anycase ("cmd", "powershell", "net.exe", "net1.exe", "whoami", "runas")
+| filter NOT tgt.process.cmdline contains "Sentinel"
+| group count = count() by endpoint.name, src.process.user, tgt.process.name, tgt.process.cmdline
+| sort endpoint.name, -count
+
+
+LVL2 = Privilege Hygiene Issues (PrivilegeRisks.csv)
+-----------------------------------------------------
+
+src.process.user = *
+| filter tgt.process.userSid = *
+| filter tgt.process.integrityLevel in ("HIGH", "SYSTEM")
+| filter src.process.integrityLevel in ("LOW", "MEDIUM")
+| filter src.process.userSid != "S-1-5-18"
+| filter src.process.userSid != "S-1-5-19"
+| filter src.process.userSid != "S-1-5-20"
+
+| group
+    endpointCount = estimate_distinct(endpoint.name),
+    eventCount = count(),
+    sourceUserCount = estimate_distinct(src.process.userSid),
+
+    sameUserHighEvents = count(
+        src.process.userSid = tgt.process.userSid
+        and tgt.process.integrityLevel = "HIGH"
+    ),
+
+    differentUserHighEvents = count(
+        src.process.userSid != tgt.process.userSid
+        and tgt.process.integrityLevel = "HIGH"
+    ),
+
+    uacConsentEvents = count(
+        tgt.process.name = "consent.exe"
+    ),
+
+    systemBrokerEvents = count(
+        tgt.process.userSid = "S-1-5-18"
+        and tgt.process.integrityLevel = "SYSTEM"
+    ),
+
+    installerEvents = count(
+        src.process.name in (
+            "msiexec.exe",
+            "setup.exe",
+            "install.exe",
+            "installer.exe"
+        )
+        or tgt.process.name in (
+            "msiexec.exe",
+            "setup.exe",
+            "install.exe",
+            "installer.exe"
+        )
+        or src.process.name contains:anycase "setup"
+        or tgt.process.name contains:anycase "setup"
+        or src.process.name contains:anycase "install"
+        or tgt.process.name contains:anycase "install"
+    ),
+
+    adminToolEvents = count(
+        src.process.name in (
+            "powershell.exe",
+            "pwsh.exe",
+            "cmd.exe",
+            "wscript.exe",
+            "cscript.exe",
+            "mshta.exe",
+            "rundll32.exe",
+            "regsvr32.exe",
+            "schtasks.exe",
+            "wmic.exe",
+            "psexec.exe",
+            "psexesvc.exe",
+            "certutil.exe",
+            "bitsadmin.exe",
+            "python.exe"
+        )
+        or tgt.process.name in (
+            "powershell.exe",
+            "pwsh.exe",
+            "cmd.exe",
+            "wscript.exe",
+            "cscript.exe",
+            "mshta.exe",
+            "rundll32.exe",
+            "regsvr32.exe",
+            "schtasks.exe",
+            "wmic.exe",
+            "psexec.exe",
+            "psexesvc.exe",
+            "certutil.exe",
+            "bitsadmin.exe",
+            "python.exe"
+        )
+    ),
+
+    accessibilityAtLogonEvents = count(
+        src.process.name in (
+            "sethc.exe",
+            "utilman.exe",
+            "osk.exe",
+            "magnify.exe",
+            "narrator.exe"
+        )
+        or src.process.parent.name = "winlogon.exe"
+    ),
+
+    printerInstallEvents = count(
+        src.process.cmdline contains:anycase "printui.dll"
+        or tgt.process.image.path contains:anycase "\\Printer Drivers\\"
+        or tgt.process.name in (
+            "KmInstall.exe",
+            "KmUninstall.exe"
+        )
+    ),
+
+    vendorInstallEvents = count(
+        src.process.name contains:anycase "Acrobat"
+        or tgt.process.name contains:anycase "Acrobat"
+        or src.process.name contains:anycase "ChromeSetup"
+        or tgt.process.name contains:anycase "OfficeClickToRun"
+        or src.process.name contains:anycase "CreativeCloud"
+        or src.process.name contains:anycase "Claude Setup"
+        or src.process.name contains:anycase "reMarkable"
+        or tgt.process.image.path contains:anycase "\\Adobe\\"
+        or tgt.process.image.path contains:anycase "\\Microsoft Shared\\ClickToRun\\"
+        or tgt.process.image.path contains:anycase "\\LogiOptionsPlus\\"
+        or tgt.process.image.path contains:anycase "\\TechSmith\\"
+        or tgt.process.image.path contains:anycase "\\Synaptics\\"
+        or tgt.process.image.path contains:anycase "\\Intel\\Driver and Support Assistant\\"
+    ),
+
+    commonWindowsHighEvents = count(
+        tgt.process.name in (
+            "runonce.exe",
+            "Taskmgr.exe",
+            "SynTPHelper.exe"
+        )
+    )
+
+  by
+    endpoint.name,
+    src.process.parent.name,
+    src.process.name,
+    src.process.cmdline,
+    src.process.user,
+    src.process.userSid,
+    src.process.integrityLevel,
+    tgt.process.name,
+    tgt.process.userSid,
+    tgt.process.integrityLevel,
+    tgt.process.image.path,
+    tgt.process.image.sha256,
+    tgt.process.cmdline
+
+| filter sameUserHighEvents > 0
+      or differentUserHighEvents > 0
+      or adminToolEvents > 0
+      or accessibilityAtLogonEvents > 0
+      or (
+            uacConsentEvents > 0
+            and printerInstallEvents = 0
+            and vendorInstallEvents = 0
+         )
+
+| sort -sameUserHighEvents,
+       -differentUserHighEvents,
+       -adminToolEvents,
+       -accessibilityAtLogonEvents,
+       -uacConsentEvents,
+       -installerEvents,
+       -eventCount
+
+
+LVL3 = Network Tunnels (NetworkTunnels.csv)
+-------------------------------------------
+
+filter event.type = "IP Connect"
+| filter src.process.image.path contains:anycase ("ngrok", "cloudflared", "frpc", "ligolo", "chisel", "bore", "rathole", "tunnelto", "tor")
+    OR src.process.name contains:anycase ("ngrok", "cloudflared", "frpc", "ligolo", "chisel", "bore", "rathole", "tunnelto", "tor")
+| filter NOT (src.process.image.path contains:anycase ("Monitor", "Doctor", "Repository", "Protector", "Suttora", "Collector", "Editor", "WindowsApps", "store", "Laborator", "Microsoft", "ToRun", "DriverStore"))
+| columns endpoint.name, event.time, src.process.name, src.process.image.path, src.ip.address, dst.ip.address, dst.port.number, event.network.direction, src.process.user
+| sort endpoint.name, event.time
+
+
+LVL3 = DNS Reconnaissance / DGA Beaconing (DGABeacons.csv, BadTLDs.csv)
+--------------------------------------------------------------------
+
+#DGABeacons
+filter event.type = "DNS Unresolved"
+| filter NOT (event.dns.request contains:anycase ("rocketcyber.com", "digicert.com", "grammarly.io", "opendns.com", "typekit.com", "in-addr.arpa", "microsoft.com", "wpad", "_ldap", "office", "amazon", "google", "microsoft", "yahoo", "azure", "verizon", "kaseya", "7layerit", "adobe", "example", "dynatrace", "webex", ".pub.", "cdn", "arpa", "windowsupdate", "doubleclick", "sentinelone", "zoom", "pki", "msft", "metrix", "trafficmanager", "kerberos", "tcp.", "duckduckgo", "southwest", "ipv4", "ipv6", "autodiscover", "actionablemessage", "claude", "scorecard", "casalmedia", "verisign"))
+| group nxdomain_count = count() by endpoint.name, src.process.name, src.process.user, event.dns.request
+| filter nxdomain_count > 100
+| sort -nxdomain_count
+
+#BadTLDs
+filter event.type in ("DNS Resolved", "DNS Unresolved")
+| filter event.dns.request contains:anycase (".ru", ".cn", ".onion", ".tk", ".xyz", ".top", ".icu")
+| filter NOT (src.process.name contains:anycase ("MsMpEng", "SentinelAgent"))
+| filter NOT (event.dns.request contains "rubicon" OR event.dns.request contains "digicert")
+| columns endpoint.name, src.process.name, event.dns.request, src.process.user, event.time
+| sort endpoint.name, event.time
+
+
+LVL3 = Backdoors (BackdoorsIn.csv, BackdoorsOut.csv)
+----------------------------------------------------
+
+#inbound
+filter event.type = "IP Connect"
+| filter src.port.number < 10000
+| filter event.network.direction contains "INCOMING"
+| filter NOT (dst.ip.address = "127.0.0.1")
+| filter NOT (src.port.number = 135 OR src.port.number = 139 OR src.port.number = 0 OR dst.port.number = 7680)
+| columns endpoint.name, src.process.name, src.process.image.path, src.ip.address, src.port.number, dst.ip.address, dst.port.number, event.network.direction, src.process.user, event.time
+| sort endpoint.name, event.time
+
+#outbound
+filter event.type = "IP Connect"
+| filter event.network.direction = "OUTGOING"
+| filter NOT (dst.ip.address contains "127.0.0.1" OR dst.ip.address contains "192.168." OR dst.ip.address contains "172." OR dst.ip.address contains "10." OR dst.ip.address contains "169.")
+| filter NOT (dst.port.number in (53, 80, 8080, 8081, 443, 3268, 3478, 5228, 7680, 19305, 52311))
+| filter NOT (src.process.name contains:anycase ("SentinelAgent", "MsMpEng", "AgentMon", "KaseyaEndpoint", "ntoskrnl", "OUTLOOK", "KDService", "ms-teams"))
+| filter NOT (src.process.cmdline contains:anycase ("update", "mojo", "Office", "rocket"))
+| columns endpoint.name, event.time, src.ip.address, src.port.number, dst.ip.address, dst.port.number, src.process.name, src.process.image.path, src.process.cmdline, src.process.user
+| sort endpoint.name, event.time
+
+
+LVL3 = Beacons (Beacons.csv)
+----------------------------
+
+filter event.type = "IP Connect"
+| filter event.network.direction = "OUTGOING"
+| filter src.process.name = *
+| filter NOT (src.process.name contains:anycase ("MsMpEng.exe", "SentinelAgent.exe", "proxy", "MpsMonitor", "spoolsv", "MsSense", "Rocket", "Spotify", "edge", "opera", "firefox", "chrome", "adobe"))
+| filter NOT (src.process.cmdline contains:anycase ("office", "Onedrive", "Zoom", "Program Files", "ProgramData", "Kaseya", "instal", "upgr", "update", "claude"))
+| filter NOT (dst.ip.address contains "127.0.0.1" OR dst.ip.address contains "192.168." OR dst.ip.address contains "172.")
+| group connection_count = count() by endpoint.name, src.process.name, dst.ip.address
+| filter connection_count > 500
+| sort -connection_count
+
+
+LVL4 = RMM Checks (RmmUse.csv, RMMComms.csv)
+--------------------------------------------
+
+#Use
+filter event.type = "Process Creation"
+| filter tgt.process.image.path contains:anycase ("mstsc", "TeamViewer", "GoToMeeting", "g2m", "AnyDesk", "ScreenConnect", "ConnectWise", "LogMeIn", "Splashtop", "Bomgar", "BeyondTrust", "NinjaRMM", "Atera", "Pulseway", "remoting_host", "VNC", "ZohoAssist", "Supremo", "Datto", "DameWare", "DWRCS", "dwrcc")
+| filter NOT (tgt.process.image.path contains "DriverStore")
+| columns endpoint.name, event.time, tgt.process.name, tgt.process.image.path, src.process.user
+| sort endpoint.name, event.time
+
+#Communicating
+filter event.type = "IP Connect"
+| filter src.process.image.path contains:anycase ("mstsc", "TSClient", "TeamViewer", "AnyDesk", "ScreenConnect", "ConnectWise", "LogMeIn", "Splashtop", "Bomgar", "BeyondTrust", "NinjaRMM", "RealVNC", "TightVNC", "UltraVNC", "WinVNC", "Datto", "Zoho", "Supremo", "Rescue", "GoToAssist", "GoToMyPC", "GoTo", "Citrix", "ISL", "RemotePC", "Getscreen", "Fixme", "Mikogo", "BASup", "RustDesk", "LMI_Rescue", "LanDesk", "DameWare", "DWRCS", "dwrcs")
+    OR src.process.name contains:anycase ("LanDesk", "BASup", "RustDesk", "LMI", "mstsc", "TSClient", "vncviewer", "winvnc", "AnyDesk", "TeamViewer", "ScreenConnect", "bomgar", "Rescue", "g2ax", "GoToMeeting", "Supremo", "ISLLight", "RemotePCService", "rfusclient", "wfica32", "DameWare", "DWRCS", "dwrcc")
+| columns endpoint.name, event.time, src.process.name, src.process.image.path, src.ip.address, dst.ip.address, dst.port.number, event.network.direction, src.process.user
+| sort endpoint.name, event.time
+
+
+LVL4 = LOLBIN Abuse (LolBinUse.csv)
+-----------------------------------
+
+filter event.type = "Process Creation"
+| filter src.process.image.path contains:anycase ("certutil", "bitsadmin", "mshta", "sfc.exe", "hh.exe", "wscript", "cscript", "regsvr32", "rundll32", "msiexec", "wmic", "installutil", "regasm", "regsvcs", "cmstp", "msbuild", "dnscmd", "odbcconf", "pcalua", "appsyncpublishingserver", "syncappvpublishingserver", "pwsh", "posh", "powershell", "desktopimgdownldr", "esentutl", "extrac32", "findstr", "makecab", "mavinject", "Microsoft.Workflow.Compiler", "msdeploy", "msdt", "msiexecntdsutil", "presentationhost", "replace", "rpcping", "runscripthelper", "shdocvw", "wab", "xwizard")
+| filter NOT (src.process.cmdline contains "Embedding" OR src.process.cmdline contains "CbsPersist" OR src.process.cmdline contains "Kaseya" OR src.process.cmdline contains "REPAIRFROMAPP" OR src.process.cmdline contains "PfSvWsSwap")
+| columns endpoint.name, event.time, src.process.name, src.process.image.path, src.process.cmdline, src.process.user
+| sort endpoint.name, event.time
+
+
+LVL4 = LOLBin Masquerades (LolBinMasq.csv)
+-------------------------
+
+filter event.type = "Process Creation"
+| filter src.process.image.path contains:anycase ("svhost.exe", "svchost.exe", "rundll.exe", "rundll32.exe", "\\service.exe", "cmd.exe")
+| filter NOT (src.process.image.path contains:anycase ("System", "SysWow", "WinSxS"))
+| columns endpoint.name, event.time, src.process.name, src.process.image.path, src.process.cmdline, src.process.user
+| sort endpoint.name, event.time
+
+
+LVL4 = Base64 activity (Base64Activities.csv)
+---------------------------------------------
+
+filter event.type in ("Process Creation", "Process Modification")
+| filter src.process.cmdline contains "=="
+| filter NOT (src.process.name contains "edge" OR src.process.name contains "chrome")
+| columns endpoint.name, event.time, src.process.name, osSrc.process.cmdline, src.process.cmdline
+| sort endpoint.name, event.time
+
+
+LVL4 = Scheduled Tasks (SchTasks.csv)
+-------------------------------------
+
+filter event.type in ("Task Register", "Task Update")
+| filter src.process.cmdline contains "\\Users\\" OR src.process.cmdline contains "\\Temp\\"
+| filter NOT (src.process.name in ("svchost.exe", "taskeng.exe"))
+| filter NOT (src.process.name contains "OneDrive" OR src.process.cmdline contains "\\Lvf")
+| filter NOT (src.process.image.path contains:anycase ("Zoom", "piriform", "Office", "Edge"))
+| columns endpoint.name, event.time, src.process.name, src.process.image.path, src.process.cmdline, src.process.user
+| sort endpoint.name, event.time
+
+
+LVL4 = Process Injection (ProcessInjections.csv)
+------------------------------------------------
+
+filter event.type = "Remote Thread Creation"
+| filter tgt.process.name = *
+| filter NOT (src.process.name = tgt.process.name)
+| filter NOT (src.process.name contains:anycase ("WerFault", "WerFaultSecure", "MBAM", "MsMpEng", "SentinelAgent", "SentinelServiceHost", "csrss", "wininit", "services.exe"))
+| filter NOT (tgt.process.name contains:anycase ("spoolsv"))
+| columns endpoint.name, event.time, src.process.name, src.process.image.path, tgt.process.name, src.process.user, src.process.cmdline
+| sort endpoint.name, event.time
+
+
+LVL4 = Office Apps Spawning Shells (ShellsSpawn.csv)
+----------------------------------------------------
+
+filter event.type = "Process Creation"
+| filter src.process.name contains:anycase ("winword", "excel", "powerpnt", "outlook", "onenote", "msaccess", "mspub")
+| filter tgt.process.name contains:anycase ("cmd", "powershell", "pwsh", "wscript", "cscript", "mshta", "rundll32", "regsvr32", "certutil", "bitsadmin", "ftp.exe", "curl.exe", "nslookup", "wmic", "msbuild", "installutil", "regasm", "regsvcs", "cmstp", "odbcconf", "schtasks", "at.exe", "sc.exe", "msiexec", "reg.exe", "regedit", "net.exe", "net1.exe", "nltest", "whoami", "systeminfo", "ipconfig", "tasklist", "taskkill", "vssadmin", "wbadmin", "bcdedit", "esentutl", "expand.exe", "extrac32", "findstr", "hh.exe", "makecab", "mavinject", "msdt.exe", "pcalua", "presentationhost", "xwizard", "replace.exe", "forfiles", "mmc.exe", "explorer.exe", "ping.exe", "arp.exe", "netstat", "icacls", "takeown", "attrib.exe", "cipher.exe", "sdelete", "dnscmd", "rpcping")
+| filter NOT (tgt.process.name contains:anycase ("acrobat", "cabinet"))
+| filter NOT (tgt.process.cmdline contains:anycase ("Office", "OfficeC2R", "Teams"))
+| columns endpoint.name, event.time, src.process.user, src.process.name, tgt.process.name, tgt.process.cmdline, src.process.cmdline
+| sort endpoint.name, event.time
+
+
+LVL4 = Executables Dropped in Writable User Locations (UserExecs.csv)
+---------------------------------------------------------------------
+
+filter event.type = "File Creation"
+| filter tgt.file.path contains "\\Temp\\"
+    OR tgt.file.path contains "\\AppData\\Local\\Temp\\"
+    OR tgt.file.path contains "\\AppData\\Roaming\\"
+    OR tgt.file.path contains "\\Downloads\\"
+    OR tgt.file.path contains "\\Public\\"
+| filter src.process.name = *
+| filter tgt.file.extension contains:anycase ("exe", "cmd", "ps1", "vbs", "scr", "jar")
+| filter NOT (src.process.name in ("MsMpEng.exe", "SentinelAgent.exe", "msiexec.exe", "WindowsInstaller")) 
+| filter NOT (tgt.file.path contains "Program Files" OR tgt.file.path contains "chrom" OR tgt.file.path contains "ProgramData")
+| filter NOT (src.process.name contains "setup" OR src.process.name contains "updat" OR src.process.name contains "inst" OR src.process.name contains "vc_redist" OR src.process.name contains "Set-up" OR src.process.name contains "HP" OR src.process.name contains "icarus" OR src.process.name contains "package" OR src.process.name contains "MSI" OR src.process.name contains "runtime" OR src.process.name contains "claude" OR src.process.name contains "Creative" OR src.process.name contains "driver" OR src.process.name contains "Zoom")
+| columns endpoint.name, event.time, src.process.user, src.process.name, tgt.file.extension, tgt.file.path
+| sort endpoint.name, event.time
+
+
+LVL4 = Suspicious New Service Installation (NewServices.csv)
+------------------------------------------------------------
+
+filter event.type = "Process Creation"
+| filter tgt.process.name = "sc.exe"
+| filter tgt.process.cmdline contains "create" OR tgt.process.cmdline contains "config"
+| filter NOT (src.process.name contains:anycase ("msiexec.exe", "TrustedInstaller.exe", "AgentMon.exe", "Lenovo"))
+| columns endpoint.name, event.time, src.process.name, tgt.process.cmdline, src.process.user
+| sort endpoint.name, event.time
+
+
+LVL4 = Unsigned or Suspicious Driver Loads (Rootkits.csv)
+---------------------------------------------------------
+
+filter event.type = "Driver Load"
+| filter NOT (driver.loadVerdict = "BENIGN")
+| filter NOT (src.process.name contains "ntoskrnl.exe")
+| columns endpoint.name, event.time, src.process.name, driver.loadVerdict
+| sort endpoint.name, event.time
+
+
+LVL4 = Command Script Events (SuspScripts.csv)
+----------------------------------------------
+
+filter event.type = "Command Script"
+| filter src.process.cmdline contains:anycase ("IEX", "Invoke-Expression", "Net.WebClient", "DownloadString", "DownloadFile", "WebRequest", "bitsadmin", "Start-BitsTransfer", "Reflection.Assembly", "FromBase64String")
+    OR tgt.process.cmdline contains:anycase ("IEX", "Invoke-Expression", "Net.WebClient", "DownloadString", "DownloadFile", "WebRequest", "bitsadmin", "Start-BitsTransfer", "Reflection.Assembly", "FromBase64String")
+| columns endpoint.name, event.time, src.process.name, src.process.cmdline, tgt.process.cmdline, src.process.user
+| sort endpoint.name, event.time
+
+
+LVL5 = Build Problems 
+---------------------------------
+pull hosts full inventory report as csv, it will include disk encryption status and other build details
+
+then deduplicate the console visible ip addresses from the inventory report for determining how many endpoints operated from where
+
+then pull app-inventory reports for os, browsers, edr, and ITAM/RMM
+
+
+then run the following query: (OSBuilds.csv)
+
+filter os.name = *
+| group count = count() by endpoint.name, os.name, mgmt.osRevision
+| sort endpoint.name
+
+and get a count for evaluating the health of sentinels (endpoints.csv)
+
+event.type in ('Process Creation', 'IP Connect', 'Login')
+| group count = count() by timestamp = timebucket("1d"), endpoint.name, event.type
+| sort timestamp, endpoint.name, event.type

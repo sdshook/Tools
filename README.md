@@ -156,6 +156,23 @@ Enterprise AI attention management infrastructure for reliable workflows:
   - **Protocol Agnostic**: Complements MCP, REST APIs, and CLI-based agent orchestration
   - Solves the fundamental enterprise AI problem: maintaining attention across stateless model invocations
 
+### ModernCRA - Modern Cyber Risk Assessment
+Comprehensive cyber risk assessment toolkit for cloud identity and MDR platforms:
+
+* **[ModernCRA/](ModernCRA/)** - Modern Cyber Risk Assessment Platform
+  - **[Entra/](ModernCRA/Entra/)** - Microsoft Entra ID Security Assessment
+    - **[entra_assessment.py](ModernCRA/Entra/entra_assessment.py)** - Comprehensive Entra ID security posture analysis
+    - **[setup_assessment_account.ps1](ModernCRA/Entra/setup_assessment_account.ps1)** - PowerShell script to configure assessment service accounts
+    - **[REPORT_PROMPT.md](ModernCRA/Entra/REPORT_PROMPT.md)** - AI prompt template for generating Entra assessment reports
+    - Analyzes authentication hygiene, MFA enrollment, privileged roles, and identity risks
+    - Supports Graph API integration for comprehensive tenant analysis
+  - **[MDR/](ModernCRA/MDR/)** - Managed Detection and Response Assessment
+    - **[s1queries.txt](ModernCRA/MDR/s1queries.txt)** - SentinelOne Singularity XDR search queries organized by risk level (LVL1-5)
+    - **[AnalysisPrompt.txt](ModernCRA/MDR/AnalysisPrompt.txt)** - AI prompt template for generating MDR assessment reports from query exports
+    - Risk categories: Data Transfer (LVL1), User Activity (LVL2), Network (LVL3), Service Config (LVL4), Build Posture (LVL5)
+    - Queries adaptable to CrowdStrike and other SIEM platforms
+    - Professional reporting with OSINT correlation and remediation roadmaps
+
 ### Other Security Utilities
 
 * **[wildcard_xyz_hunter.py](Other/wildcard_xyz_hunter.py)** - Specialized security utility for wildcard domain hunting

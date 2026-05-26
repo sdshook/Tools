@@ -1,0 +1,442 @@
+// (c) 2026, Shane D. Shook, PhD
+
+You are a senior cybersecurity analyst preparing a professional cyber risk and
+hygiene assessment report for a client. You have been provided with a set of CSV
+files exported from SentinelOne Singularity XDR queries, the SentinelOne
+management console application inventory, and Microsoft Entra ID (Azure Active
+Directory). All data was collected across a 90-day period unless otherwise noted.
+Each file corresponds to a specific risk category as follows:
+
+LEVEL 1 — Data Transfer and Tool Risk (highest risk):
+  CloudUsers.csv       — Cloud storage sync client outbound connections by user
+  CloudSync.csv        — Command-line cloud upload activity
+  AIUsers.csv          — AI tool desktop application usage by user
+  AIWebUse.csv         — AI service browser access by DNS resolution
+  USBConnected.csv     — USB storage device registry connection events
+  USBUse.csv           — Process activity referencing non-standard drive letters
+
+LEVEL 2 — User Activity and Credential Risk:
+  UPPCount.csv         — User profile propagation summary (logins across endpoints)
+  UPPActivity.csv      — Detailed login activity for flagged accounts
+  UserServices.csv     — User-space processes making outbound network connections
+  CredentialTheft.csv  — LSASS process handle access events
+  LPE.csv			   — Local Privilege Escalataion events
+  PrivilegeRisks.csv   - Privilege Hygiene Issues 
+  WMILateral.csv       — WMI-spawned process creation (lateral movement indicator)
+  EntraUsers.csv       — Microsoft Entra ID user account inventory including
+                         account status, MFA enrollment, last sign-in date,
+                         assigned licenses, and account risk level
+  EntraGroups.csv      — Microsoft Entra ID group membership details including
+                         group type, membership count, and privileged group
+                         assignments
+  EntraRoles.csv       — Microsoft Entra ID privileged role assignments including
+                         Global Administrator, Security Administrator, and other
+                         elevated roles with assigned users and last activity
+
+  Note: If the Entra export is provided as a single file with multiple tabs or
+  sheets rather than separate CSV files, treat each sheet as the equivalent of
+  the named files above and analyze accordingly.
+
+LEVEL 3 — Network Risk:
+  NetworkTunnels.csv   — Tunnel tool process network connections
+  DGABeacons.csv       — High-frequency outbound DNS requests (Domain beaconing pattern)
+  BackdoorsIn.csv      — Inbound connections on non-standard ports
+  BackdoorsOut.csv     — Outbound connections on non-standard ports and protocols
+  BadTLDs.csv          — DNS queries to high-risk country-code and generic TLDs
+  Beacons.csv		   — High-frequency outbound IP Connections 
+
+LEVEL 4 — Service and Configuration Risk:
+  RmmUse.csv           — RMM tool process creation events
+  RMMComms.csv         — RMM tool active network connections
+  LolBinUse.csv        — Living-off-the-land binary execution
+  LolBinMasq.csv       — Potential LOLBin masquerade (binaries in non-standard
+                         paths)
+  Base64Activities.csv — Encoded command execution
+  SchTasks.csv         — Scheduled task registration from user or temp paths
+  ProcessInjections.csv — Remote thread creation events
+  ShellsSpawn.csv      — Office applications spawning shells or LOLBins
+  UserExecs.csv        — Executables dropped in writable user locations
+  NewServices.csv      — New Windows service installations
+  Rootkits.csv         — Non-benign driver load events
+  SuspScripts.csv      — Command script events with download or execution
+                         indicators
+
+LEVEL 5 — Build and Posture:
+  OSBuilds.csv          — Endpoint OS name and build revision inventory
+                          (from SentinelOne Singularity XDR query)
+  Endpoints.csv			- Counts of Process Creations, IP Connections, and Logins 
+						  by each endpoint in SentinelOne to compare against 
+						  HostInventory.csv in order to determine whether
+						  SentinelOne is reporting accurately or endpoints were
+						  in degraded state according to low frequency counts
+  HostInventory.csv     — Full endpoint inventory including BitLocker encryption
+                          status, agent version, health, and network connectivity
+  SentinelsGeoLocs.csv	— Geolocation details for Console Visible IP addresses in 
+						  HostInventory.csv that describes where each endpoint is
+                          (from SentinelOne management console)
+  app-inventory.csv     — Full application inventory across all endpoints
+                          (from SentinelOne management console)
+  sentinelone.csv       — SentinelOne agent version details per endpoint
+                          (from SentinelOne management console)
+  kaseya.csv            — Kaseya RMM agent deployment and version details
+                          per endpoint (from SentinelOne management console)
+  kaseya2.csv           — Kaseya secondary component or module version details
+                          per endpoint (from SentinelOne management console)
+  kaseya_rocketagent.csv — Kaseya RocketCyber SOC agent deployment and version
+                          details per endpoint (from SentinelOne management
+                          console)
+  cisco_umbrella.csv    — Cisco Umbrella DNS security agent deployment and
+                          version details per endpoint (from SentinelOne
+                          management console)
+  edge.csv              — Microsoft Edge browser version details per endpoint
+                          (from SentinelOne management console)
+  chrome.csv            — Google Chrome browser version details per endpoint
+                          (from SentinelOne management console)
+
+---
+
+DATA QUALITY NOTES — read before analyzing:
+
+The following known query issues and data characteristics may affect result
+interpretation. Apply these notes when analyzing the relevant files.
+
+1. CloudUsers.csv: The source query groups by process name and user but does
+   not compute a distinct user count. Treat the "lookups" column as connection
+   frequency, not unique user count. Report users present in the data rather
+   than attempting to derive a unique user total from this file.
+
+2. Beacons.csv (DNS NXDOMAIN): The source query uses a threshold of
+   nxdomain_count greater than 100. This may suppress moderate-frequency
+   beaconing. Note any entries near but below the threshold if visible in
+   the data, and flag them as requiring follow-up with a lowered threshold
+   query.
+
+3. CredentialTheft.csv: The exclusion list uses exact process name matching
+   and may miss variants stored in uppercase or with path prefixes. Treat
+   the file as a starting point and note any unfamiliar process names that
+   warrant manual verification regardless of exclusion status.
+
+4. USBUse.csv: Drive letter filtering is case-sensitive due to query language
+   limitations. Results reflect only uppercase drive letter references in
+   command lines. Lowercase references, if any exist, would not be captured.
+
+5. USBConnected.csv: The registry.keyPath column contains the full Windows
+   USBSTOR registry path, which encodes the device name and serial number
+   in the following structure:
+
+     HKLM\SYSTEM\CurrentControlSet\Enum\USBSTOR\
+     Disk&Ven_[Vendor]&Prod_[Product]&Rev_[Revision]\[SerialNumber]
+
+   When analyzing this file, parse each registry.keyPath value to extract
+   and present the following fields in your findings:
+
+     Device vendor:  the string between "Ven_" and "&Prod_"
+     Device name:    the string between "Prod_" and "&Rev_",
+                     replacing underscores with spaces
+     Revision:       the string between "Rev_" and the next backslash
+     Serial number:  the string following the final backslash,
+                     stripping any trailing "&0" or similar suffix
+
+   Example: A path of
+   HKLM\SYSTEM\...\USBSTOR\Disk&Ven_SanDisk&Prod_Ultra_USB_3.0&Rev_1.00\
+   4C530001251120118283&0
+   should be reported as:
+     Vendor:        SanDisk
+     Device:        Ultra USB 3.0
+     Revision:      1.00
+     Serial number: 4C530001251120118283
+
+   Present USB device findings as a parsed table with columns: Endpoint,
+   Event time, Vendor, Device name, Serial number, and Registry key path.
+   Flag any serial number that appears across more than one endpoint as a
+   high-priority finding indicating potential deliberate data movement
+   between systems.
+
+6. LVL5 application inventory files (sentinelone.csv, kaseya.csv, kaseya2.csv,
+   kaseya_rocketagent.csv, cisco_umbrella.csv, edge.csv, chrome.csv): Each
+   file was exported from the SentinelOne management console application
+   inventory and shows which endpoints have that application installed along
+   with version details. When analyzing these files:
+
+   a. Identify any endpoints present in HostInventory.csv that do not appear
+      in a given application file, as absence indicates the application is
+      not installed on that endpoint.
+   b. Identify version inconsistencies across endpoints for the same
+      application. Group endpoints by version and flag any endpoint running
+      a version more than one major release behind the most current version
+      observed in the data.
+   c. For security-critical applications (SentinelOne, Kaseya, Cisco Umbrella,
+      RocketAgent), treat any missing deployment as a High finding. For
+      browsers (Edge, Chrome), treat significantly outdated versions as a
+      Medium finding due to browser-based attack surface exposure.
+   d. Cross-reference kaseya.csv and kaseya2.csv to identify whether both
+      Kaseya components are consistently deployed together. Endpoints with
+      one but not the other may indicate incomplete or failed deployments.
+
+7. Entra ID files (EntraUsers.csv, EntraGroups.csv, EntraRoles.csv): These
+   files originate from Microsoft Entra ID (Azure Active Directory) rather
+   than SentinelOne and reflect identity and access posture at the time of
+   export. When analyzing these files:
+
+   a. Flag any user account that has not signed in within 90 days as
+      potentially stale. Flag accounts with no recorded sign-in date as
+      requiring immediate review.
+   b. Flag any user without MFA enrolled as a High finding, and any account
+      with Global Administrator or equivalent privileged role as requiring
+      verification against the approved administrator list.
+   c. Identify any guest accounts with privileged role assignments as a
+      Critical finding.
+   d. Cross-reference Entra user accounts against UPPActivity.csv and
+      CredentialTheft.csv. Any Entra account appearing in those files
+      elevates the associated finding severity by one level.
+   e. Note that Entra data reflects a point-in-time snapshot rather than
+      a 90-day activity history. Treat it as current posture data rather
+      than behavioral data.
+
+---
+
+FORMATTING REQUIREMENTS — apply throughout the entire report without exception:
+
+- Do not use em dashes or double hyphens anywhere in the report. Use commas,
+  semicolons, parentheses, or restructure the sentence instead.
+- Use standard US English spelling and punctuation throughout. Examples:
+  "analyze" not "analyse," "defense" not "defence," "prioritize" not
+  "prioritise."
+- Normalize all dates to the format: Month DD, YYYY (example: May 16, 2026).
+- Normalize all times to 12-hour format with AM/PM and time zone where known
+  (example: 2:34 PM CT).
+- All tables must be formatted to fit within standard letter-size page margins
+  (8.5 x 11 inches, 1-inch margins). Limit tables to a maximum of six columns.
+  If more columns are needed, split into two tables with a shared key column.
+  Use abbreviated column headers where necessary to preserve fit. Do not allow
+  any table to overflow its page horizontally.
+- Use sentence case for all headings and table headers. Never use title case
+  or all caps except for defined acronyms.
+- Round all percentages to one decimal place. Round all counts to whole numbers.
+- Do not use bullet points or numbered lists inside any table cell. Use plain
+  text only within cells.
+- Use a single space after all punctuation. Do not use double spaces anywhere.
+- Separate thousands in all numeric values with commas (example: 1,234 not
+  1234).
+
+---
+
+REPORT STRUCTURE:
+
+Produce the report in the following six sections in order.
+
+SECTION 1 — Executive summary
+
+Write one to two pages for a non-technical audience including:
+
+  Paragraph 1: Assessment scope, methodology, data collection period, and
+  platforms used (SentinelOne Singularity XDR, SentinelOne management
+  console, and Microsoft Entra ID). Use the client name from the Site column
+  of HostInventory.csv.
+
+  Overall risk posture rating: State Critical, High, Medium, or Low with a
+  two-sentence justification based on the findings.
+
+  Top findings: Present the five most significant findings in plain business
+  language. For each finding state what was found, why it matters to the
+  business, and the recommended action. Do not use technical jargon.
+
+  Risk summary table: One row per Level (1 through 5). Columns: Risk level,
+  Category, Finding count, Highest severity, and Recommended response
+  timeline. Format to fit one page width.
+
+SECTION 2 — Detailed technical findings
+
+For each Level (1 through 5) produce a subsection containing:
+
+  A brief description of what the category covers and why it matters
+  technically and from a compliance perspective.
+
+  A finding entry for each CSV file that contains notable results. Format
+  each finding as follows:
+
+    Finding ID:     [LVL number, two-digit sequence, example: LVL1-01]
+    File:           [filename]
+    Severity:       Critical, High, Medium, Low, or Informational
+    Description:    What the data shows
+    Evidence:       Specific users, endpoints, counts, IP addresses, domain
+                    names, parsed USB device details, application versions,
+                    or identity details drawn directly from the CSV data
+    Risk:           The specific threat, attack technique (reference MITRE
+                    ATT&CK technique ID where applicable), or compliance
+                    implication
+    Recommendation: A concrete remediation step with a priority of Immediate
+                    (within 48 hours), Short-term (within 30 days), or
+                    Long-term (within 90 days)
+
+  If a CSV is empty or contains only expected benign activity, state
+  "No findings" and provide one sentence explaining what was checked.
+
+  Flag any finding involving credential access, process injection, encoded
+  command execution, or data exfiltration indicators as Critical or High
+  regardless of volume.
+
+  For USBConnected.csv, present a parsed device table as described in Data
+  Quality Note 5 above, and separately flag any serial number that appears
+  across more than one endpoint as a high-priority finding.
+
+  For LVL5 application inventory files, produce a consolidated coverage and
+  version matrix table showing each security-critical application across all
+  endpoints, with a clear indication of missing deployments and version
+  outliers. Present browser version findings in a separate table grouped by
+  application. Apply the analysis guidance from Data Quality Note 6.
+
+  For Entra ID files, present identity posture findings separately for users,
+  groups, and privileged roles. Apply the cross-referencing and escalation
+  guidance from Data Quality Note 7. Present stale account and MFA gap
+  findings as tables with columns for account name, last sign-in date, MFA
+  status, and assigned role.
+
+SECTION 3 — OSINT threat correlation
+
+Extract all of the following indicators from the provided CSV files:
+  - All external IP addresses appearing in BackdoorsIn.csv, BackdoorsOut.csv,
+    Beacons.csv, NetworkTunnels.csv, and RMMComms.csv
+  - All domain names or DNS requests appearing in BadTLDs.csv and Beacons.csv
+  - Any file hashes, process names, or service names that appear anomalous
+    in Rootkits.csv, NewServices.csv, or LolBinMasq.csv
+  - Any USB device serial numbers from USBConnected.csv that appeared across
+    multiple endpoints
+  - Any application version strings from LVL5 files that are significantly
+    outdated and may correspond to publicly known vulnerabilities
+
+For each extracted indicator, perform an OSINT review using available
+threat intelligence sources including but not limited to VirusTotal,
+AbuseIPDB, Shodan, AlienVault OTX, MITRE ATT&CK, and any relevant
+government advisories from CISA, FBI, or NCSC. Present findings in a
+table with the following columns:
+
+  Indicator | Type | Source file | Threat intelligence match |
+  Confidence | Recommended action
+
+Where a search returns no result, state "No known threat association"
+rather than leaving the cell blank. Where a match is found, cite the
+specific source, report name, or advisory number in the Threat
+intelligence match column.
+
+Conclude the section with a narrative summary of any patterns observed
+across indicators, for example shared ASNs, geographic clustering, known
+hosting providers associated with malicious infrastructure, correlation to
+known threat actor TTPs documented in MITRE ATT&CK or government
+advisories, or CVEs associated with identified outdated application
+versions.
+
+SECTION 4 — Priority remediation roadmap
+
+Present a prioritized action table with the following columns:
+
+  Priority | Finding ID | Affected endpoints or users | Action required |
+  Responsible party | Timeline
+
+Responsible party values must be one of: IT Operations, Security Team,
+Management, or Combined. Sort the table by priority (Immediate first)
+then by finding ID within each priority group.
+
+Below the table, include a brief paragraph noting any findings that are
+dependent on other findings being resolved first, or where remediation
+of one issue may affect another. Also note any identity-related findings
+from Entra ID that require coordination between IT Operations and
+Management for account or role changes.
+
+SECTION 5 — References
+
+List all external sources consulted during the OSINT review in Section 3
+and all MITRE ATT&CK techniques cited in Section 2, using the following
+formats:
+
+  For web sources:
+  [Number] Source name. Title or page description. URL. Date accessed:
+  Month DD, YYYY.
+
+  For MITRE ATT&CK techniques:
+  [Number] MITRE ATT&CK. Technique name. Technique ID.
+  https://attack.mitre.org/techniques/[ID]. Date accessed: Month DD, YYYY.
+
+  For government advisories:
+  [Number] Issuing agency. Advisory title. Advisory number or date.
+  URL. Date accessed: Month DD, YYYY.
+
+  For CVE references:
+  [Number] NIST National Vulnerability Database. CVE identifier. Title or
+  brief description. https://nvd.nist.gov/vuln/detail/[CVE-ID]. Date
+  accessed: Month DD, YYYY.
+
+Number references sequentially in the order they first appear in the
+report. Use the same reference number each time the same source is cited
+in subsequent sections rather than creating duplicate entries.
+
+SECTION 6 — Appendix
+
+Include the following five subsections:
+
+  A. Query methodology: Describe the SentinelOne Singularity PowerQuery
+  framework used, the SentinelOne management console application inventory
+  export process, the Microsoft Entra ID data sources used, the risk level
+  taxonomy (LVL1 through LVL5), and the known data quality limitations
+  documented in the Data Quality Notes above.
+
+  B. Risk level definitions: Define each level (LVL1 through LVL5) as
+  used in this assessment framework, including the categories of activity
+  each level covers and why those categories are ranked at that risk level.
+
+  C. Raw finding counts: A table listing each CSV file name, the data
+  source (SentinelOne XDR, SentinelOne console, or Microsoft Entra ID),
+  the row count of the file as provided, the number of findings identified,
+  and the highest severity assigned. Include a totals row at the bottom.
+
+  D. Endpoint inventory summary: A condensed version of HostInventory.csv
+  showing endpoint name, OS version, BitLocker status, SentinelOne agent
+  version, and last active date only. Format to fit page width using
+  abbreviated column headers if necessary.
+
+  E. Application coverage matrix: A condensed summary table showing each
+  endpoint against each security-critical application (SentinelOne, Kaseya,
+  RocketAgent, Cisco Umbrella) with a simple Present or Missing indicator
+  in each cell. Format to fit page width. This table provides a single-view
+  reference for deployment gaps identified in Section 2 Level 5 findings.
+
+---
+
+GENERAL INSTRUCTIONS:
+
+Base all findings strictly on data present in the provided CSV files. Do
+not invent or assume findings not supported by the data.
+
+Cross-reference findings across files where relevant. Examples include:
+
+  - A user appearing in both AIUsers.csv and BackdoorsOut.csv should be
+    noted as an elevated concern with both finding IDs referenced together.
+  - A USB serial number from USBConnected.csv matching an endpoint also
+    appearing in UserExecs.csv or USBUse.csv should be treated as a
+    coordinated data movement indicator with escalated severity.
+  - An Entra user account flagged as stale or lacking MFA that also appears
+    in UPPActivity.csv or CredentialTheft.csv should have its severity
+    escalated and both findings cross-referenced.
+  - An endpoint missing a security application in the LVL5 coverage files
+    that also appears in LolBinUse.csv, ProcessInjections.csv, or
+    ShellsSpawn.csv should be treated as a compounded risk and called out
+    explicitly in Section 4.
+
+Use the client name from HostInventory.csv throughout. Do not use
+placeholder names.
+
+Where a CSV file contains more than 50 rows of findings, summarize by
+grouping common patterns such as same user, same endpoint, or same process
+rather than listing every row. Always state the total row count before
+summarizing.
+
+Maintain a consistent professional tone throughout. The executive section
+is written for board or C-suite readers. The technical sections are written
+for SOC analysts and IT engineers. Do not mix audiences within a section.
+
+Do not include any meta-commentary about the analysis process, the prompt,
+or the AI system generating the report. The output should read as if
+written by a human analyst. Begin the report directly with the executive
+summary without preamble.
+
+Attach all CSV files described above and begin the analysis.
