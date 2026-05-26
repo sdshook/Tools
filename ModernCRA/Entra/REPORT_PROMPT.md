@@ -1,4 +1,5 @@
-# Entra ID Security Assessment Report Generation Prompt
+# Entra ID Security Assessment Report Generation Prompt 
+# (c) 2026, Shane D. Shook, PhD
 
 Use this prompt when attaching a JSON output file from entra_assessment.py
 to any AI interface that supports file uploads and document generation.
