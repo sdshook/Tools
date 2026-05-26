@@ -1,4 +1,4 @@
-# Entra ID Security Assessment Report Generation Prompt 
+# Entra ID Security Assessment Report Generation Prompt
 # (c) 2026, Shane D. Shook, PhD
 
 Use this prompt when attaching a JSON output file from entra_assessment.py
@@ -180,7 +180,7 @@ the report.
 1. Search public registries and authoritative secondary sources for each
    jurisdiction mentioned in Questions 3 and 4. For each confirmed
    permanent office or registered entity, attempt to locate:
-   - The legal entity name and type (LLC, Ltd, S.à r.l., etc.)
+   - The legal entity name and type (LLC, Ltd, S.a r.l., etc.)
    - The registration or company number
    - The registered office address
    - The date of incorporation or registration
@@ -217,9 +217,10 @@ the report.
    Form ADV, and equivalent foreign filings for associated fund entities
    that may have separate registrations or regulatory obligations.
 
-4. For each jurisdiction identified through Steps B.1-B.3, determine
-   whether the entity or activity found triggers regulatory obligations
-   beyond those already identified in the assessor's answers, including:
+4. For each jurisdiction identified through Steps B.1 through B.3,
+   determine whether the entity or activity found triggers regulatory
+   obligations beyond those already identified in the assessor's answers,
+   including:
    - Financial sector regulation (FCA, CSSF, SEC, FINRA, or equivalent)
    - Data protection registration requirements
    - AML/CTF registration or authorization
@@ -292,7 +293,7 @@ International frameworks triggered by data subject residence:
 - Singapore: Personal Data Protection Act (PDPA).
 - Switzerland: revised Federal Act on Data Protection (revFADP, in force
   September 2023).
-- Brazil: Lei Geral de Proteção de Dados (LGPD).
+- Brazil: Lei Geral de Protecao de Dados (LGPD).
 - China: Personal Information Protection Law (PIPL).
 - South Africa: Protection of Personal Information Act (POPIA).
 - Israel: Privacy Protection Law and pending amendments.
@@ -365,16 +366,47 @@ border on all four sides, light red (#FFF2F2) fill, containing:
 
 ### Page 2 onward: Executive Summary
 
-The executive summary begins on page 2 and continues for as many pages as
-the content requires. Do not compress, abbreviate, or reduce font size.
-Write the full regulatory context in the detail required for legal and
-compliance review.
+The executive summary begins on page 2 and is designed to be readable as
+a standalone briefing for an executive audience that may not read the full
+technical sections. It must be complete and self-contained. Do not
+compress, abbreviate, or reduce font size. Write all content at the level
+of detail required for senior leadership and legal and compliance review.
 
-**Section A: Security Posture Summary**
+The executive summary contains the following subsections in this order:
 
-Three equal-width colored grade boxes appear at the top of page 2, before
-any text. Each box contains a category label, a grade word in large type,
-and a one-line count and summary statement.
+**Subsection A: Purpose, Scope, and Method**
+
+Open with two paragraphs of introductory prose before any tables or grade
+boxes appear.
+
+Paragraph 1: Introduce the assessment, the tenant assessed, the
+organization and affiliated entities, and the purpose of the assessment.
+Include the following explanation of Microsoft Entra ID in plain language:
+Microsoft Entra ID is the organization's identity and resource access
+management system, controlling who can sign in, what applications and data
+they can reach, and what permissions are granted to users, administrators,
+and third-party services; auditing it reveals misuse of credentials and
+their associated permissions that could threaten the organization or
+indicate active compromise.
+
+Paragraph 2: Describe the assessment scope, the tool used (read-only
+16-module Python-based tool, Entra ID Security Posture Assessment v2.0
+by Shane Shook, available at
+https://github.com/sdshook/Tools/tree/main/ModernCRA/Entra), the
+two authentication sessions (Microsoft Graph API device code for modules
+1 through 13 and 15 through 16; Exchange Online PowerShell device code
+for module 14), the number of records collected, the number of API calls,
+the analysis window dates, and the statement that no changes were made to
+the tenant configuration, user accounts, permissions, or data during the
+assessment.
+
+These two paragraphs must appear as separate paragraphs, not combined.
+
+**Subsection B: Overall Security Posture**
+
+Three equal-width colored grade boxes appear immediately after the
+introductory paragraphs. Each box contains a category label, a grade
+word in large type, and a one-line count and summary statement.
 
 Box 1: EXIGENT RISK
 - Fill color: RED (#C00000)
@@ -400,99 +432,44 @@ Box 3: CONFIGURATION AND USE ANOMALIES
 Color specification: RED = #C00000, YELLOW = #FFC000 (amber-yellow, not
 brown or dark gold), GREEN = #375623. These exact hex values must be used.
 
-**Section B: Regulatory and Industry Context**
+**Subsection C: Finding Summary**
 
-Immediately following the grade boxes, write the full regulatory context
-derived from the assessor's answers to Questions 1 through 5 and the
-pre-report research findings from Steps A and B.
+Immediately following the grade boxes, present a structured finding
+summary table with one row per severity tier (CRITICAL, HIGH, MEDIUM,
+LOW, INFO). Columns: severity (color-coded), count, and a one to two
+sentence plain-language characterisation of the findings in that tier.
+This table must appear before the critical headline box described below.
 
-**Status label color coding — introduce this at the opening of Section B:**
+**Subsection D: Critical Headline**
 
-Before writing the first regulation entry, include a brief introductory
-paragraph explaining the color-coded status labels used throughout this
-section. The introduction should read approximately:
+After the finding summary table, present a prominent full-width red-
+bordered box (border color #C00000, background #FFF2F2) containing a
+concise plain-language statement of the most serious risk present in the
+assessment. The headline box must appear on the same page as the finding
+summary table or, if it does not fit, must begin at the top of the next
+page together with its heading label. The heading "Critical Headline" and
+the red box must never be split across pages: if the heading cannot fit
+on the same page as the box, both must move to the next page together
+using a keep-with-next control.
 
-  "Each applicable regulation and obligation below carries a compliance
-  status label indicating the organization's current posture against that
-  requirement based on the findings in this assessment. Labels are:
-  SATISFACTORY (green) — current controls are adequate for this
-  obligation; PARTIAL (amber) — controls are partially implemented but
-  material gaps exist; DEFICIENT (red) — controls are insufficient or
-  absent for this obligation; CONDITIONAL (grey) — status cannot be
-  confirmed pending external verification such as regulatory registration
-  confirmation or legal classification review."
+**Subsection E: Immediate Actions Required (P0, within 24 hours)**
 
-The status labels must be rendered as colored inline text boxes or shaded
-inline runs matching the priority matrix palette:
-- SATISFACTORY: fill #375623 (green), white text
-- PARTIAL: fill #FFC000 (amber), white text
-- DEFICIENT: fill #C00000 (red), white text
-- CONDITIONAL: fill #595959 (grey), white text
+Following the critical headline box, list each P0 action from the
+remediation matrix in plain business language. Each item shows the P0
+priority label, a short action title, and a one to two sentence
+description of what to do and why. This subsection gives an executive
+reader immediate actionable direction without requiring them to read
+Section V.
 
-**Format for each regulation entry:**
+**Subsection F: Re-Assessment**
 
-Each regulation or obligation is presented as a distinct paragraph opening
-with the colored status label as an inline element, followed immediately
-by the regulation name in bold, followed by the explanatory prose. The
-status label must appear on the same line as the regulation name, not as
-a separate heading. Example structure:
-
-  [DEFICIENT] GDPR Article 32 (Security of Processing): [prose explaining
-  the obligation, the specific findings driving the deficient status, and
-  the compliance consequence...]
-
-  [SATISFACTORY] Investment Advisers Act Section 206 Anti-Fraud: [prose
-  explaining that no findings indicate a breach event has occurred,
-  though the findings create conditions that increase Section 206 risk...]
-
-**Content requirements for each entry:**
-
-Include the following content for each applicable regulation:
-- The specific citation (CFR section, article number, statute reference)
-- Whether the obligation is mandatory (establishment) or data-subject-based
-- The specific findings from this assessment that drive the status
-  determination, referenced by finding label (EX-1, H-3, AN-2, etc.)
-- The specific compliance consequence of the current status in plain
-  language: examination exposure, notification obligation triggered,
-  fiduciary duty implicated, supervisory authority notification required,
-  or equivalent
-- For SATISFACTORY entries: which controls are present and working that
-  support the satisfactory determination — do not leave satisfactory
-  entries as bare assertions
-
-Also include:
-- Applicable voluntary framework alignment: ISO/IEC 27001:2022, NIST CSF
-  2.0, NIST SP 800-63B, CIS Controls v8, or sector-specific equivalents,
-  with a PARTIAL or SATISFACTORY label reflecting the finding pattern
-
-**Status determination rules:**
-
-DEFICIENT: one or more P0 or P1 findings in Section V cite this regulation,
-or a finding directly implicates a core requirement of this obligation
-(e.g., a finding showing no Data Processing Agreements implicates GDPR
-Article 28 as DEFICIENT regardless of P-level).
-
-PARTIAL: findings exist that implicate this regulation but compensating
-controls or partial compliance are also evidenced in the assessment data,
-or the obligation has multiple requirements of which some are met and some
-are not.
-
-SATISFACTORY: no findings implicate this regulation's core requirements,
-and the assessment data provides positive evidence of compliance (not
-merely absence of a finding — absence of a finding alone is not sufficient
-to assert SATISFACTORY where the assessment scope may not have covered
-all relevant controls).
-
-CONDITIONAL: the regulatory classification itself is uncertain (e.g., FCA
-authorisation pending confirmation, CSSF classification requiring legal
-review) and therefore the compliance status cannot be determined without
-first confirming whether the obligation applies.
+A brief closing paragraph recommending re-assessment within 30 days of
+completion of all P0 and P1 remediation actions, with specific focus areas
+to verify.
 
 ---
 
-### Sections Following the Executive Summary
-
-**Section I: Exigent Risks Requiring Immediate Action**
+### Section I: Exigent Risks Requiring Immediate Action
 
 For each Critical finding and the most severe High findings that represent
 immediately exploitable conditions:
@@ -504,9 +481,10 @@ immediately exploitable conditions:
 - Prioritize by immediacy of exploitability, not severity label alone
 - Reference the applicable regulation by name and section where relevant
 
-**Section II: Hygiene Issues With Recommendations**
+### Section II: Hygiene Issues With Recommendations
 
-For each Medium finding and remaining High findings not covered in Section I:
+For each Medium finding and remaining High findings not covered in
+Section I:
 - Label each H-1, H-2, etc., prioritized by risk
 - Explain what is misconfigured and why it matters for this organization
 - Provide specific actionable remediation steps, not generic advice
@@ -523,7 +501,7 @@ controlled via a separate device compliance CA policy, not blocked
 outright. Conflating EAS with legacy authentication in the same blocking
 policy will break mobile mail for compliant devices.
 
-**Section III: Architectural Issues**
+### Section III: Architectural Issues
 
 Identify systemic patterns across findings that indicate structural
 governance failures rather than isolated misconfigurations. Address each
@@ -535,7 +513,7 @@ of the following where evidence exists in the data:
 - Authentication architecture
 - Email security architecture
 
-**Section IV: Configuration and Use History Anomalies**
+### Section IV: Configuration and Use History Anomalies
 
 **Geographic Authentication Map (Figure IV-1)**
 
@@ -650,7 +628,7 @@ Delete rules: HIGH. Rules that delete messages can suppress wire transfer
 replies, security alerts, and MFA notifications. Each must be confirmed
 as a legitimate user preference.
 
-**Section V: Priority Remediation Matrix**
+### Section V: Priority Remediation Matrix
 
 A five-column table. One row per finding. Color-code the Priority column:
 - P0: RED background (#C00000), white text, Immediate or 24 hours
@@ -672,10 +650,11 @@ Columns:
 
 Rule 1 — Consistency with the executive summary. The Standard / Regulation
 column must cite only regulations that were established as applicable in
-Section B of the executive summary. If a regulation does not apply to this
-organization's confirmed classification, it must not appear in Section V.
-If Section B established a regulation as a mandatory obligation, it should
-appear in Section V wherever a finding implicates it.
+the executive summary regulatory context. If a regulation does not apply
+to this organization's confirmed classification, it must not appear in
+Section V. If the executive summary established a regulation as a
+mandatory obligation, it should appear in Section V wherever a finding
+implicates it.
 
 Rule 2 — Jurisdiction completeness. Where EU GDPR applies (Article number),
 UK GDPR must also be cited if the organization has a permanent UK office or
@@ -684,12 +663,12 @@ finding type and must appear together. Do not cite one without the other
 where both are confirmed.
 
 Rule 3 — Primary regulatory obligation first. Where a finding implicates a
-sector-specific regulatory obligation confirmed in Section B (such as
-Advisers Act Section 206, GLBA, HIPAA, or FCA SYSC), that obligation is
-cited first in the cell, before ISO 27001 or NIST references. Findings
-involving unauthorized access to client or fund communications, privileged
-account compromise, data exfiltration capability, or fiduciary data
-integrity must cite the primary sector obligation.
+sector-specific regulatory obligation confirmed in the executive summary
+(such as Advisers Act Section 206, GLBA, HIPAA, or FCA SYSC), that
+obligation is cited first in the cell, before ISO 27001 or NIST references.
+Findings involving unauthorized access to client or fund communications,
+privileged account compromise, data exfiltration capability, or fiduciary
+data integrity must cite the primary sector obligation.
 
 Rule 4 — State privacy law. Where a finding involves access controls,
 identity lifecycle, authentication, or account hygiene, and the organization
@@ -728,20 +707,113 @@ controls. Common correct mappings:
 - Network security: A.8.20
 - Segregation of networks: A.8.22
 
-Rule 6 — Conditional obligations. Regulations identified in Section B as
-conditional (such as FCA SYSC obligations pending FRN confirmation, or CSSF
-AIFM obligations pending classification review, or DORA pending supervision
-determination) must be cited in Section V with the same conditional qualifier:
-"FCA SYSC 13 (if FCA-authorised)" rather than "FCA SYSC 13" stated as fact.
+Rule 6 — Conditional obligations. Regulations identified in the executive
+summary as conditional (such as FCA SYSC obligations pending FRN
+confirmation, or CSSF AIFM obligations pending classification review, or
+DORA pending supervision determination) must be cited in Section V with
+the same conditional qualifier: "FCA SYSC 13 (if FCA-authorised)" rather
+than "FCA SYSC 13" stated as fact.
 
-Rule 7 — Self-consistency check before finalizing. Before writing the matrix,
-list the regulations confirmed as applicable in Section B, then verify that
-each P0 and P1 finding cites at least one of those regulations (in addition
-to framework controls) where the finding implicates that regulation. A finding
-that involves credential compromise, data access, or fiduciary data with no
-sector-specific regulatory citation is likely missing one.
+Rule 7 — Self-consistency check before finalizing. Before writing the
+matrix, list the regulations confirmed as applicable in the executive
+summary, then verify that each P0 and P1 finding cites at least one of
+those regulations (in addition to framework controls) where the finding
+implicates that regulation. A finding that involves credential compromise,
+data access, or fiduciary data with no sector-specific regulatory citation
+is likely missing one.
 
-**Appendix: Assessment Methodology and Limitations**
+### Section VI: Regulatory and Industry Context
+
+This section contains the full regulatory compliance analysis. It is
+positioned after the remediation matrix so that executive readers encounter
+the actionable findings before the legal detail, while compliance and legal
+counsel can locate the full analysis in a dedicated section.
+
+**Status label color coding — introduce this at the opening of Section VI:**
+
+Before writing the first regulation entry, include a brief introductory
+paragraph explaining the color-coded status labels used throughout this
+section. The introduction should read approximately:
+
+  "Each applicable regulation and obligation below carries a compliance
+  status label indicating the organization's current posture against that
+  requirement based on the findings in this assessment. Labels are:
+  SATISFACTORY (green) — current controls are adequate for this
+  obligation; PARTIAL (amber) — controls are partially implemented but
+  material gaps exist; DEFICIENT (red) — controls are insufficient or
+  absent for this obligation; CONDITIONAL (grey) — status cannot be
+  confirmed pending external verification such as regulatory registration
+  confirmation or legal classification review."
+
+The status labels must be rendered as colored inline text boxes or shaded
+inline runs matching the priority matrix palette:
+- SATISFACTORY: fill #375623 (green), white text
+- PARTIAL: fill #FFC000 (amber), white text
+- DEFICIENT: fill #C00000 (red), white text
+- CONDITIONAL: fill #595959 (grey), white text
+
+**Format for each regulation entry:**
+
+Each regulation or obligation is presented as a distinct paragraph opening
+with the colored status label as an inline element, followed immediately
+by the regulation name in bold, followed by the explanatory prose. The
+status label must appear on the same line as the regulation name, not as
+a separate heading. Example structure:
+
+  [DEFICIENT] GDPR Article 32 (Security of Processing): [prose explaining
+  the obligation, the specific findings driving the deficient status, and
+  the compliance consequence...]
+
+  [SATISFACTORY] Investment Advisers Act Section 206 Anti-Fraud: [prose
+  explaining that no findings indicate a breach event has occurred,
+  though the findings create conditions that increase Section 206 risk...]
+
+**Content requirements for each entry:**
+
+Include the following content for each applicable regulation:
+- The specific citation (CFR section, article number, statute reference)
+- Whether the obligation is mandatory (establishment) or data-subject-based
+- The specific findings from this assessment that drive the status
+  determination, referenced by finding label (EX-1, H-3, AN-2, etc.)
+- The specific compliance consequence of the current status in plain
+  language: examination exposure, notification obligation triggered,
+  fiduciary duty implicated, supervisory authority notification required,
+  or equivalent
+- For SATISFACTORY entries: which controls are present and working that
+  support the satisfactory determination — do not leave satisfactory
+  entries as bare assertions
+
+Also include:
+- Applicable voluntary framework alignment: ISO/IEC 27001:2022, NIST CSF
+  2.0, NIST SP 800-63B, CIS Controls v8, or sector-specific equivalents,
+  with a PARTIAL or SATISFACTORY label reflecting the finding pattern
+
+**Status determination rules:**
+
+DEFICIENT: one or more P0 or P1 findings in Section V cite this regulation,
+or a finding directly implicates a core requirement of this obligation
+(e.g., a finding showing no Data Processing Agreements implicates GDPR
+Article 28 as DEFICIENT regardless of P-level).
+
+PARTIAL: findings exist that implicate this regulation but compensating
+controls or partial compliance are also evidenced in the assessment data,
+or the obligation has multiple requirements of which some are met and some
+are not.
+
+SATISFACTORY: no findings implicate this regulation's core requirements,
+and the assessment data provides positive evidence of compliance (not
+merely absence of a finding — absence of a finding alone is not sufficient
+to assert SATISFACTORY where the assessment scope may not have covered
+all relevant controls).
+
+CONDITIONAL: the regulatory classification itself is uncertain (e.g., FCA
+authorisation pending confirmation, CSSF classification requiring legal
+review) and therefore the compliance status cannot be determined without
+first confirming whether the obligation applies.
+
+---
+
+### Appendix A: Assessment Methodology and Limitations
 
 - Tool used, authentication method, read-only nature of the assessment
 - Two authentication sessions are used: Session 1 is a Microsoft Graph
@@ -769,6 +841,101 @@ sector-specific regulatory citation is likely missing one.
 - Modules that returned no data and the reason (licensing gap, permission
   gap, scope propagation delay)
 - Re-assessment recommendations where applicable
+
+---
+
+### Appendix B: References
+
+The references appendix is divided into three subsections. Every URL must
+be rendered in full with no truncation. Use a monospace or hyperlink style
+to distinguish URLs from prose text.
+
+**Subsection 1: Assessment Tool**
+
+Entra Assessment Tool
+Shane Shook, May 2026. Entra ID Security Posture Assessment v2.0 —
+read-only 16-module Python tool using Microsoft Graph API and Exchange
+Online PowerShell.
+https://github.com/sdshook/Tools/tree/main/ModernCRA/Entra
+
+**Subsection 2: Microsoft Entra and Microsoft 365 Documentation**
+
+This subsection is a compiled output derived from the report content. It
+is NOT a static list to be reproduced verbatim. Before writing this
+subsection, review every remediation recommendation written in Sections I,
+II, III, and IV of this report. For each Microsoft documentation URL
+included in a remediation recommendation, extract the descriptive title
+and the URL. Collect all such entries, deduplicate, and present them here
+in the order they first appear in the report.
+
+Do not copy URLs from memory or from any pre-existing list. Each URL
+cited in a remediation must have been written into the report body as a
+live reference. Verify that each URL resolves to current Microsoft
+documentation before including it. If a remediation URL in the report
+body is stale or has moved, correct it here and note the correction.
+Do not include any Microsoft documentation URL that does not appear in
+a remediation recommendation in this specific report.
+
+Each entry is formatted as:
+- Descriptive title of the documentation page in bold
+- Full URL on its own line, untruncated
+
+**Subsection 3: Regulations, Statutes, and Standards**
+
+This subsection is a compiled output derived from the report content. It
+is NOT a static list to be reproduced verbatim. Before writing this
+subsection, perform the following derivation procedure:
+
+STEP 1 — Compile from Section VI. Review every regulation, statute, and
+voluntary framework entry written in Section VI (Regulatory and Industry
+Context). For each entry that carries a SATISFACTORY, PARTIAL, DEFICIENT,
+or CONDITIONAL status label, extract the full formal name of the
+regulation or framework and its specific citation (CFR section, article
+number, regulation number, or equivalent). Include every entry regardless
+of status. Do not include regulations from the baseline reference guide
+that were not written into Section VI for this specific report.
+
+STEP 2 — Compile from Section V. Review every row of the Section V
+(Priority Remediation Matrix). For each citation in the Standard /
+Regulation column, extract any regulation, statute, or framework name
+that was not already captured in Step 1. Add only items that appear in
+this report's matrix and were not already included.
+
+STEP 3 — Deduplicate. Where the same regulation appears multiple times
+across Sections V and VI (e.g., GDPR Article 32 cited in multiple matrix
+rows and in Section VI), include it once in the references list.
+
+STEP 4 — Assign source URLs. For each unique regulation, statute, or
+framework in the compiled list, search for and supply the official
+primary source URL at the time of report generation. Use the issuing
+authority's own website or official government registry as the source
+(e.g., EUR-Lex for EU regulations, legislation.gov.uk for UK statutes,
+sec.gov for US securities rules, iso.org for ISO standards, nist.gov for
+NIST publications, fca.org.uk for FCA instruments). Do not use secondary
+sources, aggregators, or law firm summaries as the cited URL. Do not
+copy URLs from memory or from any static list. Search for each URL
+individually to confirm it resolves to the current authoritative text.
+Do not leave any entry without a URL.
+
+STEP 5 — Organise into two groups. Present the compiled list in two
+groups: (a) Regulations and Statutes, then (b) Standards and Frameworks.
+Within each group, order entries by the sequence in which they first
+appear in Section VI, so the references appendix mirrors the flow of the
+regulatory analysis.
+
+STEP 6 — Quality check. Verify that every regulation and framework cited
+anywhere in Sections V or VI of this specific report appears in the
+compiled list. Verify that no regulation or framework appears in the list
+that was not cited in Sections V or VI of this specific report. Verify
+that no URL is truncated.
+
+Each entry in the compiled list is formatted as follows:
+- Full formal name of the regulation or framework in bold
+- One-line description identifying the issuing authority and the
+  nature of the obligation
+- Full official source URL on its own line, untruncated
+
+
 
 ---
 
@@ -974,9 +1141,19 @@ Before finalizing, verify each of the following:
 - No em-dashes, en-dashes, or double hyphens appear anywhere in the
   document used as separators or punctuation
 - No finding item lists are truncated; all items from the JSON are present
-- Section B opens with an introductory paragraph explaining the four
-  status label colors before the first regulation entry appears
-- Every applicable regulation entry in Section B carries a colored status
+- The executive summary opens with two separate introductory paragraphs:
+  the first introducing the assessment and explaining what Microsoft
+  Entra ID is and why it is audited; the second describing the scope,
+  tool, records collected, analysis window, and read-only nature of the
+  assessment. These must be separate paragraphs, not combined.
+- The executive summary contains the posture grade boxes (Subsection B),
+  followed by the finding summary table (Subsection C), followed by the
+  critical headline box (Subsection D). The critical headline heading and
+  its red box must never be split across pages.
+- Section VI (Regulatory and Industry Context) opens with an introductory
+  paragraph explaining the four status label colors before the first
+  regulation entry appears
+- Every applicable regulation entry in Section VI carries a colored status
   label (SATISFACTORY, PARTIAL, DEFICIENT, or CONDITIONAL); regulations
   that do not apply to this organization do not appear in the report
 - DEFICIENT and PARTIAL entries each reference the specific finding
@@ -986,7 +1163,7 @@ Before finalizing, verify each of the following:
   support the determination; bare assertion of SATISFACTORY without
   supporting evidence is not permitted
 - CONDITIONAL entries carry the same qualifier in Section V citations
-  as in Section B; a regulation that is CONDITIONAL in Section B is
+  as in Section VI; a regulation that is CONDITIONAL in Section VI is
   not cited as a confirmed obligation in Section V
 - Status labels use the correct colors: SATISFACTORY = #375623,
   PARTIAL = #FFC000, DEFICIENT = #C00000, CONDITIONAL = #595959
@@ -996,17 +1173,17 @@ Before finalizing, verify each of the following:
 - The priority matrix includes a regulatory or standards reference for
   every row with no blank entries in that column
 - Every regulation cited in Section V was established as applicable in
-  Section B; regulations that do not apply to this organization do not
+  Section VI; regulations that do not apply to this organization do not
   appear in Section V
 - Where EU GDPR is cited in Section V, UK GDPR is also cited in the same
   row unless the organization has no UK establishment and no UK data
   subjects, as confirmed in Questions 4 and 5
 - Primary sector-specific regulatory obligations (Advisers Act, GLBA,
-  HIPAA, FCA SYSC, or equivalent confirmed in Section B) appear in
+  HIPAA, FCA SYSC, or equivalent confirmed in Section VI) appear in
   Section V on all P0 and P1 findings that involve credential compromise,
   unauthorized data access, or fiduciary data integrity, not only on
   findings explicitly labeled as compliance issues
-- State privacy laws confirmed as applicable in Section B (CCPA/CPRA or
+- State privacy laws confirmed as applicable in Section VI (CCPA/CPRA or
   equivalent) appear in Section V on rows involving identity lifecycle,
   authentication, account hygiene, and access controls where personal
   data of residents of that state is implicated
@@ -1014,7 +1191,7 @@ Before finalizing, verify each of the following:
   numbering; 2013 revision numbers (such as A.11.2.8 for device
   management, A.12.4.1 for logging, A.13.2.3 for messaging) do not appear
 - Conditional regulatory obligations (FCA, CSSF, DORA, or others flagged
-  as requiring classification confirmation in Section B) are cited in
+  as requiring classification confirmation in Section VI) are cited in
   Section V with the same conditional qualifier, not as confirmed facts
 - Classification reads "Company Confidential" with no attorney-client
   privilege language unless explicitly instructed
@@ -1054,5 +1231,17 @@ Before finalizing, verify each of the following:
   diamond markers. Flagged geographic signals (unexpected jurisdictions)
   are annotated with an arrow callout and "analyst review required".
   The figure caption correctly names all office locations shown.
+- Appendix B is present and contains three subsections: (1) Assessment
+  Tool with the GitHub URL
+  https://github.com/sdshook/Tools/tree/main/ModernCRA/Entra attributed
+  to Shane Shook, May 2026; (2) Microsoft Entra and Microsoft 365
+  Documentation listing every learn.microsoft.com URL cited in the
+  report; (3) Regulations, Statutes, and Standards compiled exclusively
+  from the regulations, statutes, and frameworks actually cited in
+  Sections V and VI of this specific report — not a static list, not a
+  generic baseline. Every item in Section VI and every Standard /
+  Regulation column entry in Section V must appear in the compiled list.
+  No item appears in the list that was not cited in Sections V or VI.
+  No URL in the references is truncated.
 
 ---
