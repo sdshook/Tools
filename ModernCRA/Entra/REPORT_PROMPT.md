@@ -164,6 +164,17 @@ rules explicitly. This search should be conducted regardless of how
 recently the knowledge cutoff falls, as regulatory effective dates and
 enforcement priorities change frequently.
 
+In addition to verifying currency of the regulations listed in the
+Regulatory Reference Guide below, search for any new regulations,
+statutes, or standards applicable to the confirmed sector and
+jurisdictions that may have been enacted since your knowledge cutoff or
+that are not included in this baseline list. This includes new state
+privacy laws, new federal agency rules, new international data protection
+frameworks, and sector-specific regulations that may apply based on the
+organization's confirmed classification and geographic presence. Include
+any newly identified obligations in Section VI with appropriate status
+labels and cite them in Section V where relevant findings exist.
+
 ### Step B: Entity and Jurisdiction Verification
 
 Conduct independent research to verify and supplement the business
