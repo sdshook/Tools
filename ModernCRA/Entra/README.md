@@ -6,19 +6,21 @@ using the Microsoft Graph API and device code authentication. No app registratio
 or stored secrets required.
 
 ---
-# CLI Options
+## CLI Options
 
-python entra_assessment.py                              # 30-day window, all modules
-python entra_assessment.py --days 90                    # 90-day window
-python entra_assessment.py --days 60 --json             # with JSON report (default filename)
-python entra_assessment.py --json my_report.json        # custom JSON path
-python entra_assessment.py --tenant contoso.com         # specify tenant (recommended)
-python entra_assessment.py --tenant <guid>              # or use tenant GUID directly
-python entra_assessment.py --skip-defender              # skip if no Defender license
-python entra_assessment.py --skip-signin                # faster, less visibility
-python entra_assessment.py --init                       # generate config.yaml template
+| Command | Description |
+|---------|-------------|
+| `python entra_assessment.py` | 30-day window, all modules |
+| `python entra_assessment.py --days 90` | 90-day window |
+| `python entra_assessment.py --days 60 --json` | with JSON report (default filename) |
+| `python entra_assessment.py --json my_report.json` | custom JSON path |
+| `python entra_assessment.py --tenant contoso.com` | specify tenant (recommended) |
+| `python entra_assessment.py --tenant <guid>` | or use tenant GUID directly |
+| `python entra_assessment.py --skip-defender` | skip if no Defender license |
+| `python entra_assessment.py --skip-signin` | faster, less visibility |
+| `python entra_assessment.py --init` | generate config.yaml template |
 
-# Typical Run
+## Typical Run
 
 python entra_assessment.py --days 90 --json my_report.json 
 
