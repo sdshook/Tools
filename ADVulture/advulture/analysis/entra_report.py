@@ -1,9 +1,11 @@
-# (c) 2025 Shane D. Shook, PhD - All Rights Reserved
+# (c) 2025-2026 Shane D. Shook, PhD - All Rights Reserved
 
 """
 ADVulture - Entra ID Report Generator
 Generates factual security findings from collected Entra ID data.
 No AI interpretation - purely data-driven findings.
+
+Enhanced with behavioral analysis from entra_assessment.py learnings.
 """
 
 from __future__ import annotations
@@ -13,6 +15,18 @@ from datetime import datetime, timezone
 from typing import List, Dict, Optional, Any
 from enum import Enum
 from pathlib import Path
+
+# Import behavioral analysis module
+try:
+    from advulture.analysis.behavioral import (
+        BehavioralAnalyzer,
+        ServiceAccountAnalyzer,
+        AuthEvent,
+        normalize_entra_signin,
+    )
+    BEHAVIORAL_AVAILABLE = True
+except ImportError:
+    BEHAVIORAL_AVAILABLE = False
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +61,11 @@ class Category(str, Enum):
     IDENTITY_PROTECTION = "IDENTITY_PROTECTION"
     PASSWORD_POLICY = "PASSWORD_POLICY"
     DOMAIN_SECURITY = "DOMAIN_SECURITY"
+    # Behavioral analysis categories (from entra_assessment.py learnings)
+    BEHAVIORAL = "BEHAVIORAL"
+    TOKEN_REPLAY = "TOKEN_REPLAY"
+    IMPOSSIBLE_TRAVEL = "IMPOSSIBLE_TRAVEL"
+    LATERAL_MOVEMENT = "LATERAL_MOVEMENT"
 
 
 @dataclass
@@ -362,6 +381,8 @@ class EntraReportGenerator:
             self._analyze_email_security()
             self._analyze_app_permissions()
             self._analyze_sharepoint_security()
+            # Behavioral analysis (from entra_assessment.py learnings)
+            self._analyze_behavioral_patterns()
         
         # Sort findings by severity
         severity_order = {Severity.CRITICAL: 0, Severity.HIGH: 1, Severity.MEDIUM: 2, Severity.LOW: 3, Severity.INFO: 4}
@@ -2177,3 +2198,142 @@ class EntraReportGenerator:
                 recommendation="Implement SPF with -all (hard fail), DKIM signing via M365/Google, "
                               "and DMARC p=reject. This is critical given the Mail.Send permissions in this tenant.",
             ))
+
+    def _analyze_behavioral_patterns(self):
+        """
+        Analyze sign-in behavioral patterns using the unified BehavioralAnalyzer.
+        
+        Detects:
+        - Token replay (same session from different IPs)
+        - Impossible travel (physically impossible location changes)
+        - Off-hours authentication
+        - High IP diversity per user
+        - Lateral movement patterns
+        
+        Based on entra_assessment.py behavioral analysis modules.
+        """
+        if not BEHAVIORAL_AVAILABLE:
+            log.debug("Behavioral analysis module not available, skipping")
+            return
+        
+        if not self.events or not self.events.signins:
+            return
+        
+        # Convert sign-ins to AuthEvent format
+        auth_events = []
+        for signin in self.events.signins:
+            try:
+                auth_event = normalize_entra_signin(signin)
+                auth_events.append(auth_event)
+            except Exception as e:
+                log.debug("Failed to normalize sign-in: %s", e)
+                continue
+        
+        if not auth_events:
+            return
+        
+        log.info("Running behavioral analysis on %d sign-in events", len(auth_events))
+        
+        # Run behavioral analysis
+        analyzer = BehavioralAnalyzer()
+        results = analyzer.analyze_all(auth_events)
+        
+        # Convert behavioral anomalies to findings
+        
+        # Token replay - CRITICAL
+        for anomaly in results.get("token_replay", []):
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.CRITICAL,
+                category=Category.TOKEN_REPLAY,
+                title=f"Token Replay Detected: {anomaly.user}",
+                description=f"Same session used from {anomaly.evidence.get('source1')} then "
+                           f"{anomaly.evidence.get('source2')} within {anomaly.evidence.get('delta_minutes')} minutes. "
+                           f"This indicates potential token theft and replay attack.",
+                affected_count=1,
+                affected_objects=[anomaly.user],
+                recommendation="Immediately investigate the user account. Consider requiring re-authentication "
+                              "and review sign-in logs for the affected time period.",
+                references=[
+                    "https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-token-protection"
+                ],
+            ))
+        
+        # Impossible travel - HIGH
+        for anomaly in results.get("impossible_travel", []):
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=Severity.HIGH,
+                category=Category.IMPOSSIBLE_TRAVEL,
+                title=f"Impossible Travel: {anomaly.user}",
+                description=f"Authentication from {anomaly.evidence.get('from_location')} then "
+                           f"{anomaly.evidence.get('to_location')} ({anomaly.evidence.get('distance_km')} km) "
+                           f"in {anomaly.evidence.get('time_hours')} hours requires "
+                           f"{anomaly.evidence.get('required_speed_kmh')} km/h travel speed.",
+                affected_count=1,
+                affected_objects=[anomaly.user],
+                recommendation="Verify if user has legitimate reasons (VPN, corporate proxy). "
+                              "If not, investigate potential credential compromise.",
+                references=[
+                    "https://learn.microsoft.com/en-us/entra/id-protection/concept-identity-protection-risks"
+                ],
+            ))
+        
+        # Off-hours authentication - MEDIUM
+        for anomaly in results.get("off_hours", []):
+            severity = Severity.HIGH if anomaly.affected_count >= 20 else Severity.MEDIUM
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=severity,
+                category=Category.BEHAVIORAL,
+                title=f"Off-Hours Authentication: {anomaly.user}",
+                description=f"{anomaly.affected_count} authentications outside business hours "
+                           f"(weekends or 10pm-6am). Sample times: {', '.join(anomaly.evidence.get('sample_times', [])[:3])}",
+                affected_count=anomaly.affected_count,
+                affected_objects=[anomaly.user],
+                recommendation="Review if this pattern is expected for the user's role. "
+                              "Unusual off-hours activity may indicate compromised credentials.",
+            ))
+        
+        # IP diversity - MEDIUM/HIGH
+        for anomaly in results.get("ip_diversity", []):
+            severity = Severity.HIGH if anomaly.evidence.get("ip_count", 0) >= 20 else Severity.MEDIUM
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=severity,
+                category=Category.BEHAVIORAL,
+                title=f"High IP Diversity: {anomaly.user}",
+                description=f"Authenticated from {anomaly.evidence.get('ip_count')} distinct IP addresses. "
+                           f"Locations: {', '.join(anomaly.evidence.get('locations', [])[:5])}",
+                affected_count=anomaly.evidence.get("ip_count", 0),
+                affected_objects=[anomaly.user] + anomaly.evidence.get("sample_ips", [])[:10],
+                recommendation="High IP diversity may indicate credential sharing, VPN rotation by attacker, "
+                              "or compromised credentials used from multiple locations.",
+            ))
+        
+        # Lateral movement - MEDIUM/HIGH
+        for anomaly in results.get("lateral_movement", []):
+            severity = Severity.HIGH if anomaly.evidence.get("target_count", 0) >= 10 else Severity.MEDIUM
+            self.findings.append(Finding(
+                id=self._next_finding_id(),
+                severity=severity,
+                category=Category.LATERAL_MOVEMENT,
+                title=f"Potential Lateral Movement: {anomaly.user}",
+                description=f"Accessed {anomaly.evidence.get('target_count')} different applications/resources "
+                           f"in a 1-hour window ({anomaly.evidence.get('window')}). "
+                           f"Apps: {', '.join(anomaly.evidence.get('targets', [])[:5])}",
+                affected_count=anomaly.evidence.get("target_count", 0),
+                affected_objects=[anomaly.user],
+                recommendation="Review if this access pattern is normal for the user. "
+                              "Rapid access to many resources may indicate reconnaissance or data collection.",
+            ))
+        
+        log.info(
+            "Behavioral analysis complete: %d token replay, %d impossible travel, "
+            "%d off-hours, %d IP diversity, %d lateral movement",
+            len(results.get("token_replay", [])),
+            len(results.get("impossible_travel", [])),
+            len(results.get("off_hours", [])),
+            len(results.get("ip_diversity", [])),
+            len(results.get("lateral_movement", [])),
+        )

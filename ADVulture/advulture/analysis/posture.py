@@ -1,10 +1,13 @@
-# (c) 2025 Shane D. Shook, PhD - All Rights Reserved
+# (c) 2025-2026 Shane D. Shook, PhD - All Rights Reserved
 
 """
 ADVulture — PostureAnalyzer
 Unified entry point that orchestrates collection, graph building,
 GNN inference, Markov analysis, gradient computation, and reporting.
 All six risk classes are evaluated simultaneously.
+
+Enhanced with behavioral analysis, on-prem baseline, and hybrid monitoring
+based on entra_assessment.py learnings.
 """
 
 from __future__ import annotations
@@ -44,6 +47,23 @@ except ImportError:
     PhaseDetection = None
     RemediationItem = None
     Phase = None
+
+# Enhanced analysis modules (from entra_assessment.py learnings)
+try:
+    from advulture.analysis.behavioral import (
+        BehavioralAnalyzer,
+        ServiceAccountAnalyzer,
+        normalize_windows_event,
+    )
+    from advulture.analysis.onprem_baseline import OnPremSecurityBaseline
+    from advulture.analysis.hybrid_monitor import HybridIdentityAnalyzer
+    ENHANCED_ANALYSIS_AVAILABLE = True
+except ImportError:
+    ENHANCED_ANALYSIS_AVAILABLE = False
+    BehavioralAnalyzer = None
+    ServiceAccountAnalyzer = None
+    OnPremSecurityBaseline = None
+    HybridIdentityAnalyzer = None
 
 from advulture.config import Config
 from advulture.custody import ChainOfCustodyLogger, CustodyEventType
