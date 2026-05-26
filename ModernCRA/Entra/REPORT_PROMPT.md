@@ -143,10 +143,127 @@ person temporarily abroad, not a data subject of that jurisdiction. Foreign
 privacy laws should only be cited when the organization processes personal
 data of residents of that country or has a legal establishment there.
 
-After I answer Question 5, search for the current enforcement status of
-each applicable regulation before writing the regulatory context section.
-Verify effective dates, threshold requirements, and any amendments issued
-since your knowledge cutoff. Label proposed or pending rules explicitly.
+After receiving the answer to Question 5, perform the research steps below
+before generating any part of the report. Do not ask the analyst further
+questions during this phase. Present findings from Steps A and B to the
+analyst as a structured pre-report briefing and ask them to confirm,
+correct, or add to the information before proceeding to report generation.
+
+---
+
+## PRE-REPORT RESEARCH (perform after Question 5, before generating the report)
+
+### Step A: Regulatory Currency Check
+
+Search for the current enforcement status of each regulation applicable
+to the confirmed sector and classification before writing the regulatory
+context section. Verify effective dates, threshold requirements, and any
+amendments issued since your knowledge cutoff. Label proposed or pending
+rules explicitly. This search should be conducted regardless of how
+recently the knowledge cutoff falls, as regulatory effective dates and
+enforcement priorities change frequently.
+
+### Step B: Entity and Jurisdiction Verification
+
+Conduct independent research to verify and supplement the business
+registration and jurisdictional information provided by the assessor.
+This step exists because analysts may have incomplete records, may be
+unaware of subsidiary entities registered in additional jurisdictions, or
+may not know the current regulatory classification of each entity. The
+goal is to surface discrepancies and additional jurisdictions for analyst
+review before they propagate into the legal and compliance sections of
+the report.
+
+**Research procedure:**
+
+1. Search public registries and authoritative secondary sources for each
+   jurisdiction mentioned in Questions 3 and 4. For each confirmed
+   permanent office or registered entity, attempt to locate:
+   - The legal entity name and type (LLC, Ltd, S.à r.l., etc.)
+   - The registration or company number
+   - The registered office address
+   - The date of incorporation or registration
+   - The activity or SIC/NACE code
+   - Any regulatory authorization number (FCA FRN, SEC CRD, CSSF
+     registration, FINRA CRD, etc.) and its current status
+   Use: SEC IARD/EDGAR for US advisers; Companies House for UK entities;
+   Luxembourg RCS (registre-de-commerce.lu) for Luxembourg entities;
+   California Secretary of State for California entities; FCA Financial
+   Services Register for UK-regulated firms; CSSF register for Luxembourg
+   financial entities. Flag any authorization number found through a
+   secondary source that has not been independently confirmed against the
+   primary regulator's public register, and instruct the analyst to verify
+   it directly.
+
+2. Cross-reference the tenant data (domain names, guest user email
+   domains, application integrations, sign-in geographic data, and
+   organization metadata) for signals of jurisdictions or entities not
+   mentioned by the assessor. Signals to look for include:
+   - Domain names that suggest additional country-specific operations
+     (e.g., .co.uk, .de, .lu, .fr suffixes on verified tenant domains)
+   - Guest user home domains from countries not mentioned in Questions
+     4 or 5, suggesting business relationships with entities in those
+     countries whose employees' personal data may be processed
+   - Application integrations with country-specific services
+   - Sign-in geographic data from the behavioral analysis module showing
+     authentication from countries not confirmed by the assessor
+   - Organization display name variants that suggest related entities
+
+3. Search for any related entities under the organization's name or
+   brand that may not have been mentioned, including parent companies,
+   subsidiaries, general partner entities, fund vehicles, and holding
+   companies. For investment management firms, check Form D filings,
+   Form ADV, and equivalent foreign filings for associated fund entities
+   that may have separate registrations or regulatory obligations.
+
+4. For each jurisdiction identified through Steps B.1-B.3, determine
+   whether the entity or activity found triggers regulatory obligations
+   beyond those already identified in the assessor's answers, including:
+   - Financial sector regulation (FCA, CSSF, SEC, FINRA, or equivalent)
+   - Data protection registration requirements
+   - AML/CTF registration or authorization
+   - Local employment law or works council requirements triggered by
+     having employees in that jurisdiction
+
+**Present findings to the analyst before generating the report:**
+
+After completing Steps A and B, present a structured pre-report briefing
+to the analyst containing two sections:
+
+SECTION 1 — ENTITY AND REGISTRATION FINDINGS
+List each entity found, with: jurisdiction, legal name, registration
+number, registered address, activity code, and any authorization numbers
+with their verification status (confirmed from primary register, or
+found via secondary source and requiring direct verification). For each
+entity, note whether it matches, supplements, or conflicts with what the
+assessor provided. Flag any jurisdiction or entity found through research
+that was not mentioned by the assessor.
+
+SECTION 2 — DISCREPANCIES AND UNCONFIRMED ITEMS REQUIRING ANALYST REVIEW
+Present a numbered list of specific items that require the analyst's
+attention before the report is finalized:
+- Jurisdictions found in research but not mentioned by the assessor
+  (potential missing offices, fund registrations, or data-subject
+  populations)
+- Authorization numbers found through secondary sources that require
+  direct verification against the primary regulator's register
+- Entities whose regulatory classification is ambiguous and requires
+  legal confirmation (e.g., a GP vehicle that may or may not be subject
+  to AIFM authorization requirements)
+- Geographic signals from the tenant data that suggest business
+  activity or data subject relationships in additional countries
+- Any conflict between what the assessor stated and what public records
+  show
+
+Then ask: "Please review the findings above. Confirm which items are
+accurate, correct any errors, and advise whether any flagged jurisdictions
+or entities should be included in the report. Once you confirm, I will
+generate the full report."
+
+Wait for the analyst's response before generating any section of the
+report. Incorporate the analyst's corrections and confirmations into the
+regulatory context, the cover page Legal Entities box, and the appendix
+methodology section.
 
 Then generate the full report using the structure, content requirements,
 and formatting rules below.
@@ -285,23 +402,90 @@ brown or dark gold), GREEN = #375623. These exact hex values must be used.
 **Section B: Regulatory and Industry Context**
 
 Immediately following the grade boxes, write the full regulatory context
-derived from the assessor's answers to Questions 1 through 5. Include:
+derived from the assessor's answers to Questions 1 through 5 and the
+pre-report research findings from Steps A and B.
 
-- The primary governing statute or regulation with its specific citation
-  (CFR section, rule number, statute reference, or equivalent)
-- All rules directly implicated by the findings in this assessment, with
-  enough specificity for legal and compliance review
-- For each applicable jurisdiction from Questions 4 and 5: whether the
-  obligation is mandatory (permanent office or legal establishment present),
-  or data-subject-based (personal data of residents processed). State both
-  the legal basis and the specific obligations it creates.
-- Which commonly cited regulations do NOT apply to this organization given
-  its confirmed classification. Stating inapplicable requirements prevents
-  over-compliance burden and clarifies scope for management.
+**Status label color coding — introduce this at the opening of Section B:**
+
+Before writing the first regulation entry, include a brief introductory
+paragraph explaining the color-coded status labels used throughout this
+section. The introduction should read approximately:
+
+  "Each applicable regulation and obligation below carries a compliance
+  status label indicating the organization's current posture against that
+  requirement based on the findings in this assessment. Labels are:
+  SATISFACTORY (green) — current controls are adequate for this
+  obligation; PARTIAL (amber) — controls are partially implemented but
+  material gaps exist; DEFICIENT (red) — controls are insufficient or
+  absent for this obligation; CONDITIONAL (grey) — status cannot be
+  confirmed pending external verification such as regulatory registration
+  confirmation or legal classification review."
+
+The status labels must be rendered as colored inline text boxes or shaded
+inline runs matching the priority matrix palette:
+- SATISFACTORY: fill #375623 (green), white text
+- PARTIAL: fill #FFC000 (amber), white text
+- DEFICIENT: fill #C00000 (red), white text
+- CONDITIONAL: fill #595959 (grey), white text
+
+**Format for each regulation entry:**
+
+Each regulation or obligation is presented as a distinct paragraph opening
+with the colored status label as an inline element, followed immediately
+by the regulation name in bold, followed by the explanatory prose. The
+status label must appear on the same line as the regulation name, not as
+a separate heading. Example structure:
+
+  [DEFICIENT] GDPR Article 32 (Security of Processing): [prose explaining
+  the obligation, the specific findings driving the deficient status, and
+  the compliance consequence...]
+
+  [SATISFACTORY] Investment Advisers Act Section 206 Anti-Fraud: [prose
+  explaining that no findings indicate a breach event has occurred,
+  though the findings create conditions that increase Section 206 risk...]
+
+**Content requirements for each entry:**
+
+Include the following content for each applicable regulation:
+- The specific citation (CFR section, article number, statute reference)
+- Whether the obligation is mandatory (establishment) or data-subject-based
+- The specific findings from this assessment that drive the status
+  determination, referenced by finding label (EX-1, H-3, AN-2, etc.)
+- The specific compliance consequence of the current status in plain
+  language: examination exposure, notification obligation triggered,
+  fiduciary duty implicated, supervisory authority notification required,
+  or equivalent
+- For SATISFACTORY entries: which controls are present and working that
+  support the satisfactory determination — do not leave satisfactory
+  entries as bare assertions
+
+Also include:
 - Applicable voluntary framework alignment: ISO/IEC 27001:2022, NIST CSF
-  2.0, NIST SP 800-63B, CIS Controls v8, or sector-specific equivalents
-- A paragraph connecting the regulatory obligations specifically to the
-  findings in this assessment and their potential compliance consequences
+  2.0, NIST SP 800-63B, CIS Controls v8, or sector-specific equivalents,
+  with a PARTIAL or SATISFACTORY label reflecting the finding pattern
+
+**Status determination rules:**
+
+DEFICIENT: one or more P0 or P1 findings in Section V cite this regulation,
+or a finding directly implicates a core requirement of this obligation
+(e.g., a finding showing no Data Processing Agreements implicates GDPR
+Article 28 as DEFICIENT regardless of P-level).
+
+PARTIAL: findings exist that implicate this regulation but compensating
+controls or partial compliance are also evidenced in the assessment data,
+or the obligation has multiple requirements of which some are met and some
+are not.
+
+SATISFACTORY: no findings implicate this regulation's core requirements,
+and the assessment data provides positive evidence of compliance (not
+merely absence of a finding — absence of a finding alone is not sufficient
+to assert SATISFACTORY where the assessment scope may not have covered
+all relevant controls).
+
+CONDITIONAL: the regulatory classification itself is uncertain (e.g., FCA
+authorisation pending confirmation, CSSF classification requiring legal
+review) and therefore the compliance status cannot be determined without
+first confirming whether the obligation applies.
 
 ---
 
@@ -478,10 +662,83 @@ Columns:
 2. Finding description
 3. Action Owner
 4. Timeframe
-5. Standard / Regulation: cite the specific ISO 27001:2022 control number
-   (e.g., A.9.2.3), NIST CSF function and subcategory (e.g., PR.AC-4),
-   NIST SP document and section, CIS Control number, or regulation
-   citation for every row. Never leave this column blank.
+5. Standard / Regulation: cite the specific ISO 27001:2022 control number,
+   NIST CSF function and subcategory, NIST SP document and section, CIS
+   Control number, or regulation citation for every row. Never leave this
+   column blank. Follow the citation rules below exactly.
+
+**Section V citation rules — read before populating the matrix:**
+
+Rule 1 — Consistency with the executive summary. The Standard / Regulation
+column must cite only regulations that were established as applicable in
+Section B of the executive summary. If a regulation does not apply to this
+organization's confirmed classification, it must not appear in Section V.
+If Section B established a regulation as a mandatory obligation, it should
+appear in Section V wherever a finding implicates it.
+
+Rule 2 — Jurisdiction completeness. Where EU GDPR applies (Article number),
+UK GDPR must also be cited if the organization has a permanent UK office or
+processes personal data of UK residents. Both obligations arise from the same
+finding type and must appear together. Do not cite one without the other
+where both are confirmed.
+
+Rule 3 — Primary regulatory obligation first. Where a finding implicates a
+sector-specific regulatory obligation confirmed in Section B (such as
+Advisers Act Section 206, GLBA, HIPAA, or FCA SYSC), that obligation is
+cited first in the cell, before ISO 27001 or NIST references. Findings
+involving unauthorized access to client or fund communications, privileged
+account compromise, data exfiltration capability, or fiduciary data
+integrity must cite the primary sector obligation.
+
+Rule 4 — State privacy law. Where a finding involves access controls,
+identity lifecycle, authentication, or account hygiene, and the organization
+has confirmed employees or data subjects in a state with active privacy law
+(e.g., California CCPA/CPRA), that state law must be cited alongside GDPR
+where the finding implicates personal data of those residents.
+
+Rule 5 — ISO 27001:2022 controls only. Use the 2022 revision control
+numbering throughout. Do not use 2013 revision control numbers (A.11.x,
+A.12.x, A.13.x). The 2022 revision restructured and renumbered these
+controls. Common correct mappings:
+- Device management / endpoint security: A.8.1 (not A.11.2.8)
+- Email security / electronic messaging: A.8.23, A.5.14 (not A.13.2.3)
+- Event logging and monitoring: A.8.15, A.8.16 (not A.12.4.1)
+- Vulnerability management: A.8.8 (not A.12.6.1)
+- Privileged access / access rights: A.8.2, A.8.3, A.5.18 (not A.9.x
+  where the 2022 revision moved the control)
+- Cryptography and key management: A.8.24 (not A.10.1)
+- Malware protection: A.8.7 (not A.12.2)
+- Access control policy: A.5.15
+- Identity management: A.5.16
+- Authentication: A.5.17
+- Access rights management: A.5.18
+- Privileged access rights: A.8.2
+- Information access restriction: A.8.3
+- Secure authentication: A.8.5
+- Capacity management: A.8.6
+- Protection against malware: A.8.7
+- Endpoint device management: A.8.1
+- Web filtering: A.8.23
+- Information transfer: A.5.14
+- Monitoring activities: A.8.16
+- Clock synchronization: A.8.17
+- Use of privileged utility programs: A.8.18
+- Installation on operational systems: A.8.19
+- Network security: A.8.20
+- Segregation of networks: A.8.22
+
+Rule 6 — Conditional obligations. Regulations identified in Section B as
+conditional (such as FCA SYSC obligations pending FRN confirmation, or CSSF
+AIFM obligations pending classification review, or DORA pending supervision
+determination) must be cited in Section V with the same conditional qualifier:
+"FCA SYSC 13 (if FCA-authorised)" rather than "FCA SYSC 13" stated as fact.
+
+Rule 7 — Self-consistency check before finalizing. Before writing the matrix,
+list the regulations confirmed as applicable in Section B, then verify that
+each P0 and P1 finding cites at least one of those regulations (in addition
+to framework controls) where the finding implicates that regulation. A finding
+that involves credential compromise, data access, or fiduciary data with no
+sector-specific regulatory citation is likely missing one.
 
 **Appendix: Assessment Methodology and Limitations**
 
@@ -716,11 +973,48 @@ Before finalizing, verify each of the following:
 - No em-dashes, en-dashes, or double hyphens appear anywhere in the
   document used as separators or punctuation
 - No finding item lists are truncated; all items from the JSON are present
+- Section B opens with an introductory paragraph explaining the four
+  status label colors before the first regulation entry appears
+- Every applicable regulation entry in Section B carries a colored status
+  label (SATISFACTORY, PARTIAL, DEFICIENT, or CONDITIONAL); regulations
+  that do not apply to this organization do not appear in the report
+- DEFICIENT and PARTIAL entries each reference the specific finding
+  labels (EX-1, H-3, AN-2, etc.) that drive the status determination;
+  status is not asserted without evidential grounding in the finding data
+- SATISFACTORY entries identify the specific controls present that
+  support the determination; bare assertion of SATISFACTORY without
+  supporting evidence is not permitted
+- CONDITIONAL entries carry the same qualifier in Section V citations
+  as in Section B; a regulation that is CONDITIONAL in Section B is
+  not cited as a confirmed obligation in Section V
+- Status labels use the correct colors: SATISFACTORY = #375623,
+  PARTIAL = #FFC000, DEFICIENT = #C00000, CONDITIONAL = #595959
 - The three posture grade boxes use the exact specified colors:
   RED = #C00000, YELLOW = #FFC000, GREEN = #375623
 - YELLOW renders as amber-yellow, not brown or dark gold
 - The priority matrix includes a regulatory or standards reference for
   every row with no blank entries in that column
+- Every regulation cited in Section V was established as applicable in
+  Section B; regulations that do not apply to this organization do not
+  appear in Section V
+- Where EU GDPR is cited in Section V, UK GDPR is also cited in the same
+  row unless the organization has no UK establishment and no UK data
+  subjects, as confirmed in Questions 4 and 5
+- Primary sector-specific regulatory obligations (Advisers Act, GLBA,
+  HIPAA, FCA SYSC, or equivalent confirmed in Section B) appear in
+  Section V on all P0 and P1 findings that involve credential compromise,
+  unauthorized data access, or fiduciary data integrity, not only on
+  findings explicitly labeled as compliance issues
+- State privacy laws confirmed as applicable in Section B (CCPA/CPRA or
+  equivalent) appear in Section V on rows involving identity lifecycle,
+  authentication, account hygiene, and access controls where personal
+  data of residents of that state is implicated
+- All ISO 27001 control numbers in Section V use the 2022 revision
+  numbering; 2013 revision numbers (such as A.11.2.8 for device
+  management, A.12.4.1 for logging, A.13.2.3 for messaging) do not appear
+- Conditional regulatory obligations (FCA, CSSF, DORA, or others flagged
+  as requiring classification confirmation in Section B) are cited in
+  Section V with the same conditional qualifier, not as confirmed facts
 - Classification reads "Company Confidential" with no attorney-client
   privilege language unless explicitly instructed
 - Every remediation recommendation includes a Microsoft documentation URL
@@ -731,8 +1025,17 @@ Before finalizing, verify each of the following:
   and not presented as security anomalies
 - Regulatory citations have been verified current; no superseded rules
   are cited as in force; pending rules are labeled as proposed
-- Regulations that do not apply to the organization's confirmed
-  classification are stated explicitly as not applicable
+- Entity registrations in the Legal Entities box on the cover page and
+  in the regulatory context section reflect only confirmed information:
+  entities confirmed by the assessor, supplemented by information
+  confirmed through the Step B pre-report research. Authorization numbers
+  found only through secondary sources are flagged as requiring direct
+  verification against the primary regulator's register and are not
+  stated as confirmed facts
+- Any jurisdictions or entities surfaced during Step B research but not
+  confirmed by the analyst are not included in the report as established
+  facts; they may be referenced as items requiring further investigation
+  if the analyst has noted them as unresolved
 - If module 07 (sign-in logs) returned no data but module 15 (behavioral
   analysis) returned data, the finding is documented in the appendix as a
   permission or consent gap (not a transient indexing behavior), and is
