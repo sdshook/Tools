@@ -175,7 +175,22 @@ class PostureAnalyzer:
     Main analysis orchestrator. Connects all subsystems and produces
     a unified PostureReport with findings from all six risk classes.
     
-    Supports two modes:
+    Supports two analysis modes:
+    
+    1. ASSESSMENT MODE (ml_enabled=False):
+       - Produces factual security findings with severity ratings
+       - Similar output to entra_assessment.py
+       - No ML dependencies required
+       - Fast, deterministic results
+    
+    2. PREDICTION MODE (ml_enabled=True):
+       - Includes ML-based attack graph analysis
+       - Markov chain probability modeling
+       - GNN-based attack path prediction
+       - Gradient-based remediation prioritization
+       - Requires torch and ML modules
+    
+    Both modes support:
     - analyze(): Simple mode without progress indicators
     - analyze_with_progress(): Download-first mode with rich progress bars
     
@@ -185,10 +200,39 @@ class PostureAnalyzer:
     - Archives serve as forensic "system of record" for chain of custody
     """
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, ml_enabled: Optional[bool] = None):
+        """
+        Initialize PostureAnalyzer.
+        
+        Args:
+            config: ADVulture configuration
+            ml_enabled: Enable ML-based attack graph analysis
+                       - None (default): Auto-detect based on ML_AVAILABLE
+                       - True: Force ML mode (fails if torch unavailable)
+                       - False: Assessment-only mode (no ML)
+        """
         self.config = config
-        self.hmm = KillChainHMM()
-        self.gradient_engine = GradientEngine()
+        
+        # Determine ML mode
+        if ml_enabled is None:
+            # Auto-detect: use ML if available
+            self.ml_enabled = ML_AVAILABLE
+        elif ml_enabled and not ML_AVAILABLE:
+            log.warning("ML mode requested but torch/ML modules not available, falling back to assessment mode")
+            self.ml_enabled = False
+        else:
+            self.ml_enabled = ml_enabled
+        
+        # Initialize ML components only if enabled
+        if self.ml_enabled and ML_AVAILABLE:
+            self.hmm = KillChainHMM()
+            self.gradient_engine = GradientEngine()
+            log.info("ADVulture initialized in PREDICTION mode (ML-enabled)")
+        else:
+            self.hmm = None
+            self.gradient_engine = None
+            log.info("ADVulture initialized in ASSESSMENT mode (factual findings only)")
+        
         # Cached data from download phase
         self._cached_snapshot = None
         self._cached_event_stream = None
@@ -445,55 +489,101 @@ class PostureAnalyzer:
             findings += self._analyze_ai_agents(entra_snapshot)
         progress.advance(analysis_task)
         
-        # HMM phase detection
-        progress.update(analysis_task, description="[yellow]🔍 Detecting attack phase...")
-        event_sequence = self._build_event_sequence(event_stream)
-        graph_stats = self._compute_graph_stats(snapshot, findings)
-        phase_detection = self.hmm.viterbi(event_sequence, graph_stats)
-        progress.advance(analysis_task)
-        log.info(
-            "HMM: phase=%s confidence=%.0f%% velocity=%.2f",
-            phase_detection.most_likely.name,
-            phase_detection.confidence * 100,
-            phase_detection.threat_velocity,
-        )
+        # ════════════════════════════════════════════════════════════════════
+        # ML-BASED ANALYSIS (only if ml_enabled)
+        # ════════════════════════════════════════════════════════════════════
         
-        # Markov analysis
-        progress.update(analysis_task, description="[yellow]🔍 Running Markov analysis...")
-        num_nodes = len(snapshot.users) + len(snapshot.computers) + len(snapshot.groups)
-        tier0_ids = [i for i, u in enumerate(snapshot.users) if u.tier == 0]
-        markov = AttackChainMarkov(
-            num_nodes=max(num_nodes, 10),
-            tier0_node_ids=tier0_ids or [0],
-        )
-        edge_index, edge_probs = self._build_graph_tensors(snapshot, event_stream)
-        theta = {
-            k: torch.tensor(v, dtype=torch.float32, requires_grad=True)
-            for k, v in controls.items()
-        }
-        lpe_pairs = self._build_lpe_pairs(findings)
-        mc_result = markov.analyze(edge_index, edge_probs, theta, lpe_pairs)
-        progress.advance(analysis_task)
+        if self.ml_enabled:
+            # HMM phase detection
+            progress.update(analysis_task, description="[yellow]🔍 Detecting attack phase...")
+            event_sequence = self._build_event_sequence(event_stream)
+            graph_stats = self._compute_graph_stats(snapshot, findings)
+            phase_detection = self.hmm.viterbi(event_sequence, graph_stats)
+            progress.advance(analysis_task)
+            log.info(
+                "HMM: phase=%s confidence=%.0f%% velocity=%.2f",
+                phase_detection.most_likely.name,
+                phase_detection.confidence * 100,
+                phase_detection.threat_velocity,
+            )
+            
+            # Markov analysis
+            progress.update(analysis_task, description="[yellow]🔍 Running Markov analysis...")
+            num_nodes = len(snapshot.users) + len(snapshot.computers) + len(snapshot.groups)
+            tier0_ids = [i for i, u in enumerate(snapshot.users) if u.tier == 0]
+            markov = AttackChainMarkov(
+                num_nodes=max(num_nodes, 10),
+                tier0_node_ids=tier0_ids or [0],
+            )
+            edge_index, edge_probs = self._build_graph_tensors(snapshot, event_stream)
+            theta = {
+                k: torch.tensor(v, dtype=torch.float32, requires_grad=True)
+                for k, v in controls.items()
+            }
+            lpe_pairs = self._build_lpe_pairs(findings)
+            mc_result = markov.analyze(edge_index, edge_probs, theta, lpe_pairs)
+            progress.advance(analysis_task)
+            
+            # Gradient ranking
+            progress.update(analysis_task, description="[yellow]🔍 Computing gradient ranking...")
+            ranking = self.gradient_engine.compute_ranking(
+                edge_index, edge_probs, controls, phase_detection, markov, lpe_pairs
+            )
+            
+            # Attach gradient contributions to findings
+            ctrl_to_findings = self._map_controls_to_findings(findings)
+            for item in ranking:
+                for fid in ctrl_to_findings.get(item.control, []):
+                    matching = [f for f in findings if f.id == fid]
+                    for f in matching:
+                        f.gradient_contribution = max(f.gradient_contribution, item.gradient)
+            findings.sort(key=lambda f: f.gradient_contribution, reverse=True)
+            progress.advance(analysis_task)
+            
+            # Regime classification
+            progress.update(analysis_task, description="[yellow]🔍 Classifying regime...")
+            regime, regime_explanation = self._classify_regime(mc_result, ranking)
+        else:
+            # ════════════════════════════════════════════════════════════════
+            # ASSESSMENT MODE (no ML) - Sort by severity, no attack graph
+            # ════════════════════════════════════════════════════════════════
+            progress.update(analysis_task, description="[yellow]🔍 Assessment mode (no ML)...")
+            
+            # Sort findings by severity (CRITICAL > HIGH > MEDIUM > LOW > INFO)
+            severity_order = {
+                Severity.CRITICAL: 0, Severity.HIGH: 1, 
+                Severity.MEDIUM: 2, Severity.LOW: 3, Severity.INFO: 4
+            }
+            findings.sort(key=lambda f: severity_order.get(f.severity, 5))
+            
+            # No ML predictions - set defaults
+            phase_detection = None
+            mc_result = None
+            ranking = []
+            
+            # Simple regime classification based on finding counts
+            critical_count = sum(1 for f in findings if f.severity == Severity.CRITICAL)
+            high_count = sum(1 for f in findings if f.severity == Severity.HIGH)
+            
+            if critical_count >= 5 or (critical_count >= 2 and high_count >= 10):
+                regime = "COMPROMISED"
+                regime_explanation = f"Assessment: {critical_count} CRITICAL and {high_count} HIGH findings indicate severe risk"
+            elif critical_count >= 1 or high_count >= 5:
+                regime = "ELEVATED"
+                regime_explanation = f"Assessment: {critical_count} CRITICAL and {high_count} HIGH findings indicate elevated risk"
+            elif high_count >= 1:
+                regime = "GUARDED"
+                regime_explanation = f"Assessment: {high_count} HIGH findings require attention"
+            else:
+                regime = "NOMINAL"
+                regime_explanation = "Assessment: No critical or high-severity findings"
+            
+            progress.advance(analysis_task)
+            progress.advance(analysis_task)  # Skip ML steps
+            progress.advance(analysis_task)
+            
+            log.info("Assessment mode: %d findings, regime=%s", len(findings), regime)
         
-        # Gradient ranking
-        progress.update(analysis_task, description="[yellow]🔍 Computing gradient ranking...")
-        ranking = self.gradient_engine.compute_ranking(
-            edge_index, edge_probs, controls, phase_detection, markov, lpe_pairs
-        )
-        
-        # Attach gradient contributions to findings
-        ctrl_to_findings = self._map_controls_to_findings(findings)
-        for item in ranking:
-            for fid in ctrl_to_findings.get(item.control, []):
-                matching = [f for f in findings if f.id == fid]
-                for f in matching:
-                    f.gradient_contribution = max(f.gradient_contribution, item.gradient)
-        findings.sort(key=lambda f: f.gradient_contribution, reverse=True)
-        progress.advance(analysis_task)
-        
-        # Regime classification
-        progress.update(analysis_task, description="[yellow]🔍 Classifying regime...")
-        regime, regime_explanation = self._classify_regime(mc_result, ranking)
         active_signals = self._extract_active_signals(findings, event_stream)
         progress.advance(analysis_task)
         
@@ -511,9 +601,9 @@ class PostureAnalyzer:
             deployment_type="hybrid" if entra_snapshot else "on_prem",
             regime=regime,
             regime_explanation=regime_explanation,
-            tier0_steady_state_probability=mc_result.tier0_probability,
-            mean_steps_to_tier0=mc_result.mean_steps_to_tier0,
-            most_exposed_nodes=mc_result.most_exposed_nodes,
+            tier0_steady_state_probability=mc_result.tier0_probability if mc_result else 0.0,
+            mean_steps_to_tier0=mc_result.mean_steps_to_tier0 if mc_result else 0.0,
+            most_exposed_nodes=mc_result.most_exposed_nodes if mc_result else [],
             attacker_phase=phase_detection,
             findings=findings,
             remediation_ranking=ranking,
@@ -523,8 +613,12 @@ class PostureAnalyzer:
             evidence_manifest_hash=evidence_manifest_hash,
         )
 
-        log.info("Analysis complete. %d findings. Regime: %s. π_tier0: %.1f%%",
-                 len(findings), regime, mc_result.tier0_probability * 100)
+        if self.ml_enabled and mc_result:
+            log.info("Analysis complete. %d findings. Regime: %s. π_tier0: %.1f%%",
+                     len(findings), regime, mc_result.tier0_probability * 100)
+        else:
+            log.info("Assessment complete. %d findings. Regime: %s (no ML predictions)",
+                     len(findings), regime)
         
         # SECURITY: Clear credential references after analysis completes
         # This ensures tokens are not retained in memory longer than necessary
@@ -639,52 +733,92 @@ class PostureAnalyzer:
             findings += self._analyze_entra_role_hygiene(entra_snapshot)
             findings += self._analyze_entra_mfa_posture(entra_snapshot)
 
-        # ── HMM phase detection ────────────────────────────────────────────
-        event_sequence = self._build_event_sequence(event_stream)
-        graph_stats = self._compute_graph_stats(snapshot, findings)
-        phase_detection = self.hmm.viterbi(event_sequence, graph_stats)
-        log.info(
-            "HMM: phase=%s confidence=%.0f%% velocity=%.2f",
-            phase_detection.most_likely.name,
-            phase_detection.confidence * 100,
-            phase_detection.threat_velocity,
-        )
+        # ════════════════════════════════════════════════════════════════════
+        # ML-BASED ANALYSIS (only if ml_enabled)
+        # ════════════════════════════════════════════════════════════════════
+        
+        if self.ml_enabled:
+            # ── HMM phase detection ────────────────────────────────────────────
+            event_sequence = self._build_event_sequence(event_stream)
+            graph_stats = self._compute_graph_stats(snapshot, findings)
+            phase_detection = self.hmm.viterbi(event_sequence, graph_stats)
+            log.info(
+                "HMM: phase=%s confidence=%.0f%% velocity=%.2f",
+                phase_detection.most_likely.name,
+                phase_detection.confidence * 100,
+                phase_detection.threat_velocity,
+            )
 
-        # ── Markov analysis ────────────────────────────────────────────────
-        num_nodes = len(snapshot.users) + len(snapshot.computers) + len(snapshot.groups)
-        tier0_ids = [
-            i for i, u in enumerate(snapshot.users) if u.tier == 0
-        ]
-        markov = AttackChainMarkov(
-            num_nodes=max(num_nodes, 10),
-            tier0_node_ids=tier0_ids or [0],
-        )
-        edge_index, edge_probs = self._build_graph_tensors(snapshot, event_stream)
-        theta = {
-            k: torch.tensor(v, dtype=torch.float32, requires_grad=True)
-            for k, v in controls.items()
-        }
-        lpe_pairs = self._build_lpe_pairs(findings)
-        mc_result = markov.analyze(edge_index, edge_probs, theta, lpe_pairs)
+            # ── Markov analysis ────────────────────────────────────────────────
+            num_nodes = len(snapshot.users) + len(snapshot.computers) + len(snapshot.groups)
+            tier0_ids = [
+                i for i, u in enumerate(snapshot.users) if u.tier == 0
+            ]
+            markov = AttackChainMarkov(
+                num_nodes=max(num_nodes, 10),
+                tier0_node_ids=tier0_ids or [0],
+            )
+            edge_index, edge_probs = self._build_graph_tensors(snapshot, event_stream)
+            theta = {
+                k: torch.tensor(v, dtype=torch.float32, requires_grad=True)
+                for k, v in controls.items()
+            }
+            lpe_pairs = self._build_lpe_pairs(findings)
+            mc_result = markov.analyze(edge_index, edge_probs, theta, lpe_pairs)
 
-        # ── Gradient ranking ───────────────────────────────────────────────
-        ranking = self.gradient_engine.compute_ranking(
-            edge_index, edge_probs, controls, phase_detection, markov, lpe_pairs
-        )
+            # ── Gradient ranking ───────────────────────────────────────────────
+            ranking = self.gradient_engine.compute_ranking(
+                edge_index, edge_probs, controls, phase_detection, markov, lpe_pairs
+            )
 
-        # ── Attach gradient contributions to findings ──────────────────────
-        ctrl_to_findings = self._map_controls_to_findings(findings)
-        for item in ranking:
-            for fid in ctrl_to_findings.get(item.control, []):
-                matching = [f for f in findings if f.id == fid]
-                for f in matching:
-                    f.gradient_contribution = max(f.gradient_contribution, item.gradient)
+            # ── Attach gradient contributions to findings ──────────────────────
+            ctrl_to_findings = self._map_controls_to_findings(findings)
+            for item in ranking:
+                for fid in ctrl_to_findings.get(item.control, []):
+                    matching = [f for f in findings if f.id == fid]
+                    for f in matching:
+                        f.gradient_contribution = max(f.gradient_contribution, item.gradient)
 
-        # Sort all findings by gradient contribution
-        findings.sort(key=lambda f: f.gradient_contribution, reverse=True)
+            # Sort all findings by gradient contribution
+            findings.sort(key=lambda f: f.gradient_contribution, reverse=True)
 
-        # ── Regime classification ──────────────────────────────────────────
-        regime, regime_explanation = self._classify_regime(mc_result, ranking)
+            # ── Regime classification ──────────────────────────────────────────
+            regime, regime_explanation = self._classify_regime(mc_result, ranking)
+        else:
+            # ════════════════════════════════════════════════════════════════
+            # ASSESSMENT MODE (no ML) - Sort by severity, no attack graph
+            # ════════════════════════════════════════════════════════════════
+            
+            # Sort findings by severity (CRITICAL > HIGH > MEDIUM > LOW > INFO)
+            severity_order = {
+                Severity.CRITICAL: 0, Severity.HIGH: 1,
+                Severity.MEDIUM: 2, Severity.LOW: 3, Severity.INFO: 4
+            }
+            findings.sort(key=lambda f: severity_order.get(f.severity, 5))
+            
+            # No ML predictions - set defaults
+            phase_detection = None
+            mc_result = None
+            ranking = []
+            
+            # Simple regime classification based on finding counts
+            critical_count = sum(1 for f in findings if f.severity == Severity.CRITICAL)
+            high_count = sum(1 for f in findings if f.severity == Severity.HIGH)
+            
+            if critical_count >= 5 or (critical_count >= 2 and high_count >= 10):
+                regime = "COMPROMISED"
+                regime_explanation = f"Assessment: {critical_count} CRITICAL and {high_count} HIGH findings indicate severe risk"
+            elif critical_count >= 1 or high_count >= 5:
+                regime = "ELEVATED"
+                regime_explanation = f"Assessment: {critical_count} CRITICAL and {high_count} HIGH findings indicate elevated risk"
+            elif high_count >= 1:
+                regime = "GUARDED"
+                regime_explanation = f"Assessment: {high_count} HIGH findings require attention"
+            else:
+                regime = "NOMINAL"
+                regime_explanation = "Assessment: No critical or high-severity findings"
+            
+            log.info("Assessment mode: %d findings, regime=%s", len(findings), regime)
 
         # ── Active signals ─────────────────────────────────────────────────
         active_signals = self._extract_active_signals(findings, event_stream)
@@ -700,9 +834,9 @@ class PostureAnalyzer:
             deployment_type="hybrid" if entra_snapshot else "on_prem",
             regime=regime,
             regime_explanation=regime_explanation,
-            tier0_steady_state_probability=mc_result.tier0_probability,
-            mean_steps_to_tier0=mc_result.mean_steps_to_tier0,
-            most_exposed_nodes=mc_result.most_exposed_nodes,
+            tier0_steady_state_probability=mc_result.tier0_probability if mc_result else 0.0,
+            mean_steps_to_tier0=mc_result.mean_steps_to_tier0 if mc_result else 0.0,
+            most_exposed_nodes=mc_result.most_exposed_nodes if mc_result else [],
             attacker_phase=phase_detection,
             findings=findings,
             remediation_ranking=ranking,
@@ -710,8 +844,12 @@ class PostureAnalyzer:
             finding_counts=counts,
         )
 
-        log.info("Analysis complete. %d findings. Regime: %s. π_tier0: %.1f%%",
-                 len(findings), regime, mc_result.tier0_probability * 100)
+        if self.ml_enabled and mc_result:
+            log.info("Analysis complete. %d findings. Regime: %s. π_tier0: %.1f%%",
+                     len(findings), regime, mc_result.tier0_probability * 100)
+        else:
+            log.info("Assessment complete. %d findings. Regime: %s (no ML predictions)",
+                     len(findings), regime)
         
         # SECURITY: Clear credential references after analysis completes
         self._clear_credentials()

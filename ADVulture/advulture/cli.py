@@ -141,14 +141,32 @@ def _discover_evtx_files() -> list:
               help="Disable evidence preservation (not recommended for production)")
 @click.option("--evidence-dir", type=Path, default=Path("evidence"),
               help="Directory for evidence archives")
+# Analysis mode options
+@click.option("--no-ml", is_flag=True, default=False,
+              help="Assessment mode: factual findings only, no ML predictions (like entra_assessment.py)")
+@click.option("--ml", "use_ml", is_flag=True, default=False,
+              help="Prediction mode: include ML-based attack graph analysis (requires torch)")
 @click.pass_context
 def analyze(ctx, output: Path, evtx, fmt: str, 
             ad_auth: Optional[str], domain: Optional[str], server: Optional[str],
             entra_auth: Optional[str], entra_only: bool, ad_only: bool,
             tenant_id: Optional[str], client_id: Optional[str],
-            no_evidence: bool, evidence_dir: Path):
+            no_evidence: bool, evidence_dir: Path,
+            no_ml: bool, use_ml: bool):
     """
     Run posture analysis and generate reports.
+    
+    \b
+    ANALYSIS MODES:
+      --no-ml    Assessment mode (default if torch unavailable)
+                 Produces factual security findings with severity ratings,
+                 similar to entra_assessment.py output.
+    
+      --ml       Prediction mode (requires torch)
+                 Adds ML-based attack graph analysis with:
+                 - Markov chain probability modeling
+                 - GNN-based attack path prediction
+                 - Gradient-based remediation prioritization
     
     \b
     SIMPLEST USAGE:
@@ -271,8 +289,31 @@ def analyze(ctx, output: Path, evtx, fmt: str,
     else:
         console.print("[yellow]Evidence preservation: disabled[/yellow]")
 
+    # Determine ML mode
+    # --no-ml explicitly disables ML
+    # --ml explicitly enables ML
+    # Default: auto-detect (use ML if available)
+    if no_ml and use_ml:
+        console.print("[yellow]Both --no-ml and --ml specified; using --ml[/yellow]")
+        ml_enabled = True
+    elif no_ml:
+        ml_enabled = False
+        console.print("[dim]Analysis mode: ASSESSMENT (factual findings only)[/dim]")
+    elif use_ml:
+        ml_enabled = True
+        console.print("[dim]Analysis mode: PREDICTION (ML-based attack graph)[/dim]")
+    else:
+        ml_enabled = None  # Auto-detect
+        console.print("[dim]Analysis mode: auto-detect[/dim]")
+
     analysis_start = datetime.now(timezone.utc)
-    analyzer = PostureAnalyzer(cfg)
+    analyzer = PostureAnalyzer(cfg, ml_enabled=ml_enabled)
+    
+    # Show effective mode after initialization
+    if analyzer.ml_enabled:
+        console.print("[cyan]→ Using PREDICTION mode (ML-enabled)[/cyan]")
+    else:
+        console.print("[cyan]→ Using ASSESSMENT mode (no ML)[/cyan]")
     
     # Run analysis with progress indicators
     with create_progress() as progress:
