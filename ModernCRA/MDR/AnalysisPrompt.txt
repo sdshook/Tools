@@ -95,24 +95,80 @@ LEVEL 5 — Build and Posture:
 
 APPLICATION INVENTORY ANALYSIS:
 The app-inventory.csv file contains ALL applications discovered across endpoints.
-When analyzing security tool coverage and software versions, filter this file for
-the following categories of applications:
+Analyze this file to identify security tool coverage gaps and browser version risks.
 
-  Security agents:       Filter for application names containing "SentinelOne",
-                         "CrowdStrike", "Falcon", "Kaseya", "RocketCyber",
-                         "Cisco Umbrella", "Roaming Client", or similar
-  Browsers:              Filter for "Chrome", "Edge", "Firefox", "Safari"
-  Remote access:         Filter for RMM tools, VPN clients, remote desktop apps
-  Outdated software:     Identify applications with known vulnerabilities based
-                         on version numbers
+STEP 1 — Identify the organization's security stack:
+Scan app-inventory.csv to identify security-relevant applications by category:
 
-Present security tool deployment as a coverage matrix showing:
-  - Which endpoints have each security agent installed
-  - Version consistency across the fleet
-  - Gaps where expected agents are missing
+  EDR/XDR agents:    SentinelOne, CrowdStrike, Falcon, Carbon Black, Cortex XDR,
+                     Microsoft Defender, Cylance, Trend Micro, Sophos, ESET, etc.
+  RMM/MDM agents:    Kaseya, Intune, JAMF, Connectwise, Datto, NinjaRMM, Kandji,
+                     Mosyle, Workspace ONE, MobileIron, etc.
+  DLP agents:        Symantec DLP, Digital Guardian, Forcepoint, Code42, Netskope,
+                     Microsoft Purview, Endpoint Protector, etc.
+  VPN/ZTNA clients:  Cisco AnyConnect, GlobalProtect, Zscaler, Cloudflare WARP,
+                     FortiClient, Pulse Secure, Perimeter 81, Tailscale, etc.
+  DNS security:      Cisco Umbrella, Roaming Client, DNSFilter, Cloudflare Gateway,
+                     Infoblox, NextDNS, etc.
+  SOC/MDR agents:    RocketCyber, Huntress, Arctic Wolf, Expel, Red Canary, etc.
+  Backup agents:     Veeam, Acronis, Datto, Carbonite, Druva, Cohesity, etc.
 
-Present browser versions in a separate table showing version distribution and
-identifying severely outdated versions with known CVEs.
+STEP 2 — Determine expected baseline by frequency analysis:
+For each security category above, count how many unique endpoints have each
+application installed. The application(s) with the highest deployment count in
+each category represent the organization's expected security baseline.
+
+Example: If 847 of 900 endpoints have "CrowdStrike Falcon Sensor" installed,
+that is the expected EDR agent. The 53 endpoints without it are coverage gaps.
+
+STEP 3 — Report coverage gaps as findings:
+For each security category where a baseline tool is identified:
+  a. List all endpoints present in HostInventory.csv that are MISSING the
+     expected tool for that category
+  b. Calculate the coverage percentage (endpoints with tool / total endpoints)
+  c. Flag coverage below 95% as a High finding; below 80% as Critical
+  d. Note any endpoints with a DIFFERENT tool in the same category (e.g.,
+     endpoint has Defender but fleet standard is CrowdStrike) as requiring
+     review for policy compliance
+
+Present findings as a security tool coverage matrix table:
+  | Category | Expected tool | Deployed count | Missing count | Coverage % |
+  | EDR      | CrowdStrike   | 847            | 53            | 94.1%      |
+  | VPN      | Zscaler       | 612            | 288           | 68.0%      |
+  ...
+
+Follow with a detailed list of endpoints missing each expected tool, grouped
+by category.
+
+STEP 4 — Browser version analysis (LVL5 build control risk):
+Browsers are primary communications interfaces and attack surface portals.
+Analyze browser deployment as a build control and patch hygiene indicator:
+
+  a. Filter app-inventory.csv for browser applications: Chrome, Edge, Firefox,
+     Safari, Brave, Opera, and any other browsers present
+  b. For each browser, group endpoints by major version number
+  c. Count how many endpoints are running each version
+  d. Identify the current stable version for each browser (reference the
+     browser vendor's release notes or use the highest version observed if
+     current release data is unavailable)
+  e. Flag endpoints running versions more than 2 major releases behind current
+     as Medium risk; more than 4 major releases behind as High risk
+  f. Note any endpoints with no browser detected (may indicate incomplete
+     inventory or specialized systems)
+
+Present browser findings as a version distribution table:
+  | Browser | Version | Endpoint count | Status          |
+  | Chrome  | 125.x   | 412            | Current         |
+  | Chrome  | 124.x   | 287            | 1 behind        |
+  | Chrome  | 121.x   | 43             | 4 behind (High) |
+  | Edge    | 125.x   | 698            | Current         |
+  ...
+
+Follow with a summary of browser patch hygiene:
+  - Total browsers assessed
+  - Percentage at current or recent version (within 2 releases)
+  - Count of endpoints with critically outdated browsers (High/Critical)
+  - Any browsers with known actively exploited CVEs in deployed versions
 
 ---
 
@@ -174,28 +230,23 @@ interpretation. Apply these notes when analyzing the relevant files.
    between systems.
 
 6. app-inventory.csv (unified application inventory): This file contains ALL
-   applications discovered across all endpoints. It replaces the previous
-   individual application files (sentinelone.csv, kaseya.csv, etc.). When
-   analyzing this file:
+   applications discovered across all endpoints. Follow the APPLICATION
+   INVENTORY ANALYSIS methodology above to:
 
-   a. Filter by application name to extract security-critical applications:
-      - MDR agents: "SentinelOne", "CrowdStrike", "Falcon Sensor"
-      - RMM agents: "Kaseya", "VSA", "Connectwise", "Datto"
-      - SOC agents: "RocketCyber", "Huntress"
-      - DNS security: "Cisco Umbrella", "Roaming Client"
-      - Browsers: "Chrome", "Edge", "Firefox"
-   b. For each security-critical application category, compare the list of
-      endpoints in the filtered results against HostInventory.csv. Any
-      endpoint present in HostInventory.csv but absent from the filtered
-      application results indicates the application is not installed.
-   c. Identify version inconsistencies by grouping endpoints by application
-      version. Flag any endpoint running a version more than one major
-      release behind the most current version observed in the data.
-   d. For MDR/RMM/SOC agents, treat any missing deployment as a High finding.
-      For browsers, treat significantly outdated versions (with known CVEs)
-      as a Medium finding due to browser-based attack surface exposure.
-   e. Present findings as a coverage matrix table showing each endpoint
-      against each security-critical application category.
+   a. Identify the organization's security stack by scanning for security
+      tools in each category (EDR, RMM/MDM, DLP, VPN/ZTNA, DNS security,
+      SOC/MDR agents, backup agents).
+   b. Use frequency analysis to determine the expected baseline: the most
+      commonly deployed tool in each category is what endpoints SHOULD have.
+   c. Report all endpoints missing the expected tool as coverage gaps.
+   d. For security agents, flag coverage below 95% as High, below 80% as
+      Critical. Missing security tools represent defense gaps.
+   e. For browsers, analyze version distribution across the fleet. Flag
+      versions more than 2 major releases behind as Medium risk, more than
+      4 behind as High risk. Browsers are LVL5 build control indicators.
+   f. Note: Not every organization will have tools in every category. Only
+      report gaps for categories where a baseline tool is actually deployed
+      to a significant portion (>20%) of endpoints.
 
 7. Entra ID files (EntraUsers.csv, EntraGroups.csv, EntraRoles.csv): These
    files originate from Microsoft Entra ID (Azure Active Directory) rather
@@ -427,7 +478,7 @@ in subsequent sections rather than creating duplicate entries.
 
 SECTION 6 — Appendix
 
-Include the following six subsections:
+Include the following seven subsections:
 
   A. Query methodology: Describe the MDR platform and query framework used:
      - For SentinelOne: Deep Visibility PowerQuery with the v2.1 Management API
@@ -452,14 +503,20 @@ Include the following six subsections:
   MDR agent version, and last active date only. Format to fit page width
   using abbreviated column headers if necessary.
 
-  E. Application coverage matrix: A condensed summary table derived from
-  app-inventory.csv showing each endpoint against each security-critical
-  application category (MDR agent, RMM agent, SOC agent, DNS security) with
-  a simple Present or Missing indicator in each cell. Format to fit page
-  width. This table provides a single-view reference for deployment gaps
-  identified in Section 2 Level 5 findings.
+  E. Security tool coverage matrix: A condensed summary table derived from
+  app-inventory.csv showing the organization's identified security stack
+  (determined by frequency analysis) with coverage statistics for each
+  category. Include columns for: Category, Expected Tool, Deployed Count,
+  Missing Count, Coverage %. Only include categories where a baseline tool
+  was identified (deployed to >20% of endpoints). This table provides a
+  single-view reference for deployment gaps identified in Section 2 Level 5.
 
-  F. Collection integrity: Reference the chain_of_custody.json manifest
+  F. Browser version distribution: A summary table showing browser patch
+  hygiene across the fleet. Include columns for: Browser, Version, Endpoint
+  Count, Status (Current, N behind, Outdated). Flag any versions with known
+  actively exploited CVEs. This is a LVL5 build control risk indicator.
+
+  G. Collection integrity: Reference the chain_of_custody.json manifest
   and summarize the collection metadata including script version, operator,
   run timestamps, query date range, and total files collected. Note any
   files with non-success status that may require follow-up collection.
