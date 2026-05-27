@@ -2651,7 +2651,7 @@ Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
         # Run without capturing stdout so device code prompt is visible
         result = subprocess.run(
             [ps_exe, "-NoProfile", "-Command", ps_script],
-            timeout=300
+            timeout=900
         )
 
         if not os.path.exists(tmp_path):
