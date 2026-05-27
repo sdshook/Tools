@@ -34,9 +34,12 @@ LEVEL 2 — User Activity and Credential Risk:
   UPPActivity.csv      — Detailed login activity for flagged accounts
   UserServices.csv     — User-space processes making outbound network connections
   CredentialTheft.csv  — LSASS process handle access events
-  LPE.csv			   — Local Privilege Escalataion events
-  PrivilegeRisks.csv   - Privilege Hygiene Issues 
+  LPE.csv              — Local Privilege Escalation events
+  PrivilegeRisks.csv   — Privilege Hygiene Issues 
   WMILateral.csv       — WMI-spawned process creation (lateral movement indicator)
+  MgmtActivity.csv     — MDR console administrative activity log (CRITICAL for
+                         detecting APT abuse of security tools — see MDR CONSOLE
+                         ABUSE DETECTION section below)
   EntraUsers.csv       — Microsoft Entra ID user account inventory including
                          account status, MFA enrollment, last sign-in date,
                          assigned licenses, and account risk level
@@ -169,6 +172,102 @@ Follow with a summary of browser patch hygiene:
   - Percentage at current or recent version (within 2 releases)
   - Count of endpoints with critically outdated browsers (High/Critical)
   - Any browsers with known actively exploited CVEs in deployed versions
+
+---
+
+MDR CONSOLE ABUSE DETECTION (LVL2 Administrative Risk):
+
+APT actors increasingly target MDR/EDR platforms after gaining initial access.
+Compromising security tool administration allows attackers to blind defenders,
+create persistence, and operate undetected. MgmtActivity.csv contains the audit
+trail of all administrative actions in the MDR console.
+
+Analyze MgmtActivity.csv for the following HIGH-RISK indicators:
+
+CATEGORY 1 — Protection Tampering (Critical severity):
+  - Agent uninstall or decommission actions (especially on specific endpoints)
+  - Policy changes that reduce protection levels or disable features
+  - Exclusion creation (path, hash, certificate, or process exclusions)
+  - Threat/detection status changes (marking malware as false positive)
+  - Quarantine release or restoration of blocked files
+  - Network isolation removal from compromised endpoints
+  - Scan cancellation or scheduled scan modifications
+
+CATEGORY 2 — Reconnaissance via Console (High severity):
+  - Bulk export of endpoint inventory or threat data
+  - Excessive query activity or Deep Visibility/NGSIEM searches
+  - Access to threat intelligence or detection rule details
+  - Viewing of incident response playbooks or procedures
+  - Download of forensic artifacts or memory dumps
+
+CATEGORY 3 — Persistence and Access (High severity):
+  - New user account creation (especially with admin privileges)
+  - Role or permission escalation for existing accounts
+  - API key generation or token creation
+  - SSO/SAML configuration changes
+  - MFA bypass or authentication policy weakening
+  - Service account modifications
+
+CATEGORY 4 — Stealth and Evasion (Critical severity):
+  - Audit log clearing or export (covering tracks)
+  - Alert suppression or notification rule changes
+  - Integration disconnection (SIEM, SOAR, ticketing)
+  - Reporting schedule modifications or disabling
+  - Retention policy changes
+
+CATEGORY 5 — Anomalous Access Patterns (Medium to High severity):
+  - Console access from unusual IP addresses or geolocations
+  - Access outside normal business hours
+  - High-frequency administrative actions in short time windows
+  - Actions by accounts that rarely access the console
+  - Actions immediately following a security incident or detection
+
+Platform-specific activity types to monitor:
+
+SentinelOne MgmtActivity.csv columns:
+  - activityType: Look for types containing "exclusion", "uninstall", "policy",
+    "user", "role", "api", "threat", "quarantine", "network isolation"
+  - primaryDescription / secondaryDescription: Action details
+  - userId / createdByUser: Who performed the action
+  - createdAt: When (check for off-hours activity)
+  - data: JSON blob with additional context
+
+CrowdStrike MgmtActivity.csv (Audit Events):
+  - OperationName / EventType: Action performed
+  - UserId / UserName: Who performed the action
+  - Timestamp: When
+  - ServiceName: Which Falcon module (e.g., "sensor_update_policies",
+    "host_group", "prevention_policies", "detects", "iocs")
+  - AuditKeyValues: Additional action parameters
+
+Analysis workflow:
+
+1. BASELINE: Identify all unique administrative users in MgmtActivity.csv and
+   their typical activity patterns (action types, frequency, timing).
+
+2. ANOMALY DETECTION: Flag any user whose activity deviates significantly from
+   their baseline or whose actions match Categories 1-4 above.
+
+3. TIMELINE CORRELATION: Cross-reference suspicious console activity against:
+   - Threat detections in LVL3/LVL4 query results (were protections weakened
+     before or after a detection?)
+   - User logins in UPPActivity.csv (did the admin account show unusual
+     endpoint access?)
+   - CredentialTheft.csv (was the admin account potentially compromised?)
+
+4. SEVERITY ESCALATION: Any Category 1 or 4 finding should be treated as a
+   potential incident requiring immediate investigation. Do not assume
+   administrative actions are legitimate without verification.
+
+Present MgmtActivity.csv findings as a separate subsection within LVL2 with:
+  - Summary table of administrative users and action counts
+  - Chronological timeline of high-risk actions (Categories 1-4)
+  - Anomaly flags with cross-references to other findings
+  - Specific recommendations for each suspicious action identified
+
+If MgmtActivity.csv shows exclusions created, policy weakening, or protection
+disabling during the assessment period, treat this as a CRITICAL finding
+requiring immediate client notification regardless of other findings.
 
 ---
 
@@ -330,6 +429,30 @@ Present a DATA QUALITY SUMMARY at the beginning of Section 2 with:
    e. Note that Entra data reflects a point-in-time snapshot rather than
       a 90-day activity history. Treat it as current posture data rather
       than behavioral data.
+
+8. MgmtActivity.csv (MDR console audit log): This file is CRITICAL for
+   detecting APT abuse of security tools. Follow the MDR CONSOLE ABUSE
+   DETECTION methodology above. Key considerations:
+
+   a. Completeness: Verify the audit log covers the full assessment period.
+      Gaps in the audit trail may indicate log tampering (Critical finding).
+   b. User inventory: Build a list of all administrative users who accessed
+      the console. Cross-reference against authorized administrator lists
+      if available from the client.
+   c. Exclusion audit: Any exclusion (path, hash, process, certificate)
+      created during the assessment period MUST be reviewed. Attackers
+      commonly create exclusions to hide malware. Request justification
+      for each exclusion from the client.
+   d. Timing analysis: Actions performed outside business hours (especially
+      2 AM - 6 AM local time) or on weekends warrant additional scrutiny.
+   e. Correlation: Match timestamps of suspicious console actions against
+      detections in other LVL2-4 files. Attackers often disable protections
+      immediately before or after malicious activity.
+   f. API access: Any API token creation or programmatic access should be
+      inventoried. Attackers may create API tokens for persistent access.
+   g. If the file is empty or shows minimal activity for a large tenant,
+      investigate whether audit logging is properly enabled (potential
+      configuration gap finding).
 
 ---
 
