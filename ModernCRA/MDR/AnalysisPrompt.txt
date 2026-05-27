@@ -177,6 +177,69 @@ DATA QUALITY NOTES — read before analyzing:
 The following known query issues and data characteristics may affect result
 interpretation. Apply these notes when analyzing the relevant files.
 
+CRITICAL: TELEMETRY RELIABILITY ASSESSMENT
+
+Before analyzing any query results, assess the overall data quality by examining
+two key factors that directly impact telemetry reliability:
+
+A. Host health status (from HostInventory.csv):
+   Endpoints must be consistently reporting healthy state to the MDR console for
+   their telemetry data to be complete and reliable. Check the health/status
+   columns in HostInventory.csv:
+   
+   - SentinelOne: Look for columns like "isActive", "networkStatus", "infected",
+     "agentOperationalState", "scanStatus". Healthy = active + connected.
+   - CrowdStrike: Look for columns like "status", "device_status", "reduced_
+     functionality_mode". Healthy = normal operational state.
+   
+   Flag any endpoints showing:
+   - Offline or disconnected status for extended periods
+   - Degraded or reduced functionality mode
+   - Pending updates or stuck in transitional states
+   - Last seen date significantly older than the assessment period
+   
+   Endpoints with unhealthy status may have INCOMPLETE telemetry in the query
+   results. Note the count and percentage of unhealthy endpoints as a data
+   quality caveat at the beginning of Section 2 findings. If more than 10% of
+   endpoints show unhealthy status, escalate this as a Critical finding itself
+   (defense visibility gap).
+
+B. EDR agent version consistency (from HostInventory.csv and app-inventory.csv):
+   Different EDR agent versions may have different telemetry capabilities, event
+   types collected, and data fidelity. Version fragmentation affects data quality.
+   
+   Analyze the EDR agent version distribution:
+   - Identify all unique agent versions deployed
+   - Count endpoints per version
+   - Flag significant version spread (more than 3 major versions in use)
+   - Note any endpoints running significantly outdated agent versions
+   
+   Version inconsistency implications:
+   - Older agent versions may not collect certain event types used in queries
+   - Feature gaps between versions may cause false negatives (missing detections)
+   - Endpoints on old versions should be weighted lower in coverage calculations
+   
+   If agent version fragmentation exceeds 20% of endpoints on non-current
+   versions, note this as a data quality limitation and recommend agent
+   standardization as a remediation item.
+
+Cross-reference: Use the Endpoints.csv file (counts of Process Creations, IP
+Connections, and Logins per endpoint) to identify endpoints with anomalously
+low event counts. Low activity may indicate:
+   - Endpoint in degraded/offline state during collection period
+   - Agent malfunction or tampering
+   - Legitimately low-activity system (verify against system type)
+
+Present a DATA QUALITY SUMMARY at the beginning of Section 2 with:
+   - Total endpoints in HostInventory.csv
+   - Count and percentage reporting healthy status
+   - Count and percentage on current/recent agent version
+   - Count of endpoints with anomalously low telemetry (from Endpoints.csv)
+   - Overall data confidence rating: High (>95% healthy, <10% version spread),
+     Medium (>85% healthy, <20% version spread), or Low (below these thresholds)
+
+---
+
 1. CloudUsers.csv: The source query groups by process name and user but does
    not compute a distinct user count. Treat the "lookups" column as connection
    frequency, not unique user count. Report users present in the data rather
@@ -352,6 +415,21 @@ Write one to two pages for a non-technical audience including:
   timeline. Format to fit one page width.
 
 SECTION 2 — Detailed technical findings
+
+Begin this section with a DATA QUALITY SUMMARY box containing:
+  - Total endpoints in assessment scope (from HostInventory.csv)
+  - Endpoints reporting healthy status: [count] ([percentage]%)
+  - Endpoints on current/recent EDR agent version: [count] ([percentage]%)
+  - Endpoints with low telemetry activity: [count] (from Endpoints.csv analysis)
+  - Overall data confidence: [High/Medium/Low] based on thresholds in Data
+    Quality Notes
+  - Any caveats that affect interpretation of findings below
+
+If data confidence is Medium or Low, include a paragraph explaining which
+findings may be affected by incomplete telemetry and recommend re-assessment
+after addressing agent health and version standardization.
+
+---
 
 For each Level (1 through 5) produce a subsection containing:
 
