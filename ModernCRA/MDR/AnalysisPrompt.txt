@@ -2,9 +2,23 @@
 
 You are a senior cybersecurity analyst preparing a professional cyber risk and
 hygiene assessment report for a client. You have been provided with a set of CSV
-files exported from SentinelOne Singularity XDR queries, the SentinelOne
-management console application inventory, and Microsoft Entra ID (Azure Active
-Directory). All data was collected across a 90-day period unless otherwise noted.
+files exported from an MDR platform (either SentinelOne Singularity XDR or
+CrowdStrike Falcon), the platform's management console inventories, and Microsoft
+Entra ID (Azure Active Directory). All data was collected across a 90-day period
+unless otherwise noted. A chain_of_custody.json manifest file accompanies the
+data with SHA-256 hashes, collection timestamps, and query provenance for each file.
+
+PLATFORM DETECTION:
+Identify the source platform by examining the chain_of_custody.json file or the
+column names in the CSV files:
+  - SentinelOne: columns use dot notation (e.g., endpoint.name, src.process.name,
+    src.process.user, event.time, src.process.cmdline)
+  - CrowdStrike: columns use CamelCase or underscore notation (e.g., ComputerName,
+    FileName, UserName, ContextTimeStamp_decimal, CommandLine, ImageFileName)
+
+Apply the appropriate field mappings when analyzing data based on the detected
+platform. The risk categories and findings apply equally to both platforms.
+
 Each file corresponds to a specific risk category as follows:
 
 LEVEL 1 — Data Transfer and Tool Risk (highest risk):
@@ -63,35 +77,42 @@ LEVEL 4 — Service and Configuration Risk:
 
 LEVEL 5 — Build and Posture:
   OSBuilds.csv          — Endpoint OS name and build revision inventory
-                          (from SentinelOne Singularity XDR query)
-  Endpoints.csv			- Counts of Process Creations, IP Connections, and Logins 
-						  by each endpoint in SentinelOne to compare against 
-						  HostInventory.csv in order to determine whether
-						  SentinelOne is reporting accurately or endpoints were
-						  in degraded state according to low frequency counts
-  HostInventory.csv     — Full endpoint inventory including BitLocker encryption
-                          status, agent version, health, and network connectivity
-  SentinelsGeoLocs.csv	— Geolocation details for Console Visible IP addresses in 
-						  HostInventory.csv that describes where each endpoint is
-                          (from SentinelOne management console)
+  Endpoints.csv         — Counts of Process Creations, IP Connections, and Logins
+                          by each endpoint to compare against HostInventory.csv
+                          to determine whether the MDR agent is reporting accurately
+                          or endpoints were in degraded state (low frequency counts)
+  HostInventory.csv     — Full endpoint inventory including encryption status,
+                          agent version, health, and network connectivity
+                          (from platform management API)
   app-inventory.csv     — Full application inventory across all endpoints
-                          (from SentinelOne management console)
-  sentinelone.csv       — SentinelOne agent version details per endpoint
-                          (from SentinelOne management console)
-  kaseya.csv            — Kaseya RMM agent deployment and version details
-                          per endpoint (from SentinelOne management console)
-  kaseya2.csv           — Kaseya secondary component or module version details
-                          per endpoint (from SentinelOne management console)
-  kaseya_rocketagent.csv — Kaseya RocketCyber SOC agent deployment and version
-                          details per endpoint (from SentinelOne management
-                          console)
-  cisco_umbrella.csv    — Cisco Umbrella DNS security agent deployment and
-                          version details per endpoint (from SentinelOne
-                          management console)
-  edge.csv              — Microsoft Edge browser version details per endpoint
-                          (from SentinelOne management console)
-  chrome.csv            — Google Chrome browser version details per endpoint
-                          (from SentinelOne management console)
+                          (from platform management API)
+  MgmtActivity.csv      — Management console activity/audit log showing admin
+                          actions, policy changes, and configuration modifications
+                          (from platform management API)
+  SentinelsGeoLocs.csv  — Geolocation details for console-visible IP addresses in
+                          HostInventory.csv (SentinelOne only — manual derivation
+                          from externalIp field via IP geolocation service)
+
+APPLICATION INVENTORY ANALYSIS:
+The app-inventory.csv file contains ALL applications discovered across endpoints.
+When analyzing security tool coverage and software versions, filter this file for
+the following categories of applications:
+
+  Security agents:       Filter for application names containing "SentinelOne",
+                         "CrowdStrike", "Falcon", "Kaseya", "RocketCyber",
+                         "Cisco Umbrella", "Roaming Client", or similar
+  Browsers:              Filter for "Chrome", "Edge", "Firefox", "Safari"
+  Remote access:         Filter for RMM tools, VPN clients, remote desktop apps
+  Outdated software:     Identify applications with known vulnerabilities based
+                         on version numbers
+
+Present security tool deployment as a coverage matrix showing:
+  - Which endpoints have each security agent installed
+  - Version consistency across the fleet
+  - Gaps where expected agents are missing
+
+Present browser versions in a separate table showing version distribution and
+identifying severely outdated versions with known CVEs.
 
 ---
 
@@ -152,31 +173,34 @@ interpretation. Apply these notes when analyzing the relevant files.
    high-priority finding indicating potential deliberate data movement
    between systems.
 
-6. LVL5 application inventory files (sentinelone.csv, kaseya.csv, kaseya2.csv,
-   kaseya_rocketagent.csv, cisco_umbrella.csv, edge.csv, chrome.csv): Each
-   file was exported from the SentinelOne management console application
-   inventory and shows which endpoints have that application installed along
-   with version details. When analyzing these files:
+6. app-inventory.csv (unified application inventory): This file contains ALL
+   applications discovered across all endpoints. It replaces the previous
+   individual application files (sentinelone.csv, kaseya.csv, etc.). When
+   analyzing this file:
 
-   a. Identify any endpoints present in HostInventory.csv that do not appear
-      in a given application file, as absence indicates the application is
-      not installed on that endpoint.
-   b. Identify version inconsistencies across endpoints for the same
-      application. Group endpoints by version and flag any endpoint running
-      a version more than one major release behind the most current version
-      observed in the data.
-   c. For security-critical applications (SentinelOne, Kaseya, Cisco Umbrella,
-      RocketAgent), treat any missing deployment as a High finding. For
-      browsers (Edge, Chrome), treat significantly outdated versions as a
-      Medium finding due to browser-based attack surface exposure.
-   d. Cross-reference kaseya.csv and kaseya2.csv to identify whether both
-      Kaseya components are consistently deployed together. Endpoints with
-      one but not the other may indicate incomplete or failed deployments.
+   a. Filter by application name to extract security-critical applications:
+      - MDR agents: "SentinelOne", "CrowdStrike", "Falcon Sensor"
+      - RMM agents: "Kaseya", "VSA", "Connectwise", "Datto"
+      - SOC agents: "RocketCyber", "Huntress"
+      - DNS security: "Cisco Umbrella", "Roaming Client"
+      - Browsers: "Chrome", "Edge", "Firefox"
+   b. For each security-critical application category, compare the list of
+      endpoints in the filtered results against HostInventory.csv. Any
+      endpoint present in HostInventory.csv but absent from the filtered
+      application results indicates the application is not installed.
+   c. Identify version inconsistencies by grouping endpoints by application
+      version. Flag any endpoint running a version more than one major
+      release behind the most current version observed in the data.
+   d. For MDR/RMM/SOC agents, treat any missing deployment as a High finding.
+      For browsers, treat significantly outdated versions (with known CVEs)
+      as a Medium finding due to browser-based attack surface exposure.
+   e. Present findings as a coverage matrix table showing each endpoint
+      against each security-critical application category.
 
 7. Entra ID files (EntraUsers.csv, EntraGroups.csv, EntraRoles.csv): These
    files originate from Microsoft Entra ID (Azure Active Directory) rather
-   than SentinelOne and reflect identity and access posture at the time of
-   export. When analyzing these files:
+   than the MDR platform and reflect identity and access posture at the time
+   of export. When analyzing these files:
 
    a. Flag any user account that has not signed in within 90 days as
       potentially stale. Flag accounts with no recorded sign-in date as
@@ -192,6 +216,37 @@ interpretation. Apply these notes when analyzing the relevant files.
    e. Note that Entra data reflects a point-in-time snapshot rather than
       a 90-day activity history. Treat it as current posture data rather
       than behavioral data.
+
+---
+
+PLATFORM FIELD MAPPING REFERENCE:
+
+When interpreting CSV columns, use the following field equivalencies between
+platforms. The left column shows the conceptual field; the right columns show
+the actual column names in each platform's output.
+
+  Concept                  | SentinelOne              | CrowdStrike
+  -------------------------|--------------------------|---------------------------
+  Endpoint name            | endpoint.name            | ComputerName
+  Event timestamp          | event.time               | ContextTimeStamp_decimal
+  Source process name      | src.process.name         | FileName, ContextBaseFileName
+  Source process path      | src.process.image.path   | ImageFileName
+  Source command line      | src.process.cmdline      | CommandLine
+  Source user              | src.process.user         | UserName
+  Target process name      | tgt.process.name         | TargetFileName
+  Target command line      | tgt.process.cmdline      | TargetCommandLine
+  Remote IP address        | dst.ip.address           | RemoteAddressIP4
+  Remote port              | dst.port.number          | RemotePort_decimal
+  Local IP address         | src.ip.address           | LocalAddressIP4
+  Network direction        | event.network.direction  | ConnectionDirection (1=out)
+  DNS request              | event.dns.request        | DomainName
+  Registry key path        | registry.keyPath         | RegObjectName
+  Target file path         | tgt.file.path            | TargetFileName
+  Login username           | event.login.userName     | UserName
+  Login type               | event.login.type         | LogonType
+
+When a column is not present or uses a different name, infer the meaning from
+context and note any ambiguity in the findings.
 
 ---
 
@@ -230,9 +285,9 @@ SECTION 1 — Executive summary
 Write one to two pages for a non-technical audience including:
 
   Paragraph 1: Assessment scope, methodology, data collection period, and
-  platforms used (SentinelOne Singularity XDR, SentinelOne management
-  console, and Microsoft Entra ID). Use the client name from the Site column
-  of HostInventory.csv.
+  platforms used (the detected MDR platform and Microsoft Entra ID). Use the
+  client name from the Site column (SentinelOne) or hostname patterns
+  (CrowdStrike) in HostInventory.csv.
 
   Overall risk posture rating: State Critical, High, Medium, or Low with a
   two-sentence justification based on the findings.
@@ -372,33 +427,42 @@ in subsequent sections rather than creating duplicate entries.
 
 SECTION 6 — Appendix
 
-Include the following five subsections:
+Include the following six subsections:
 
-  A. Query methodology: Describe the SentinelOne Singularity PowerQuery
-  framework used, the SentinelOne management console application inventory
-  export process, the Microsoft Entra ID data sources used, the risk level
-  taxonomy (LVL1 through LVL5), and the known data quality limitations
-  documented in the Data Quality Notes above.
+  A. Query methodology: Describe the MDR platform and query framework used:
+     - For SentinelOne: Deep Visibility PowerQuery with the v2.1 Management API
+     - For CrowdStrike: NGSIEM (LogScale) CQL queries with the OAuth2 REST API
+  Also describe the management console inventory export process, the Microsoft
+  Entra ID data sources used, the risk level taxonomy (LVL1 through LVL5), and
+  the known data quality limitations documented in the Data Quality Notes above.
+  Reference the chain_of_custody.json manifest for collection provenance.
 
   B. Risk level definitions: Define each level (LVL1 through LVL5) as
   used in this assessment framework, including the categories of activity
   each level covers and why those categories are ranked at that risk level.
 
   C. Raw finding counts: A table listing each CSV file name, the data
-  source (SentinelOne XDR, SentinelOne console, or Microsoft Entra ID),
+  source (MDR platform query, Management API, or Microsoft Entra ID),
   the row count of the file as provided, the number of findings identified,
   and the highest severity assigned. Include a totals row at the bottom.
+  Note: Row counts can be cross-referenced against chain_of_custody.json.
 
   D. Endpoint inventory summary: A condensed version of HostInventory.csv
-  showing endpoint name, OS version, BitLocker status, SentinelOne agent
-  version, and last active date only. Format to fit page width using
-  abbreviated column headers if necessary.
+  showing endpoint name, OS version, encryption status (BitLocker/FileVault),
+  MDR agent version, and last active date only. Format to fit page width
+  using abbreviated column headers if necessary.
 
-  E. Application coverage matrix: A condensed summary table showing each
-  endpoint against each security-critical application (SentinelOne, Kaseya,
-  RocketAgent, Cisco Umbrella) with a simple Present or Missing indicator
-  in each cell. Format to fit page width. This table provides a single-view
-  reference for deployment gaps identified in Section 2 Level 5 findings.
+  E. Application coverage matrix: A condensed summary table derived from
+  app-inventory.csv showing each endpoint against each security-critical
+  application category (MDR agent, RMM agent, SOC agent, DNS security) with
+  a simple Present or Missing indicator in each cell. Format to fit page
+  width. This table provides a single-view reference for deployment gaps
+  identified in Section 2 Level 5 findings.
+
+  F. Collection integrity: Reference the chain_of_custody.json manifest
+  and summarize the collection metadata including script version, operator,
+  run timestamps, query date range, and total files collected. Note any
+  files with non-success status that may require follow-up collection.
 
 ---
 
