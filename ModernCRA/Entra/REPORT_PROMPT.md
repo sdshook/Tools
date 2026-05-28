@@ -458,15 +458,102 @@ most for business risk:
 | 4 | **Supply Chain / Trusted Access Abuse** | If a vendor, partner, third-party application, or employee with trusted access acts maliciously or is compromised, what data and access are exposed? |
 | 5 | **Business Email Compromise** | If someone impersonates an executive or trusted party via email, what financial or data exposure results? |
 
-For each scenario, provide a one to two sentence assessment based on the
-evidence. Use RED/YELLOW/GREEN language to characterize readiness:
+**Each assessment must be objective and evidence-supported.** State the
+specific evidence from the assessment data, cite the relevant metrics,
+and apply the criteria below. Do not use subjective language or
+unsupported characterizations.
 
-- **RED**: Controls absent or critically deficient; scenario would cause
-  severe damage with no effective mitigation
-- **YELLOW**: Partial controls present; scenario would cause moderate
-  damage but some mitigation exists
-- **GREEN**: Adequate controls present; scenario would be contained with
-  limited damage
+---
+
+**Scenario 1: Credential Compromise** — *Evidence-based criteria:*
+
+| Rating | Objective Criteria (cite evidence) |
+|---|---|
+| **RED** | MFA coverage <50% of human users (Module 09/17); OR no CA policy requiring MFA for privileged roles (Module 04); OR Global Administrators without phishing-resistant MFA (Module 02 + 17); OR password spray pattern detected with successful authentications (Module 07) |
+| **YELLOW** | MFA coverage 50-90%; OR MFA deployed but weak methods only (SMS/voice >50% of registrations); OR CA policies exist but have exclusions for privileged accounts; OR legacy authentication not fully blocked |
+| **GREEN** | MFA coverage >90% with strong methods (authenticator app, FIDO2, WHfB); AND CA policy requires MFA for all privileged roles with no exclusions; AND legacy authentication blocked; AND no credential compromise indicators in sign-in logs |
+
+*Evidence statement format:* "X of Y human users (Z%) have MFA registered
+(Module 17). CA policy [name] requires MFA for [scope] with [N] exclusions
+(Module 04). [N] privileged accounts use phishing-resistant methods (Module
+02 + 17). Legacy authentication is [blocked/partially blocked/not blocked]."
+
+---
+
+**Scenario 2: Ransomware Outbreak** — *Evidence-based criteria:*
+
+| Rating | Objective Criteria (cite evidence) |
+|---|---|
+| **RED** | No device compliance CA policies (Module 04); OR MDM enrollment <30% (Module 06); OR DLP absent or covers <25% of cloud resources; OR unresolved Defender alerts for malware/ransomware TTPs (Module 11); OR no evidence of endpoint protection |
+| **YELLOW** | Device compliance policies exist but <50% of devices compliant (Module 06); OR DLP covers 25-75% of cloud resources; OR Defender alerts present but resolved; OR MDM enrollment 30-70% |
+| **GREEN** | Device compliance required by CA policy AND >80% compliance rate; AND DLP covers >75% of cloud resources (Exchange, SharePoint, OneDrive, Teams); AND MDM enrollment >70%; AND no unresolved malware/ransomware Defender alerts |
+
+*Evidence statement format:* "X of Y registered devices (Z%) are compliant
+(Module 06). CA policy [name] requires device compliance for [scope]
+(Module 04). DLP policies cover [list resources] (inferred from licensing/
+CA). [N] Defender alerts relate to malware TTPs, [N] unresolved (Module 11)."
+
+---
+
+**Scenario 3: Device Theft** — *Evidence-based criteria:*
+
+| Rating | Objective Criteria (cite evidence) |
+|---|---|
+| **RED** | MDM enrollment <30% of active devices (Module 06); OR no CA policy requiring managed/compliant devices (Module 04); OR MAM absent and unmanaged device access >30% of sign-ins (Module 07); OR stale devices >20% of registered devices |
+| **YELLOW** | MDM enrollment 30-70%; OR CA policy requires compliance but allows fallback to unmanaged; OR MAM deployed but not covering all apps; OR unmanaged device sign-ins 15-30% |
+| **GREEN** | MDM enrollment >70%; AND CA policy blocks or restricts unmanaged device access; AND MAM protects data on any unmanaged devices permitted; AND stale devices <10%; AND remote wipe capability confirmed via Intune |
+
+*Evidence statement format:* "X of Y devices (Z%) enrolled in MDM (Module
+06). X devices non-compliant, Y stale >90 days. CA policy [name] [requires/
+does not require] compliant devices (Module 04). Unmanaged device sign-ins:
+X of Y (Z%) in analysis window (Module 07). MAM policies [present/absent]."
+
+---
+
+**Scenario 4: Supply Chain / Trusted Access Abuse** — *Evidence-based criteria:*
+
+| Rating | Objective Criteria (cite evidence) |
+|---|---|
+| **RED** | Applications with Mail.Read, Mail.ReadWrite, Files.ReadWrite.All, or Directory.ReadWrite.All permissions >5 (Module 05/10); OR OAuth grants to unrecognized publishers (Module 05); OR service principals with privileged role assignments (Module 02); OR no access review for guest users and guest count >10% of users (Module 03) |
+| **YELLOW** | 2-5 applications with sensitive permissions; OR guest users 5-10% without regular access review; OR admin consent granted to applications without documented business justification; OR PIM not enabled for privileged roles (Module 13) |
+| **GREEN** | <2 applications with highly privileged permissions, all with documented business need; AND guest users <5% or access reviews enabled; AND service principals have minimal necessary permissions; AND PIM enabled with approval workflows for privileged access |
+
+*Evidence statement format:* "X applications have permissions to read/write
+mail or files (Module 05/10). [List app names] with [permissions]. X of Y
+users (Z%) are guests (Module 03). Access reviews [enabled/not enabled].
+X service principals hold privileged role assignments (Module 02). PIM
+[enabled/not enabled] (Module 13)."
+
+---
+
+**Scenario 5: Business Email Compromise** — *Evidence-based criteria:*
+
+| Rating | Objective Criteria (cite evidence) |
+|---|---|
+| **RED** | Mailbox forwarding to external addresses detected (Module 14); OR inbox rules forwarding/deleting/hiding mail (Module 14); OR OAuth grants to mail-accessing applications from suspicious publishers (Module 05/12); OR admin password resets for privileged accounts without MFA re-registration (Module 12); OR SPF/DKIM/DMARC not configured for primary domains (Module 16) |
+| **YELLOW** | Internal mailbox forwarding present (lower risk but requires verification); OR DMARC policy is p=none (monitoring only); OR consent grants to mail applications present but from recognized publishers; OR legacy auth enabled for mail protocols |
+| **GREEN** | No external mailbox forwarding or suspicious inbox rules; AND DMARC p=quarantine or p=reject on all domains; AND no OAuth grants to unrecognized mail-accessing apps; AND legacy mail protocols blocked; AND no BEC indicators in audit logs (Module 12) |
+
+*Evidence statement format:* "X mailboxes have external forwarding configured
+(Module 14). X inbox rules forward, delete, or hide messages. SPF [pass/fail],
+DKIM [pass/fail], DMARC [policy] for [domain] (Module 16). X applications
+have mail read/send permissions (Module 05). BEC-pattern events in audit:
+[count] (Module 12)."
+
+---
+
+**Presentation format in executive summary:**
+
+For each scenario, present a brief table row or paragraph that states:
+1. The rating (RED/YELLOW/GREEN)
+2. The key evidence metrics that determined the rating
+3. A one-sentence summary of the risk posture for that scenario
+
+Example: "**Credential Compromise: YELLOW** — 78% of human users have MFA
+(Module 17), but 34% use SMS/voice only. CA policy 'Require MFA for Admins'
+has 2 exclusions including a Global Administrator. Legacy authentication
+blocked for Exchange but not for other workloads. Partial protection exists
+but privileged account coverage and MFA method strength require improvement."
 
 **Regulatory notification thread (applies to all five scenarios):**
 
@@ -1675,9 +1762,13 @@ Before finalizing, verify each of the following:
   Framework) with RED/YELLOW/GREEN assessments for all five risk scenarios:
   (1) Credential Compromise, (2) Ransomware Outbreak, (3) Device Theft,
   (4) Supply Chain / Trusted Access Abuse, (5) Business Email Compromise.
-  Each assessment is evidence-based using the mapped module sources. The
-  regulatory notification thread addresses incident response readiness
-  against confirmed regulatory timelines (GDPR 72-hour, SEC 4-day, etc.)
+  Each assessment is objective and evidence-supported: ratings are
+  determined by the specific threshold criteria defined in the framework
+  (e.g., MFA coverage percentages, MDM enrollment rates, application
+  permission counts), not subjective characterizations. Each assessment
+  cites the specific metrics from the relevant modules using the evidence
+  statement format provided. The regulatory notification thread addresses
+  incident response readiness against confirmed regulatory timelines
 - Legacy authentication blocking recommendation specifies "Other clients"
   as the CA policy target, not "Exchange ActiveSync and Other clients"
 - Section IV opens with a geographic authentication map (Figure IV-1)
