@@ -2881,6 +2881,10 @@ def module_15_signin_behavioral(a: Assessment):
     print("  [15/17] Sign-in Behavioral Analysis...")
     client = a.client
 
+    # Brief pause after Exchange module to let Graph session settle
+    # (token/session state can cause silent empty returns on auditLogs/signIns)
+    time.sleep(2)
+
     all_signins = client.get_all(
         f"{GRAPH_BASE}/auditLogs/signIns",
         params={
@@ -2893,10 +2897,26 @@ def module_15_signin_behavioral(a: Assessment):
         max_pages=10
     )
 
+    # Retry once if empty — auditLogs/signIns can return empty under throttling or token timing
+    if not all_signins:
+        print("      → Sign-in query returned empty, retrying after brief delay...")
+        time.sleep(5)
+        all_signins = client.get_all(
+            f"{GRAPH_BASE}/auditLogs/signIns",
+            params={
+                "$filter":  f"createdDateTime ge {a.since} and status/errorCode eq 0",
+                "$select":  "createdDateTime,userPrincipalName,appDisplayName,"
+                            "ipAddress,location,clientAppUsed,isInteractive",
+                "$top":     "999",
+            },
+            max_pages=10
+        )
+
     if not all_signins:
         a.finding("INFO", "Behavioral Analysis",
             "Sign-in Behavioral Analysis Skipped",
-            "No sign-in data available. Requires AuditLog.Read.All and admin consent.")
+            "No sign-in data available after retry. Requires AuditLog.Read.All and admin consent. "
+            "This can also occur due to Graph API throttling or token timing issues.")
         return
 
     from collections import defaultdict
