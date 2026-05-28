@@ -1498,12 +1498,14 @@ def module_08_risky_users(a: Assessment):
             "$filter":  f"createdDateTime ge {a.since} and status/errorCode eq 0",
             "$select":  "createdDateTime,userPrincipalName,ipAddress,location",
             "$top":     "999",
-            "$orderby": "createdDateTime asc",
+            # NOTE: No $orderby — auditLogs/signIns silently returns empty with $orderby+$filter
         },
         max_pages=5
     )
 
     if travel_signins:
+        # Sort locally by time (Graph can't do $orderby with $filter on this endpoint)
+        travel_signins.sort(key=lambda x: x.get("createdDateTime", ""))
         # Group successful sign-ins by user, sorted by time
         by_user_travel = defaultdict(list)
         for s in travel_signins:
@@ -2886,7 +2888,7 @@ def module_15_signin_behavioral(a: Assessment):
             "$select":  "createdDateTime,userPrincipalName,appDisplayName,"
                         "ipAddress,location,clientAppUsed,isInteractive",
             "$top":     "999",
-            "$orderby": "createdDateTime desc",
+            # NOTE: No $orderby — auditLogs/signIns silently returns empty with $orderby+$filter
         },
         max_pages=10
     )
