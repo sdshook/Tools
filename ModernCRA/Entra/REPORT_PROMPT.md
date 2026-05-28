@@ -578,7 +578,10 @@ SharePoint and OneDrive workloads. 3 of 8 Global Administrators use
 phishing-resistant methods (FIDO2 or Windows Hello). **If a password is
 compromised, lateral movement to privileged access is partially constrained
 by MFA, but weak methods and legacy authentication gaps provide bypass
-opportunities for a sophisticated attacker.**
+opportunities for a sophisticated attacker.** This can be resolved with
+existing licensed technology: expanding the legacy authentication block
+CA policy to all workloads and requiring authenticator app registration
+for remaining users requires configuration changes only.
 
 **2. Ransomware Outbreak — RED**
 
@@ -593,7 +596,11 @@ and Teams are unprotected. 2 unresolved Defender alerts relate to
 suspicious PowerShell execution (Module 11). **No — if ransomware breaks
 out, no device-level controls exist to limit spread, and data exfiltration
 via unprotected cloud channels cannot be prevented. The value of stolen
-data cannot be limited because DLP does not cover file storage.**
+data cannot be limited because DLP does not cover file storage.** This
+requires both modified architecture and additional investment: MDM
+enrollment requires a device onboarding campaign (architecture), while
+extending DLP to SharePoint, OneDrive, and Teams requires M365 E5
+Compliance licensing (investment) beyond current E3 entitlements.
 
 **3. Device Theft — RED**
 
@@ -608,6 +615,11 @@ deployed. 23 of 127 registered devices (18%) are stale with no check-in
 for >90 days. **No — remote wipe capability exists for only 27% of devices.
 For the remaining 73%, a stolen device provides persistent access to email
 and files until the user's password is changed and all sessions are revoked.**
+This can be substantially improved with existing licensed technology:
+Intune MDM and MAM are included in the current M365 E3 licensing. Expanding
+MDM enrollment and deploying MAM app protection policies requires modified
+architecture (device enrollment campaign, user communication, CA policy
+changes) but no additional investment.
 
 **4. Supply Chain / Trusted Access Abuse — YELLOW**
 
@@ -623,7 +635,12 @@ holds Directory.ReadWrite.All (Module 02). PIM is not enabled (Module 13).
 **If a third-party application or guest account is compromised, the attacker
 gains read access to all user mailboxes and files. The unverified backup
 application and over-privileged sync service present the highest risk and
-require immediate review.**
+require immediate review.** Reducing this exposure requires modified
+architecture: revoking unnecessary OAuth grants, right-sizing service
+principal permissions, and enabling guest access reviews are configuration
+changes under existing licensing. Enabling PIM for privileged roles requires
+Azure AD P2 licensing, which is included in M365 E5 or available as an
+add-on (investment decision).
 
 **5. Business Email Compromise — RED**
 
@@ -640,7 +657,29 @@ from unrecognized publishers (Module 05). **Active BEC persistence mechanisms
 are present. External forwarding on the CEO and Finance mailboxes enables
 real-time interception of wire transfer communications and client
 correspondence. Financial exposure is severe and immediate investigation
-is required.**
+is required.** The forwarding and inbox rules must be removed immediately
+pending investigation (operational action). Strengthening DMARC to p=quarantine
+and blocking external auto-forwarding via transport rule are configuration
+changes under existing licensing. No additional investment is required to
+resolve this scenario.
+
+---
+
+**Remediation path categories:**
+
+Each scenario assessment concludes with one of three remediation paths:
+
+- **Existing licensed technology** — The organization already has the
+  licensing required; remediation requires configuration or deployment only
+- **Modified architecture** — Remediation requires changes to processes,
+  device enrollment, user behavior, or security architecture but not new
+  licensing
+- **Additional investment required** — Remediation requires licensing or
+  procurement beyond current entitlements; state specifically what is needed
+
+Where a scenario requires multiple paths (e.g., some controls available
+now, others require investment), state both clearly so the organization
+can implement available controls immediately while planning for investment.
 
 ---
 
@@ -1861,8 +1900,12 @@ Before finalizing, verify each of the following:
   (e.g., MFA coverage percentages, MDM enrollment rates, application
   permission counts), not subjective characterizations. Each assessment
   cites the specific metrics from the relevant modules using the evidence
-  statement format provided. The regulatory notification thread addresses
-  incident response readiness against confirmed regulatory timelines
+  statement format provided. Each scenario answer concludes with a
+  remediation path statement indicating whether the issue can be resolved
+  with existing licensed technology, requires modified architecture, or
+  requires additional investment (with specifics stated). The regulatory
+  notification thread addresses incident response readiness against
+  confirmed regulatory timelines
 - Legacy authentication blocking recommendation specifies "Other clients"
   as the CA policy target, not "Exchange ActiveSync and Other clients"
 - Section IV opens with a geographic authentication map (Figure IV-1)
