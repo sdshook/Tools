@@ -215,29 +215,60 @@ For each question, provide:
 | 4 | If a vendor, partner, or application is compromised, what is exposed? |
 | 5 | If someone impersonates an executive via email, what is the financial exposure? |
 
-**Rating Criteria:**
+**Rating Criteria (incorporating device platform analysis):**
 
 | Scenario | RED | YELLOW | GREEN |
 |----------|-----|--------|-------|
-| Credential | MFA <50%, no CA for privileged, GAs without phishing-resistant MFA | MFA 50-90%, weak methods >50%, CA exclusions | MFA >90% strong, CA covers privileged, legacy blocked |
-| Ransomware | No device compliance CA, MDM <30%, DLP <25% | Compliance <50%, DLP 25-75%, MDM 30-70% | Compliance >80%, DLP >75%, MDM >70% |
-| Device | MDM <30%, no CA for managed devices, unmanaged >30% | MDM 30-70%, partial MAM | MDM >70%, CA blocks unmanaged, MAM deployed |
+| Credential | MFA <50%, no CA for privileged, GAs without phishing-resistant MFA, OR MFA methods don't match dominant platform (WHfB only but mobile-dominant) | MFA 50-90%, weak methods >50%, CA exclusions | MFA >90% strong methods matching dominant platform, CA covers privileged, legacy blocked |
+| Ransomware | No device compliance CA, MDM <30%, DLP <25%, OR mobile-dominant with no MAM | Compliance <50%, DLP 25-75%, MDM 30-70% | Compliance >80%, DLP >75% covering dominant access method, MDM/MAM >70% |
+| Device | MDM <30%, no CA for managed devices, unmanaged >30%, OR dominant platform unprotected (mobile-dominant with no MAM) | MDM 30-70%, partial MAM, platform mismatch | MDM/MAM >70% on dominant platform, CA blocks unmanaged, remote wipe available |
 | Supply Chain | >5 apps with sensitive permissions, guests >10% unreviewed | 2-5 sensitive apps, guests 5-10%, no PIM | <2 sensitive apps documented, PIM enabled |
 | BEC | External forwarding, suspicious rules, no DMARC | Internal forwarding, DMARC p=none | No forwarding, DMARC p=quarantine+ |
 
+**Platform-specific considerations:**
+- If `dominant_platform` = "mobile": MAM is required, MDM alone insufficient
+- If `dominant_access_method` = "native_app": Browser-based controls inadequate
+- If `unmanaged_pct` > 50%: Device compliance CA is ineffective without MAM
+
 **Defense Posture by Technology Domain:**
 
-Summarize the organization's defensive architecture across three domains:
+The assessment now captures device platform and access method distribution
+directly from sign-in logs (Module 07). Use these metrics to determine the
+organization's actual technology reliance:
 
-| Domain | What to Assess | Evidence Sources |
-|--------|----------------|------------------|
-| Mobile | MDM enrollment, MAM policies, mobile app access | Module 06, CA policies |
-| Cloud | DLP coverage, CASB, OAuth grants, cloud app permissions | Modules 05, 10, CA policies |
-| End User Computing | Device compliance, endpoint protection, legacy auth | Module 06, 07, 11, CA policies |
+| Metric | JSON Key | Meaning |
+|--------|----------|---------|
+| Dominant Platform | `dominant_platform` | "mobile", "euc", or "mixed" |
+| Mobile % | `mobile_pct` | Percentage of sign-ins from iOS/Android |
+| EUC % | `euc_pct` | Percentage from Windows/MacOS/Linux |
+| Dominant Access | `dominant_access_method` | "native_app", "browser", or "mixed" |
+| Native App % | `native_app_pct` | Outlook, Teams, OneDrive apps |
+| Browser % | `browser_pct` | Web browser access |
+| Unmanaged % | `unmanaged_pct` | Sign-ins from unmanaged devices |
+| Platform Distribution | `platform_distribution` | Breakdown by OS (iOS, Windows, etc.) |
 
-State whether defensive controls match actual usage patterns. If cloud
-resources are accessed from unmanaged devices without MAM/DLP, state this
-as an architectural gap.
+**Security posture must align with actual access patterns:**
+
+| If Dominant Platform Is | Required Controls | Gap Indicator |
+|-------------------------|-------------------|---------------|
+| **Mobile** (>50% iOS/Android) | MAM policies, mobile-aware CA | MDM <30% or unmanaged >50% |
+| **EUC** (>50% Windows/MacOS) | Device compliance CA, endpoint protection | Compliance not required by CA |
+| **Mixed** | Both mobile and desktop controls | Either gap applies |
+
+| If Dominant Access Is | Required Controls | Gap Indicator |
+|-----------------------|-------------------|---------------|
+| **Native App** (>50%) | MAM app protection, Intune DLP | Browser-only DLP deployed |
+| **Browser** (>50%) | CASB, browser-based DLP, session controls | No session restrictions |
+
+**Critical finding:** If `dominant_platform` = "mobile" but MAM is absent
+and `unmanaged_pct` > 50%, the security architecture does not match
+actual usage. This is a HIGH severity architectural gap.
+
+**MFA method relevance:** Windows Hello for Business (WHfB) provides
+phishing-resistant MFA only on Windows devices. If `dominant_platform` =
+"mobile" and WHfB is the primary MFA method, effective MFA coverage on
+the dominant platform is zero. Cross-reference Module 17 MFA methods
+against `dominant_platform` to identify this gap.
 
 **Associated Entities:**
 

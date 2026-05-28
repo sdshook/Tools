@@ -1161,12 +1161,53 @@ This evaluation must be evidence-based, drawing from:
    that do not exist. This applies equally to mobile apps and desktop
    browsers accessing cloud resources.
 
+7. **Evaluate device platform and access method distribution.** Module 07
+   now provides detailed analysis of actual technology reliance patterns:
+
+   | Metric | JSON Key | Interpretation |
+   |--------|----------|----------------|
+   | Dominant Platform | `dominant_platform` | "mobile", "euc", or "mixed" |
+   | Mobile % | `mobile_pct` | iOS/Android sign-in percentage |
+   | EUC % | `euc_pct` | Windows/MacOS/Linux percentage |
+   | Dominant Access | `dominant_access_method` | "native_app", "browser", or "mixed" |
+   | Native App % | `native_app_pct` | Outlook, Teams, OneDrive app access |
+   | Browser % | `browser_pct` | Web browser access |
+   | Unmanaged % | `unmanaged_pct` | Sign-ins from unmanaged devices |
+   | Platform Distribution | `platform_distribution` | Breakdown by OS |
+
+   The security architecture must match actual access patterns:
+   - If `dominant_platform` = "mobile" but MAM is absent: architectural gap
+   - If `dominant_access_method` = "native_app" but only browser DLP: gap
+   - If `unmanaged_pct` > 50% but device compliance required by CA: ineffective
+   - If MFA methods don't match platform (WHfB only but mobile-dominant): gap
+
+8. Cross-reference MFA methods against dominant platform. Windows Hello
+   for Business (WHfB) is phishing-resistant but only works on Windows.
+   If `dominant_platform` = "mobile" and WHfB is the primary MFA method
+   in Module 17, the organization has no effective phishing-resistant MFA
+   on its dominant access platform.
+
 **Scoring and presentation:**
 
 Where the evidence shows cloud resource access from unmanaged devices or
 applications without corresponding MDM/MAM/DLP/CASB controls, present this
-as an architectural deficiency, not merely a configuration gap. Use language
-such as:
+as an architectural deficiency, not merely a configuration gap. 
+
+**Platform-architecture mismatch language:**
+
+If `dominant_platform` = "mobile" but mobile protections are absent:
+- "The organization's access pattern is mobile-dominant (X% of sign-ins
+  from iOS/Android), but the security architecture remains desktop-centric.
+  MDM enrollment is Y%, MAM policies are absent, and mobile devices access
+  corporate data without protection or remote wipe capability."
+
+If `dominant_access_method` = "native_app" but only browser controls exist:
+- "X% of access occurs via native applications (Outlook, Teams, OneDrive
+  apps) rather than web browsers. Browser-based CASB and session controls
+  do not protect native app data flows. MAM app protection policies are
+  required to control data in native applications."
+
+**General architecture gap language:**
 
 - "The defensive architecture assumes managed endpoints, but X% of
   authentication events originate from unmanaged devices without
