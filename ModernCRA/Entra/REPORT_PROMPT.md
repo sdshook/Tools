@@ -796,6 +796,39 @@ changes. Where a recommended control requires licensing not currently held:
 3. Include licensing cost consideration in the action owner and timeframe
    columns where appropriate
 
+**Regulatory implications of licensing gaps:**
+
+Licensing limitations do not excuse regulatory obligations. Where a
+regulation requires a control that the organization's licensing does not
+support, this is a compliance gap with procurement implications:
+
+- HIPAA Security Rule requires access controls and audit logging — if the
+  organization lacks licensing for advanced audit or DLP, the licensing
+  gap is also a HIPAA compliance gap
+- GLBA Safeguards Rule 16 CFR 314.4 requires access controls and monitoring
+  proportionate to risk — missing CASB or DLP capabilities may constitute
+  non-compliance regardless of licensing status
+- GDPR Article 32 requires "appropriate technical measures" — licensing
+  limitations that prevent implementation of appropriate measures do not
+  satisfy the requirement
+- SEC/FINRA requirements for supervision of electronic communications —
+  missing DLP or archiving capabilities are compliance gaps
+
+When a licensing gap prevents implementation of a control required by
+the organization's confirmed regulatory obligations:
+
+1. Cite the regulatory requirement in Section V
+2. State that current licensing does not support the required control
+3. Classify the remediation as both a licensing decision AND a compliance
+   obligation — the organization cannot defer compliance pending budget
+4. In Section VI (Regulatory Analysis), note the licensing gap under the
+   affected regulation with status FAIL or PARTIAL, not as a mitigating
+   factor
+
+This ensures the report does not inadvertently suggest that licensing
+limitations are an acceptable reason for non-compliance with mandatory
+regulatory obligations.
+
 This evaluation must be evidence-based, drawing from:
 - Module 01 (Tenant): organization information, inferred licensing level
 - Module 06 (Device Compliance): managed vs unmanaged device counts,
@@ -929,6 +962,30 @@ Specifically:
 Any of these gaps should prevent a GREEN posture grade regardless of other
 findings, as they represent fundamental architectural deficiencies in data
 protection.
+
+**Regulatory scoring for data protection gaps:**
+
+Data protection architectural gaps have direct regulatory implications
+that must be reflected in Section VI scoring:
+
+| Regulatory Framework | Data Protection Requirement | Gap Impact on Compliance Status |
+|---|---|---|
+| HIPAA Security Rule | 164.312(c) Integrity Controls, 164.312(e) Transmission Security | Missing DLP or unmanaged access without MAM = PARTIAL or FAIL |
+| GLBA Safeguards Rule | 16 CFR 314.4(c) Access Controls, 314.4(d) Data Protection | Incomplete DLP coverage or no CASB = PARTIAL |
+| GDPR Article 32 | Appropriate technical measures for data security | Architectural gaps in data protection = PARTIAL |
+| SEC Rule 17a-4 / FINRA | Supervision of electronic communications | No DLP for email/Teams = FAIL for communication supervision |
+| SOX (if applicable) | IT General Controls for financial data | Unmanaged access to financial systems = PARTIAL |
+| PCI DSS (if applicable) | Requirement 7 (Access Control), Req 10 (Monitoring) | Missing controls for cardholder data environments = FAIL |
+
+When completing Section VI, cross-reference the data protection
+architecture findings with applicable regulations. A finding of incomplete
+MDM/MAM/DLP/CASB coverage should appear in the regulatory analysis for
+every applicable data protection regulation, not just as a technical
+finding in Section IV.
+
+The executive summary posture grade and Section VI compliance status
+indicators must be consistent — if data protection gaps cause PARTIAL
+status for HIPAA or GLBA, the overall posture grade cannot be GREEN.
 
 ### Section V: Priority Remediation Matrix
 
@@ -1557,6 +1614,13 @@ Before finalizing, verify each of the following:
   Remediation recommendations do not assume capabilities unavailable under
   current licensing; where license upgrade is required, this is stated
   explicitly with cost/procurement implications noted
+- Regulatory scoring reflects data protection gaps: Section VI compliance
+  status for HIPAA, GLBA, GDPR, SEC/FINRA, and other applicable regulations
+  explicitly accounts for MDM/MAM/DLP/CASB gaps. Licensing limitations are
+  not treated as mitigating factors — a licensing gap that prevents
+  implementation of a required control is scored as PARTIAL or FAIL for
+  the affected regulation. The executive summary posture grade is
+  consistent with Section VI compliance status indicators
 - Legacy authentication blocking recommendation specifies "Other clients"
   as the CA policy target, not "Exchange ActiveSync and Other clients"
 - Section IV opens with a geographic authentication map (Figure IV-1)
