@@ -692,101 +692,176 @@ This is ground truth for "does this user have MFA."
    live credential store could not be queried and counts may understate
    actual MFA coverage for tenants with legacy registrations.
 
-**Mobile device security posture — architectural currency evaluation:**
+**Data protection architecture — device, application, and cloud resource evaluation:**
 
-Users increasingly rely upon mobile devices for protected communications,
-information access, authentication, and data transfer. Security standards
-and regulations have not fully caught up with this reality, nor with the
-threat landscape evidenced by numerous breaches involving mobile credential
-compromise and data exfiltration. The report must evaluate whether the
-organization's security architecture defends actual technology use patterns
-or is based on outdated perimeter-centric and desktop-first defensive models.
+Users increasingly rely upon mobile devices, cloud applications, and browser-
+based access for protected communications, information access, authentication,
+and data transfer. Security standards and regulations have not fully caught
+up with this reality, nor with the threat landscape evidenced by numerous
+breaches involving credential compromise and data exfiltration via unregulated
+devices and applications. The report must evaluate whether the organization's
+security architecture defends actual technology use patterns or is based on
+outdated perimeter-centric defensive models that assume managed endpoints and
+on-premises data.
+
+**The interrelated controls — MDM, MAM, DLP, and CASB:**
+
+These four control categories work together to prevent data theft via
+unregulated devices and applications. The absence of any one creates gaps
+that attackers exploit:
+
+- **MDM (Mobile Device Management)**: Device enrollment, compliance state,
+  remote wipe capability. Applies to mobile AND desktop/laptop endpoints.
+  Without MDM, the organization cannot enforce device-level security or
+  respond to device loss/theft.
+
+- **MAM (Mobile Application Management)**: App-level data protection even
+  on unmanaged devices. Protects data within managed apps (Outlook, Teams,
+  OneDrive) without requiring full device enrollment. Critical for BYOD
+  scenarios on both mobile and desktop.
+
+- **DLP (Data Loss Prevention)**: Data classification and protection rules
+  applied to SharePoint, OneDrive, Exchange, Teams, and endpoint file
+  operations. Prevents sensitive data from leaving the organization via
+  email, file sharing, copy/paste, or download. Must be applied consistently
+  across ALL cloud resources, not just email.
+
+- **CASB (Cloud Access Security Broker)**: Visibility into cloud app usage,
+  shadow IT detection, unsanctioned app blocking, session controls. Defender
+  for Cloud Apps provides this for Microsoft 365 and third-party SaaS.
+  Without CASB, the organization has no visibility into data flowing to
+  unauthorized cloud services.
 
 This evaluation must be evidence-based, drawing from:
 - Module 06 (Device Compliance): managed vs unmanaged device counts,
   compliance state, MDM enrollment, stale device registrations
 - Module 07 (Sign-in Logs): device types (mobile vs desktop), operating
-  systems, managed device sign-in percentages, legacy protocol use by device
+  systems, managed device sign-in percentages, browser-based access,
+  legacy protocol use by device type
 - Module 15 (Behavioral Analysis): device diversity per user, geographic
-  access patterns by device type, off-hours authentication by device
-- Module 04 (Conditional Access): policies targeting mobile platforms,
-  requiring device compliance, blocking unmanaged device access
-- Module 09/17 (MFA): authentication method distribution (mobile app push
-  vs SMS vs hardware tokens), phishing-resistant method adoption
+  access patterns, off-hours authentication patterns
+- Module 04 (Conditional Access): policies requiring device compliance,
+  app protection policies, session controls, blocking unmanaged access
+  to sensitive resources
+- Module 09/17 (MFA): authentication method distribution, phishing-resistant
+  method adoption across device types
+- Module 05 (Applications): OAuth grants to third-party apps accessing
+  mail, files, or user data — indicator of shadow IT and data exposure
 
 **Perform this analysis for every report:**
 
-1. Calculate mobile access percentage from sign-in logs. If >30% of
-   successful sign-ins originate from mobile devices but <30% of CA policies
-   specifically address mobile scenarios (device compliance requirements,
-   app protection policies, mobile-specific MFA controls), flag this as
-   an architectural gap.
+1. Calculate unmanaged device access percentage from sign-in logs and
+   device compliance data. If significant access occurs from unmanaged
+   devices (mobile OR desktop/browser) but CA policies do not require
+   device compliance or app protection, flag this as an architectural gap.
+   The gap exists regardless of device type — a browser on an unmanaged
+   personal laptop is as risky as an unmanaged mobile device.
 
-2. Evaluate MDM/MAM coverage against mobile access. If mobile devices
-   authenticate to the tenant but MDM enrollment is low or MAM policies
-   are absent, the organization has mobile data exposure without
-   corresponding mobile data protection.
+2. Evaluate MDM/MAM coverage against actual access patterns. If devices
+   authenticate to the tenant but MDM enrollment is low AND MAM policies
+   are absent, the organization has data exposure without corresponding
+   data protection. MAM can protect data on unmanaged devices if deployed;
+   its absence means unmanaged device access equals unprotected data access.
 
-3. Assess authentication method distribution. If users primarily
-   authenticate via mobile devices but MFA methods are SMS/voice (weak)
-   rather than authenticator app push or FIDO2 (strong), the mobile
-   authentication surface is inadequately protected against the specific
-   threats targeting mobile (SIM swap, SS7 interception, real-time phishing).
+3. Assess DLP deployment across cloud resources. DLP must be applied to:
+   - Exchange Online (email and attachments)
+   - SharePoint Online (document libraries)
+   - OneDrive for Business (user files)
+   - Microsoft Teams (chat and channel files)
+   - Endpoint DLP (local file operations, USB, print)
+   
+   If DLP is absent or only partially deployed (e.g., email only), data
+   can be exfiltrated via the unprotected channels. Present this as an
+   incomplete data protection architecture, not a configuration oversight.
 
-4. Review DLP posture for mobile. If email and file access occurs from
-   mobile devices but DLP policies do not extend to mobile apps or are
-   not enforced via MAM, data loss prevention is architecturally incomplete.
+4. Evaluate CASB/Defender for Cloud Apps deployment. If the tenant shows
+   OAuth grants to third-party applications (Module 05) or sign-in patterns
+   suggesting shadow IT, but no CASB controls are evident, the organization
+   lacks visibility into data flowing to unauthorized cloud services.
 
-5. Compare device compliance findings to access patterns. Unmanaged devices
-   with access to sensitive resources (mail, SharePoint, Teams) represent
-   architectural risk — the defensive model assumes managed endpoints but
-   reality includes unmanaged mobile access.
+5. Assess authentication method distribution. If users authenticate via
+   mobile devices or browsers but MFA methods are SMS/voice (weak) rather
+   than authenticator app push, FIDO2, or Windows Hello (strong), the
+   authentication surface is inadequately protected against real-time
+   phishing proxies that specifically target weak MFA regardless of device.
+
+6. Compare device compliance findings to sensitive resource access. If
+   unmanaged devices access SharePoint, OneDrive, Exchange, or Teams
+   without app protection policies, the defensive model assumes protections
+   that do not exist. This applies equally to mobile apps and desktop
+   browsers accessing cloud resources.
 
 **Scoring and presentation:**
 
-Where the evidence shows mobile device usage exceeding mobile-specific
-security controls, present this as an architectural deficiency, not merely
-a configuration gap. Use language such as:
+Where the evidence shows cloud resource access from unmanaged devices or
+applications without corresponding MDM/MAM/DLP/CASB controls, present this
+as an architectural deficiency, not merely a configuration gap. Use language
+such as:
 
-- "The defensive architecture is desktop-centric and does not adequately
-  address the mobile access patterns evident in the sign-in data."
-- "Security controls assume managed endpoints, but X% of authentication
-  events originate from unmanaged mobile devices."
-- "The organization's technology dependencies have outpaced its defensive
-  architecture — mobile device usage is prevalent but mobile-specific
-  protections (MDM, MAM, mobile CA policies, app-based MFA) are absent
-  or incomplete."
+- "The defensive architecture assumes managed endpoints, but X% of
+  authentication events originate from unmanaged devices without
+  compensating app protection policies."
+- "DLP is deployed for email but not for SharePoint, OneDrive, or Teams —
+  data exfiltration via file sharing or collaboration channels is not
+  prevented by current controls."
+- "No CASB controls are evident. Third-party OAuth grants indicate data
+  flows to external applications without visibility or control."
+- "The organization's cloud adoption has outpaced its data protection
+  architecture — cloud resources are accessible from unregulated devices
+  and applications without MDM, MAM, DLP, or CASB controls to prevent
+  data theft."
+- "Mobile device usage is prevalent but the security architecture remains
+  desktop-centric. MDM enrollment is low, MAM policies are absent, and
+  DLP does not extend to mobile app scenarios."
 
-**Standards and regulations for mobile security findings:**
+**Standards and regulations for data protection architecture findings:**
 
-Apply these citations to mobile security gaps in Section V:
+Apply these citations to MDM/MAM/DLP/CASB gaps in Section V:
 
 | Finding Type | Primary Citations |
 |---|---|
-| No MDM/MAM for mobile access | NIST SP 800-124 Rev 2 (Mobile Device Security); ISO 27001:2022 A.8.1 (User Endpoint Devices); CIS Control 1 (Enterprise Asset Inventory) |
-| Unmanaged device access to sensitive data | NIST CSF PR.AC-3 (Remote Access); ISO 27001:2022 A.6.7 (Remote Working); NIST SP 800-46 (Remote Access Security) |
-| Mobile CA policy gaps | NIST CSF PR.AC-4 (Access Permissions); ISO 27001:2022 A.5.18 (Access Rights); CIS Control 6 (Access Control Management) |
-| Weak MFA on mobile-heavy workforce | NIST SP 800-63B (Authentication); ISO 27001:2022 A.8.5 (Secure Authentication); CISA Zero Trust Maturity Model |
-| No mobile DLP | NIST CSF PR.DS-5 (Data Leak Protection); ISO 27001:2022 A.8.12 (Data Leakage Prevention); CIS Control 3 (Data Protection) |
+| No MDM for device fleet | NIST SP 800-124 Rev 2 (Mobile Device Security); ISO 27001:2022 A.8.1 (User Endpoint Devices); CIS Control 1 (Enterprise Asset Inventory) |
+| No MAM for unmanaged access | NIST CSF PR.DS-5 (Data Leak Protection); ISO 27001:2022 A.8.2 (Privileged Access Rights); CIS Control 3 (Data Protection) |
+| Unmanaged device access to cloud resources | NIST CSF PR.AC-3 (Remote Access); ISO 27001:2022 A.6.7 (Remote Working); NIST SP 800-46 (Remote Access Security) |
+| Incomplete DLP (not all cloud resources) | NIST CSF PR.DS-5 (Data Leak Protection); ISO 27001:2022 A.8.12 (Data Leakage Prevention); CIS Control 3.3 (Data Encryption) |
+| No CASB / shadow IT visibility | NIST CSF DE.CM-7 (Monitoring for Unauthorized Activity); ISO 27001:2022 A.8.16 (Monitoring Activities); CIS Control 2 (Software Asset Inventory) |
+| CA policy gaps for device compliance | NIST CSF PR.AC-4 (Access Permissions); ISO 27001:2022 A.5.18 (Access Rights); CIS Control 6 (Access Control Management) |
+| Weak MFA across device types | NIST SP 800-63B (Authentication); ISO 27001:2022 A.8.5 (Secure Authentication); CISA Zero Trust Maturity Model |
 | Architecture/use mismatch | ISO 27001:2022 A.5.8 (Information Security in Project Management); NIST CSF ID.GV-4 (Governance and Risk Management) |
 
 For regulated industries, add sector-specific citations:
-- Financial Services: FFIEC IT Examination Handbook (Mobile Financial Services);
-  SEC OCIE Cybersecurity Guidance (mobile device policies)
-- Healthcare: HIPAA Security Rule 45 CFR 164.310(d) (Device and Media Controls);
-  HIPAA 164.312(d) (Person or Entity Authentication)
+- Financial Services: FFIEC IT Examination Handbook (Information Security,
+  Mobile Financial Services); SEC OCIE Cybersecurity Guidance (data loss
+  prevention, mobile device policies); GLBA Safeguards Rule 16 CFR 314
+- Healthcare: HIPAA Security Rule 45 CFR 164.310(d) (Device and Media
+  Controls); HIPAA 164.312(c) (Integrity Controls); HIPAA 164.312(e)
+  (Transmission Security)
 - Defense Industrial Base: NIST SP 800-171 (Protecting CUI); CMMC Level 2
-  mobile device requirements
+  mobile device and data protection requirements
+- Privacy regulations: GDPR Article 32 (Security of Processing); CCPA/CPRA
+  1798.150 (reasonable security procedures)
 
 **Risk escalation for architectural gaps:**
 
-Where the evidence shows significant mobile usage (>40% of sign-ins) with
-minimal mobile-specific controls, escalate the overall security posture
-grade. An organization with excellent desktop security but minimal mobile
-controls has an incomplete defensive architecture that does not match its
-actual technology dependencies. The executive summary posture grade should
-reflect this architectural incompleteness, not just the sum of individual
-findings.
+Where the evidence shows significant cloud resource access (SharePoint,
+OneDrive, Exchange, Teams) from unmanaged devices or via uncontrolled
+applications, with absent or incomplete MDM/MAM/DLP/CASB controls, escalate
+the overall security posture grade. An organization with authentication
+controls but no data protection architecture has defended the door but left
+the windows open. The executive summary posture grade should reflect this
+architectural incompleteness — the organization cannot prevent data theft
+via unregulated devices and applications despite having identity controls
+in place.
+
+Specifically:
+- If DLP covers <50% of cloud resources: architectural gap
+- If MAM is absent and unmanaged device access >20%: architectural gap
+- If CASB is absent and third-party OAuth grants exist: visibility gap
+- If MDM enrollment <50% of active devices: device control gap
+
+Any of these gaps should prevent a GREEN posture grade regardless of other
+findings, as they represent fundamental architectural deficiencies in data
+protection.
 
 ### Section V: Priority Remediation Matrix
 
@@ -1391,15 +1466,21 @@ Before finalizing, verify each of the following:
   discrepancy findings (users where module 09 and 17 disagree) represent
   migration risk: these users' MFA may silently stop satisfying CA
   policies as Microsoft enforces the unified registry
-- Mobile security architectural evaluation is present and evidence-based:
-  the report calculates mobile access percentage from sign-in logs,
-  compares MDM/MAM coverage to mobile access patterns, evaluates whether
-  CA policies address mobile scenarios, and explicitly states whether the
-  defensive architecture matches actual technology use patterns. Where
-  mobile usage exceeds mobile-specific controls, this is presented as an
-  architectural deficiency affecting the overall posture grade, not merely
-  a configuration finding. Standards citations include NIST SP 800-124,
-  ISO 27001:2022 A.8.1 and A.6.7, and sector-specific mobile guidance
+- Data protection architecture evaluation is present and evidence-based:
+  the report calculates unmanaged device access percentage, evaluates
+  MDM/MAM/DLP/CASB coverage against actual access patterns across all
+  cloud resources (SharePoint, OneDrive, Exchange, Teams), and explicitly
+  states whether the defensive architecture matches actual technology use
+  patterns. Where cloud resource access occurs from unmanaged devices or
+  applications without corresponding data protection controls, this is
+  presented as an architectural deficiency affecting the overall posture
+  grade, not merely a configuration finding. The four interrelated controls
+  (MDM, MAM, DLP, CASB) are evaluated together. Standards citations include
+  NIST SP 800-124, ISO 27001:2022 A.8.1/A.6.7/A.8.12, NIST CSF PR.DS-5,
+  and sector-specific data protection guidance. A GREEN posture grade is
+  precluded if DLP covers <50% of cloud resources, MAM is absent with
+  >20% unmanaged access, CASB is absent with third-party OAuth grants,
+  or MDM enrollment is <50%
 - Legacy authentication blocking recommendation specifies "Other clients"
   as the CA policy target, not "Exchange ActiveSync and Other clients"
 - Section IV opens with a geographic authentication map (Figure IV-1)
