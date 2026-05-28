@@ -639,6 +639,59 @@ Delete rules: HIGH. Rules that delete messages can suppress wire transfer
 replies, security alerts, and MFA notifications. Each must be confirmed
 as a legitimate user preference.
 
+**MFA findings require reconciliation between modules 09 and 17:**
+
+The assessment produces MFA data from two different sources that must be
+correctly interpreted and presented:
+
+Module 09 (MFA Registration) queries the unified registration history
+(`userRegistrationDetails` endpoint). This reflects what Microsoft's
+combined security info experience (aka.ms/mysecurityinfo) knows about
+each user. It also provides SSPR capability, passwordless readiness,
+and the `isMfaCapable` policy signal that module 17 cannot provide.
+
+Module 17 (MFA Reconciliation) queries the live credential store
+(`/users/{id}/authentication/methods`). This reflects what is actually
+registered right now, regardless of which portal was used to register.
+This is ground truth for "does this user have MFA."
+
+**When both modules are present in the JSON, apply these rules:**
+
+1. Use module 17 counts for all MFA adoption statements. If module 17
+   reports 15 users without MFA, that is the authoritative number even
+   if module 09 reported a different count. The tool automatically
+   suppresses the module 09 adoption finding when module 17 runs.
+
+2. Registry discrepancy findings are migration risk, not false positives.
+   When module 17 finds MFA in the live store but module 09 shows
+   `isMfaRegistered=false`, the user registered via the legacy per-user
+   MFA portal (aka.ms/mfasetup) and has not migrated to the unified
+   registry. Explain in the report that Microsoft is progressively
+   enforcing the unified registry for Conditional Access MFA satisfaction,
+   and these users' MFA may silently stop satisfying policy requirements.
+   The remediation is to have affected users re-register at
+   aka.ms/mysecurityinfo — this creates a unified registry entry without
+   invalidating existing credentials.
+
+3. The reverse discrepancy (module 09 shows registered, module 17 finds
+   nothing) indicates a stale registry entry where credentials were
+   deleted but the registration history was not updated. These users
+   have no working MFA despite appearing registered.
+
+4. Module 09 retains exclusive ownership of these signals — use module 09
+   data for SSPR coverage, passwordless capability, and system-preferred
+   authentication method deployment findings.
+
+5. Privileged account escalation: module 17 escalates weak MFA findings
+   from MEDIUM to HIGH when privileged accounts (from module 02's role
+   assignments) have only SMS, voice, or email OTP. Present this
+   escalation with the privileged account names highlighted.
+
+6. Where module 17 was skipped (permission not granted), module 09's MFA
+   adoption finding remains authoritative. Note in the report that the
+   live credential store could not be queried and counts may understate
+   actual MFA coverage for tenants with legacy registrations.
+
 ### Section V: Priority Remediation Matrix
 
 A five-column table. One row per finding. Color-code the Priority column:
