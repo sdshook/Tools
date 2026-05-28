@@ -1156,7 +1156,9 @@ def module_07_signins(a: Assessment):
     _common = {
         "$select": _select,
         "$top":    "999",
-        "$orderby": "createdDateTime desc",
+        # NOTE: Do NOT add $orderby here. The auditLogs/signIns endpoint
+        # silently returns empty results when $orderby is combined with $filter.
+        # Sorting is done locally where needed.
     }
 
     successful = a.client.get_all(
