@@ -446,9 +446,15 @@ brown or dark gold), GREEN = #375623. These exact hex values must be used.
 **Subsection B-1: Security Posture Assessment Framework**
 
 Immediately after the grade boxes, present a brief assessment of the
-organization's security posture against five core risk scenarios. This
-framework provides executive-level answers to the questions that matter
-most for business risk:
+organization's security posture against five core risk scenarios.
+
+Open this subsection with the following introductory sentence:
+
+> "Separating the variety and complexity of technologies and services,
+> the following questions essentially interpret your cybersecurity
+> posture and defensive readiness."
+
+The five questions and their evidence-based answers follow:
 
 | # | Risk Scenario | Assessment Question |
 |---|---|---|
@@ -458,10 +464,11 @@ most for business risk:
 | 4 | **Supply Chain / Trusted Access Abuse** | If a vendor, partner, third-party application, or employee with trusted access acts maliciously or is compromised, what data and access are exposed? |
 | 5 | **Business Email Compromise** | If someone impersonates an executive or trusted party via email, what financial or data exposure results? |
 
-**Each assessment must be objective and evidence-supported.** State the
-specific evidence from the assessment data, cite the relevant metrics,
-and apply the criteria below. Do not use subjective language or
-unsupported characterizations.
+**Each answer must restate the question and be objective and evidence-
+supported.** The question provides context for why specific evidence is
+being cited. State the specific evidence from the assessment data, cite
+the relevant metrics, and apply the criteria below. Do not use subjective
+language or unsupported characterizations.
 
 ---
 
@@ -544,16 +551,103 @@ have mail read/send permissions (Module 05). BEC-pattern events in audit:
 
 **Presentation format in executive summary:**
 
-For each scenario, present a brief table row or paragraph that states:
-1. The rating (RED/YELLOW/GREEN)
-2. The key evidence metrics that determined the rating
-3. A one-sentence summary of the risk posture for that scenario
+For each scenario, present a paragraph that:
+1. Restates the question being answered
+2. Provides the rating (RED/YELLOW/GREEN)
+3. Cites the specific evidence metrics from the assessment modules
+4. Concludes with a direct answer to the question
 
-Example: "**Credential Compromise: YELLOW** — 78% of human users have MFA
-(Module 17), but 34% use SMS/voice only. CA policy 'Require MFA for Admins'
-has 2 exclusions including a Global Administrator. Legacy authentication
-blocked for Exchange but not for other workloads. Partial protection exists
-but privileged account coverage and MFA method strength require improvement."
+**Complete example of Subsection B-1 as it should appear in the report:**
+
+---
+
+*Separating the variety and complexity of technologies and services, the
+following questions essentially interpret your cybersecurity posture and
+defensive readiness.*
+
+**1. Credential Compromise — YELLOW**
+
+*If a password were compromised, what would be the damage of its misuse?*
+
+78% of 156 human users have MFA registered (Module 17). However, 42% of
+MFA registrations are SMS or voice only. CA policy "Require MFA for Admins"
+covers Global Administrator and Privileged Role Administrator but excludes
+2 accounts including the break-glass emergency access account. Legacy
+authentication is blocked for Exchange Online but remains enabled for
+SharePoint and OneDrive workloads. 3 of 8 Global Administrators use
+phishing-resistant methods (FIDO2 or Windows Hello). **If a password is
+compromised, lateral movement to privileged access is partially constrained
+by MFA, but weak methods and legacy authentication gaps provide bypass
+opportunities for a sophisticated attacker.**
+
+**2. Ransomware Outbreak — RED**
+
+*If ransomware breaks out in our systems, can we sufficiently limit the
+spread and the value of the data that is stolen?*
+
+34 of 127 registered devices (27%) are MDM-enrolled (Module 06). No CA
+policy requires device compliance for resource access (Module 04). 18
+devices show non-compliant status; 23 devices have not checked in for
+>90 days. DLP policies cover Exchange Online only — SharePoint, OneDrive,
+and Teams are unprotected. 2 unresolved Defender alerts relate to
+suspicious PowerShell execution (Module 11). **No — if ransomware breaks
+out, no device-level controls exist to limit spread, and data exfiltration
+via unprotected cloud channels cannot be prevented. The value of stolen
+data cannot be limited because DLP does not cover file storage.**
+
+**3. Device Theft — RED**
+
+*If a phone or laptop is stolen, can we limit the access to information
+it provides, and remotely wipe or locate the device?*
+
+MDM enrollment covers 27% of active devices (Module 06). CA policy "Block
+Unmanaged Devices" exists but applies only to the Finance SharePoint site,
+not tenant-wide (Module 04). 41% of sign-ins in the analysis window
+originated from unmanaged devices (Module 07). MAM policies are not
+deployed. 23 of 127 registered devices (18%) are stale with no check-in
+for >90 days. **No — remote wipe capability exists for only 27% of devices.
+For the remaining 73%, a stolen device provides persistent access to email
+and files until the user's password is changed and all sessions are revoked.**
+
+**4. Supply Chain / Trusted Access Abuse — YELLOW**
+
+*If a vendor, partner, third-party application, or employee with trusted
+access acts maliciously or is compromised, what data and access are exposed?*
+
+4 applications hold Mail.Read or Mail.ReadWrite permissions; 2 hold
+Files.ReadWrite.All (Module 05/10). Publishers include Microsoft, Salesforce
+(recognized), and "Acme Backup Solutions Ltd" (unverified — requires business
+justification confirmation). 23 of 156 users (15%) are guests (Module 03);
+access reviews are not enabled. 1 service principal ("Legacy Sync Service")
+holds Directory.ReadWrite.All (Module 02). PIM is not enabled (Module 13).
+**If a third-party application or guest account is compromised, the attacker
+gains read access to all user mailboxes and files. The unverified backup
+application and over-privileged sync service present the highest risk and
+require immediate review.**
+
+**5. Business Email Compromise — RED**
+
+*If someone impersonates an executive or trusted party via email, what
+financial or data exposure results?*
+
+3 mailboxes have SMTP forwarding to external addresses configured (Module
+14): jsmith@contoso.com → jsmith.backup@gmail.com, finance@contoso.com →
+acctspayable@externalvendor.com, ceo@contoso.com → ceo.personal@outlook.com.
+7 inbox rules forward, delete, or move messages to hidden folders. SPF
+configured (pass), DKIM configured (pass), DMARC policy is p=none (monitoring
+only) for contoso.com (Module 16). 2 applications have Mail.Send permission
+from unrecognized publishers (Module 05). **Active BEC persistence mechanisms
+are present. External forwarding on the CEO and Finance mailboxes enables
+real-time interception of wire transfer communications and client
+correspondence. Financial exposure is severe and immediate investigation
+is required.**
+
+---
+
+**Regulatory Notification Thread:**
+
+Following the five scenario assessments, add a paragraph addressing
+regulatory notification readiness that applies to all scenarios.
 
 **Regulatory notification thread (applies to all five scenarios):**
 
