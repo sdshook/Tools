@@ -443,6 +443,56 @@ Box 3: CONFIGURATION AND USE ANOMALIES
 Color specification: RED = #C00000, YELLOW = #FFC000 (amber-yellow, not
 brown or dark gold), GREEN = #375623. These exact hex values must be used.
 
+**Subsection B-1: Security Posture Assessment Framework**
+
+Immediately after the grade boxes, present a brief assessment of the
+organization's security posture against five core risk scenarios. This
+framework provides executive-level answers to the questions that matter
+most for business risk:
+
+| # | Risk Scenario | Assessment Question |
+|---|---|---|
+| 1 | **Credential Compromise** | If a password were compromised, what would be the damage of its misuse? |
+| 2 | **Ransomware Outbreak** | If ransomware breaks out in our systems, can we sufficiently limit the spread and the value of the data that is stolen? |
+| 3 | **Device Theft** | If a phone or laptop is stolen, can we limit the access to information it provides, and remotely wipe or locate the device? |
+| 4 | **Supply Chain / Trusted Access Abuse** | If a vendor, partner, third-party application, or employee with trusted access acts maliciously or is compromised, what data and access are exposed? |
+| 5 | **Business Email Compromise** | If someone impersonates an executive or trusted party via email, what financial or data exposure results? |
+
+For each scenario, provide a one to two sentence assessment based on the
+evidence. Use RED/YELLOW/GREEN language to characterize readiness:
+
+- **RED**: Controls absent or critically deficient; scenario would cause
+  severe damage with no effective mitigation
+- **YELLOW**: Partial controls present; scenario would cause moderate
+  damage but some mitigation exists
+- **GREEN**: Adequate controls present; scenario would be contained with
+  limited damage
+
+**Regulatory notification thread (applies to all five scenarios):**
+
+After the five scenario assessments, add a brief statement addressing:
+"What regulatory obligations exist to notify and respond — and with what
+resources?" This ties the scenario assessments to the organization's
+confirmed regulatory obligations from the intake questions. State whether
+incident response plans, breach notification procedures, and legal/
+compliance resources are adequate for the applicable regulatory timeline
+(e.g., GDPR 72-hour notification, SEC 4-day disclosure, state breach laws).
+
+**Mapping scenarios to assessment modules:**
+
+| Scenario | Primary Evidence Sources |
+|---|---|
+| Credential Compromise | Module 02 (Roles), 04 (CA), 07 (Sign-ins), 09/17 (MFA) |
+| Ransomware Outbreak | Module 04 (CA), 06 (Devices), 11 (Defender), data protection architecture |
+| Device Theft | Module 06 (Devices), 04 (CA), MDM/MAM evaluation |
+| Supply Chain / Trusted Access | Module 05 (Apps), 10 (App Roles), 02 (Roles), 03 (Users) |
+| Business Email Compromise | Module 12 (O365/BEC), 14 (Mailbox Forwarding), 07 (Sign-ins) |
+
+This framework ensures the executive summary answers the questions
+executives actually ask, grounded in the technical evidence from the
+assessment modules. The detailed findings in Sections I-IV support these
+summary assessments with specifics.
+
 **Subsection C: Finding Summary**
 
 Immediately following the grade boxes, present a structured finding
@@ -1621,6 +1671,13 @@ Before finalizing, verify each of the following:
   implementation of a required control is scored as PARTIAL or FAIL for
   the affected regulation. The executive summary posture grade is
   consistent with Section VI compliance status indicators
+- Executive summary includes Subsection B-1 (Security Posture Assessment
+  Framework) with RED/YELLOW/GREEN assessments for all five risk scenarios:
+  (1) Credential Compromise, (2) Ransomware Outbreak, (3) Device Theft,
+  (4) Supply Chain / Trusted Access Abuse, (5) Business Email Compromise.
+  Each assessment is evidence-based using the mapped module sources. The
+  regulatory notification thread addresses incident response readiness
+  against confirmed regulatory timelines (GDPR 72-hour, SEC 4-day, etc.)
 - Legacy authentication blocking recommendation specifies "Other clients"
   as the CA policy target, not "Exchange ActiveSync and Other clients"
 - Section IV opens with a geographic authentication map (Figure IV-1)
