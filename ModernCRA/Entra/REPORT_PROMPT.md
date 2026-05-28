@@ -401,11 +401,11 @@ their associated permissions that could threaten the organization or
 indicate active compromise.
 
 Paragraph 2: Describe the assessment scope, the tool used (read-only
-16-module Python-based tool, Entra ID Security Posture Assessment v2.0
+17-module Python-based tool, Entra ID Security Posture Assessment v2.0
 by Shane Shook, available at
 https://github.com/sdshook/Tools/tree/main/ModernCRA/Entra), the
 two authentication sessions (Microsoft Graph API device code for modules
-1 through 13 and 15 through 16; Exchange Online PowerShell device code
+1 through 13 and 15 through 17; Exchange Online PowerShell device code
 for module 14), the number of records collected, the number of API calls,
 the analysis window dates, and the statement that no changes were made to
 the tenant configuration, user accounts, permissions, or data during the
@@ -829,7 +829,7 @@ first confirming whether the obligation applies.
 - Tool used, authentication method, read-only nature of the assessment
 - Two authentication sessions are used: Session 1 is a Microsoft Graph
   API device code login at startup covering modules 1 through 13 and 15
-  through 16. Session 2 is a separate Exchange Online PowerShell device
+  through 17. Session 2 is a separate Exchange Online PowerShell device
   code login that occurs mid-run during module 14. Both sessions are
   read-only. Note this in the methodology section so the two device code
   events in any access log are correctly understood as expected assessment
@@ -1233,6 +1233,15 @@ Before finalizing, verify each of the following:
   SMTP forwarding and external inbox forwarding rules as CRITICAL, internal
   forwarding rules as LOW, and disabled rules are explicitly noted as
   inactive with no active risk
+- MFA findings from module 17 (MFA Reconciliation) are treated as
+  authoritative over module 09 counts when both are present. Module 17
+  reads the live credential store directly and captures MFA registered
+  via both the legacy per-user MFA portal and the new combined security
+  info experience. If module 17 suppressed the module 09 adoption finding,
+  use module 17 counts for all MFA coverage statements. Registry
+  discrepancy findings (users where module 09 and 17 disagree) represent
+  migration risk: these users' MFA may silently stop satisfying CA
+  policies as Microsoft enforces the unified registry
 - Legacy authentication blocking recommendation specifies "Other clients"
   as the CA policy target, not "Exchange ActiveSync and Other clients"
 - Section IV opens with a geographic authentication map (Figure IV-1)

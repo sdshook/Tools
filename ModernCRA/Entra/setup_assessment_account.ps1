@@ -42,6 +42,7 @@ $ADDITIONAL_SCOPES = @(
     "RoleEligibilitySchedule.Read.Directory"
     "RoleAssignmentSchedule.Read.Directory"
     "RoleManagementPolicy.Read.Directory"
+    "UserAuthenticationMethod.Read.All"
 )
 
 # Scopes needed for this setup script

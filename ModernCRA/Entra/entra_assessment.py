@@ -673,7 +673,7 @@ class GraphClient:
             self.stats["errors"] += 1
             return None
 
-    def get_all(self, url: str, params: dict = None, max_pages: int = 20) -> list:
+    def get_all(self, url: str, params: dict = None, max_pages: int = 200) -> list:
         results, current_url, page = [], url, 0
         while current_url and page < max_pages:
             data = self.get(current_url, params=params if page == 0 else None)
@@ -719,7 +719,7 @@ class Assessment:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def module_01_tenant(a: Assessment):
-    print("  [01/16] Tenant & Organization...")
+    print("  [01/17] Tenant & Organization...")
     org = a.client.get(f"{GRAPH_BASE}/organization")
     if org and org.get("value"):
         o = org["value"][0]
@@ -760,7 +760,7 @@ def module_01_tenant(a: Assessment):
 
 
 def module_02_roles(a: Assessment):
-    print("  [02/16] Privileged Role Assignments...")
+    print("  [02/17] Privileged Role Assignments...")
     assignments = a.client.get_all(
         f"{GRAPH_BASE}/roleManagement/directory/roleAssignments",
         params={"$expand": "principal", "$top": "999"}
@@ -769,6 +769,7 @@ def module_02_roles(a: Assessment):
     guest_admins    = []
     sp_admins       = []
     permanent_privs = []
+    privileged_upns = set()  # UPNs of all privileged role holders
 
     for ra in assignments:
         role_id   = ra.get("roleDefinitionId", "")
@@ -781,6 +782,9 @@ def module_02_roles(a: Assessment):
         role_members[role_name].append(name)
 
         if role_id in HIGH_PRIV_ROLES:
+            # Track privileged user UPNs for cross-module reference
+            if "#microsoft.graph.user" in odata and upn:
+                privileged_upns.add(upn.lower())
             if ra.get("directoryScopeId") == "/":
                 permanent_privs.append(f"{name} → {role_name}")
             if "#microsoft.graph.user" in odata and "#EXT#" in upn:
@@ -791,6 +795,7 @@ def module_02_roles(a: Assessment):
     ga_count = len(role_members.get("Global Administrator", []))
     a.metrics["global_admins"]             = ga_count
     a.metrics["privileged_role_assignments"]= len(assignments)
+    a.metrics["privileged_upns"]           = privileged_upns  # For module 17 severity escalation
 
     if ga_count > 5:
         a.finding("HIGH", "Privileged Access",
@@ -828,7 +833,7 @@ def module_02_roles(a: Assessment):
 
 
 def module_03_users(a: Assessment):
-    print("  [03/16] User Hygiene...")
+    print("  [03/17] User Hygiene...")
     users = a.client.get_all(
         f"{GRAPH_BASE}/users",
         params={
@@ -870,6 +875,15 @@ def module_03_users(a: Assessment):
         "synced_from_onprem": len(synced),
     })
 
+    # Large tenant detection — inform user of extended runtime
+    if total >= 10000:
+        a.metrics["large_tenant"] = True
+        print(f"\n  ⚠️  Large tenant detected ({total:,} users)")
+        print(f"      Some modules may take longer. Module 17 will process")
+        print(f"      {(total + 19) // 20:,} batch requests with rate limiting.\n")
+    else:
+        a.metrics["large_tenant"] = False
+
     if total > 0:
         guest_pct = len(guests) / total * 100
         if guest_pct > 20:
@@ -899,7 +913,7 @@ def module_03_users(a: Assessment):
 
 
 def module_04_ca(a: Assessment):
-    print("  [04/16] Conditional Access Policies...")
+    print("  [04/17] Conditional Access Policies...")
     policies = a.client.get_all(f"{GRAPH_BETA}/identity/conditionalAccess/policies")
     if policies is None:
         a.finding("MEDIUM", "Conditional Access",
@@ -981,7 +995,7 @@ def module_04_ca(a: Assessment):
 
 
 def module_05_apps(a: Assessment):
-    print("  [05/16] Applications & Service Principals...")
+    print("  [05/17] Applications & Service Principals...")
     apps         = a.client.get_all(f"{GRAPH_BASE}/applications",
         params={"$select": "id,displayName,createdDateTime,passwordCredentials,keyCredentials", "$top": "999"})
     sps          = a.client.get_all(f"{GRAPH_BASE}/servicePrincipals",
@@ -1076,7 +1090,7 @@ def module_05_apps(a: Assessment):
 
 
 def module_06_devices(a: Assessment):
-    print("  [06/16] Device Compliance & Management...")
+    print("  [06/17] Device Compliance & Management...")
     devices = a.client.get_all(f"{GRAPH_BASE}/devices",
         params={
             "$select": "id,displayName,operatingSystem,isCompliant,isManaged,trustType,"
@@ -1126,7 +1140,7 @@ def module_06_devices(a: Assessment):
 
 
 def module_07_signins(a: Assessment):
-    print(f"  [07/16] Sign-in Logs (last {a.days_back} days)...")
+    print(f"  [07/17] Sign-in Logs (last {a.days_back} days)...")
 
     # NOTE: The Graph auditLogs/signIns endpoint silently returns an empty result set
     # (not a 400 error) when a bare createdDateTime range filter is used without an
@@ -1365,7 +1379,7 @@ def module_07_signins(a: Assessment):
 
 
 def module_08_risky_users(a: Assessment):
-    print("  [08/16] Identity Protection — Risky Users & Risk Detections...")
+    print("  [08/17] Identity Protection — Risky Users & Risk Detections...")
     client = a.client
 
     # ── Risky users ──────────────────────────────────────────────────────────
@@ -1581,13 +1595,16 @@ def _classify_account(upn: str, display_name: str, user_type: str) -> str:
 
 
 def module_09_mfa(a: Assessment):
-    print("  [09/16] MFA Registration & Auth Methods...")
+    print("  [09/17] MFA Registration & Auth Methods...")
 
     # Pull report — paginate to get all users
     report = a.client.get_all(
         f"{GRAPH_BETA}/reports/authenticationMethods/userRegistrationDetails",
         params={"$top": "999"}
     )
+    # Store raw report for module 17 cross-reference
+    a.metrics["mfa_m09_raw_report"] = report
+
     if not report:
         a.finding("INFO", "MFA & Auth Methods",
             "MFA Registration Report Unavailable",
@@ -1686,6 +1703,8 @@ def module_09_mfa(a: Assessment):
     # ── Findings ──────────────────────────────────────────────────────────────
 
     # Human users without MFA — the real risk number
+    # NOTE: This finding may be suppressed by module 17 if it runs successfully,
+    # as module 17 has authoritative data from the live credential store.
     if human_total > 0:
         pct = len(human_mfa_reg) / human_total * 100
         sev = ("CRITICAL" if pct < 50 else
@@ -1702,6 +1721,8 @@ def module_09_mfa(a: Assessment):
                 f"Enforce MFA registration via a CA policy targeting 'All Users' "
                 f"with appropriate exclusions for service accounts.",
                 len(human_mfa_missing), human_mfa_missing)
+            # Flag for module 17 to know this finding was emitted
+            a.metrics["mfa_m09_adoption_finding_emitted"] = True
 
     # Weak MFA — humans only
     if human_weak_only:
@@ -1824,7 +1845,7 @@ def _audit_target(event: dict) -> str:
 
 
 def module_10_app_roles(a: Assessment):
-    print("  [10/16] App Role Analysis — Permissions, Combos & Audit History...")
+    print("  [10/17] App Role Analysis — Permissions, Combos & Audit History...")
     client = a.client
 
     # Resolve the Microsoft Graph SP in this tenant
@@ -2009,7 +2030,7 @@ def module_10_app_roles(a: Assessment):
 
 
 def module_11_defender(a: Assessment):
-    print(f"  [11/16] Microsoft Defender Alerts (last {a.days_back} days)...")
+    print(f"  [11/17] Microsoft Defender Alerts (last {a.days_back} days)...")
     alerts = a.client.get_all(
         f"{GRAPH_BASE}/security/alerts_v2",
         params={
@@ -2156,7 +2177,7 @@ def module_11_defender(a: Assessment):
 
 
 def module_12_o365_abuse(a: Assessment):
-    print(f"  [12/16] O365 / Exchange Credential Abuse & BEC Indicators...")
+    print(f"  [12/17] O365 / Exchange Credential Abuse & BEC Indicators...")
     client = a.client
 
     # ── Audit events: BEC-relevant Entra operations ──
@@ -2339,7 +2360,7 @@ def module_12_o365_abuse(a: Assessment):
 
 def module_13_pim(a: Assessment):
     """PIM eligible assignments and policy quality checks."""
-    print("  [13/16] PIM — Eligible Assignments & Policy Quality...")
+    print("  [13/17] PIM — Eligible Assignments & Policy Quality...")
     client = a.client
 
     # Eligible (PIM-managed) role assignments
@@ -2517,7 +2538,7 @@ def module_14_mailbox_forwarding(a: Assessment):
     """
     import shutil, tempfile, os
 
-    print("  [14/16] Mailbox Forwarding and Inbox Rules (Exchange Online PowerShell)...")
+    print("  [14/17] Mailbox Forwarding and Inbox Rules (Exchange Online PowerShell)...")
 
     # Check for ExchangeOnlineManagement module
     ps_exe = shutil.which("pwsh") or shutil.which("powershell")
@@ -2852,7 +2873,7 @@ Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
 
 def module_15_signin_behavioral(a: Assessment):
     """Behavioral sign-in analysis: off-hours, IP diversity, SharePoint geo."""
-    print("  [15/16] Sign-in Behavioral Analysis...")
+    print("  [15/17] Sign-in Behavioral Analysis...")
     client = a.client
 
     all_signins = client.get_all(
@@ -2997,7 +3018,7 @@ def module_15_signin_behavioral(a: Assessment):
 
 def module_16_dns_and_user_hygiene(a: Assessment):
     """SPF/DKIM/DMARC DNS checks + inactive user and service account analysis."""
-    print("  [16/16] DNS Email Security & Advanced User Hygiene...")
+    print("  [16/17] DNS Email Security & Advanced User Hygiene...")
     import socket
     import re
 
@@ -3196,6 +3217,495 @@ def module_16_dns_and_user_hygiene(a: Assessment):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# MODULE 17 — MFA RECONCILIATION (Live Credential Store)
+# ─────────────────────────────────────────────────────────────────────────────
+# PURPOSE
+#   Module 09 queries /beta/reports/authenticationMethods/userRegistrationDetails,
+#   which reads the Microsoft Graph unified registration history (the new combined
+#   security info experience, aka.ms/mysecurityinfo).  Tenants where MFA was set
+#   up via the legacy per-user MFA portal (aka.ms/mfasetup / MSOnline MSOL) may
+#   have registrations that never migrated to the unified registry.  Those users
+#   show isMfaRegistered=false in module 09 even though they have working MFA.
+#
+#   This module queries the *live credential store* via the per-user endpoint:
+#       GET /beta/users/{id}/authentication/methods
+#   which returns every method currently registered regardless of which portal
+#   was used.  It then cross-references module 09's output to:
+#     1. Produce authoritative MFA registration findings (replaces module 09
+#        severity findings for human MFA adoption).
+#     2. Flag every user where the two APIs disagree as a registry-migration risk.
+#     3. Emit a summary of users whose legacy-only registration will silently
+#        stop satisfying MFA policy once Microsoft completes the registry migration.
+#
+# GRAPH PERMISSIONS REQUIRED (in addition to module 09 scopes)
+#   UserAuthenticationMethod.Read.All
+#   (Delegated or Application — must be admin-consented)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Method type classification for module 17
+_M17_METHOD_TYPE_MAP = {
+    "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod":
+        "microsoftAuthenticatorPush",
+    "#microsoft.graph.windowsHelloForBusinessAuthenticationMethod":
+        "windowsHelloForBusiness",
+    "#microsoft.graph.fido2AuthenticationMethod":
+        "fido2SecurityKey",
+    "#microsoft.graph.softwareOathAuthenticationMethod":
+        "softwareOneTimePasscode",
+    "#microsoft.graph.phoneAuthenticationMethod":
+        "mobilePhone",          # could be SMS or voice — check phoneType field
+    "#microsoft.graph.emailAuthenticationMethod":
+        "email",
+    "#microsoft.graph.temporaryAccessPassAuthenticationMethod":
+        "temporaryAccessPass",
+    "#microsoft.graph.passwordAuthenticationMethod":
+        "password",             # always present; not an MFA method
+}
+_M17_STRONG_METHODS = {
+    "microsoftAuthenticatorPush",
+    "windowsHelloForBusiness",
+    "fido2SecurityKey",
+    "softwareOneTimePasscode",
+}
+_M17_WEAK_METHODS = {"mobilePhone", "email"}
+_M17_NON_MFA      = {"password", "temporaryAccessPass"}
+
+
+def _m17_parse_methods(raw_methods: list) -> dict:
+    """Return a summary dict for a user's authentication/methods response."""
+    canonical = set()
+    has_push      = False
+    has_whfb      = False
+    has_fido2     = False
+    has_totp      = False
+    has_sms_voice = False
+    has_email     = False
+
+    for m in raw_methods:
+        otype = m.get("@odata.type", "")
+        name  = _M17_METHOD_TYPE_MAP.get(otype, otype)
+        canonical.add(name)
+
+        if name == "microsoftAuthenticatorPush":
+            has_push  = True
+        elif name == "windowsHelloForBusiness":
+            has_whfb  = True
+        elif name == "fido2SecurityKey":
+            has_fido2 = True
+        elif name == "softwareOneTimePasscode":
+            has_totp  = True
+        elif name == "mobilePhone":
+            has_sms_voice = True
+        elif name == "email":
+            has_email = True
+
+    has_strong = has_push or has_whfb or has_fido2 or has_totp
+    has_weak   = has_sms_voice or has_email
+    has_mfa    = has_strong or has_weak
+
+    # Phishing-resistant = cannot be intercepted by real-time proxy attack
+    phishing_resistant = has_whfb or has_fido2
+
+    if not has_mfa:
+        strength = "none"
+    elif has_strong:
+        strength = "strong"
+    else:
+        strength = "weak"
+
+    return {
+        "methods":            sorted(canonical - _M17_NON_MFA),
+        "has_mfa":            has_mfa,
+        "strength":           strength,     # "strong" | "weak" | "none"
+        "phishing_resistant": phishing_resistant,
+        "has_push":           has_push,
+        "has_whfb":           has_whfb,
+        "has_fido2":          has_fido2,
+        "has_totp":           has_totp,
+        "has_sms_voice":      has_sms_voice,
+        "has_email_otp":      has_email,
+    }
+
+
+def _m17_batch_get_user_methods(client, user_ids: list) -> dict:
+    """
+    Fetch /beta/users/{id}/authentication/methods for a list of user IDs using
+    the $batch endpoint (max 20 requests per batch call).
+
+    Returns dict: { user_id: [method_objects] | None }
+    None means the request failed (403 = permission denied, 404 = user gone).
+
+    Rate limiting: 100ms delay between batches to avoid throttling on large
+    tenants. Implements exponential backoff on 429 responses.
+    """
+    BATCH_SIZE    = 20
+    BATCH_URL     = f"{GRAPH_BETA}/$batch"
+    BATCH_DELAY   = 0.1   # 100ms between batches
+    MAX_RETRIES   = 3
+    results       = {}
+    total_batches = (len(user_ids) + BATCH_SIZE - 1) // BATCH_SIZE
+
+    for chunk_start in range(0, len(user_ids), BATCH_SIZE):
+        chunk = user_ids[chunk_start: chunk_start + BATCH_SIZE]
+        batch_num = chunk_start // BATCH_SIZE + 1
+
+        batch_body = {
+            "requests": [
+                {
+                    "id":     uid,
+                    "method": "GET",
+                    "url":    f"/users/{uid}/authentication/methods",
+                }
+                for uid in chunk
+            ]
+        }
+
+        # Retry loop with exponential backoff for 429 throttling
+        retry_delay = 1.0
+        for attempt in range(MAX_RETRIES):
+            try:
+                resp = requests.post(
+                    BATCH_URL,
+                    headers={**client.headers, "Content-Type": "application/json"},
+                    json=batch_body,
+                    timeout=60,
+                )
+                client.stats["requests"] += 1
+
+                # Handle throttling with exponential backoff
+                if resp.status_code == 429:
+                    retry_after = int(resp.headers.get("Retry-After", retry_delay))
+                    if attempt < MAX_RETRIES - 1:
+                        time.sleep(retry_after)
+                        retry_delay *= 2
+                        continue
+                    else:
+                        client.stats["errors"] += 1
+                        for uid in chunk:
+                            results[uid] = None
+                        break
+
+                if resp.status_code != 200:
+                    client.stats["errors"] += 1
+                    for uid in chunk:
+                        results[uid] = None
+                    break
+
+                data = resp.json()
+
+                # Store raw batch response in evidence
+                client.evidence.store(
+                    f"{BATCH_URL}?chunk={chunk_start // BATCH_SIZE}",
+                    {"user_ids": chunk},
+                    data,
+                )
+
+                for item in data.get("responses", []):
+                    uid    = item.get("id")
+                    status = item.get("status", 0)
+                    body   = item.get("body", {})
+                    if status == 200:
+                        results[uid] = body.get("value", [])
+                    else:
+                        results[uid] = None   # 403 or 404
+
+                break  # Success - exit retry loop
+
+            except Exception:
+                client.stats["errors"] += 1
+                for uid in chunk:
+                    results[uid] = None
+                break
+
+        # Rate limit protection: small delay between batches for large tenants
+        if batch_num < total_batches:
+            time.sleep(BATCH_DELAY)
+
+    return results
+
+
+def module_17_mfa_reconciliation(a: Assessment):
+    """
+    Authoritative MFA credential inventory via per-user authentication/methods.
+    Cross-references module 09 userRegistrationDetails to surface registry-
+    migration risk and produce corrected human MFA adoption findings.
+    """
+    print("  [17/17] MFA Reconciliation — Per-User Authentication Methods...")
+
+    client = a.client
+
+    # ── 1. Collect human user IDs from module 03's user list ─────────────────
+    # Re-query is cheap; users were already collected by module 03.
+    raw_users = client.get_all(
+        f"{GRAPH_BASE}/users",
+        params={
+            "$select": "id,userPrincipalName,displayName,userType,accountEnabled",
+            "$top":    "999",
+        },
+    )
+    if not raw_users:
+        a.finding(
+            "INFO", "MFA Reconciliation",
+            "MFA Reconciliation Skipped — User List Unavailable",
+            "Could not retrieve user list. Verify User.Read.All admin consent.",
+        )
+        return
+
+    # Filter to enabled human accounts only (same logic as module 09)
+    human_users = [
+        u for u in raw_users
+        if u.get("accountEnabled")
+        and _classify_account(
+            u.get("userPrincipalName", ""),
+            u.get("displayName", ""),
+            u.get("userType", "member"),
+        ) == "human"
+    ]
+
+    if not human_users:
+        a.finding(
+            "INFO", "MFA Reconciliation",
+            "MFA Reconciliation Skipped — No Human Accounts Found",
+            "No enabled human accounts were identified after classification.",
+        )
+        return
+
+    user_id_to_meta = {
+        u["id"]: {
+            "upn":  u.get("userPrincipalName", ""),
+            "name": u.get("displayName", u.get("userPrincipalName", "")),
+        }
+        for u in human_users
+        if u.get("id")
+    }
+    user_ids = list(user_id_to_meta.keys())
+
+    # ── 2. Fetch per-user authentication methods via $batch ───────────────────
+    print(f"         Querying authentication methods for {len(user_ids)} "
+          f"human accounts ({(len(user_ids) + 19) // 20} batch requests)...")
+
+    raw_methods = _m17_batch_get_user_methods(client, user_ids)
+
+    # Check permission: if all results are None, scope is missing
+    non_null = [v for v in raw_methods.values() if v is not None]
+    if not non_null:
+        a.finding(
+            "INFO", "MFA Reconciliation",
+            "MFA Reconciliation Skipped — UserAuthenticationMethod.Read.All Not Granted",
+            "All per-user authentication method requests returned 403. "
+            "Grant admin consent for UserAuthenticationMethod.Read.All on the "
+            "assessment service principal, then re-run this module. "
+            "Without this scope the tool cannot read the live credential store "
+            "and module 09 registration details remain the only MFA data source.",
+        )
+        return
+
+    # ── 3. Parse and classify each user ──────────────────────────────────────
+    # Buckets
+    no_mfa         = []   # (name, upn, methods_summary)
+    weak_only      = []
+    strong         = []
+    phish_resistant= []
+    permission_err = []   # 403 — could not read this user
+
+    # For cross-reference with module 09
+    m09_data = {}
+    for u in (a.metrics.get("mfa_m09_raw_report") or []):
+        upn = u.get("userPrincipalName", "").lower()
+        m09_data[upn] = u
+
+    registry_discrepancies = []   # users where module 09 and module 17 disagree
+
+    for uid, methods_list in raw_methods.items():
+        meta = user_id_to_meta.get(uid, {})
+        upn  = meta.get("upn", "")
+        name = meta.get("name", upn)
+        label = f"{name} ({upn})"
+
+        if methods_list is None:
+            permission_err.append(label)
+            continue
+
+        summary = _m17_parse_methods(methods_list)
+
+        if not summary["has_mfa"]:
+            no_mfa.append((name, upn, summary))
+        elif summary["strength"] == "weak":
+            weak_only.append((name, upn, summary))
+        else:
+            strong.append((name, upn, summary))
+            if summary["phishing_resistant"]:
+                phish_resistant.append(label)
+
+        # Cross-reference with module 09
+        m09 = m09_data.get(upn.lower())
+        if m09:
+            m09_registered = m09.get("isMfaRegistered", False)
+            m17_registered = summary["has_mfa"]
+            if m09_registered != m17_registered:
+                discrepancy_type = (
+                    "legacy-only: MFA exists in live store but absent from unified registry"
+                    if m17_registered and not m09_registered
+                    else "unified-only: MFA in unified registry but absent from live store"
+                )
+                registry_discrepancies.append(
+                    f"{label}: module 09 isMfaRegistered={m09_registered}, "
+                    f"module 17 has_mfa={m17_registered} ({discrepancy_type})"
+                )
+
+    # ── 4. Update metrics ─────────────────────────────────────────────────────
+    total_human = len(human_users)
+    n_no_mfa    = len(no_mfa)
+    n_weak      = len(weak_only)
+    n_strong    = len(strong)
+    n_phr       = len(phish_resistant)
+    n_error     = len(permission_err)
+    n_disc      = len(registry_discrepancies)
+    pct_reg     = (n_strong + n_weak) / total_human * 100 if total_human else 0
+
+    a.metrics.update({
+        "mfa_m17_human_total":         total_human,
+        "mfa_m17_no_mfa":              n_no_mfa,
+        "mfa_m17_weak_only":           n_weak,
+        "mfa_m17_strong":              n_strong,
+        "mfa_m17_phishing_resistant":  n_phr,
+        "mfa_m17_permission_errors":   n_error,
+        "mfa_m17_registry_discrepancies": n_disc,
+        "mfa_m17_pct_registered":      round(pct_reg, 1),
+    })
+
+    # ── 5. Emit findings ──────────────────────────────────────────────────────
+
+    # 5a. Suppress module 09 MFA adoption severity finding if it was emitted
+    # (module 09 sets this flag when it emits its adoption finding)
+    if a.metrics.get("mfa_m09_adoption_finding_emitted"):
+        a.findings = [
+            f for f in a.findings
+            if not (
+                f["category"] == "MFA & Auth Methods"
+                and "Human User MFA Adoption" in f["title"]
+            )
+        ]
+
+    # 5b. No MFA — authoritative finding
+    if no_mfa:
+        # Severity based on percentage of users without MFA
+        if n_no_mfa / total_human > 0.50:
+            sev = "CRITICAL"
+        elif n_no_mfa / total_human > 0.10:
+            sev = "HIGH"
+        else:
+            sev = "HIGH"  # Any users without MFA is HIGH minimum
+
+        items = [
+            f"{name} ({upn}) — methods in live store: "
+            f"{', '.join(s['methods']) if s['methods'] else 'none'}"
+            for name, upn, s in sorted(no_mfa, key=lambda x: x[0])
+        ]
+        a.finding(
+            sev, "MFA Reconciliation",
+            f"Human Accounts With No MFA — Live Credential Store "
+            f"({n_no_mfa} of {total_human}, authoritative)",
+            f"Per-user authentication/methods endpoint (live credential store) "
+            f"confirms {n_no_mfa} of {total_human} enabled human accounts have "
+            f"no MFA method registered. This count is authoritative: it reads "
+            f"the live credential store directly and reflects methods registered "
+            f"through both the new combined registration experience and the legacy "
+            f"per-user MFA portal. "
+            f"Accounts: {', '.join(i.split(' —')[0] for i in items[:10])}"
+            f"{'...' if n_no_mfa > 10 else ''}. "
+            f"Enroll in Microsoft Authenticator push immediately.",
+            n_no_mfa,
+            items,
+        )
+
+    # 5c. Weak MFA only — per-user methods endpoint
+    if weak_only:
+        # Escalate to HIGH if any privileged accounts have weak MFA
+        privileged_upns = a.metrics.get("privileged_upns") or set()
+        has_privileged_weak = any(
+            upn.lower() in privileged_upns
+            for _, upn, _ in weak_only
+        )
+        sev = "HIGH" if has_privileged_weak else "MEDIUM"
+
+        items = [
+            f"{name} ({upn}) — registered: {', '.join(s['methods'])}"
+            for name, upn, s in sorted(weak_only, key=lambda x: x[0])
+        ]
+        a.finding(
+            sev, "MFA Reconciliation",
+            f"Human Accounts With Weak MFA Only — SMS, Voice, or Email "
+            f"({n_weak} accounts, live credential store)",
+            f"{n_weak} enabled human accounts have only SMS, voice call, or "
+            f"email OTP registered. These methods are susceptible to SIM-swap, "
+            f"SS7 interception, and real-time phishing proxy attacks. None "
+            f"satisfy phishing-resistant MFA requirements. "
+            f"{'⚠️ INCLUDES PRIVILEGED ACCOUNTS. ' if has_privileged_weak else ''}"
+            f"Migrate to Microsoft Authenticator push, FIDO2, or Windows Hello.",
+            n_weak,
+            items,
+        )
+
+    # 5d. Registry discrepancies — migration risk
+    if registry_discrepancies:
+        a.finding(
+            "MEDIUM", "MFA Reconciliation",
+            f"MFA Registry Discrepancy: {n_disc} Accounts Differ Between "
+            f"Live Credential Store and Unified Registration Registry",
+            f"{n_disc} accounts show different MFA registration state between "
+            f"the Microsoft Graph unified registration registry (module 09, "
+            f"userRegistrationDetails endpoint) and the live credential store "
+            f"(this module, per-user authentication/methods endpoint). "
+            f"Accounts with MFA in the live store but absent from the unified "
+            f"registry registered via the legacy per-user MFA portal and have "
+            f"not been migrated to the new combined registration experience. "
+            f"As Microsoft progressively enforces the unified registry for "
+            f"Conditional Access MFA satisfaction, these users' MFA will "
+            f"silently stop satisfying policy without administrator notification. "
+            f"Remediation: require all affected users to re-register at "
+            f"aka.ms/mysecurityinfo to migrate their credentials to the unified "
+            f"registry. This does not invalidate existing credentials — it "
+            f"creates a unified registry entry alongside the legacy one.",
+            n_disc,
+            registry_discrepancies,
+        )
+
+    # 5e. Permission errors — partial data warning
+    if permission_err:
+        a.finding(
+            "INFO", "MFA Reconciliation",
+            f"MFA Reconciliation Partial — {n_error} Users Could Not Be Queried",
+            f"UserAuthenticationMethod.Read.All permission was denied for "
+            f"{n_error} user(s). These users are excluded from the authoritative "
+            f"MFA counts. Grant admin consent for UserAuthenticationMethod.Read.All "
+            f"and re-run to obtain complete coverage.",
+            n_error,
+            permission_err,
+        )
+
+    # 5f. Summary INFO — reconciliation complete
+    suppressed_note = (
+        "Module 09 MFA adoption finding suppressed — this module is authoritative."
+        if a.metrics.get("mfa_m09_adoption_finding_emitted") else ""
+    )
+    a.finding(
+        "INFO", "MFA Reconciliation",
+        f"MFA Reconciliation Complete — Live Credential Store "
+        f"({total_human} human accounts, {pct_reg:.0f}% registered)",
+        f"Per-user authentication methods queried for {total_human} enabled "
+        f"human accounts via {(len(user_ids) + 19) // 20} Graph $batch requests. "
+        f"Results: {n_strong} strong MFA ({n_phr} phishing-resistant), "
+        f"{n_weak} weak MFA only (SMS/voice/email), "
+        f"{n_no_mfa} no MFA. "
+        f"Registry discrepancies between unified registry (module 09) and "
+        f"live credential store (this module): {n_disc} accounts. "
+        f"{suppressed_note}",
+        total_human,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # SECTION 10 — REPORTING
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -3265,6 +3775,11 @@ def print_report(a: Assessment, skip_defender: bool = False):
         ("MFA Service Accounts",      m.get("mfa_service_accounts","N/A")),
         ("MFA Resource/Room Accounts",m.get("mfa_resource_accounts","N/A")),
         ("MFA Disabled (excluded)",   m.get("mfa_disabled_excluded","N/A")),
+        ("MFA M17 No MFA (auth)",     m.get("mfa_m17_no_mfa","N/A")),
+        ("MFA M17 Weak Only (auth)",  m.get("mfa_m17_weak_only","N/A")),
+        ("MFA M17 Strong (auth)",     m.get("mfa_m17_strong","N/A")),
+        ("MFA M17 Phish-Resistant",   m.get("mfa_m17_phishing_resistant","N/A")),
+        ("MFA Registry Discrepancies",m.get("mfa_m17_registry_discrepancies","N/A")),
         ("High-Risk Users (IDP)",     m.get("high_risk_users","N/A")),
         ("Graph App Role Grants",     m.get("graph_app_role_grants","N/A")),
         ("Dangerous Perm Grants",     m.get("dangerous_permission_grants","N/A")),
@@ -3607,7 +4122,7 @@ Examples:
         module_06_devices(a)
 
         if cfg["skip_signin"]:
-            print("  [07/16] Sign-in Logs — SKIPPED")
+            print("  [07/17] Sign-in Logs — SKIPPED")
         else:
             module_07_signins(a)
 
@@ -3616,7 +4131,7 @@ Examples:
         module_10_app_roles(a)
 
         if cfg["skip_defender"]:
-            print("  [11/16] Defender Alerts — SKIPPED")
+            print("  [11/17] Defender Alerts — SKIPPED")
         else:
             module_11_defender(a)
 
@@ -3625,6 +4140,7 @@ Examples:
         module_14_mailbox_forwarding(a)
         module_15_signin_behavioral(a)
         module_16_dns_and_user_hygiene(a)
+        module_17_mfa_reconciliation(a)
 
         print(f"\n{BOLD}  Assessment complete — generating report...{RESET}")
 

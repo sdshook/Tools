@@ -65,7 +65,7 @@ Uses the Microsoft Graph Command Line Tools app (client ID
 14d82eec-204b-4c2f-b7e8-296a70dab67e) with device code flow.
 This is a Microsoft-owned public client. No custom app registration,
 no client secret, no credentials stored anywhere. Covers modules 1-13
-and 15-16.
+and 15-17.
 
 **Session 2 — Exchange Online PowerShell (Module 14 only)**
 When module 14 runs, a second device code prompt appears for Exchange
@@ -111,6 +111,7 @@ The setup_assessment_account.ps1 script handles this automatically.
 | RoleEligibilitySchedule.Read.Directory | 13 | PIM eligible role assignments |
 | RoleAssignmentSchedule.Read.Directory | 13 | PIM active role schedules |
 | RoleManagementPolicy.Read.Directory | 13 | PIM activation policy settings |
+| UserAuthenticationMethod.Read.All | 17 | Per-user authentication methods (live credential store) |
 
 Note: Delegated scope consent is bounded by the user's Entra roles.
 Consenting Policy.Read.All does not grant CA policy access to accounts
@@ -176,7 +177,7 @@ Search-UnifiedAuditLog for Exchange-level events not available via Graph API.
 
 ---
 
-## What Is Assessed (16 Modules)
+## What Is Assessed (17 Modules)
 
 | Module | Key Checks |
 |---|---|
@@ -188,7 +189,7 @@ Search-UnifiedAuditLog for Exchange-level events not available via Graph API.
 | 06 Device Compliance | Unmanaged/non-compliant devices, stale registrations |
 | 07 Sign-in Logs | Failure rates, legacy auth, spray detection, token replay, impossible travel |
 | 08 Identity Protection | Risk detections, high/medium risk users (requires Entra P2) |
-| 09 MFA Registration | Adoption by account type, weak methods, FIDO2/passwordless coverage |
+| 09 MFA Registration | Adoption by account type, weak methods, FIDO2/passwordless coverage, SSPR |
 | 10 App Role Analysis | Dangerous permission combos, over-privileged SPs, consent audit history |
 | 11 Defender Alerts | Unresolved alerts, credential TTPs, threat actor attribution |
 | 12 O365 / Exchange / BEC | Mail OAuth grants, consent events, admin password resets, legacy auth |
@@ -196,6 +197,7 @@ Search-UnifiedAuditLog for Exchange-level events not available via Graph API.
 | 14 Mailbox Forwarding | Server-side SMTP forwarding, inbox rules (forward/delete/hide) via Exchange PS |
 | 15 Behavioral Analysis | Off-hours auth, high IP diversity, SharePoint multi-location access |
 | 16 DNS and User Hygiene | SPF/DKIM/DMARC per domain, inactive users, account classification |
+| 17 MFA Reconciliation | Live credential store vs unified registry, migration risk, authoritative MFA counts |
 
 ---
 
@@ -207,6 +209,47 @@ Search-UnifiedAuditLog for Exchange-level events not available via Graph API.
 | Defender unified alerts | Requires Defender licensing | Microsoft Defender portal: security.microsoft.com -> Alerts |
 | Mailbox rules (if Exchange role not assigned) | Requires View-Only Recipients Exchange role | Create Exchange role group as described above |
 | CA policies, PIM, Security Defaults | Requires Global Reader + admin-consented scopes | Run setup_assessment_account.ps1 as Global Administrator |
+
+---
+
+## Large Tenants (10,000+ Users)
+
+The tool automatically detects large tenants and displays a notice after
+module 03 completes. No configuration changes are required for tenants
+up to approximately 200,000 users.
+
+**Automatic adaptations for large tenants:**
+
+| Feature | Default | Large Tenant Behavior |
+|---|---|---|
+| Pagination | Up to 200 pages (~200K items) | Same — stops early when no more data |
+| Module 17 batching | 20 users per batch | 100ms delay between batches to avoid throttling |
+| Rate limiting | Exponential backoff on 429 | Up to 3 retries with increasing delay |
+| Progress notice | None | Displays user count and estimated batch requests |
+
+**Expected runtime by tenant size:**
+
+| Users | Module 17 Batches | Estimated Module 17 Time |
+|---|---|---|
+| 1,000 | 50 | ~10 seconds |
+| 10,000 | 500 | ~2 minutes |
+| 25,000 | 1,250 | ~5 minutes |
+| 100,000 | 5,000 | ~15-20 minutes |
+
+Module 14 (Exchange Online PowerShell) also scales with mailbox count.
+For tenants with 50,000+ mailboxes, module 14 may take 10-15 minutes.
+The 900-second timeout accommodates this.
+
+**Tenants over 200,000 users:**
+
+For very large enterprise tenants, you may need to increase `max_pages`
+in the `get_all()` method. Edit line ~676 in entra_assessment.py:
+
+```python
+def get_all(self, url: str, params: dict = None, max_pages: int = 500) -> list:
+```
+
+This supports up to ~500,000 items per collection endpoint.
 
 ---
 
