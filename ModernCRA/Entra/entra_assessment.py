@@ -1151,7 +1151,8 @@ def module_07_signins(a: Assessment):
     # carry an equality anchor, then merge and deduplicate locally by id.
     _select = (
         "id,createdDateTime,userPrincipalName,appDisplayName,ipAddress,location,"
-        "status,riskLevelAggregated,conditionalAccessStatus,clientAppUsed,isInteractive"
+        "status,riskLevelAggregated,conditionalAccessStatus,clientAppUsed,isInteractive,"
+        "deviceDetail"
     )
     _common = {
         "$select": _select,
@@ -1218,21 +1219,55 @@ def module_07_signins(a: Assessment):
         c = _country_name((s.get("location") or {}).get("countryOrRegion", "Unknown"))
         countries[c] += 1
 
-    # ── Access method analysis (from clientAppUsed) ─────────────────────────────
-    # NOTE: deviceDetail (operatingSystem, browser, isManaged) is NOT available
-    # when using $select with $filter on auditLogs/signIns — Graph returns empty
-    # results. We can only analyze access method from clientAppUsed.
-    access_method_dist = defaultdict(int)
+    # ── Device platform and access method analysis ─────────────────────────────
+    # Categorize sign-ins by platform (Mobile vs EUC) and access method (App vs Browser)
+    # This determines the organization's actual technology reliance pattern.
+    platform_dist = defaultdict(int)  # iOS, Android, Windows, MacOS, etc.
+    access_method_dist = defaultdict(int)  # Native App, Browser, Legacy
+    mobile_signins = 0
+    euc_signins = 0
     browser_signins = 0
     native_app_signins = 0
+    managed_signins = 0
+    unmanaged_signins = 0
+
+    MOBILE_OS = {"ios", "iphone", "ipad", "ipados", "android"}
+    EUC_OS = {"windows", "macos", "mac os", "linux", "chrome os", "chromeos"}
 
     for s in sign_ins:
+        device = s.get("deviceDetail") or {}
+        os_raw = (device.get("operatingSystem") or "").lower()
         client_app = (s.get("clientAppUsed") or "").lower()
+        is_managed = device.get("isManaged") or False
+
+        # Determine OS platform
+        os_display = device.get("operatingSystem") or "Unknown"
+        if os_raw:
+            # Normalize OS name for display
+            if "ios" in os_raw or "iphone" in os_raw or "ipad" in os_raw:
+                os_display = "iOS/iPadOS"
+            elif "android" in os_raw:
+                os_display = "Android"
+            elif "windows" in os_raw:
+                os_display = "Windows"
+            elif "mac" in os_raw:
+                os_display = "MacOS"
+            elif "linux" in os_raw:
+                os_display = "Linux"
+            elif "chrome" in os_raw:
+                os_display = "ChromeOS"
+        platform_dist[os_display] += 1
+
+        # Categorize as Mobile vs EUC (End User Computing / Desktop)
+        is_mobile = any(m in os_raw for m in MOBILE_OS)
+        is_euc = any(e in os_raw for e in EUC_OS)
+        if is_mobile:
+            mobile_signins += 1
+        elif is_euc:
+            euc_signins += 1
+        # Unknown OS doesn't count toward either
 
         # Determine access method: Browser vs Native App vs Legacy
-        # "Browser" clientAppUsed = web browser access
-        # "Mobile Apps and Desktop clients" = native app (Outlook, Teams, OneDrive apps)
-        # Legacy protocols = IMAP, POP, etc.
         if client_app == "browser":
             access_method_dist["Browser"] += 1
             browser_signins += 1
@@ -1244,12 +1279,25 @@ def module_07_signins(a: Assessment):
         else:
             access_method_dist["Other"] += 1
 
-    # Calculate percentages
+        # Track managed vs unmanaged
+        if is_managed:
+            managed_signins += 1
+        else:
+            unmanaged_signins += 1
+
+    # Calculate percentages and determine dominant patterns
+    total_categorized_platform = mobile_signins + euc_signins
+    mobile_pct = (mobile_signins / total_categorized_platform * 100) if total_categorized_platform > 0 else 0
+    euc_pct = (euc_signins / total_categorized_platform * 100) if total_categorized_platform > 0 else 0
+
     total_access_method = browser_signins + native_app_signins
     browser_pct = (browser_signins / total_access_method * 100) if total_access_method > 0 else 0
     native_app_pct = (native_app_signins / total_access_method * 100) if total_access_method > 0 else 0
 
-    # Determine dominant access method
+    unmanaged_pct = (unmanaged_signins / total * 100) if total > 0 else 0
+
+    # Determine dominant platform and access method
+    dominant_platform = "mobile" if mobile_pct > 50 else "euc" if euc_pct > 50 else "mixed"
     dominant_access = "native_app" if native_app_pct > 50 else "browser" if browser_pct > 50 else "mixed"
 
     a.metrics.update({
@@ -1259,13 +1307,24 @@ def module_07_signins(a: Assessment):
         "risky_signins":            len(risky),
         "mfa_not_required_signins": len(no_mfa),
         "signin_countries":         len(countries),
-        # Access method analysis (from clientAppUsed - deviceDetail not available with $filter)
+        # Device platform analysis
+        "platform_distribution":    dict(platform_dist),
+        "mobile_signins":           mobile_signins,
+        "euc_signins":              euc_signins,
+        "mobile_pct":               round(mobile_pct, 1),
+        "euc_pct":                  round(euc_pct, 1),
+        "dominant_platform":        dominant_platform,
+        # Access method analysis
         "access_method_distribution": dict(access_method_dist),
         "browser_signins":          browser_signins,
         "native_app_signins":       native_app_signins,
         "browser_pct":              round(browser_pct, 1),
         "native_app_pct":           round(native_app_pct, 1),
         "dominant_access_method":   dominant_access,
+        # Managed vs unmanaged
+        "managed_signins":          managed_signins,
+        "unmanaged_signins":        unmanaged_signins,
+        "unmanaged_pct":            round(unmanaged_pct, 1),
     })
 
     fail_rate = len(failed) / total * 100 if total else 0
@@ -1421,22 +1480,56 @@ def module_07_signins(a: Assessment):
     a.metrics["token_replay_indicators"] = len(replay_indicators)
     a.metrics["spray_source_ips"]        = len(spray_ips)
 
-    # ── Access method findings ───────────────────────────────────────────────────
-    # Report access method distribution (platform details not available via API)
+    # ── Device platform and access architecture findings ───────────────────────
+    # Generate findings based on dominant platform and security control alignment
+
+    # Report platform distribution as INFO for visibility
+    platform_items = [f"{os}: {count} sign-ins ({count/total*100:.1f}%)"
+                      for os, count in sorted(platform_dist.items(), key=lambda x: x[1], reverse=True)]
     access_items = [f"{method}: {count} sign-ins"
                     for method, count in sorted(access_method_dist.items(), key=lambda x: x[1], reverse=True)]
 
-    a.finding("INFO", "Access Method Analysis",
-        f"Access Method Distribution — {dominant_access.upper().replace('_', ' ')} Dominant "
-        f"({native_app_pct:.0f}% Native App, {browser_pct:.0f}% Browser)",
-        f"Sign-in activity by client type. Native App includes Outlook, Teams, OneDrive mobile "
-        f"and desktop applications. Browser includes web access. Note: Device platform details "
-        f"(iOS vs Windows) are not available via filtered sign-in queries.",
-        total, access_items)
+    a.finding("INFO", "Device & Access Analysis",
+        f"Platform Distribution — {dominant_platform.upper()} Dominant ({mobile_pct:.0f}% Mobile, {euc_pct:.0f}% EUC)",
+        f"Sign-in activity by operating system. Dominant platform: {dominant_platform}. "
+        f"Dominant access method: {dominant_access} ({native_app_pct:.0f}% native app, {browser_pct:.0f}% browser). "
+        f"Unmanaged device access: {unmanaged_pct:.0f}%.",
+        total, platform_items + ["---"] + access_items)
+
+    # HIGH: Mobile-dominant with no MAM — architecture mismatch
+    # Check if MDM/MAM data is available from Module 06
+    mdm_enrolled = a.metrics.get("mdm_enrolled_devices", 0)
+    total_devices = a.metrics.get("total_devices", 0)
+    mdm_pct = (mdm_enrolled / total_devices * 100) if total_devices > 0 else 0
+
+    if dominant_platform == "mobile" and mobile_pct >= 50:
+        if mdm_pct < 30 or unmanaged_pct > 50:
+            a.finding("HIGH", "Device & Access Analysis",
+                f"Mobile-Dominant Access Without Device Management ({mobile_pct:.0f}% mobile, {mdm_pct:.0f}% MDM)",
+                f"The organization's access pattern is mobile-dominant ({mobile_pct:.0f}% of sign-ins from "
+                f"iOS/Android), but device management coverage is inadequate (MDM: {mdm_pct:.0f}%, "
+                f"unmanaged sign-ins: {unmanaged_pct:.0f}%). Mobile Application Management (MAM) policies "
+                f"should protect corporate data on mobile devices. Without MAM, data on mobile devices "
+                f"cannot be remotely wiped if the device is lost or the employee departs. "
+                f"Implement Intune MAM app protection policies for Outlook, Teams, OneDrive, and SharePoint.",
+                mobile_signins,
+                [f"Mobile sign-ins: {mobile_signins}", f"EUC sign-ins: {euc_signins}",
+                 f"Unmanaged sign-ins: {unmanaged_signins} ({unmanaged_pct:.0f}%)",
+                 f"MDM enrolled devices: {mdm_enrolled} of {total_devices}"])
+
+    # MEDIUM: High unmanaged access regardless of platform
+    if unmanaged_pct > 30 and dominant_platform != "mobile":
+        a.finding("MEDIUM", "Device & Access Analysis",
+            f"High Unmanaged Device Access ({unmanaged_pct:.0f}%)",
+            f"{unmanaged_pct:.0f}% of sign-ins originate from unmanaged devices. This limits visibility "
+            f"into device security posture and prevents enforcement of compliance policies. "
+            f"Consider requiring device compliance via Conditional Access or implementing MAM for "
+            f"unmanaged device scenarios.",
+            unmanaged_signins)
 
     # INFO: Native app dominant — note that browser-based DLP may not apply
     if dominant_access == "native_app" and native_app_pct >= 60:
-        a.finding("INFO", "Access Method Analysis",
+        a.finding("INFO", "Device & Access Analysis",
             f"Native App Access Dominant ({native_app_pct:.0f}%)",
             f"Most access is via native applications (Outlook, Teams, OneDrive apps) rather than "
             f"web browsers. Ensure MAM policies cover these apps. Browser-based CASB controls "
@@ -2954,7 +3047,7 @@ def module_15_signin_behavioral(a: Assessment):
         params={
             "$filter":  f"createdDateTime ge {a.since} and status/errorCode eq 0",
             "$select":  "createdDateTime,userPrincipalName,appDisplayName,"
-                        "ipAddress,location,clientAppUsed,isInteractive",
+                        "ipAddress,location,clientAppUsed,isInteractive,deviceDetail",
             "$top":     "999",
             # NOTE: No $orderby — auditLogs/signIns silently returns empty with $orderby+$filter
         },
