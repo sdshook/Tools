@@ -732,7 +732,72 @@ that attackers exploit:
   Without CASB, the organization has no visibility into data flowing to
   unauthorized cloud services.
 
+**Licensing determines capability availability:**
+
+Before evaluating control deployment, determine which capabilities are
+available under the tenant's current licensing. The report must distinguish
+between three states for each control:
+
+1. **Deployed and configured** — control is available and in use
+2. **Available but not deployed** — licensing permits the control but it
+   is not configured (remediation is configuration, not procurement)
+3. **Not available (licensing gap)** — control requires licenses the tenant
+   does not have (remediation requires license upgrade)
+
+Key licensing thresholds for data protection controls:
+
+| Capability | License Required | Notes |
+|---|---|---|
+| **Intune MDM/MAM** | M365 E3/E5, EMS E3/E5, or Intune standalone | Basic MDM available in M365 Business Premium |
+| **Conditional Access (basic)** | Azure AD P1 (included in M365 E3) | Device compliance, location, app-based policies |
+| **Conditional Access (risk-based)** | Azure AD P2 (included in M365 E5) | Sign-in risk, user risk conditions |
+| **DLP (basic)** | M365 E3 | Exchange, SharePoint, OneDrive policies |
+| **DLP (advanced)** | M365 E5 or E5 Compliance add-on | Endpoint DLP, exact data match, trainable classifiers |
+| **Defender for Cloud Apps (CASB)** | M365 E5 or E5 Security add-on | Shadow IT discovery, app governance, session controls |
+| **Azure AD Identity Protection** | Azure AD P2 (included in M365 E5) | Risk detections, risky user remediation |
+| **Privileged Identity Management** | Azure AD P2 (included in M365 E5) | Just-in-time access, approval workflows |
+| **Insider Risk Management** | M365 E5 or E5 Compliance add-on | User behavior analytics, data theft detection |
+| **Information Barriers** | M365 E5 or E5 Compliance add-on | Segment communication between groups |
+
+Where the assessment JSON includes tenant or organization information
+(Module 01), infer licensing from:
+- Presence of P2-only features in use (risk-based CA, PIM) indicates E5 or P2
+- Absence of these features may indicate E3-level licensing
+- If licensing cannot be determined, ask the assessor to confirm
+
+**Licensing evaluation in the report:**
+
+When a control gap is identified, explicitly state whether it is a
+deployment gap or a licensing gap:
+
+- Deployment gap: "Intune MDM is available under the organization's M365 E3
+  licensing but device enrollment is minimal. Remediation requires Intune
+  configuration and a device enrollment campaign, not additional licensing."
+
+- Licensing gap: "Endpoint DLP is not available under the current M365 E3
+  licensing. Protecting sensitive data on endpoints requires upgrade to
+  M365 E5 or the E5 Compliance add-on. This is a licensing decision with
+  budget implications, not a configuration oversight."
+
+- Partial availability: "Basic DLP for Exchange and SharePoint is available
+  under current licensing but advanced capabilities (endpoint DLP, exact
+  data match) require E5 Compliance. The organization should deploy
+  available DLP immediately while evaluating the E5 upgrade for complete
+  coverage."
+
+**Section V remediation entries must reflect licensing reality:**
+
+Do not recommend controls the tenant cannot implement without license
+changes. Where a recommended control requires licensing not currently held:
+
+1. State the licensing requirement explicitly in the remediation
+2. Separate the recommendation into immediate (available now) and
+   future (requires licensing) phases
+3. Include licensing cost consideration in the action owner and timeframe
+   columns where appropriate
+
 This evaluation must be evidence-based, drawing from:
+- Module 01 (Tenant): organization information, inferred licensing level
 - Module 06 (Device Compliance): managed vs unmanaged device counts,
   compliance state, MDM enrollment, stale device registrations
 - Module 07 (Sign-in Logs): device types (mobile vs desktop), operating
@@ -742,7 +807,9 @@ This evaluation must be evidence-based, drawing from:
   access patterns, off-hours authentication patterns
 - Module 04 (Conditional Access): policies requiring device compliance,
   app protection policies, session controls, blocking unmanaged access
-  to sensitive resources
+  to sensitive resources — presence of risk-based policies indicates P2
+- Module 08 (Identity Protection): presence indicates P2 licensing
+- Module 13 (PIM): presence indicates P2 licensing
 - Module 09/17 (MFA): authentication method distribution, phishing-resistant
   method adoption across device types
 - Module 05 (Applications): OAuth grants to third-party apps accessing
@@ -1481,6 +1548,15 @@ Before finalizing, verify each of the following:
   precluded if DLP covers <50% of cloud resources, MAM is absent with
   >20% unmanaged access, CASB is absent with third-party OAuth grants,
   or MDM enrollment is <50%
+- Licensing evaluation distinguishes deployment gaps from licensing gaps:
+  each control gap explicitly states whether the capability is available
+  under current licensing (deployment gap — remediation is configuration)
+  or requires license upgrade (licensing gap — remediation involves
+  procurement). Licensing is inferred from presence of P2-only features
+  (risk-based CA, PIM, Identity Protection) or confirmed with assessor.
+  Remediation recommendations do not assume capabilities unavailable under
+  current licensing; where license upgrade is required, this is stated
+  explicitly with cost/procurement implications noted
 - Legacy authentication blocking recommendation specifies "Other clients"
   as the CA policy target, not "Exchange ActiveSync and Other clients"
 - Section IV opens with a geographic authentication map (Figure IV-1)
