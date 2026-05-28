@@ -692,6 +692,102 @@ This is ground truth for "does this user have MFA."
    live credential store could not be queried and counts may understate
    actual MFA coverage for tenants with legacy registrations.
 
+**Mobile device security posture — architectural currency evaluation:**
+
+Users increasingly rely upon mobile devices for protected communications,
+information access, authentication, and data transfer. Security standards
+and regulations have not fully caught up with this reality, nor with the
+threat landscape evidenced by numerous breaches involving mobile credential
+compromise and data exfiltration. The report must evaluate whether the
+organization's security architecture defends actual technology use patterns
+or is based on outdated perimeter-centric and desktop-first defensive models.
+
+This evaluation must be evidence-based, drawing from:
+- Module 06 (Device Compliance): managed vs unmanaged device counts,
+  compliance state, MDM enrollment, stale device registrations
+- Module 07 (Sign-in Logs): device types (mobile vs desktop), operating
+  systems, managed device sign-in percentages, legacy protocol use by device
+- Module 15 (Behavioral Analysis): device diversity per user, geographic
+  access patterns by device type, off-hours authentication by device
+- Module 04 (Conditional Access): policies targeting mobile platforms,
+  requiring device compliance, blocking unmanaged device access
+- Module 09/17 (MFA): authentication method distribution (mobile app push
+  vs SMS vs hardware tokens), phishing-resistant method adoption
+
+**Perform this analysis for every report:**
+
+1. Calculate mobile access percentage from sign-in logs. If >30% of
+   successful sign-ins originate from mobile devices but <30% of CA policies
+   specifically address mobile scenarios (device compliance requirements,
+   app protection policies, mobile-specific MFA controls), flag this as
+   an architectural gap.
+
+2. Evaluate MDM/MAM coverage against mobile access. If mobile devices
+   authenticate to the tenant but MDM enrollment is low or MAM policies
+   are absent, the organization has mobile data exposure without
+   corresponding mobile data protection.
+
+3. Assess authentication method distribution. If users primarily
+   authenticate via mobile devices but MFA methods are SMS/voice (weak)
+   rather than authenticator app push or FIDO2 (strong), the mobile
+   authentication surface is inadequately protected against the specific
+   threats targeting mobile (SIM swap, SS7 interception, real-time phishing).
+
+4. Review DLP posture for mobile. If email and file access occurs from
+   mobile devices but DLP policies do not extend to mobile apps or are
+   not enforced via MAM, data loss prevention is architecturally incomplete.
+
+5. Compare device compliance findings to access patterns. Unmanaged devices
+   with access to sensitive resources (mail, SharePoint, Teams) represent
+   architectural risk — the defensive model assumes managed endpoints but
+   reality includes unmanaged mobile access.
+
+**Scoring and presentation:**
+
+Where the evidence shows mobile device usage exceeding mobile-specific
+security controls, present this as an architectural deficiency, not merely
+a configuration gap. Use language such as:
+
+- "The defensive architecture is desktop-centric and does not adequately
+  address the mobile access patterns evident in the sign-in data."
+- "Security controls assume managed endpoints, but X% of authentication
+  events originate from unmanaged mobile devices."
+- "The organization's technology dependencies have outpaced its defensive
+  architecture — mobile device usage is prevalent but mobile-specific
+  protections (MDM, MAM, mobile CA policies, app-based MFA) are absent
+  or incomplete."
+
+**Standards and regulations for mobile security findings:**
+
+Apply these citations to mobile security gaps in Section V:
+
+| Finding Type | Primary Citations |
+|---|---|
+| No MDM/MAM for mobile access | NIST SP 800-124 Rev 2 (Mobile Device Security); ISO 27001:2022 A.8.1 (User Endpoint Devices); CIS Control 1 (Enterprise Asset Inventory) |
+| Unmanaged device access to sensitive data | NIST CSF PR.AC-3 (Remote Access); ISO 27001:2022 A.6.7 (Remote Working); NIST SP 800-46 (Remote Access Security) |
+| Mobile CA policy gaps | NIST CSF PR.AC-4 (Access Permissions); ISO 27001:2022 A.5.18 (Access Rights); CIS Control 6 (Access Control Management) |
+| Weak MFA on mobile-heavy workforce | NIST SP 800-63B (Authentication); ISO 27001:2022 A.8.5 (Secure Authentication); CISA Zero Trust Maturity Model |
+| No mobile DLP | NIST CSF PR.DS-5 (Data Leak Protection); ISO 27001:2022 A.8.12 (Data Leakage Prevention); CIS Control 3 (Data Protection) |
+| Architecture/use mismatch | ISO 27001:2022 A.5.8 (Information Security in Project Management); NIST CSF ID.GV-4 (Governance and Risk Management) |
+
+For regulated industries, add sector-specific citations:
+- Financial Services: FFIEC IT Examination Handbook (Mobile Financial Services);
+  SEC OCIE Cybersecurity Guidance (mobile device policies)
+- Healthcare: HIPAA Security Rule 45 CFR 164.310(d) (Device and Media Controls);
+  HIPAA 164.312(d) (Person or Entity Authentication)
+- Defense Industrial Base: NIST SP 800-171 (Protecting CUI); CMMC Level 2
+  mobile device requirements
+
+**Risk escalation for architectural gaps:**
+
+Where the evidence shows significant mobile usage (>40% of sign-ins) with
+minimal mobile-specific controls, escalate the overall security posture
+grade. An organization with excellent desktop security but minimal mobile
+controls has an incomplete defensive architecture that does not match its
+actual technology dependencies. The executive summary posture grade should
+reflect this architectural incompleteness, not just the sum of individual
+findings.
+
 ### Section V: Priority Remediation Matrix
 
 A five-column table. One row per finding. Color-code the Priority column:
@@ -1295,6 +1391,15 @@ Before finalizing, verify each of the following:
   discrepancy findings (users where module 09 and 17 disagree) represent
   migration risk: these users' MFA may silently stop satisfying CA
   policies as Microsoft enforces the unified registry
+- Mobile security architectural evaluation is present and evidence-based:
+  the report calculates mobile access percentage from sign-in logs,
+  compares MDM/MAM coverage to mobile access patterns, evaluates whether
+  CA policies address mobile scenarios, and explicitly states whether the
+  defensive architecture matches actual technology use patterns. Where
+  mobile usage exceeds mobile-specific controls, this is presented as an
+  architectural deficiency affecting the overall posture grade, not merely
+  a configuration finding. Standards citations include NIST SP 800-124,
+  ISO 27001:2022 A.8.1 and A.6.7, and sector-specific mobile guidance
 - Legacy authentication blocking recommendation specifies "Other clients"
   as the CA policy target, not "Exchange ActiveSync and Other clients"
 - Section IV opens with a geographic authentication map (Figure IV-1)
