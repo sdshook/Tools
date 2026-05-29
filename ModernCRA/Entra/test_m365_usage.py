@@ -30,8 +30,9 @@ except ImportError:
     print("  pip install requests msal")
     sys.exit(1)
 
-# Microsoft Graph CLI app (same as main assessment tool)
-CLIENT_ID = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
+# Custom app registration for Shane's PowerShell/Graph queries
+# Device code flow - no secret needed
+CLIENT_ID = "ed120d50-6c8e-47bb-8b56-dae9be69fff7"
 TENANT = "common"
 SCOPES = ["https://graph.microsoft.com/.default"]
 
