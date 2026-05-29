@@ -33,7 +33,7 @@ except ImportError:
 # Custom app registration for Shane's PowerShell/Graph queries
 # Device code flow - no secret needed
 CLIENT_ID = "ed120d50-6c8e-47bb-8b56-dae9be69fff7"
-TENANT = "common"
+TENANT = "forgepointcap.com"  # Tenant-specific app, not multi-tenant
 SCOPES = ["https://graph.microsoft.com/.default"]
 
 def get_token():
