@@ -30,11 +30,11 @@ except ImportError:
     print("  pip install requests msal")
     sys.exit(1)
 
-# Custom app registration for Shane's PowerShell/Graph queries
-# Device code flow - no secret needed
-CLIENT_ID = "ed120d50-6c8e-47bb-8b56-dae9be69fff7"
-TENANT = "forgepointcap.com"  # Tenant-specific app, not multi-tenant
-SCOPES = ["https://graph.microsoft.com/.default"]
+# Microsoft Graph CLI app - already configured for device code flow
+# The user's admin consent in their tenant controls what permissions are available
+CLIENT_ID = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
+TENANT = "organizations"  # Any org account, tenant determined at sign-in
+SCOPES = ["Reports.Read.All"]  # Specific scope for usage reports
 
 def get_token():
     """Authenticate via device code flow."""
