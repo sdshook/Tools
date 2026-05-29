@@ -2,7 +2,7 @@
 """
 (c) 2026, Shane D. Shook, PhD
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║         Entra ID Security Posture Assessment Tool  v2.0                      ║
+║         Entra ID Security Posture Assessment Tool  v1.0                      ║
 ║         16-module read-only assessment via Microsoft Graph API               ║
 ║         Authentication: Device Code Flow (no secrets required)               ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
