@@ -81,21 +81,21 @@ Search modes:
   2. Company name (lookup all locations)
 Select mode [1]: 2
 
-Enter company name: Forgepoint Capital
+Enter company name: Acme Corporation
 Search for building/property management companies? (Y/n): y
 
-[*] Searching for Forgepoint Capital locations...
+[*] Searching for Acme Corporation locations...
     [*] Searching OpenCorporates...
     [*] Searching web for office locations...
     [*] Searching for property management companies...
 
-[+] Found 2 location(s) for Forgepoint Capital:
-    1. 400 S. El Camino Real, Suite 1050, San Mateo, CA... [OpenCorporates]
+[+] Found 2 location(s) for Acme Corporation:
+    1. 100 Main Street, Suite 500, Anytown, CA... [OpenCorporates]
        Property Managers Found: 1
-         • Orchard Commercial Inc...
+         • Example Property Management Inc...
        Property Manager Shodan Results:
-         • Orchard Commercial: 1 hosts found
-    2. 12 Hammersmith Grove, Suite 301, London... [OpenCorporates]
+         • Example Property Management: 1 hosts found
+    2. 25 Business Park Road, Suite 200, London... [OpenCorporates]
 
 Scan all locations? (Y/n): y
 ```
