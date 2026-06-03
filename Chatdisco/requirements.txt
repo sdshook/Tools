@@ -1,0 +1,32 @@
+# Chatdisco Python dependencies
+# Third-party binary tools required separately - see docs/INSTALL.md
+
+# Core framework
+volatility3>=2.11.0
+click>=8.1.0
+rich>=13.0.0
+
+# Packet parsing (supplemental to tshark)
+dpkt>=1.9.8
+scapy>=2.5.0
+
+# Pattern matching
+yara-python>=4.3.0
+
+# Output / reporting
+jinja2>=3.1.0
+python-dateutil>=2.8.2
+pytz>=2023.3
+
+# CASE/UCO forensic output
+caseutil>=0.7.0
+
+# Hashing and crypto
+pycryptodome>=3.19.0
+
+# JSON handling
+orjson>=3.9.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
