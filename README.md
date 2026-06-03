@@ -173,6 +173,38 @@ Comprehensive cyber risk assessment toolkit for cloud identity and MDR platforms
     - Queries adaptable to CrowdStrike and other SIEM platforms
     - Professional reporting with OSINT correlation and remediation roadmaps
 
+### PLoc - Physical Location to Shodan Scanner
+Reconnaissance tool for discovering internet-connected devices near a physical address:
+
+* **[PLoc/](PLoc/)** - Physical Location to Shodan Scanner
+  - **Address Geocoding**: Converts physical addresses to latitude/longitude via Nominatim (OpenStreetMap)
+  - **Shodan Integration**: Discovers nearby internet-connected devices using geographic coordinates
+  - **BAS/BMS Filtering**: Optional filter for Building Automation and Building Management Systems
+  - **Reverse DNS Lookup**: PTR record resolution for IP-to-hostname mapping
+  - **RDAP/WHOIS Cross-Reference**: IP registrant details for property management and tenant identification
+  - **TLS Certificate Analysis**: Extract CN, SANs, Organization, and emails from HTTPS services
+  - **Certificate Transparency**: Query crt.sh for historical certificate issuance
+  - **SecurityTrails Integration**: Optional domain intelligence lookup
+  - **Correlation Analysis**: Confidence-scored associations between physical address and organizations
+  - **Business Registration Lookup**: Query OpenCorporates for company registration details
+  - **Building Management Detection**: Identify building management vs tenant companies
+  - **JSON Export**: Timestamped JSON output for further analysis
+
+### Chatdisco - AI Chat Forensics Tool
+Extract and reconstruct AI chat sessions from memory dumps, network captures, and disk artifacts:
+
+* **[Chatdisco/](Chatdisco/)** - AI Chat Forensics Tool
+  - **Multi-Surface Recovery**: RAM dumps, process dumps, PCAPs, hiberfil.sys, pagefile.sys, Prefetch files
+  - **CASE/UCO Output**: Court-admissible JSON-LD evidence bundles with full chain of custody
+  - **SBOM Documentation**: Every tool version embedded in chain of custody for reproducibility
+  - **TLS Key Recovery Waterfall**: 5-stage key recovery for encrypted traffic decryption
+  - **Supported Services**: ChatGPT, Claude, Gemini, Copilot, Perplexity, Grok, GitHub Copilot, Cursor
+  - **Local LLM Support**: Ollama, LM Studio, Jan, llama.cpp conversation recovery
+  - **Browser Artifact Parsing**: Chrome/Edge IndexedDB, localStorage, cookies, network cache
+  - **Three-Engine Architecture**: bulk_extractor (carving), tshark (protocol reconstruction), Volatility 3 (memory analysis)
+  - **Live Collection Mode**: Triage, full, or targeted acquisition with real-time manifest
+  - **Professional Reporting**: HTML reports with Jinja2 templating
+
 ### Other Security Utilities
 
 * **[wildcard_xyz_hunter.py](Other/wildcard_xyz_hunter.py)** - Specialized security utility for wildcard domain hunting
