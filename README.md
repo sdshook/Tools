@@ -205,6 +205,24 @@ Extract and reconstruct AI chat sessions from memory dumps, network captures, an
   - **Live Collection Mode**: Triage, full, or targeted acquisition with real-time manifest
   - **Professional Reporting**: HTML reports with Jinja2 templating
 
+### BAI - Browser Audit Inventory
+Browser extension plug-in for AiTM and Infostealer evidence collection (requires Developer mode):
+
+* **[BAI/](BAI/)** - Browser Audit Inventory v0.9.0
+  - **Browser Extension**: Load as unpacked extension with Developer mode enabled
+  - **AiTM Phishing Detection**: Identify Adversary-in-the-Middle attack artifacts via proxy settings, performance timing (redirects), WebAuthn capabilities, and cookies
+  - **Infostealer Assessment**: Evaluate browser data exposure including localStorage, sessionStorage, IndexedDB (structure and full dump), and cache storage
+  - **29 Artifact Collectors** in 4 categories:
+    - Core Browser Data (8): History, cookies, downloads, tab snapshots, bookmarks, extensions, sessions, top sites
+    - Security Settings (4): Proxy, privacy, content settings, search engines
+    - Deep Collection (10): Web storage, IndexedDB structure, IndexedDB full dump, service workers, cache storage, storage estimates, performance timing, visit details, WebAuthn/FIDO, media devices
+    - System and Account (7): Chrome account (email), system info (CPU/memory/storage), permissions, windows, detailed tabs, reading list, environment
+  - **Content Script Collection**: Extracts origin-scoped data from open tabs (localStorage, IndexedDB, cache, performance timing, WebAuthn)
+  - **One-Click Verifier**: Drop a package and get instant pass/fail verification
+  - **Portable Signing Keys**: Export and import signing keys across machines for key continuity
+  - **Forensic Packaging**: SHA-256 hashing, sealed manifests, chain of custody, ECDSA signatures
+  - **Supported Browsers**: Chrome, Edge, Brave, Opera (Chromium-based); Firefox and Safari planned
+
 ### Other Security Utilities
 
 * **[wildcard_xyz_hunter.py](Other/wildcard_xyz_hunter.py)** - Specialized security utility for wildcard domain hunting

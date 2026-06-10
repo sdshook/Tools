@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BAI: Package Verifier</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .dropzone {
+      border: 3px dashed var(--line);
+      border-radius: 8px;
+      padding: 40px 20px;
+      text-align: center;
+      background: var(--paper);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent);
+      background: #f0f7ff;
+    }
+    .dropzone p { margin: 0; color: var(--muted); }
+    .dropzone .icon { font-size: 48px; margin-bottom: 10px; }
+    
+    .result { margin-top: 20px; padding: 16px; border-radius: 6px; }
+    .result.pass { background: #d4edda; border: 1px solid #28a745; }
+    .result.fail { background: #f8d7da; border: 1px solid #dc3545; }
+    .result.pending { background: #fff3cd; border: 1px solid #ffc107; }
+    
+    .result-head { font-weight: 600; font-size: 18px; margin-bottom: 10px; }
+    .result.pass .result-head { color: #155724; }
+    .result.fail .result-head { color: #721c24; }
+    .result.pending .result-head { color: #856404; }
+    
+    .check-list { list-style: none; padding: 0; margin: 10px 0; }
+    .check-list li { padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,0.1); display: flex; align-items: center; gap: 10px; }
+    .check-list li:last-child { border-bottom: none; }
+    .check-list .icon { font-size: 16px; flex-shrink: 0; }
+    .check-list .pass { color: #28a745; }
+    .check-list .fail { color: #dc3545; }
+    .check-list .skip { color: #6c757d; }
+    
+    .details { margin-top: 16px; }
+    .details summary { cursor: pointer; font-weight: 500; color: var(--accent); }
+    .details pre { background: var(--paper); padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 12px; margin-top: 8px; }
+    
+    .artifact-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    .artifact-table th, .artifact-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); }
+    .artifact-table th { background: var(--paper); font-weight: 500; }
+    .artifact-table .hash { font-family: monospace; font-size: 11px; color: var(--muted); }
+    .artifact-table .pass { color: #28a745; }
+    .artifact-table .fail { color: #dc3545; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="masthead">
+      <h1>BAI <span class="full">Package Verifier</span></h1>
+      <span class="ver" id="version">v0.4.0</span>
+    </header>
+
+    <p class="lede">
+      Drop a BAI evidence package (.zip or folder) to verify its integrity and signature.
+      All verification runs locally in your browser. Nothing is uploaded.
+    </p>
+
+    <section class="step">
+      <h2><span class="num">1</span> Select package</h2>
+      
+      <div class="dropzone" id="dropzone">
+        <div class="icon">📦</div>
+        <p><strong>Drop a BAI .zip file here</strong></p>
+        <p>or click to select</p>
+      </div>
+      <input type="file" id="fileInput" accept=".zip" style="display: none" />
+      
+      <div id="result" style="display: none;"></div>
+    </section>
+
+    <footer class="footer">
+      © 2026, Shane Shook. All Rights Reserved. For testing and analysis.
+    </footer>
+  </div>
+
+  <script type="module" src="verify.js"></script>
+</body>
+</html>

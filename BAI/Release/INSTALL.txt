@@ -1,0 +1,78 @@
+BAI: Browser Audit Inventory
+Installation Instructions
+==========================
+
+Version: 0.9.0
+Package: BAI_v0.9.0.zip
+
+
+VERIFY THE PACKAGE
+------------------
+Before installing, verify the package integrity:
+
+    sha256sum BAI_v0.9.0.zip
+
+Expected hash (also in BAI_v0.9.0.zip.sha256):
+    bb1383d43bf6e6d43fd5197ba3ffb9e9e0332bbabc6aac0d96da3e44da44c8b4
+
+
+INSTALLATION STEPS
+------------------
+1. Extract BAI_v0.4.0.zip to a LOCAL folder (e.g., Downloads/BAI)
+   Do NOT run from a USB drive; the USB is for output only.
+
+2. Open your browser's extension page:
+   - Chrome:  chrome://extensions
+   - Edge:    edge://extensions
+   - Brave:   brave://extensions
+   - Opera:   opera://extensions
+
+3. Enable "Developer mode" (toggle in the top-right corner)
+
+4. Click "Load unpacked" and select the extracted BAI folder
+
+5. The BAI icon will appear in your toolbar
+
+
+WHY DEVELOPER MODE IS REQUIRED
+------------------------------
+Chrome extensions can only be installed in three ways:
+
+1. Chrome Web Store (publicly signed by Google)
+2. Enterprise Policy (managed devices only)
+3. Developer Mode (Load unpacked)
+
+BAI is a forensic tool intended for authorized security assessments.
+It is not published to the Chrome Web Store, so Developer mode is
+required for installation.
+
+This is a security feature of Chrome, not a limitation of BAI.
+
+
+SUPPORTED BROWSERS
+------------------
+- Google Chrome (primary target)
+- Microsoft Edge (Chromium-based)
+- Brave
+- Opera
+
+Firefox and Safari versions are planned for future releases.
+
+
+USAGE
+-----
+1. Click the BAI toolbar icon to open the Acquisition Console
+2. Enter case details and confirm authorization
+3. Select which artifacts to collect
+4. Choose a destination folder (USB drive or local)
+5. Click "Run acquisition"
+
+For verification, use the built-in Package Verifier (link in footer)
+or follow the manual steps in VERIFY.txt inside each package.
+
+
+LICENSE
+-------
+Copyright 2026 Shane Shook. All Rights Reserved.
+This tool is for testing and analysis only.
+See LICENSE file for full terms.

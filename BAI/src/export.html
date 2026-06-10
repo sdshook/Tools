@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Browser Audit Inventory: Acquisition Console</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="masthead">
+      <h1>BAI <span class="full">Browser Audit Inventory</span></h1>
+      <span class="ver" id="version">v0.1.0</span>
+    </header>
+
+    <p class="lede">
+      Captures artifacts from the currently signed-in Chrome profile, hashes each
+      one with SHA-256, and writes a verifiable evidence package to a folder you
+      choose, including a removable drive.
+    </p>
+
+    <div class="notice">
+      <strong>This is a live, single-profile acquisition.</strong> It reads only
+      this profile through Chrome's own APIs. It cannot reach saved passwords,
+      deleted records, other accounts on this device, or data outside the browser,
+      and the act of running it is itself part of the profile state. Timestamps
+      come from this device's clock, which is not a trusted timestamp authority.
+    </div>
+
+    <div class="unsupported" id="unsupported">
+      This browser does not expose the File System Access API, so the package
+      cannot be written to a chosen folder here. Open this console in a recent
+      desktop Chrome / ChromeOS build.
+    </div>
+
+    <!-- Step 1 -->
+    <section class="step">
+      <h2><span class="num">1</span> Case &amp; authorization</h2>
+      <label class="field">
+        <span class="lab">Case / matter ID</span>
+        <input type="text" id="caseId" placeholder="e.g. IR-2026-0042" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span class="lab">Examiner / operator</span>
+        <input type="text" id="examiner" placeholder="Your name or identifier" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span class="lab">Authority / consent reference
+          <span class="hint">(the legal basis for this collection)</span></span>
+        <textarea id="authority" placeholder="e.g. signed consent on file, warrant no., incident ticket"></textarea>
+      </label>
+      <label class="field">
+        <span class="lab">Notes <span class="hint">(optional)</span></span>
+        <textarea id="notes" placeholder="Context for the record"></textarea>
+      </label>
+      <label class="affirm">
+        <input type="checkbox" id="affirm" />
+        <span>I confirm I am authorized to perform this collection on this device and profile.</span>
+      </label>
+
+      <div class="subpanel">
+        <div class="subpanel-head">Signing key <span class="opt">(optional)</span></div>
+        <p class="subpanel-note">A signature proves a package was sealed by you, not just that it is
+          unaltered. Choose between a <strong>secure</strong> key (cannot be exported, stays in this browser)
+          or a <strong>portable</strong> key (can be backed up and moved to another machine).</p>
+        <div class="dest-row" id="keyGenRow">
+          <button id="genKey" type="button">Generate secure key</button>
+          <button id="genKeyPortable" type="button">Generate portable key</button>
+          <button id="importKey" type="button">Import key…</button>
+          <input type="file" id="importKeyFile" accept=".json" style="display:none" />
+        </div>
+        <div class="dest-row" id="keyMgmtRow" style="display:none">
+          <button id="replaceKey" type="button">Replace key…</button>
+          <button id="downloadPub" type="button">Download public key</button>
+          <button id="downloadPriv" type="button" style="display:none">Backup private key</button>
+        </div>
+        <div class="dest-name" id="keyStatus" style="margin-top:10px;">No signing key on this device.</div>
+        <label class="affirm" style="background:var(--paper);border-color:var(--line);">
+          <input type="checkbox" id="signToggle" disabled />
+          <span>Sign the manifest with this key</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Step 2 -->
+    <section class="step">
+      <h2><span class="num">2</span> Evidence to collect</h2>
+      <div class="checks">
+        <label class="check">
+          <input type="checkbox" class="ev" value="history" checked />
+          <span>Browsing history
+            <span class="meta">All visited URLs with visit times via <code>chrome.history</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="cookies" checked />
+          <span>Cookies
+            <span class="meta">All cookies incl. HttpOnly, across cookie stores via <code>chrome.cookies</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="downloads" checked />
+          <span>Download records
+            <span class="meta">Download history metadata via <code>chrome.downloads</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="snapshots" checked />
+          <span>Open-tab page snapshots
+            <span class="meta">MHTML capture of each open tab via <code>chrome.pageCapture</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="bookmarks" checked />
+          <span>Bookmarks
+            <span class="meta">Full bookmark tree with folders via <code>chrome.bookmarks</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="extensions" checked />
+          <span>Installed extensions
+            <span class="meta">All extensions and apps with permissions via <code>chrome.management</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="sessions" checked />
+          <span>Recently closed tabs
+            <span class="meta">Session history of closed tabs and windows via <code>chrome.sessions</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="topsites" checked />
+          <span>Top sites
+            <span class="meta">Most visited sites from new tab page via <code>chrome.topSites</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="proxy" checked />
+          <span>Proxy settings
+            <span class="meta">Proxy configuration (critical for AiTM detection) via <code>chrome.proxy</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="privacy" checked />
+          <span>Privacy settings
+            <span class="meta">Safe browsing, cookies, tracking settings via <code>chrome.privacy</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="contentsettings" checked />
+          <span>Content settings
+            <span class="meta">Site permissions (notifications, camera, etc.) via <code>chrome.contentSettings</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="visitdetails" checked />
+          <span>Visit details
+            <span class="meta">Per-URL visit history with transition types via <code>chrome.history.getVisits</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="webstorage" checked />
+          <span>Web storage
+            <span class="meta">localStorage and sessionStorage from open tabs (auth tokens, sessions)</span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="indexeddb" checked />
+          <span>IndexedDB
+            <span class="meta">Database structure and record counts from open tabs</span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="serviceworkers" checked />
+          <span>Service workers
+            <span class="meta">Registered service workers per origin (potential persistence mechanism)</span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="cachestorage" checked />
+          <span>Cache storage
+            <span class="meta">Cached URLs per origin (can contain sensitive responses)</span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="storageestimates" checked />
+          <span>Storage estimates
+            <span class="meta">Quota usage per origin via <code>navigator.storage.estimate</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="performance" checked />
+          <span>Performance timing
+            <span class="meta">Navigation timing and redirects (AiTM indicator) via Performance API</span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="searchengines" checked />
+          <span>Search engines
+            <span class="meta">Search engine settings via <code>chrome.search</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="permissions" checked />
+          <span>Extension permissions
+            <span class="meta">Granted permissions via <code>chrome.permissions</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="windows" checked />
+          <span>Window state
+            <span class="meta">Open windows and positions via <code>chrome.windows</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="tabsdetailed" checked />
+          <span>Detailed tabs
+            <span class="meta">Full tab state including audio, mute, grouping via <code>chrome.tabs</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="webauthn" checked />
+          <span>WebAuthn/FIDO
+            <span class="meta">Passkey and security key capabilities per origin (AiTM indicator)</span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="mediadevices" checked />
+          <span>Media devices
+            <span class="meta">Cameras, microphones, and permission states per origin</span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="indexeddbfull" checked />
+          <span>IndexedDB full dump
+            <span class="meta">Actual database records (complete dump, can be large)</span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="identity" checked />
+          <span>Chrome account
+            <span class="meta">Signed-in Google account email via <code>chrome.identity</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="systeminfo" checked />
+          <span>System info
+            <span class="meta">CPU, memory, storage, platform details via <code>chrome.system</code></span>
+          </span>
+        </label>
+        <label class="check">
+          <input type="checkbox" class="ev" value="readinglist" checked />
+          <span>Reading list
+            <span class="meta">Saved articles via <code>chrome.readingList</code> (Chrome 120+)</span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Step 3 -->
+    <section class="step">
+      <h2><span class="num">3</span> Destination</h2>
+      <div class="dest-row">
+        <button id="pickDest" type="button">Select destination folder…</button>
+        <span class="dest-name" id="destName">No folder selected. Pick your USB drive or a local folder.</span>
+      </div>
+      <label class="check" style="margin-top:14px;">
+        <input type="checkbox" id="zipMode" checked />
+        <span>Package as a single <code>.zip</code> file
+          <span class="meta">One sealed archive plus a <code>.zip.sha256</code>. Uncheck to write a loose folder tree instead.</span>
+        </span>
+      </label>
+    </section>
+
+    <!-- Step 4 -->
+    <section class="step">
+      <h2><span class="num">4</span> Run</h2>
+      <div class="run-row">
+        <button class="primary" id="run" type="button" disabled>Run acquisition</button>
+        <span class="run-state" id="runState">Complete steps 1–3 to enable.</span>
+      </div>
+      <div class="log" id="log"></div>
+
+      <div class="seal" id="seal">
+        <div class="seal-head">Package sealed</div>
+        <div class="seal-body">
+          <p>The package below was written and hashed. Record the manifest seal hash
+             in your own notes; anyone can re-verify the package later from these values.</p>
+          <dl class="kv">
+            <dt>Collection ID</dt><dd id="rCollectionId"></dd>
+            <dt>Package</dt><dd id="rFolder"></dd>
+            <dt>Started (UTC)</dt><dd id="rStarted"></dd>
+            <dt>Completed (UTC)</dt><dd id="rCompleted"></dd>
+            <dt>Signature</dt><dd id="rSignature"></dd>
+          </dl>
+          <div class="hashbox" id="containerBox" style="display:none">
+            <div class="label">Package seal: SHA-256 of the .zip</div>
+            <div class="val" id="rContainer"></div>
+            <button class="copy" id="copyContainer" type="button">Copy package seal</button>
+          </div>
+          <div class="hashbox">
+            <div class="label">Root hash: SHA-256 over all artifacts</div>
+            <div class="val" id="rRoot"></div>
+          </div>
+          <div class="hashbox">
+            <div class="label">Manifest seal: SHA-256 of MANIFEST.json</div>
+            <div class="val" id="rManifest"></div>
+            <button class="copy" id="copySeal" type="button">Copy seal hash</button>
+          </div>
+          <div class="files">
+            <h3>Artifacts</h3>
+            <table>
+              <thead><tr><th>File</th><th>Type</th><th>Records</th><th>Bytes</th><th>SHA-256</th></tr></thead>
+              <tbody id="rFiles"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <a href="verify.html" style="color: var(--accent);">Open Package Verifier</a> |
+      © 2026, Shane Shook. All Rights Reserved. For testing and analysis.
+    </footer>
+  </div>
+
+  <script type="module" src="export.js"></script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+BAI: Browser Audit Inventory
+Copyright © 2026 Shane Shook. All Rights Reserved.
+
+This tool is for testing and analysis.
+
+PROPRIETARY LICENSE
+
+The software in this repository, including its source code, documentation, and
+all associated files (collectively, the "Software"), is the proprietary work of
+and is owned by Shane Shook (the "Author"). The Software is protected by
+copyright law and international treaty provisions.
+
+No license, right, or interest in the Software is granted, whether by
+implication, estoppel, or otherwise, except as expressly stated in a separate
+written agreement signed by the Author. Without such written permission, no
+person or entity may:
+
+  (a) use, run, or execute the Software for any purpose other than the Author's
+      own testing and analysis;
+  (b) copy, reproduce, or republish the Software in whole or in part;
+  (c) modify, adapt, translate, or create derivative works from the Software;
+  (d) distribute, sublicense, lease, rent, sell, or otherwise transfer the
+      Software or any copy thereof; or
+  (e) reverse engineer, decompile, or disassemble the Software, except to the
+      extent such restriction is prohibited by applicable law.
+
+All rights not expressly granted are reserved by the Author.
+
+DISCLAIMER OF WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+For permissions and inquiries, contact the Author.
