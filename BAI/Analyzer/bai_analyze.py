@@ -2035,7 +2035,7 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
                 potential_upn = f'{first}.{last}@{dom}.{tld}'
                 add_upn(potential_upn, domain, 'cookie (encoded)', token_type)
     
-    # 2. HISTORY/VISITDETAILS - UPNs in page titles
+    # 2. HISTORY/VISITDETAILS - UPNs in page titles AND URL parameters
     for fname in ('history.json', 'visitdetails.json'):
         for r in records(pkg.get(fname)):
             title = r.get('title', '') or ''
@@ -2046,8 +2046,21 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
             except:
                 service = 'unknown'
             
+            # UPNs in page titles
             for match in upn_pattern.findall(title):
                 add_upn(match, service, 'page title', 'Authenticated Session')
+            
+            # UPNs in URL parameters (login_hint, username, email, upn, etc.)
+            decoded_url = unquote(url)
+            for match in upn_pattern.findall(decoded_url):
+                add_upn(match, service, 'URL parameter', 'Authenticated Session')
+            
+            # Underscore-encoded UPNs in URLs (e.g., personal/shane_shook_aus_com)
+            for match in underscore_pattern.findall(decoded_url):
+                first, last, dom, tld = match
+                if tld.lower() in valid_tlds:
+                    potential_upn = f'{first}.{last}@{dom}.{tld}'
+                    add_upn(potential_upn, service, 'URL path (encoded)', 'Authenticated Session')
     
     # 3. WEBSTORAGE - localStorage
     for ws in records(pkg.get("webstorage.json")):
@@ -2098,19 +2111,35 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
                                     add_upn(decoded[claim], origin, 'IndexedDB JWT', 'Access Token (JS-accessible)')
                                     break
     
-    # Convert to list format
+    # Convert to list format, prioritizing accounts with strong evidence
     result = []
     for upn_lower, info in sorted(accounts.items()):
         services = {}
+        has_strong_evidence = False
+        
         for svc, details in info['services'].items():
+            # Check if this account has token/cookie evidence (not just URL mentions)
+            sources = details['sources']
+            token_types = details['token_types']
+            
+            strong_sources = {'JWT cookie', 'cookie value', 'cookie (encoded)', 
+                            'localStorage', 'localStorage JWT', 'IndexedDB JWT'}
+            if sources & strong_sources:
+                has_strong_evidence = True
+            
             services[svc] = {
                 'sources': sorted(details['sources']),
                 'token_types': sorted(details['token_types'])
             }
+        
         result.append({
             'upn': info['upn'],
-            'services': services
+            'services': services,
+            'has_strong_evidence': has_strong_evidence
         })
+    
+    # Sort: accounts with strong evidence first
+    result.sort(key=lambda x: (not x['has_strong_evidence'], x['upn'].lower()))
     
     return result
 
@@ -3597,14 +3626,18 @@ class ReportGenerator:
         lines.append("=" * 78)
         lines.append("")
         
-        # Show UPN-centric account inventory
-        if self.upn_accounts or self.entra_sessions:
-            lines.append("USER ACCOUNTS (UPN → Service → Token)")
+        # Split accounts by evidence strength
+        primary_accounts = [a for a in self.upn_accounts if a.get('has_strong_evidence')]
+        session_accounts = [a for a in self.upn_accounts if not a.get('has_strong_evidence')]
+        
+        # Show PRIMARY accounts (with cookie/token evidence)
+        if primary_accounts or self.entra_sessions:
+            lines.append("PRIMARY USER ACCOUNTS (Cookie/Token Evidence)")
             lines.append("-" * 78)
+            lines.append("  These accounts have session cookies or tokens that could be stolen/replayed.")
             lines.append("")
             
-            # Display UPN accounts
-            for acct in self.upn_accounts:
+            for acct in primary_accounts:
                 upn = acct.get('upn', 'Unknown')
                 lines.append(f"  UPN: {upn}")
                 lines.append(f"  " + "-" * 50)
@@ -3633,15 +3666,36 @@ class ReportGenerator:
                     lines.append(f"  Type:       {sess_type} Cookie ({httponly})")
                     lines.append(f"  Cookie:     {sess.get('cookie_name', 'Unknown')}")
                     lines.append("")
-        else:
-            lines.append("  No UPN-based accounts discovered in cookies or storage.")
+        
+        # Show AUTHENTICATED SESSION accounts (URL-based evidence only)
+        if session_accounts:
+            lines.append("AUTHENTICATED SESSIONS (URL/Page Title Evidence)")
+            lines.append("-" * 78)
+            lines.append("  These accounts were used to access services (evidence from URLs/titles).")
+            lines.append("")
+            
+            for acct in session_accounts:
+                upn = acct.get('upn', 'Unknown')
+                services = list(acct.get('services', {}).keys())
+                
+                # Skip obvious noise (email addresses from search results)
+                if any(x in upn.lower() for x in ['outbound+', 'e.g.+', 'no-reply@', 'noreply@']):
+                    continue
+                    
+                lines.append(f"  UPN: {upn}")
+                lines.append(f"    Services: {', '.join(services[:5])}")  # First 5 services
+                if len(services) > 5:
+                    lines.append(f"              ... and {len(services)-5} more")
+            lines.append("")
+        
+        if not primary_accounts and not session_accounts and not self.entra_sessions:
+            lines.append("  No UPN-based accounts discovered.")
             lines.append("")
         
         # Summary counts
-        total_upns = len(self.upn_accounts)
-        total_entra = len(self.entra_sessions)
-        lines.append(f"  Total UPN Accounts: {total_upns}")
-        lines.append(f"  Total Entra Sessions: {total_entra}")
+        lines.append(f"  Primary Accounts (with tokens): {len(primary_accounts)}")
+        lines.append(f"  Session Accounts (URL evidence): {len([a for a in session_accounts if not any(x in a.get('upn', '').lower() for x in ['outbound+', 'e.g.+', 'no-reply@', 'noreply@'])])}")
+        lines.append(f"  Entra Sessions: {len(self.entra_sessions)}")
         lines.append("")
         
         return "\n".join(lines)
