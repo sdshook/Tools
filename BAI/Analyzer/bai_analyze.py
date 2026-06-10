@@ -2152,12 +2152,66 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
     return result
 
 
-def discover_entra_sessions(pkg: Dict) -> List[Dict]:
+def discover_tenant_upn_mapping(pkg: Dict) -> Dict[str, str]:
+    """
+    Build a mapping of Entra tenant IDs to UPNs by analyzing login URLs.
+    The login_hint parameter in Microsoft login URLs contains the UPN.
+    """
+    import re
+    from urllib.parse import unquote, urlparse, parse_qs
+    
+    tenant_to_upn = {}
+    upn_pattern = re.compile(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})')
+    tenant_pattern = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.IGNORECASE)
+    
+    # Scan history for Microsoft login URLs with both tenant and login_hint
+    for fname in ('history.json', 'visitdetails.json'):
+        for r in records(pkg.get(fname)):
+            url = r.get('url', '') or ''
+            
+            # Must be a Microsoft auth URL
+            if not any(d in url.lower() for d in ['microsoftonline.com', 'microsoft.com/signin', 
+                                                    'login.microsoft', 'security.microsoft']):
+                continue
+            
+            decoded = unquote(url)
+            
+            # Extract tenant ID from URL
+            tenants = tenant_pattern.findall(decoded)
+            if not tenants:
+                continue
+            
+            # Look for login_hint or username parameter
+            upns = []
+            if 'login_hint=' in decoded or 'username=' in decoded:
+                upns = upn_pattern.findall(decoded)
+            
+            # Associate tenant with UPN
+            for tenant in tenants:
+                tenant_lower = tenant.lower()
+                for upn in upns:
+                    # Skip investigation subjects (usually in query params for audit searches)
+                    if 'audit' in url.lower() and 'searchresults' in url.lower():
+                        continue
+                    # Prefer UPNs from login_hint
+                    if 'login_hint=' in decoded and upn in decoded.split('login_hint=')[-1][:100]:
+                        tenant_to_upn[tenant_lower] = upn
+                        break
+                    elif tenant_lower not in tenant_to_upn:
+                        tenant_to_upn[tenant_lower] = upn
+    
+    return tenant_to_upn
+
+
+def discover_entra_sessions(pkg: Dict, tenant_upn_map: Dict[str, str] = None) -> List[Dict]:
     """
     Extract Microsoft Entra sessions from ESTSAUTH/ESTSAUTHPERSISTENT cookies.
     These contain tenant_id and object_id even when UPN is encrypted.
+    
+    If tenant_upn_map is provided, associates UPNs with sessions based on tenant ID.
     """
     sessions = []
+    tenant_upn_map = tenant_upn_map or {}
     
     for c in records(pkg.get("cookies.json")):
         cookie_name = (c.get('name', '') or '').lower()
@@ -2171,9 +2225,15 @@ def discover_entra_sessions(pkg: Dict) -> List[Dict]:
         
         decoded = decode_entra_home_account(value)
         if decoded and decoded.get('tenant_id'):
+            tenant_id = decoded.get('tenant_id', '').lower()
+            
+            # Look up UPN for this tenant
+            upn = tenant_upn_map.get(tenant_id, None)
+            
             sessions.append({
                 'tenant_id': decoded.get('tenant_id'),
                 'object_id': decoded.get('object_id'),
+                'upn': upn,  # Associated UPN from login URLs
                 'domain': domain,
                 'type': 'PERSISTENT' if 'persistent' in cookie_name else 'SESSION',
                 'httponly': httponly,
@@ -3674,6 +3734,32 @@ class ReportGenerator:
         if not primary_accounts:
             return "<p>No authenticated accounts discovered.</p>"
         
+        def format_token_type(token_types_str: str) -> tuple:
+            """Convert token types to descriptive format with risk assessment."""
+            is_httponly = 'HttpOnly' in token_types_str
+            is_jwt = 'JWT' in token_types_str or 'Bearer' in token_types_str
+            
+            parts = []
+            if is_jwt:
+                parts.append("JWT")
+            elif 'Cookie' in token_types_str:
+                parts.append("Cookie")
+            elif 'Storage' in token_types_str or 'localStorage' in token_types_str:
+                parts.append("localStorage")
+            else:
+                parts.append("Session")
+            
+            if is_httponly:
+                parts.append("(HttpOnly)")
+                risk_desc = "Replayable if exfiltrated"
+                risk_class = 'low-risk'
+            else:
+                parts.append("(JS-accessible)")
+                risk_desc = "Easily stolen & replayable"
+                risk_class = 'high-risk'
+            
+            return ' '.join(parts) + f" - {risk_desc}", risk_class
+        
         rows = []
         for acct in primary_accounts:
             upn = acct.get('upn', 'Unknown')
@@ -3681,21 +3767,19 @@ class ReportGenerator:
             
             for i, (domain, svc_info) in enumerate(sorted(services.items())):
                 sources = ', '.join(svc_info.get('sources', []))
-                token_types = ', '.join(svc_info.get('token_types', []))
+                token_types_raw = ', '.join(svc_info.get('token_types', []))
                 
-                # Determine if token is HttpOnly (protected) or JS-accessible (vulnerable)
-                is_httponly = 'HttpOnly' in token_types
-                risk_class = 'low-risk' if is_httponly else 'high-risk'
+                token_desc, risk_class = format_token_type(token_types_raw)
                 
                 if i == 0:
                     rows.append(f"<tr><td rowspan='{len(services)}' class='upn-cell'>{html_mod.escape(upn)}</td>"
                                f"<td>{html_mod.escape(domain)}</td>"
                                f"<td>{html_mod.escape(sources)}</td>"
-                               f"<td class='{risk_class}'>{html_mod.escape(token_types)}</td></tr>")
+                               f"<td class='{risk_class}'>{html_mod.escape(token_desc)}</td></tr>")
                 else:
                     rows.append(f"<tr><td>{html_mod.escape(domain)}</td>"
                                f"<td>{html_mod.escape(sources)}</td>"
-                               f"<td class='{risk_class}'>{html_mod.escape(token_types)}</td></tr>")
+                               f"<td class='{risk_class}'>{html_mod.escape(token_desc)}</td></tr>")
         
         return f"""<table class='data-table identity-table'>
 <thead>
@@ -3715,24 +3799,32 @@ class ReportGenerator:
         
         rows = []
         for sess in self.entra_sessions:
+            upn = sess.get('upn') or '<em>Unknown</em>'
             tenant_id = sess.get('tenant_id', 'Unknown')
             object_id = sess.get('object_id', 'Unknown')
-            domain = sess.get('domain', 'Unknown')
             sess_type = sess.get('type', 'SESSION')
-            httponly = "HttpOnly" if sess.get('httponly') else "JS-Accessible"
+            httponly = sess.get('httponly', False)
             cookie_name = sess.get('cookie_name', 'Unknown')
             
-            risk_class = 'low-risk' if sess.get('httponly') else 'high-risk'
+            # Token type with replayability info
+            if httponly:
+                token_desc = f"{sess_type} Cookie (HttpOnly) - Replayable if exfiltrated"
+                risk_class = 'low-risk'
+            else:
+                token_desc = f"{sess_type} Cookie (JS-accessible) - Easily stolen & replayable"
+                risk_class = 'high-risk'
             
-            rows.append(f"<tr><td><code>{html_mod.escape(tenant_id)}</code></td>"
-                       f"<td><code>{html_mod.escape(object_id)}</code></td>"
-                       f"<td>{html_mod.escape(domain)}</td>"
+            upn_html = html_mod.escape(upn) if upn and upn != '<em>Unknown</em>' else upn
+            
+            rows.append(f"<tr><td><strong>{upn_html}</strong></td>"
+                       f"<td><code style='font-size:9px;'>{html_mod.escape(tenant_id)}</code></td>"
+                       f"<td><code style='font-size:9px;'>{html_mod.escape(object_id)}</code></td>"
                        f"<td>{html_mod.escape(cookie_name)}</td>"
-                       f"<td class='{risk_class}'>{sess_type} ({httponly})</td></tr>")
+                       f"<td class='{risk_class}'>{token_desc}</td></tr>")
         
         return f"""<table class='data-table entra-table'>
 <thead>
-<tr><th>Tenant ID</th><th>Object ID</th><th>Domain</th><th>Cookie</th><th>Type</th></tr>
+<tr><th>UPN (User)</th><th>Tenant ID</th><th>Object ID</th><th>Cookie</th><th>Token Type &amp; Risk</th></tr>
 </thead>
 <tbody>
 {''.join(rows)}
@@ -4887,7 +4979,11 @@ Examples:
     
     # Discover user accounts using UPN-centric approach
     upn_accounts = discover_upn_accounts(pkg)
-    entra_sessions = discover_entra_sessions(pkg)
+    
+    # Build tenant-to-UPN mapping from login URLs, then discover Entra sessions
+    tenant_upn_map = discover_tenant_upn_mapping(pkg)
+    entra_sessions = discover_entra_sessions(pkg, tenant_upn_map)
+    
     if not args.quiet:
         if upn_accounts:
             print(f"[+] Discovered {len(upn_accounts)} UPN accounts from cookies/storage")
