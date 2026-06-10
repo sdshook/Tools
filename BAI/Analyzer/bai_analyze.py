@@ -3852,6 +3852,28 @@ class ReportGenerator:
             lines.append("")
             return "\n".join(lines)
         
+        lines.append("TABLE:findings")  # Marker for HTML table
+        lines.append("")
+        
+        return "\n".join(lines)
+    
+    def _generate_findings_table_html(self) -> str:
+        """Generate HTML table for findings."""
+        import html as html_mod
+        
+        if not self.findings:
+            return "<p>No findings to report.</p>"
+        
+        rows = []
+        severity_order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+        severity_colors = {
+            "CRITICAL": "#8b0000",
+            "HIGH": "#cc0000",
+            "MEDIUM": "#ff8c00",
+            "LOW": "#b8860b",
+            "INFO": "#0066cc"
+        }
+        
         # Group by severity
         by_severity = {}
         for f in self.findings:
@@ -3860,114 +3882,122 @@ class ReportGenerator:
                 by_severity[sev] = []
             by_severity[sev].append(f)
         
-        severity_order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
         for sev in severity_order:
             if sev not in by_severity:
                 continue
             
-            lines.append(f"[{sev}]")
-            lines.append("-" * 40)
+            color = severity_colors.get(sev, "#333")
+            
             for f in by_severity[sev]:
-                lines.append(f"  • {f['title']}")
-                lines.append(f"    Category: {f.get('category', 'Unknown')}")
+                title = html_mod.escape(f.get('title', 'Unknown'))
+                category = html_mod.escape(f.get('category', 'Unknown'))
                 
-                # Show evidence details
-                details = f.get('details', {})
-                if details:
-                    lines.append("    Evidence:")
-                    self._format_finding_details(lines, details)
+                # Format evidence
+                evidence_html = self._format_evidence_html(f.get('details', {}))
                 
-                if f.get('recommendation'):
-                    # Word wrap recommendation
-                    rec = f['recommendation']
-                    wrapped = [rec[i:i+65] for i in range(0, len(rec), 65)]
-                    lines.append(f"    Action: {wrapped[0]}")
-                    for w in wrapped[1:]:
-                        lines.append(f"            {w}")
-                lines.append("")
+                # Format recommendation
+                rec = f.get('recommendation', '')
+                rec_html = html_mod.escape(rec) if rec else '<em>None</em>'
+                
+                rows.append(f"""<tr>
+<td style="color: {color}; font-weight: bold; text-align: center; white-space: nowrap;">[{sev}]</td>
+<td><strong>{title}</strong><br><small style="color: #666;">{category}</small></td>
+<td>{evidence_html}</td>
+<td>{rec_html}</td>
+</tr>""")
         
-        return "\n".join(lines)
+        return f"""<table class='data-table findings-table'>
+<thead>
+<tr><th style="width: 80px;">Severity</th><th style="width: 25%;">Finding</th><th style="width: 35%;">Evidence</th><th style="width: 30%;">Recommended Action</th></tr>
+</thead>
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>"""
     
-    def _format_finding_details(self, lines: List[str], details: Dict):
-        """Format finding details for display."""
+    def _format_evidence_html(self, details: Dict) -> str:
+        """Format finding evidence as HTML."""
+        import html as html_mod
+        
+        if not details:
+            return "<em>No specific evidence</em>"
+        
+        parts = []
+        
         # SEO poisoning chains
         if 'chains' in details:
             for i, chain in enumerate(details['chains'][:3], 1):
+                chain_parts = []
                 if chain.get('search_query'):
-                    lines.append(f"      Chain {i}: Searched '{chain['search_query']}'")
+                    chain_parts.append(f"Searched: <code>{html_mod.escape(chain['search_query'])}</code>")
                 if chain.get('suspicious_visits'):
-                    lines.append(f"               Visited {chain['suspicious_visits']} suspicious domains")
+                    chain_parts.append(f"Visited {chain['suspicious_visits']} suspicious domains")
                 if chain.get('suspicious_domains'):
-                    domains = chain['suspicious_domains'][:3]
-                    lines.append(f"               Domains: {', '.join(str(d) for d in domains)}")
+                    domains = [str(d) for d in chain['suspicious_domains'][:3] if d]
+                    if domains:
+                        chain_parts.append(f"Domains: {', '.join(html_mod.escape(d) for d in domains)}")
                 if chain.get('downloads'):
-                    files = [str(d) for d in chain['downloads'] if d][:3]
+                    files = [str(d) for d in chain['downloads'] if d][:2]
                     if files:
-                        lines.append(f"               Downloads: {', '.join(files)}")
+                        chain_parts.append(f"Downloaded: <code>{html_mod.escape(', '.join(files))}</code>")
+                if chain_parts:
+                    parts.append(f"<strong>Chain {i}:</strong> " + "; ".join(chain_parts))
         
         # Extensions
         if 'extensions' in details:
-            for ext in details['extensions'][:5]:
+            for ext in details['extensions'][:3]:
                 if isinstance(ext, dict):
                     name = ext.get('name', ext.get('id', 'Unknown'))
                     ext_id = ext.get('id', '')
-                    install_type = ext.get('installType', '')
-                    lines.append(f"      - {name}")
-                    if ext_id:
-                        lines.append(f"        ID: {ext_id}")
-                    if install_type:
-                        lines.append(f"        Install: {install_type}")
-                    if ext.get('install_time'):
-                        lines.append(f"        Time: {self._fmt_epoch_dual(ext['install_time'])}")
+                    parts.append(f"Extension: <strong>{html_mod.escape(name)}</strong>" + 
+                               (f" <code style='font-size:10px;'>{html_mod.escape(ext_id)}</code>" if ext_id else ""))
                 else:
-                    lines.append(f"      - {ext}")
+                    parts.append(f"Extension: {html_mod.escape(str(ext))}")
         
-        # Extension permissions
+        # Permissions
         if 'permissions' in details and isinstance(details['permissions'], list):
-            perms = details['permissions'][:10]
+            perms = details['permissions'][:6]
             if perms:
-                lines.append(f"      Permissions: {', '.join(str(p) for p in perms)}")
+                parts.append(f"Permissions: <code>{', '.join(html_mod.escape(str(p)) for p in perms)}</code>")
         
-        # Downloads
-        if 'downloads' in details and not 'chains' in details:
-            for dl in details['downloads'][:5]:
+        # Downloads (not in chains)
+        if 'downloads' in details and 'chains' not in details:
+            for dl in details['downloads'][:3]:
                 if isinstance(dl, dict):
                     filename = dl.get('filename', 'Unknown')
-                    url = dl.get('url', dl.get('finalUrl', ''))
-                    when = dl.get('startTime', dl.get('endTime'))
-                    lines.append(f"      - {filename}")
-                    if url:
-                        lines.append(f"        URL: {url[:80]}")
-                    if when:
-                        lines.append(f"        Time: {self._fmt_epoch_dual(when)}")
-                else:
-                    lines.append(f"      - {dl}")
+                    parts.append(f"File: <code>{html_mod.escape(filename)}</code>")
         
-        # URLs/domains
+        # URLs
         if 'urls' in details:
-            for url in details['urls'][:5]:
-                lines.append(f"      - {url[:80]}")
+            for url in details['urls'][:3]:
+                parts.append(f"URL: <code style='word-break:break-all;'>{html_mod.escape(url[:60])}</code>")
         
+        # Domains
         if 'domains' in details:
-            domains = details['domains'][:5]
-            lines.append(f"      Domains: {', '.join(str(d) for d in domains)}")
+            domains = [str(d) for d in details['domains'][:5] if d]
+            if domains:
+                parts.append(f"Domains: {', '.join(html_mod.escape(d) for d in domains)}")
         
         # Tabs
         if 'tabs' in details:
-            for tab in details['tabs'][:5]:
+            tab_titles = []
+            for tab in details['tabs'][:3]:
                 if isinstance(tab, dict):
-                    title = tab.get('title', 'Untitled')[:50]
-                    url = tab.get('url', '')
-                    lines.append(f"      - {title}")
-                    if url:
-                        lines.append(f"        URL: {url[:70]}")
+                    tab_titles.append(tab.get('title', 'Untitled')[:40])
+            if tab_titles:
+                parts.append(f"Tabs: {', '.join(html_mod.escape(t) for t in tab_titles)}")
         
-        # Generic key-value pairs
+        # Other key-value pairs
         for key, value in details.items():
             if key in ('chains', 'extensions', 'downloads', 'urls', 'domains', 'tabs', 'permissions'):
-                continue  # Already handled
-            if isinstance(value, (str, int, float, bool)):
-                lines.append(f"      {key}: {value}")
+                continue
+            if isinstance(value, (str, int, float, bool)) and value:
+                parts.append(f"{html_mod.escape(key)}: <code>{html_mod.escape(str(value))}</code>")
+        
+        if not parts:
+            return "<em>No specific evidence</em>"
+        
+        return "<br>".join(parts)
     
     def _section_timelines(self) -> str:
         """Generate Timelines section."""
@@ -4229,6 +4259,9 @@ class ReportGenerator:
             elif "TABLE:entra_sessions" in line:
                 html_lines.append(self._generate_entra_table_html())
                 continue
+            elif "TABLE:findings" in line:
+                html_lines.append(self._generate_findings_table_html())
+                continue
             
             if line.startswith("=" * 20):
                 if in_section:
@@ -4365,6 +4398,19 @@ class ReportGenerator:
             background: #f0f0f0;
             padding: 2px 4px;
             border-radius: 3px;
+        }}
+        .findings-table td {{
+            font-size: 11px;
+        }}
+        .findings-table code {{
+            font-size: 10px;
+            background: #f5f5f5;
+            padding: 1px 4px;
+            border-radius: 3px;
+            word-break: break-all;
+        }}
+        .findings-table td:first-child {{
+            vertical-align: middle;
         }}
         .footer {{
             text-align: center;
