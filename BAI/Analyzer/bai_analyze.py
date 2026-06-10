@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# © 2026, Shane Shook, All Rights Reserved - this tool is for testing and analysis.
 """
 bai_analyze.py - Offline analyzer for BAI (Browser Audit Inventory) packages.
 
@@ -3051,7 +3052,796 @@ def write_auth_json(sessions: List[Dict], idp_cookies: List[Dict],
 
 
 # --------------------------------------------------------------------------- #
-# Console report
+# Structured Report Generator (HTML/TXT)
+# --------------------------------------------------------------------------- #
+
+class ReportGenerator:
+    """Generate structured forensic reports in HTML or TXT format."""
+    
+    def __init__(self, pkg: Dict, findings: List[Dict], aitm_view: Dict,
+                 sessions: List[Dict], storage_tokens: List[Dict],
+                 events: List[Dict], theft_timeline: Dict,
+                 entra_correlation: Dict = None, tz=None):
+        self.pkg = pkg
+        self.findings = findings
+        self.aitm_view = aitm_view
+        self.sessions = sessions
+        self.storage_tokens = storage_tokens
+        self.events = events
+        self.theft_timeline = theft_timeline
+        self.entra_correlation = entra_correlation
+        self.tz = tz
+        
+        # Extract common data
+        self.manifest = pkg.get("MANIFEST.json") or {}
+        self.chain = pkg.get("chain_of_custody.json") or {}
+        self.sysinfo = pkg.get("systeminfo.json") or {}
+        self.session_log = pkg.get("session_log.json") or {}
+        self.identity_json = pkg.get("identity.json") or {}
+    
+    def _fmt_ts(self, ts) -> str:
+        """Format timestamp for display."""
+        if ts is None:
+            return "Unknown"
+        if isinstance(ts, str):
+            return ts
+        return fmt(ts, self.tz) if self.tz else str(ts)
+    
+    def _get_mfa_status(self, session: Dict) -> str:
+        """Determine MFA status from session claims."""
+        # Check decoded token claims
+        identity = session.get("identity", {})
+        amr = identity.get("amr", [])
+        
+        if isinstance(amr, list):
+            if "mfa" in amr:
+                return "MFA verified"
+            if "ngcmfa" in amr:
+                return "MFA (NGC)"
+            if "otp" in amr:
+                return "OTP"
+            if "hwk" in amr or "fido" in amr:
+                return "FIDO/Hardware key"
+            if "pwd" in amr and len(amr) == 1:
+                return "Password only"
+        
+        # Check for MFA-related cookies
+        cookie_names = session.get("cookie_names", [])
+        if any("mfa" in c.lower() for c in cookie_names):
+            return "MFA (cookie indicator)"
+        
+        # Check token types for persistent (usually requires MFA)
+        token_types = session.get("token_types", [])
+        if "persistent" in token_types:
+            return "Likely MFA (persistent)"
+        
+        return "Unknown"
+    
+    def _get_token_types(self, session: Dict) -> str:
+        """Get token types as display string."""
+        types = []
+        token_types = session.get("token_types", [])
+        
+        if "persistent" in token_types:
+            types.append("Persistent")
+        if session.get("any_httponly"):
+            types.append("Bearer (HttpOnly)")
+        else:
+            types.append("Bearer")
+        
+        # Check for refresh tokens in identity
+        identity = session.get("identity", {})
+        if identity.get("refresh_token") or identity.get("rt"):
+            types.append("Refresh")
+        
+        return ", ".join(types) if types else "Session"
+    
+    def build_identity_inventory(self) -> List[Dict]:
+        """Build comprehensive identity inventory from all sources."""
+        inventory = []
+        
+        for session in self.sessions:
+            idp = session.get("idp", "Unknown")
+            domain = session.get("domain", "Unknown")
+            identity = session.get("identity", {})
+            
+            entry = {
+                "identity": identity.get("upn") or identity.get("preferred_username") or 
+                           identity.get("email") or identity.get("name") or 
+                           f"[{domain}]",
+                "idp": idp,
+                "domain": domain,
+                "tenant_id": session.get("tenant_id") or identity.get("tid"),
+                "object_id": session.get("object_id") or identity.get("oid"),
+                "mfa_status": self._get_mfa_status(session),
+                "token_types": self._get_token_types(session),
+                "valid_until": session.get("latest_expiry") or session.get("earliest_expiry"),
+                "cookie_count": len(session.get("cookie_names", [])),
+                "httponly": "Yes" if session.get("any_httponly") else "No",
+            }
+            inventory.append(entry)
+        
+        # Add storage tokens
+        for token in self.storage_tokens:
+            identity = token.get("identity", {})
+            entry = {
+                "identity": identity.get("upn") or identity.get("preferred_username") or 
+                           identity.get("email") or token.get("key", "Unknown"),
+                "idp": token.get("idp", "Web Storage"),
+                "domain": token.get("origin", "Unknown"),
+                "tenant_id": identity.get("tid"),
+                "object_id": identity.get("oid"),
+                "mfa_status": self._get_mfa_status({"identity": identity}),
+                "token_types": "Storage Token" + (" (Refresh)" if token.get("is_refresh") else ""),
+                "valid_until": token.get("expiration"),
+                "cookie_count": 0,
+                "httponly": "N/A (XSS vulnerable)",
+            }
+            inventory.append(entry)
+        
+        return inventory
+    
+    def _section_evidence_provenance(self) -> str:
+        """Generate Evidence Provenance section."""
+        lines = []
+        lines.append("=" * 78)
+        lines.append("1. EVIDENCE PROVENANCE")
+        lines.append("=" * 78)
+        lines.append("")
+        
+        # Collection metadata - handle both old and new manifest formats
+        tool = self.manifest.get("tool", {})
+        env = self.manifest.get("environment", {})
+        acq = self.manifest.get("acquisition", {})
+        root_hash = self.manifest.get("root_hash", {})
+        
+        lines.append("COLLECTION METADATA")
+        lines.append("-" * 40)
+        lines.append(f"  Collection ID:   {self.manifest.get('collection_id', 'Unknown')}")
+        lines.append(f"  Started:         {acq.get('started_utc', self.manifest.get('timestamp', 'Unknown'))}")
+        lines.append(f"  Completed:       {acq.get('collection_completed_utc', 'Unknown')}")
+        lines.append(f"  Extension:       {tool.get('name', 'BAI')} v{tool.get('version', env.get('extension_version', '?'))}")
+        
+        pkg_hash = root_hash.get('value', self.manifest.get('package_sha256', 'Not computed'))
+        if pkg_hash and len(pkg_hash) > 40:
+            lines.append(f"  Root Hash:       {pkg_hash[:40]}...")
+        else:
+            lines.append(f"  Root Hash:       {pkg_hash}")
+        lines.append("")
+        
+        # Case information
+        case = self.manifest.get("case", {})
+        lines.append("CASE INFORMATION")
+        lines.append("-" * 40)
+        lines.append(f"  Case ID:         {case.get('case_id', 'Not specified')}")
+        lines.append(f"  Examiner:        {case.get('examiner', 'Not specified')}")
+        lines.append(f"  Notes:           {case.get('notes', 'None')}")
+        lines.append("")
+        
+        # Chain of custody - handle both "entries" and "events" field names
+        coc_entries = self.chain.get("events", self.chain.get("entries", []))
+        lines.append("CHAIN OF CUSTODY")
+        lines.append("-" * 40)
+        if coc_entries:
+            # Show key events, not every artifact collection
+            key_events = [e for e in coc_entries if e.get('action') not in ('artifact_collected',)]
+            if not key_events:
+                key_events = coc_entries[:5]  # Show first 5 if all are artifact collections
+            
+            for i, entry in enumerate(key_events[:10], 1):  # Limit to 10
+                ts = entry.get('timestamp_utc', entry.get('timestamp', '?'))
+                operator = entry.get('operator', entry.get('actor', '?'))
+                action = entry.get('action', '?')
+                
+                lines.append(f"  [{i}] {ts}")
+                lines.append(f"      Action:   {action}")
+                lines.append(f"      Operator: {operator}")
+                
+                detail = entry.get('detail', {})
+                if isinstance(detail, dict):
+                    if detail.get('sha256'):
+                        lines.append(f"      Hash:     {detail['sha256'][:40]}...")
+                    if detail.get('record_count'):
+                        lines.append(f"      Records:  {detail['record_count']}")
+                
+                if entry.get('notes'):
+                    lines.append(f"      Notes:    {entry.get('notes')}")
+                lines.append("")
+            
+            if len(coc_entries) > len(key_events):
+                lines.append(f"  ... and {len(coc_entries) - len(key_events)} more events (artifact collections)")
+                lines.append("")
+        else:
+            lines.append("  No chain of custody entries recorded.")
+            lines.append("")
+        
+        # Signature verification - check both SIGNATURE.json and manifest.signing
+        sig = self.pkg.get("SIGNATURE.json") or {}
+        signing = self.manifest.get("signing", {})
+        
+        lines.append("INTEGRITY VERIFICATION")
+        lines.append("-" * 40)
+        
+        if signing.get("signed") or sig.get("signature"):
+            lines.append(f"  Signed:          Yes")
+            lines.append(f"  Algorithm:       {signing.get('algorithm', sig.get('algorithm', 'Unknown'))}")
+            lines.append(f"  Signer:          {signing.get('signer_label', sig.get('signer_label', 'Unknown'))}")
+            
+            key_fp = signing.get('public_key_fingerprint_sha256', sig.get('key_id', ''))
+            if key_fp:
+                lines.append(f"  Key Fingerprint: {key_fp[:40]}...")
+            
+            if sig.get("signature"):
+                lines.append(f"  Signature File:  SIGNATURE.json (present)")
+            else:
+                lines.append(f"  Signature File:  {signing.get('signature_file', 'Unknown')}")
+        else:
+            lines.append("  Signed:          No")
+        lines.append("")
+        
+        return "\n".join(lines)
+    
+    def _section_system_context(self) -> str:
+        """Generate System Context section."""
+        lines = []
+        lines.append("=" * 78)
+        lines.append("2. SYSTEM CONTEXT")
+        lines.append("=" * 78)
+        lines.append("")
+        
+        env = self.manifest.get("environment", {})
+        totals = self.manifest.get("totals", {})
+        
+        # Get systeminfo records - handle different structures
+        sysinfo_rec = {}
+        if self.sysinfo:
+            if isinstance(self.sysinfo.get("records"), dict):
+                sysinfo_rec = self.sysinfo["records"]
+            elif isinstance(self.sysinfo.get("records"), list) and self.sysinfo["records"]:
+                sysinfo_rec = self.sysinfo["records"][0]
+            elif "navigator" in self.sysinfo:
+                sysinfo_rec = self.sysinfo.get("navigator", {})
+        
+        # Computer information
+        lines.append("COMPUTER INFORMATION")
+        lines.append("-" * 40)
+        lines.append(f"  Platform:        {env.get('platform', sysinfo_rec.get('platform', 'Unknown'))}")
+        ua = sysinfo_rec.get('userAgent', env.get('user_agent', 'Unknown'))
+        lines.append(f"  User Agent:      {ua[:70]}..." if len(str(ua)) > 70 else f"  User Agent:      {ua}")
+        
+        # Languages can be list or string
+        langs = env.get('languages', sysinfo_rec.get('languages', 'Unknown'))
+        if isinstance(langs, list):
+            langs = ", ".join(langs)
+        lines.append(f"  Locale:          {env.get('locale', sysinfo_rec.get('language', 'Unknown'))}")
+        lines.append(f"  Languages:       {langs}")
+        lines.append(f"  Timezone:        {env.get('timezone', 'Unknown')}")
+        lines.append(f"  Hardware Cores:  {sysinfo_rec.get('hardwareConcurrency', 'Unknown')}")
+        mem = sysinfo_rec.get('deviceMemory', 'Unknown')
+        lines.append(f"  Device Memory:   {mem} GB" if mem != 'Unknown' else f"  Device Memory:   {mem}")
+        lines.append(f"  Online:          {sysinfo_rec.get('onLine', 'Unknown')}")
+        lines.append("")
+        
+        # Browser information
+        lines.append("BROWSER INFORMATION")
+        lines.append("-" * 40)
+        lines.append(f"  Browser:         Chrome {env.get('chrome_version', 'Unknown')}")
+        lines.append(f"  Extension ID:    {env.get('extension_id', 'Unknown')}")
+        lines.append(f"  Extension Ver:   {env.get('extension_version', 'Unknown')}")
+        lines.append(f"  Clock Source:    {env.get('clock_source', 'Unknown')}")
+        lines.append("")
+        
+        # Collection statistics
+        log = self.session_log
+        lines.append("COLLECTION STATISTICS")
+        lines.append("-" * 40)
+        lines.append(f"  Artifacts:       {totals.get('artifact_count', self.manifest.get('artifact_count', '?'))}")
+        lines.append(f"  Total Size:      {totals.get('total_bytes', 0):,} bytes")
+        lines.append(f"  Partial:         {totals.get('partial_artifacts', 0)} artifact(s)")
+        lines.append(f"  Log Entries:     {log.get('entry_count', '?')}")
+        lines.append(f"  Errors:          {log.get('error_count', 0)}")
+        lines.append(f"  Warnings:        {log.get('warning_count', 0)}")
+        lines.append("")
+        
+        # List any errors/warnings
+        if log.get('error_count', 0) > 0 or log.get('warning_count', 0) > 0:
+            lines.append("COLLECTION ISSUES")
+            lines.append("-" * 40)
+            for entry in log.get('entries', []):
+                if entry.get('level') in ('error', 'warning'):
+                    lines.append(f"  [{entry['level'].upper()}] {entry.get('message', '?')[:60]}")
+            lines.append("")
+        
+        return "\n".join(lines)
+    
+    def _section_identity_inventory(self) -> str:
+        """Generate Identity Inventory section."""
+        lines = []
+        lines.append("=" * 78)
+        lines.append("3. IDENTITY INVENTORY")
+        lines.append("=" * 78)
+        lines.append("")
+        
+        inventory = self.build_identity_inventory()
+        
+        if not inventory:
+            lines.append("  No authenticated sessions or identity tokens found.")
+            lines.append("")
+            return "\n".join(lines)
+        
+        lines.append(f"  Total Identities: {len(inventory)}")
+        lines.append("")
+        
+        # Group by IdP
+        by_idp = {}
+        for entry in inventory:
+            idp = entry["idp"]
+            if idp not in by_idp:
+                by_idp[idp] = []
+            by_idp[idp].append(entry)
+        
+        for idp, entries in sorted(by_idp.items()):
+            lines.append(f"[{idp}]")
+            lines.append("-" * 40)
+            for e in entries:
+                lines.append(f"  Identity:      {e['identity']}")
+                if e.get('tenant_id'):
+                    lines.append(f"  Tenant ID:     {e['tenant_id']}")
+                if e.get('object_id'):
+                    lines.append(f"  Object ID:     {e['object_id']}")
+                lines.append(f"  Domain:        {e['domain']}")
+                lines.append(f"  MFA Status:    {e['mfa_status']}")
+                lines.append(f"  Token Types:   {e['token_types']}")
+                lines.append(f"  Valid Until:   {e['valid_until'] or 'Unknown'}")
+                lines.append(f"  HttpOnly:      {e['httponly']}")
+                lines.append("")
+        
+        return "\n".join(lines)
+    
+    def _section_risk_assessment(self) -> str:
+        """Generate Risk Assessment Summary section."""
+        lines = []
+        lines.append("=" * 78)
+        lines.append("4. RISK ASSESSMENT SUMMARY")
+        lines.append("=" * 78)
+        lines.append("")
+        
+        # Calculate overall risk
+        severity_counts = {s.value: 0 for s in Severity}
+        for f in self.findings:
+            sev = f.get("severity", "INFO")
+            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+        
+        if severity_counts.get("CRITICAL", 0) > 0:
+            risk_level = "CRITICAL"
+            risk_color = "CRITICAL security issues require immediate attention"
+        elif severity_counts.get("HIGH", 0) > 0:
+            risk_level = "HIGH"
+            risk_color = "High-risk findings detected - investigation recommended"
+        elif severity_counts.get("MEDIUM", 0) > 0:
+            risk_level = "MEDIUM"
+            risk_color = "Medium-risk findings present - review recommended"
+        elif severity_counts.get("LOW", 0) > 0:
+            risk_level = "LOW"
+            risk_color = "Minor issues detected"
+        else:
+            risk_level = "CLEAN"
+            risk_color = "No significant security findings"
+        
+        # Check for token replays
+        if self.entra_correlation and self.entra_correlation.get("first_ta_replays"):
+            risk_level = "CRITICAL"
+            risk_color = "TOKEN REPLAY DETECTED - Active compromise likely"
+        
+        lines.append("EXECUTIVE SUMMARY")
+        lines.append("-" * 40)
+        lines.append(f"  Overall Risk:    [{risk_level}]")
+        lines.append(f"  Assessment:      {risk_color}")
+        lines.append("")
+        
+        # Findings by severity
+        lines.append("FINDINGS BY SEVERITY")
+        lines.append("-" * 40)
+        lines.append(f"  CRITICAL:        {severity_counts.get('CRITICAL', 0)}")
+        lines.append(f"  HIGH:            {severity_counts.get('HIGH', 0)}")
+        lines.append(f"  MEDIUM:          {severity_counts.get('MEDIUM', 0)}")
+        lines.append(f"  LOW:             {severity_counts.get('LOW', 0)}")
+        lines.append(f"  INFO:            {severity_counts.get('INFO', 0)}")
+        lines.append(f"  Total:           {len(self.findings)}")
+        lines.append("")
+        
+        # Key threats
+        lines.append("KEY THREATS IDENTIFIED")
+        lines.append("-" * 40)
+        if self.findings:
+            for f in self.findings:
+                if f.get("severity") in ("CRITICAL", "HIGH"):
+                    lines.append(f"  • [{f['severity']}] {f['title']}")
+            if not any(f.get("severity") in ("CRITICAL", "HIGH") for f in self.findings):
+                lines.append("  No critical or high-severity threats identified.")
+        else:
+            lines.append("  No threats identified.")
+        lines.append("")
+        
+        # AiTM risk
+        lines.append("AiTM RISK ASSESSMENT")
+        lines.append("-" * 40)
+        aitm_risk = self.aitm_view.get("overall_risk", "Unknown")
+        lines.append(f"  AiTM Risk:       {aitm_risk}")
+        lines.append(f"  Proxy Status:    {self.aitm_view.get('proxy_status', 'Unknown')}")
+        lines.append(f"  Redirect Chains: {len(self.aitm_view.get('redirect_chains', []))} transitions")
+        lines.append(f"  Summary:         {self.aitm_view.get('summary', 'No summary')}")
+        lines.append("")
+        
+        # Recommended actions
+        lines.append("RECOMMENDED ACTIONS")
+        lines.append("-" * 40)
+        if risk_level == "CRITICAL":
+            lines.append("  1. IMMEDIATE: Revoke all active sessions for affected identities")
+            lines.append("  2. IMMEDIATE: Reset credentials for compromised accounts")
+            lines.append("  3. Investigate Entra sign-in logs for unauthorized access")
+            lines.append("  4. Review audit logs for post-compromise activity")
+            lines.append("  5. Preserve this evidence package for incident response")
+        elif risk_level == "HIGH":
+            lines.append("  1. Review identified high-risk findings in detail")
+            lines.append("  2. Correlate with Entra sign-in logs using provided anchors")
+            lines.append("  3. Consider session revocation if token theft is suspected")
+            lines.append("  4. Investigate flagged extensions and downloads")
+        elif risk_level == "MEDIUM":
+            lines.append("  1. Review medium-risk findings")
+            lines.append("  2. Verify extension legitimacy")
+            lines.append("  3. Check for signs of user deception (SEO poisoning, phishing)")
+        else:
+            lines.append("  1. No immediate action required")
+            lines.append("  2. Retain evidence package for baseline comparison")
+        lines.append("")
+        
+        return "\n".join(lines)
+    
+    def _section_detailed_findings(self) -> str:
+        """Generate Detailed Findings section."""
+        lines = []
+        lines.append("=" * 78)
+        lines.append("5. DETAILED FINDINGS")
+        lines.append("=" * 78)
+        lines.append("")
+        
+        if not self.findings:
+            lines.append("  No findings to report.")
+            lines.append("")
+            return "\n".join(lines)
+        
+        # Group by severity
+        by_severity = {}
+        for f in self.findings:
+            sev = f.get("severity", "INFO")
+            if sev not in by_severity:
+                by_severity[sev] = []
+            by_severity[sev].append(f)
+        
+        severity_order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+        for sev in severity_order:
+            if sev not in by_severity:
+                continue
+            
+            lines.append(f"[{sev}]")
+            lines.append("-" * 40)
+            for f in by_severity[sev]:
+                lines.append(f"  • {f['title']}")
+                lines.append(f"    Category: {f.get('category', 'Unknown')}")
+                if f.get('recommendation'):
+                    # Word wrap recommendation
+                    rec = f['recommendation']
+                    wrapped = [rec[i:i+60] for i in range(0, len(rec), 60)]
+                    lines.append(f"    Action: {wrapped[0]}")
+                    for w in wrapped[1:]:
+                        lines.append(f"            {w}")
+                lines.append("")
+        
+        return "\n".join(lines)
+    
+    def _section_timelines(self) -> str:
+        """Generate Timelines section."""
+        lines = []
+        lines.append("=" * 78)
+        lines.append("6. TIMELINE ANALYSIS")
+        lines.append("=" * 78)
+        lines.append("")
+        
+        # Session Theft Timeline
+        lines.append("SESSION THEFT TIMELINE")
+        lines.append("-" * 40)
+        
+        tl = self.theft_timeline or {}
+        stealable = tl.get("stealable_sessions", [])
+        auth_flows = tl.get("authentication_flows", [])
+        theft_windows = tl.get("theft_windows", [])
+        
+        lines.append(f"  Stealable Sessions (ESTS): {len(stealable)}")
+        lines.append(f"  IdP Authentication Flows:  {len(auth_flows)}")
+        lines.append(f"  Theft Windows:             {len(theft_windows)}")
+        lines.append("")
+        
+        # Show theft windows if any
+        if theft_windows:
+            lines.append("  THEFT WINDOWS:")
+            for i, tw in enumerate(theft_windows[:5], 1):
+                lines.append(f"    [{i}] {tw.get('identity', 'Unknown')}")
+                lines.append(f"        Session Birth: {tw.get('session_birth_lower', '?')} - {tw.get('session_birth_upper', '?')}")
+                lines.append(f"        Birth Source:  {tw.get('birth_source', 'Unknown')}")
+            lines.append("")
+        
+        # Show recent auth flows
+        if auth_flows:
+            lines.append("  RECENT AUTHENTICATION FLOWS (last 10):")
+            for i, flow in enumerate(auth_flows[-10:], 1):
+                lines.append(f"    [{i}] {flow.get('idp', '?')} @ {flow.get('visit_time', '?')}")
+                lines.append(f"        Delivery: {flow.get('delivery_vector', 'Unknown')}")
+            lines.append("")
+        
+        # Entra correlation results
+        if self.entra_correlation:
+            lines.append("ENTRA LOG CORRELATION")
+            lines.append("-" * 40)
+            ec = self.entra_correlation
+            lines.append(f"  Identities Matched:    {ec.get('identities_matched', 0)}")
+            lines.append(f"  Sign-ins Analyzed:     {ec.get('signins_analyzed', 0)}")
+            lines.append(f"  Anomalous Sign-ins:    {len(ec.get('anomalous_signins', []))}")
+            lines.append(f"  Token Replays:         {len(ec.get('first_ta_replays', []))}")
+            lines.append("")
+            
+            replays = ec.get("first_ta_replays", [])
+            if replays:
+                lines.append("  🚨 TOKEN REPLAYS DETECTED:")
+                for r in replays[:5]:
+                    lines.append(f"    • {r.get('identity', '?')}")
+                    lines.append(f"      Replay Time: {r.get('first_replay_time', '?')}")
+                    lines.append(f"      Theft IP:    {r.get('ip_address', '?')}")
+                    lines.append(f"      Window:      {r.get('theft_window', '?')}")
+                lines.append("")
+        
+        # Event summary
+        lines.append("EVENT TIMELINE SUMMARY")
+        lines.append("-" * 40)
+        lines.append(f"  Total Events:    {len(self.events)}")
+        if self.events:
+            lines.append(f"  First Event:     {self._fmt_ts(self.events[0].get('ts'))}")
+            lines.append(f"  Last Event:      {self._fmt_ts(self.events[-1].get('ts'))}")
+            
+            # Count by type
+            by_kind = {}
+            for e in self.events:
+                kind = e.get("kind", "unknown")
+                by_kind[kind] = by_kind.get(kind, 0) + 1
+            
+            lines.append("  By Type:")
+            for kind, count in sorted(by_kind.items(), key=lambda x: -x[1])[:8]:
+                lines.append(f"    {kind}: {count}")
+        lines.append("")
+        
+        return "\n".join(lines)
+    
+    def _section_correlation_guidance(self) -> str:
+        """Generate Correlation Guidance section."""
+        lines = []
+        lines.append("=" * 78)
+        lines.append("7. CORRELATION GUIDANCE")
+        lines.append("=" * 78)
+        lines.append("")
+        
+        lines.append("KEY CORRELATION ANCHORS")
+        lines.append("-" * 40)
+        lines.append("  • ESTS cookie = 'loaded gun on the table' — proves replayable session existed")
+        lines.append("  • visitdetails = best causal anchor — dates lure + auth (AiTM capture moment)")
+        lines.append("  • auth_time claim = precise session birth (when available in cleartext tokens)")
+        lines.append("  • Theft window = [session_birth, first_TA_replay_in_Entra_logs]")
+        lines.append("")
+        
+        lines.append("ENTRA SIGN-IN LOG QUERIES")
+        lines.append("-" * 40)
+        
+        # Extract correlation anchors
+        anchors = self.theft_timeline.get("correlation_anchors", []) if self.theft_timeline else []
+        if anchors:
+            for a in anchors[:3]:
+                lines.append(f"  Identity: {a.get('upn', a.get('object_id', 'Unknown'))}")
+                lines.append(f"  Tenant:   {a.get('tenant_id', 'Unknown')}")
+                lines.append(f"  Query:    Filter by userId eq '{a.get('object_id', '?')}'")
+                lines.append(f"            within {a.get('validity_start', '?')} to {a.get('validity_end', '?')}")
+                lines.append("")
+        else:
+            lines.append("  No specific correlation anchors extracted.")
+            lines.append("  Use tenant_id and object_id from Identity Inventory section.")
+        lines.append("")
+        
+        lines.append("PURVIEW/UAL GUIDANCE")
+        lines.append("-" * 40)
+        lines.append("  • Pivot on SessionId in audit records")
+        lines.append("  • Look for same SessionId used from different ClientIP")
+        lines.append("  • Storage tokens (localStorage/IndexedDB) may have longer validity than cookies")
+        lines.append("  • Check for refresh token reuse patterns")
+        lines.append("")
+        
+        return "\n".join(lines)
+    
+    def generate_txt(self) -> str:
+        """Generate complete TXT report."""
+        sections = []
+        
+        # Header
+        sections.append("=" * 78)
+        sections.append("BAI OFFLINE ANALYSIS - FORENSIC REPORT")
+        sections.append("=" * 78)
+        sections.append(f"Generated: {datetime.now(timezone.utc).isoformat()}")
+        sections.append("")
+        
+        # All sections
+        sections.append(self._section_evidence_provenance())
+        sections.append(self._section_system_context())
+        sections.append(self._section_identity_inventory())
+        sections.append(self._section_risk_assessment())
+        sections.append(self._section_detailed_findings())
+        sections.append(self._section_timelines())
+        sections.append(self._section_correlation_guidance())
+        
+        # Footer
+        sections.append("=" * 78)
+        sections.append("END OF REPORT")
+        sections.append("=" * 78)
+        
+        return "\n".join(sections)
+    
+    def generate_html(self) -> str:
+        """Generate complete HTML report."""
+        # Convert TXT sections to HTML with styling
+        txt_content = self.generate_txt()
+        
+        # Escape HTML and convert structure
+        import html as html_mod
+        escaped = html_mod.escape(txt_content)
+        
+        # Convert section headers to styled divs
+        lines = escaped.split("\n")
+        html_lines = []
+        in_section = False
+        
+        for line in lines:
+            if line.startswith("=" * 20):
+                if in_section:
+                    html_lines.append("</div>")
+                html_lines.append("<hr class='section-break'>")
+                in_section = False
+            elif line.startswith("-" * 20):
+                html_lines.append("<hr class='subsection-break'>")
+            elif line.startswith("[CRITICAL]") or line.startswith("[HIGH]") or \
+                 line.startswith("[MEDIUM]") or line.startswith("[LOW]") or line.startswith("[INFO]"):
+                sev = line.strip("[]")
+                html_lines.append(f"<h3 class='severity-{sev.lower()}'>{line}</h3>")
+            elif any(line.startswith(f"{i}. ") for i in range(1, 10)):
+                html_lines.append(f"<h2>{line}</h2>")
+                html_lines.append("<div class='section'>")
+                in_section = True
+            elif line.strip().isupper() and len(line.strip()) > 5 and ":" not in line:
+                html_lines.append(f"<h3>{line}</h3>")
+            else:
+                html_lines.append(f"<pre>{line}</pre>")
+        
+        if in_section:
+            html_lines.append("</div>")
+        
+        body = "\n".join(html_lines)
+        
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAI Forensic Analysis Report</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+            color: #333;
+        }}
+        .header {{
+            text-align: center;
+            padding: 10px;
+            background: #cc0000;
+            color: white;
+            margin-bottom: 20px;
+            font-style: italic;
+        }}
+        h1 {{
+            color: #1a1a2e;
+            border-bottom: 3px solid #1a1a2e;
+            padding-bottom: 10px;
+        }}
+        h2 {{
+            color: #16213e;
+            background: #e8e8e8;
+            padding: 10px;
+            margin-top: 30px;
+        }}
+        h3 {{
+            color: #0f3460;
+            margin-top: 20px;
+        }}
+        pre {{
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 12px;
+            margin: 2px 0;
+            white-space: pre-wrap;
+        }}
+        .section {{
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }}
+        .section-break {{
+            border: none;
+            border-top: 3px solid #1a1a2e;
+            margin: 30px 0;
+        }}
+        .subsection-break {{
+            border: none;
+            border-top: 1px solid #ccc;
+            margin: 15px 0;
+        }}
+        .severity-critical {{ color: #8b0000; font-weight: bold; }}
+        .severity-high {{ color: #cc0000; font-weight: bold; }}
+        .severity-medium {{ color: #ff8c00; font-weight: bold; }}
+        .severity-low {{ color: #b8860b; }}
+        .severity-info {{ color: #0066cc; }}
+        .footer {{
+            text-align: center;
+            padding: 10px;
+            margin-top: 30px;
+            font-size: 11px;
+            color: #666;
+        }}
+        @media print {{
+            body {{ background: white; }}
+            .section {{ box-shadow: none; border: 1px solid #ccc; }}
+            .header {{ background: #333; -webkit-print-color-adjust: exact; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        Privileged and Confidential - DRAFT Work Product
+    </div>
+    <h1>BAI Forensic Analysis Report</h1>
+    {body}
+    <div class="footer">
+        Generated by BAI Analyzer | © 2026, Shane Shook, All Rights Reserved
+    </div>
+</body>
+</html>"""
+        
+        return html
+    
+    def write_identity_csv(self, path: str):
+        """Write identity inventory to CSV."""
+        inventory = self.build_identity_inventory()
+        
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            import csv
+            writer = csv.DictWriter(f, fieldnames=[
+                "identity", "idp", "domain", "tenant_id", "object_id",
+                "mfa_status", "token_types", "valid_until", "cookie_count", "httponly"
+            ])
+            writer.writeheader()
+            for entry in inventory:
+                writer.writerow(entry)
+
+
+# --------------------------------------------------------------------------- #
+# Console report (legacy, kept for backward compatibility)
 # --------------------------------------------------------------------------- #
 
 def print_findings_report(findings: List[Dict], aitm_view: Dict):
@@ -3421,6 +4211,8 @@ Examples:
     )
     ap.add_argument("package", help="BAI package folder or .zip")
     ap.add_argument("--out", default="./bai_analysis", help="output directory")
+    ap.add_argument("--format", choices=["txt", "html"], default="txt",
+                    help="Report output format (default: txt)")
     ap.add_argument("--tz", default=None, help="display timezone, e.g. America/Los_Angeles")
     ap.add_argument("--since", default=None, help="filter events on/after YYYY-MM-DD")
     ap.add_argument("--until", default=None, help="filter events on/before YYYY-MM-DD")
@@ -3484,28 +4276,58 @@ Examples:
     tl_csv = os.path.join(args.out, "timeline.csv")
     findings_json = os.path.join(args.out, "findings.json")
     auth_json = os.path.join(args.out, "auth_sessions.json")
+    identity_csv = os.path.join(args.out, "identity_inventory.csv")
     
     write_timeline_csv(events, tz, tl_csv)
     write_findings_json(findings, aitm_view, theft_timeline, findings_json, entra_correlation)
     write_auth_json(sessions, idp_cookies, all_storage_tokens, auth_json)
+    
+    # Generate structured report
+    report_gen = ReportGenerator(
+        pkg=pkg,
+        findings=findings,
+        aitm_view=aitm_view,
+        sessions=sessions,
+        storage_tokens=all_storage_tokens,
+        events=events,
+        theft_timeline=theft_timeline,
+        entra_correlation=entra_correlation,
+        tz=tz
+    )
+    
+    # Write report in requested format
+    if args.format == "html":
+        report_path = os.path.join(args.out, "report.html")
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(report_gen.generate_html())
+    else:
+        report_path = os.path.join(args.out, "report.txt")
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(report_gen.generate_txt())
+    
+    # Write identity inventory CSV
+    report_gen.write_identity_csv(identity_csv)
     
     # Write Entra correlation if available
     if entra_correlation:
         correlation_json = os.path.join(args.out, "entra_correlation.json")
         with open(correlation_json, "w", encoding="utf-8") as f:
             json.dump(entra_correlation, f, indent=2, default=str)
-        print(f"[+] entra correlation     : {correlation_json}")
     
-    # Console report
+    # Console report (legacy format for terminal viewing)
     if not args.quiet:
         print_report(pkg, findings, aitm_view, sessions, all_storage_tokens, events, tz, 
                      theft_timeline, entra_correlation)
     
     print()
+    print(f"[+] report written        : {report_path}")
+    print(f"[+] identity inventory    : {identity_csv}  ({len(sessions) + len(all_storage_tokens)} identities)")
     print(f"[+] timeline written      : {tl_csv}  ({len(events)} events)")
     print(f"[+] findings written      : {findings_json}  ({len(findings)} findings)")
     print(f"[+] auth sessions written : {auth_json}  ({len(sessions)} sessions, "
           f"{len(all_storage_tokens)} storage tokens)")
+    if entra_correlation:
+        print(f"[+] entra correlation     : {os.path.join(args.out, 'entra_correlation.json')}")
     
     if args.include_token_values:
         print("[!] WARNING: raw token values were written - treat output as live credentials.")

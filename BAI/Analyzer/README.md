@@ -1,6 +1,8 @@
 # BAI Analyzer
 
-> Offline analysis tool for BAI (Browser Audit Inventory) packages.
+> © 2026, Shane Shook, All Rights Reserved. This tool is for testing and analysis.
+
+Offline analysis tool for BAI (Browser Audit Inventory) packages.
 
 Mission-focused analyzer that processes BAI evidence packages to detect **Adversary-in-the-Middle (AiTM) attacks** and **Infostealer malware** indicators, while correlating browser-side evidence with enterprise logs.
 
@@ -93,32 +95,100 @@ Flags high-risk extensions:
 ## Usage
 
 ```bash
+python3 bai_analyze.py <package> [options]
+```
+
+### Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `package` | Yes | Path to BAI package folder or .zip file |
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--out DIR` | `./bai_analysis` | Output directory for analysis results |
+| `--format {txt,html}` | `txt` | Report output format |
+| `--tz TIMEZONE` | System default | Display timezone (e.g., `America/Los_Angeles`, `UTC`) |
+| `--since YYYY-MM-DD` | None | Filter events on/after this date |
+| `--until YYYY-MM-DD` | None | Filter events on/before this date |
+| `--entra-logs FOLDER` | None | Folder containing Entra sign-in logs, audit logs, and Purview/UAL for correlation (CSV or JSON) |
+| `--include-token-values` | Off | **DANGEROUS**: Write raw token values into output JSON. Treat output as live credentials! |
+| `--online` | Off | Enable online lookups (WHOIS/RDAP) for domain age analysis |
+| `--quiet`, `-q` | Off | Minimal console output (just write files) |
+
+### Examples
+
+```bash
 # Basic BAI-only analysis (default)
 python3 bai_analyze.py /path/to/BAI_package
 
-# With timezone and output directory
+# Specify output directory and timezone
 python3 bai_analyze.py pkg.zip --out ./analysis --tz America/Los_Angeles
 
-# Filter by date range
+# Filter timeline to specific date range
 python3 bai_analyze.py pkg/ --since 2026-06-01 --until 2026-06-11
 
 # With Entra/Purview log correlation (completes theft windows)
 python3 bai_analyze.py pkg.zip --entra-logs /path/to/entra_logs/
 
+# Enable domain age lookups (requires internet)
+python3 bai_analyze.py pkg.zip --online
+
 # Include raw token values (DANGEROUS - treat output as live credentials)
 python3 bai_analyze.py pkg/ --include-token-values
 
-# Quiet mode (just write files)
+# Quiet mode (just write files, no console report)
 python3 bai_analyze.py pkg/ -q
+
+# Full analysis with all options
+python3 bai_analyze.py pkg.zip \
+    --out ./case_001 \
+    --tz America/New_York \
+    --since 2026-06-01 \
+    --until 2026-06-10 \
+    --entra-logs ./entra_exports/ \
+    --online
 ```
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Clean - no critical/high findings |
+| `1` | Critical or High severity findings detected |
+| `2` | Token replay detected (likely active compromise) |
 
 ## Output Files
 
-| File | Contents |
-|------|----------|
-| `findings.json` | Severity-ranked findings with AiTM view |
-| `auth_sessions.json` | Cookie/storage token inventory with decoded claims |
-| `timeline.csv` | Chronological event timeline |
+| File | Format | Contents |
+|------|--------|----------|
+| `report.txt` or `report.html` | TXT/HTML | Full forensic report (format selected by `--format`) |
+| `identity_inventory.csv` | CSV | All accounts with IdP, MFA status, token types, validity |
+| `findings.json` | JSON | Severity-ranked findings with AiTM view |
+| `auth_sessions.json` | JSON | Cookie/storage token inventory with decoded claims |
+| `timeline.csv` | CSV | Chronological event timeline |
+| `entra_correlation.json` | JSON | Entra log correlation results (only with `--entra-logs`) |
+
+### Report Structure
+
+The generated report includes:
+1. **Evidence Provenance** - Collection metadata, case info, chain of custody, integrity verification
+2. **System Context** - Computer info, browser details, collection statistics
+3. **Identity Inventory** - All accounts with MFA status and token types
+4. **Risk Assessment Summary** - Executive summary, severity counts, key threats, recommended actions
+5. **Detailed Findings** - Full finding details by severity
+6. **Timeline Analysis** - Session theft timeline, authentication flows, Entra correlation
+7. **Correlation Guidance** - Query templates for Entra sign-in logs and Purview/UAL
+
+### Generating DOCX/PDF Reports
+
+Use the AI prompt in `REPORT_PROMPT.md` to convert report files into professionally formatted Word/PDF documents with:
+- "Privileged and Confidential - DRAFT Work Product" headers
+- Page X of Y footers
+- US English spelling/grammar corrections
+- Professional table formatting
 
 ### findings.json Structure
 ```json
