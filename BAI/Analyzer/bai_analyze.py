@@ -248,9 +248,13 @@ def decode_jwt_noverify(value: str) -> Dict[str, Any]:
         segs = value.split(".")
         if len(segs) >= 2:
             payload = json.loads(_b64u(segs[1]))
+            # Include auth_time - critical for session birth timing
+            # auth_time = interactive authentication instant (MFA moment)
+            # iat = token issuance (can be silent refresh, less useful)
             for k in ("tid", "oid", "upn", "preferred_username", "unique_name",
                       "email", "sub", "iss", "aud", "iat", "exp", "nbf", "sid",
-                      "name", "given_name", "family_name", "azp", "appid", "scp"):
+                      "name", "given_name", "family_name", "azp", "appid", "scp",
+                      "auth_time", "amr", "acr", "nonce"):
                 if k in payload:
                     out[k] = payload[k]
     except Exception:
@@ -2018,6 +2022,353 @@ def build_aitm_view(pkg: Dict, findings: List[Dict]) -> Dict:
 
 
 # --------------------------------------------------------------------------- #
+# Session Theft Timeline - Causal Chain Reconstruction
+# --------------------------------------------------------------------------- #
+
+# Known IdP authentication domains
+IDP_DOMAINS = {
+    "login.microsoftonline.com": "Entra ID",
+    "login.live.com": "Microsoft Account",
+    "accounts.google.com": "Google",
+    "auth0.com": "Auth0",
+    "okta.com": "Okta",
+    "login.okta.com": "Okta",
+    "sso.": "SSO Provider",
+    "idp.": "IdP Provider",
+    "auth.": "Auth Provider",
+    "saml.": "SAML IdP",
+}
+
+# ESTS persistent cookie default lifetime (days)
+ESTS_PERSISTENT_LIFETIME_DAYS = 90
+
+
+def build_session_theft_timeline(pkg: Dict, auth_sessions: List[Dict]) -> Dict:
+    """
+    Build a Session Theft Timeline reconstructing the causal chain for token theft.
+    
+    The assembled chain:
+    1. visitdetails referrer-chain dates the lure and auth (causal action → session birth)
+    2. ESTS cookie proves the resulting replayable session existed, whose it is, and validity
+    3. Cleartext token auth_time (when available) provides precise session birth
+    4. Entra sign-in logs (external) date the first replay from TA infrastructure
+    
+    The theft lives in the gap between session-birth and first-replay.
+    BAI uniquely contributes the visitdetails navigation record for causality timing.
+    """
+    timeline = {
+        "stealable_sessions": [],      # ESTS sessions with identity and validity window
+        "authentication_flows": [],     # Reconstructed IdP auth flows from visitdetails
+        "session_birth_anchors": [],    # auth_time from cleartext tokens
+        "causal_events": [],            # Lure/phishing referrer chains
+        "dropper_downloads": [],        # Infostealer delivery timestamps
+        "theft_windows": [],            # Estimated theft brackets
+        "correlation_anchors": [],      # For Entra sign-in log correlation
+    }
+    
+    # -------------------------------------------------------------------------
+    # 1. Extract Stealable Sessions (ESTS cookies)
+    # -------------------------------------------------------------------------
+    for session in auth_sessions:
+        if session.get("type") in ("ESTSAUTH", "ESTSAUTHPERSISTENT"):
+            stealable = {
+                "cookie_name": session.get("name"),
+                "domain": session.get("domain"),
+                "tenant_id": session.get("identity", {}).get("tenant_id"),
+                "object_id": session.get("identity", {}).get("object_id"),
+                "upn": session.get("identity", {}).get("upn"),
+                "expiration": session.get("expiration"),
+                "is_persistent": session.get("type") == "ESTSAUTHPERSISTENT",
+                "estimated_birth": None,
+                "theft_note": None,
+            }
+            
+            # Estimate session birth from expiration (exp - 90 days for persistent)
+            if stealable["is_persistent"] and stealable["expiration"]:
+                try:
+                    exp_dt = datetime.fromisoformat(stealable["expiration"].replace("Z", "+00:00"))
+                    birth_estimate = exp_dt - timedelta(days=ESTS_PERSISTENT_LIFETIME_DAYS)
+                    stealable["estimated_birth"] = birth_estimate.isoformat()
+                    stealable["theft_note"] = (
+                        f"Session birth estimated as {birth_estimate.strftime('%Y-%m-%d')} "
+                        f"(expiration - {ESTS_PERSISTENT_LIFETIME_DAYS} days). "
+                        "Note: Conditional Access sign-in-frequency may alter this. "
+                        "This is the 'loaded gun' - correlate with Entra sign-in logs for first TA replay."
+                    )
+                except Exception:
+                    pass
+            
+            # Add correlation anchor for Entra
+            if stealable["tenant_id"] and stealable["object_id"]:
+                timeline["correlation_anchors"].append({
+                    "type": "Entra",
+                    "tenant_id": stealable["tenant_id"],
+                    "object_id": stealable["object_id"],
+                    "upn": stealable.get("upn"),
+                    "query_guidance": (
+                        "In Entra Sign-in Logs, filter by: "
+                        f"userId eq '{stealable['object_id']}' or "
+                        f"userPrincipalName eq '{stealable.get('upn', 'UNKNOWN')}'. "
+                        "Look for: (1) SessionId match, (2) MFA inherited without prompt, "
+                        "(3) Location/IP inconsistent with user."
+                    ),
+                })
+            
+            timeline["stealable_sessions"].append(stealable)
+    
+    # -------------------------------------------------------------------------
+    # 2. Extract auth_time from cleartext tokens (best session birth anchor)
+    # -------------------------------------------------------------------------
+    for session in auth_sessions:
+        claims = session.get("identity", {})
+        if "auth_time" in claims:
+            auth_time = claims["auth_time"]
+            try:
+                if isinstance(auth_time, (int, float)):
+                    auth_dt = datetime.utcfromtimestamp(auth_time)
+                    auth_time_iso = auth_dt.isoformat() + "Z"
+                else:
+                    auth_time_iso = str(auth_time)
+                
+                timeline["session_birth_anchors"].append({
+                    "source": session.get("name", "unknown"),
+                    "domain": session.get("domain"),
+                    "auth_time": auth_time_iso,
+                    "auth_time_epoch": auth_time if isinstance(auth_time, (int, float)) else None,
+                    "iat": claims.get("iat"),
+                    "amr": claims.get("amr"),  # Authentication methods (mfa, pwd, etc.)
+                    "note": (
+                        "auth_time is the interactive authentication instant (MFA moment). "
+                        "This is more precise than iat (which can be a silent refresh). "
+                        f"Authentication methods: {claims.get('amr', 'unknown')}"
+                    ),
+                })
+            except Exception:
+                pass
+    
+    # -------------------------------------------------------------------------
+    # 3. Reconstruct IdP Authentication Flows from visitdetails
+    # -------------------------------------------------------------------------
+    visit_blob = pkg.get("visitdetails.json")
+    visit_index = {}  # Map visitId to visit for chain reconstruction
+    
+    if visit_blob:
+        for visit in records(visit_blob):
+            url = visit.get("url", "")
+            visit_list = visit.get("visits", [])
+            
+            for v in visit_list:
+                vid = v.get("visitId")
+                if vid:
+                    visit_index[vid] = {
+                        "url": url,
+                        "visit_time": v.get("visitTime"),
+                        "transition": v.get("transition", ""),
+                        "referring_visit_id": v.get("referringVisitId", 0),
+                    }
+        
+        # Find visits to IdP domains and trace their referrer chains
+        for visit in records(visit_blob):
+            url = visit.get("url", "")
+            
+            # Check if this is an IdP authentication URL
+            idp_type = None
+            for idp_domain, idp_name in IDP_DOMAINS.items():
+                if idp_domain in url.lower():
+                    idp_type = idp_name
+                    break
+            
+            if not idp_type:
+                continue
+            
+            visit_list = visit.get("visits", [])
+            for v in visit_list:
+                visit_time = v.get("visitTime")
+                transition = v.get("transition", "")
+                referring_id = v.get("referringVisitId", 0)
+                
+                # Build the referrer chain
+                chain = []
+                chain.append({
+                    "url": url,
+                    "transition": transition,
+                    "visit_time": visit_time,
+                    "role": "IdP authentication"
+                })
+                
+                # Walk back the referrer chain
+                current_ref = referring_id
+                depth = 0
+                while current_ref and current_ref in visit_index and depth < 10:
+                    ref_visit = visit_index[current_ref]
+                    
+                    # Determine role based on transition type
+                    ref_transition = ref_visit.get("transition", "")
+                    role = "referrer"
+                    if "link" in ref_transition.lower():
+                        role = "link click (possible phishing email/page)"
+                    elif "typed" in ref_transition.lower():
+                        role = "typed URL (possible pharming/direct)"
+                    elif "reload" in ref_transition.lower():
+                        role = "page reload"
+                    elif "form_submit" in ref_transition.lower():
+                        role = "form submission"
+                    
+                    chain.append({
+                        "url": ref_visit.get("url"),
+                        "transition": ref_transition,
+                        "visit_time": ref_visit.get("visit_time"),
+                        "role": role,
+                    })
+                    
+                    current_ref = ref_visit.get("referring_visit_id", 0)
+                    depth += 1
+                
+                # Analyze the delivery vector
+                delivery_vector = "unknown"
+                if len(chain) > 1:
+                    first_hop = chain[-1]
+                    first_transition = first_hop.get("transition", "").lower()
+                    first_url = first_hop.get("url", "").lower()
+                    
+                    if "link" in first_transition:
+                        if any(mail in first_url for mail in ["mail.", "outlook.", "gmail.", "webmail"]):
+                            delivery_vector = "phishing email (link from webmail)"
+                        else:
+                            delivery_vector = "link click (possible phishing page)"
+                    elif "typed" in first_transition:
+                        delivery_vector = "direct navigation (possible pharming/typosquatting)"
+                    elif any(search in first_url for search in ["google.", "bing.", "search."]):
+                        delivery_vector = "search result (possible SEO poisoning)"
+                
+                auth_flow = {
+                    "idp_type": idp_type,
+                    "idp_url": url,
+                    "visit_time": visit_time,
+                    "transition": transition,
+                    "delivery_vector": delivery_vector,
+                    "referrer_chain": list(reversed(chain)),  # Chronological order
+                    "chain_depth": len(chain),
+                    "note": (
+                        f"Authentication to {idp_type} at {visit_time}. "
+                        f"This visit_time is the best proxy for AiTM capture moment. "
+                        f"Delivery: {delivery_vector}."
+                    ),
+                }
+                
+                timeline["authentication_flows"].append(auth_flow)
+                
+                # Add to causal events if there's a meaningful chain
+                if len(chain) > 1:
+                    timeline["causal_events"].append({
+                        "type": "authentication_chain",
+                        "idp": idp_type,
+                        "auth_time": visit_time,
+                        "delivery_vector": delivery_vector,
+                        "lure_url": chain[-1].get("url") if len(chain) > 1 else None,
+                        "chain_summary": " → ".join([c.get("url", "?")[:50] for c in reversed(chain)]),
+                    })
+    
+    # -------------------------------------------------------------------------
+    # 4. Extract Dropper Downloads (Infostealer delivery anchor)
+    # -------------------------------------------------------------------------
+    dl_blob = pkg.get("downloads.json")
+    if dl_blob:
+        suspicious_exts = {".exe", ".msi", ".dll", ".bat", ".cmd", ".ps1", ".vbs", 
+                          ".js", ".hta", ".scr", ".zip", ".rar", ".7z", ".iso"}
+        
+        for dl in records(dl_blob):
+            filename = dl.get("filename", "")
+            url = dl.get("url", "")
+            start_time = dl.get("startTime")
+            
+            # Check for suspicious file types
+            ext = ""
+            if "." in filename:
+                ext = "." + filename.rsplit(".", 1)[-1].lower()
+            
+            if ext in suspicious_exts or any(x in filename.lower() for x in ["crack", "keygen", "patch", "loader"]):
+                timeline["dropper_downloads"].append({
+                    "filename": filename,
+                    "url": url,
+                    "download_time": start_time,
+                    "extension": ext,
+                    "referrer": dl.get("referrer"),
+                    "note": (
+                        f"Potential dropper download at {start_time}. "
+                        "This is the causal anchor for infostealer delivery vector. "
+                        "Correlate with any infostealer execution artifacts."
+                    ),
+                })
+    
+    # -------------------------------------------------------------------------
+    # 5. Build Theft Windows
+    # -------------------------------------------------------------------------
+    for session in timeline["stealable_sessions"]:
+        theft_window = {
+            "identity": {
+                "tenant_id": session.get("tenant_id"),
+                "object_id": session.get("object_id"),
+                "upn": session.get("upn"),
+            },
+            "session_birth_lower": None,  # Earliest possible birth
+            "session_birth_upper": None,  # Latest possible birth
+            "validity_end": session.get("expiration"),
+            "birth_source": None,
+            "investigation_guidance": [],
+        }
+        
+        # Use auth_time if available for this identity
+        for anchor in timeline["session_birth_anchors"]:
+            # Try to match by domain/tenant
+            if anchor.get("auth_time"):
+                theft_window["session_birth_lower"] = anchor.get("auth_time")
+                theft_window["session_birth_upper"] = anchor.get("auth_time")
+                theft_window["birth_source"] = "auth_time claim (precise)"
+                break
+        
+        # Fallback to ESTS expiration estimate
+        if not theft_window["session_birth_lower"] and session.get("estimated_birth"):
+            theft_window["session_birth_lower"] = session.get("estimated_birth")
+            theft_window["session_birth_upper"] = session.get("expiration")
+            theft_window["birth_source"] = "ESTS expiration estimate (coarse, ±sign-in-frequency)"
+        
+        # Use visitdetails auth flows
+        for flow in timeline["authentication_flows"]:
+            if flow.get("idp_type") == "Entra ID":
+                if flow.get("visit_time"):
+                    theft_window["session_birth_upper"] = flow.get("visit_time")
+                    if not theft_window["birth_source"] or "estimate" in theft_window["birth_source"]:
+                        theft_window["birth_source"] = "visitdetails IdP navigation"
+                    break
+        
+        # Add investigation guidance
+        guidance = []
+        guidance.append(
+            "1. The ESTS cookie is the 'loaded gun on the table' - proof the replayable session existed."
+        )
+        guidance.append(
+            f"2. Session birth bracketed by: {theft_window['birth_source'] or 'unknown source'}"
+        )
+        if theft_window["session_birth_lower"]:
+            guidance.append(
+                f"3. Theft occurred AFTER {theft_window['session_birth_lower']} (session birth)"
+            )
+        guidance.append(
+            "4. Query Entra sign-in logs for this object_id - look for first replay from TA IP "
+            "(same SessionId, MFA inherited without prompt, anomalous location)"
+        )
+        guidance.append(
+            "5. The theft window is: [session_birth, first_TA_replay]"
+        )
+        
+        theft_window["investigation_guidance"] = guidance
+        timeline["theft_windows"].append(theft_window)
+    
+    return timeline
+
+
+# --------------------------------------------------------------------------- #
 # Timeline builder
 # --------------------------------------------------------------------------- #
 
@@ -2164,17 +2515,22 @@ def write_timeline_csv(events: List[Dict], tz, path: str):
             ])
 
 
-def write_findings_json(findings: List[Dict], aitm_view: Dict, path: str):
+def write_findings_json(findings: List[Dict], aitm_view: Dict, 
+                        theft_timeline: Dict, path: str):
     with open(path, "w", encoding="utf-8") as fh:
         json.dump({
             "findings": findings,
             "aitm_view": aitm_view,
+            "session_theft_timeline": theft_timeline,
             "summary": {
                 "total_findings": len(findings),
                 "by_severity": {s.value: len([f for f in findings if f["severity"] == s.value]) 
                                for s in Severity},
                 "by_category": {c.value: len([f for f in findings if f["category"] == c.value])
                                for c in FindingCategory},
+                "stealable_sessions": len(theft_timeline.get("stealable_sessions", [])),
+                "authentication_flows": len(theft_timeline.get("authentication_flows", [])),
+                "dropper_downloads": len(theft_timeline.get("dropper_downloads", [])),
             },
         }, fh, indent=2)
 
@@ -2302,9 +2658,107 @@ def print_auth_report(sessions: List[Dict], storage_tokens: List[Dict], tz):
             print(f"    - {origin}: {len(tokens)} token(s)")
 
 
+def print_theft_timeline(theft_timeline: Dict, tz):
+    """Print Session Theft Timeline summary."""
+    print()
+    print("=" * 78)
+    print("SESSION THEFT TIMELINE - CAUSAL CHAIN")
+    print("=" * 78)
+    
+    stealable = theft_timeline.get("stealable_sessions", [])
+    auth_flows = theft_timeline.get("authentication_flows", [])
+    birth_anchors = theft_timeline.get("session_birth_anchors", [])
+    droppers = theft_timeline.get("dropper_downloads", [])
+    theft_windows = theft_timeline.get("theft_windows", [])
+    correlation = theft_timeline.get("correlation_anchors", [])
+    
+    print(f"\n  Stealable Sessions (ESTS): {len(stealable)}")
+    print(f"  IdP Authentication Flows:  {len(auth_flows)}")
+    print(f"  Session Birth Anchors:     {len(birth_anchors)}")
+    print(f"  Potential Droppers:        {len(droppers)}")
+    
+    # Show stealable sessions
+    if stealable:
+        print()
+        print("-" * 40)
+        print("STEALABLE SESSIONS (ESTS Cookies)")
+        print("-" * 40)
+        for i, s in enumerate(stealable[:5], 1):
+            print(f"  [{i}] {s.get('cookie_name', '?')} @ {s.get('domain', '?')}")
+            print(f"      Tenant: {s.get('tenant_id', '?')}")
+            print(f"      Object: {s.get('object_id', '?')}")
+            print(f"      UPN:    {s.get('upn', '?')}")
+            print(f"      Exp:    {s.get('expiration', '?')}")
+            if s.get("estimated_birth"):
+                print(f"      Est Birth: {s.get('estimated_birth', '?')}")
+    
+    # Show authentication flows
+    if auth_flows:
+        print()
+        print("-" * 40)
+        print("IdP AUTHENTICATION FLOWS (visitdetails)")
+        print("-" * 40)
+        print("  These are the causal anchors - the visit_time approximates")
+        print("  when the session was born (and when AiTM could capture it).")
+        print()
+        for i, flow in enumerate(auth_flows[:5], 1):
+            print(f"  [{i}] {flow.get('idp_type', '?')} auth at {flow.get('visit_time', '?')}")
+            print(f"      URL: {flow.get('idp_url', '?')[:70]}...")
+            print(f"      Delivery Vector: {flow.get('delivery_vector', '?')}")
+            if flow.get("referrer_chain"):
+                print(f"      Chain depth: {flow.get('chain_depth', 0)} hops")
+                if len(flow["referrer_chain"]) > 1:
+                    print(f"      Lure: {flow['referrer_chain'][0].get('url', '?')[:60]}...")
+    
+    # Show session birth anchors (auth_time)
+    if birth_anchors:
+        print()
+        print("-" * 40)
+        print("SESSION BIRTH ANCHORS (auth_time claims)")
+        print("-" * 40)
+        print("  auth_time is the interactive authentication instant (MFA moment).")
+        print("  More precise than iat (which can be silent refresh).")
+        print()
+        for anchor in birth_anchors[:3]:
+            print(f"  • {anchor.get('source', '?')}: {anchor.get('auth_time', '?')}")
+            if anchor.get("amr"):
+                print(f"    Auth methods: {anchor.get('amr')}")
+    
+    # Show theft windows
+    if theft_windows:
+        print()
+        print("-" * 40)
+        print("THEFT WINDOWS")
+        print("-" * 40)
+        for i, tw in enumerate(theft_windows[:3], 1):
+            identity = tw.get("identity", {})
+            print(f"  [{i}] {identity.get('upn', identity.get('object_id', '?'))}")
+            print(f"      Birth: {tw.get('session_birth_lower', '?')}")
+            print(f"      Expires: {tw.get('validity_end', '?')}")
+            print(f"      Source: {tw.get('birth_source', '?')}")
+            print("      → Theft window = [session_birth, first_TA_replay_in_Entra_logs]")
+    
+    # Show correlation guidance
+    if correlation:
+        print()
+        print("-" * 40)
+        print("ENTRA SIGN-IN LOG CORRELATION")
+        print("-" * 40)
+        for anchor in correlation[:2]:
+            print(f"  Tenant: {anchor.get('tenant_id', '?')}")
+            print(f"  Object: {anchor.get('object_id', '?')}")
+            print(f"  UPN:    {anchor.get('upn', '?')}")
+            print()
+            print("  Query Guidance:")
+            guidance = anchor.get("query_guidance", "")
+            for line in guidance.split(". "):
+                if line.strip():
+                    print(f"    • {line.strip()}.")
+
+
 def print_report(pkg: Dict, findings: List[Dict], aitm_view: Dict, 
                  sessions: List[Dict], storage_tokens: List[Dict], 
-                 events: List[Dict], tz):
+                 events: List[Dict], tz, theft_timeline: Dict = None):
     man = pkg.get("MANIFEST.json") or {}
     env = man.get("environment", {})
     case = man.get("case", {})
@@ -2344,10 +2798,19 @@ def print_report(pkg: Dict, findings: List[Dict], aitm_view: Dict,
     # Auth sessions
     print_auth_report(sessions, storage_tokens, tz)
     
+    # Session Theft Timeline
+    if theft_timeline:
+        print_theft_timeline(theft_timeline, tz)
+    
     print()
     print("=" * 78)
     print("CORRELATION GUIDANCE")
     print("=" * 78)
+    print("• ESTS cookie = 'loaded gun on the table' — proves replayable session existed")
+    print("• visitdetails = best causal anchor — dates lure + auth (AiTM capture moment)")
+    print("• auth_time claim = precise session birth (when available in cleartext tokens)")
+    print("• Theft window = [session_birth, first_TA_replay_in_Entra_logs]")
+    print()
     print("• Entra Sign-in Logs: Join on tenant_id + object_id + UPN within token")
     print("  validity window. Hunt for same session reused from new IP/ASN/device.")
     print("• Purview/UAL: Pivot on SessionId in audit records.")
@@ -2408,6 +2871,11 @@ Examples:
     # Combine storage tokens
     all_storage_tokens = supplementary["storage_tokens"] + supplementary["indexeddb_tokens"]
     
+    # Build Session Theft Timeline for causal chain reconstruction
+    # Combines auth_sessions with visitdetails to date the lure/auth and bracket the theft
+    all_auth_sessions = sessions + all_storage_tokens
+    theft_timeline = build_session_theft_timeline(pkg, all_auth_sessions)
+    
     # Write outputs
     os.makedirs(args.out, exist_ok=True)
     
@@ -2416,12 +2884,13 @@ Examples:
     auth_json = os.path.join(args.out, "auth_sessions.json")
     
     write_timeline_csv(events, tz, tl_csv)
-    write_findings_json(findings, aitm_view, findings_json)
+    write_findings_json(findings, aitm_view, theft_timeline, findings_json)
     write_auth_json(sessions, idp_cookies, all_storage_tokens, auth_json)
     
     # Console report
     if not args.quiet:
-        print_report(pkg, findings, aitm_view, sessions, all_storage_tokens, events, tz)
+        print_report(pkg, findings, aitm_view, sessions, all_storage_tokens, events, tz, 
+                     theft_timeline)
     
     print()
     print(f"[+] timeline written      : {tl_csv}  ({len(events)} events)")

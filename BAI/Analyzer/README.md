@@ -30,6 +30,29 @@ Joins three critical data sources for AiTM detection:
 2. **Performance timing** (redirect duration, DNS/connect latency)
 3. **Proxy configuration**
 
+### Session Theft Timeline - Causal Chain Reconstruction
+The analyzer builds a **causal chain** for token theft investigations:
+
+**Key insight:** BAI cannot timestamp exfiltration itself, but it CAN date:
+- When the stealable session was born
+- The causal action that delivered the victim to the IdP
+
+**The assembled chain:**
+1. `visitdetails` referrer-chain → dates the lure and auth (causal action → session birth)
+2. ESTS cookie → proves replayable session existed, whose it is, and validity window
+3. `auth_time` claim (when available) → precise session birth from cleartext tokens
+4. Entra sign-in logs (external) → date the first replay from TA infrastructure
+
+**Theft window = [session_birth, first_TA_replay]**
+
+**What's extracted:**
+- **Stealable sessions**: ESTSAUTH/ESTSAUTHPERSISTENT with tenant_id, object_id, estimated birth
+- **IdP authentication flows**: Visits to login.microsoftonline.com with full referrer chains
+- **Delivery vector detection**: link (phishing email), typed (pharming), search (SEO poisoning)
+- **Session birth anchors**: `auth_time` claims from cleartext tokens (more precise than `iat`)
+- **Theft windows**: Estimated brackets for Entra sign-in log correlation
+- **Correlation guidance**: Query templates for Entra sign-in logs
+
 ### Token Decoder (localStorage/IndexedDB)
 Modern SPAs store JWTs and refresh tokens in web storage, not cookies. The analyzer:
 - Scans localStorage/sessionStorage for token patterns
