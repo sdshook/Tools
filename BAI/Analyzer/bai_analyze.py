@@ -1957,6 +1957,148 @@ def analyze_cookies(cookie_blob: Dict, include_values: bool = False) -> Tuple[Li
 
 
 # --------------------------------------------------------------------------- #
+# Cross-artifact Identity Discovery
+# --------------------------------------------------------------------------- #
+
+def discover_identities(pkg: Dict) -> Dict[str, List[Dict]]:
+    """
+    Discover user identities from history, sessions, tabs, and other artifacts.
+    Returns dict mapping service names to list of discovered identities.
+    """
+    import re
+    
+    identities = {}
+    email_pattern = re.compile(r'[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}')
+    
+    # Skip list for GitHub usernames that are actually paths
+    github_skip = {'login', 'signup', 'settings', 'notifications', 'issues', 
+                   'pulls', 'explore', 'orgs', 'search', 'topics', 'trending',
+                   'collections', 'events', 'sponsors', 'pricing', 'features',
+                   'enterprise', 'team', 'marketplace', 'apps', 'account',
+                   'sessions', 'security', 'codespaces', 'new', 'organizations'}
+    
+    def add_identity(service: str, username: str, source: str, url: str = None):
+        if not username or not service:
+            return
+        key = username.lower()
+        if service not in identities:
+            identities[service] = {}
+        if key not in identities[service]:
+            identities[service][key] = {
+                'username': username,
+                'sources': [],
+                'urls': []
+            }
+        identities[service][key]['sources'].append(source)
+        if url:
+            identities[service][key]['urls'].append(url)
+    
+    # 1. History - URLs and titles
+    for h in records(pkg.get("history.json")):
+        url = h.get('url', '') or ''
+        title = h.get('title', '') or ''
+        
+        # GitHub profile/repo URLs
+        m = re.search(r'github\.com/([a-zA-Z0-9_-]+)(?:/|$)', url)
+        if m and m.group(1).lower() not in github_skip:
+            add_identity('GitHub', m.group(1), 'browsing history', url)
+        
+        # Google - email in title
+        if 'google' in url.lower() or 'gmail' in url.lower():
+            for email in email_pattern.findall(title):
+                add_identity('Google', email, 'browsing history', url)
+        
+        # Microsoft/Office 365
+        if any(x in url.lower() for x in ['microsoft', 'outlook', 'office', 'sharepoint', 'teams']):
+            for email in email_pattern.findall(title):
+                add_identity('Microsoft', email, 'browsing history', url)
+            # Name from title like "Mail - Name - Outlook"
+            m = re.search(r'(?:Mail|Calendar|OneDrive) - (.+?) - (?:Outlook|Microsoft)', title)
+            if m:
+                add_identity('Microsoft', m.group(1), 'browsing history', url)
+        
+        # LinkedIn
+        m = re.search(r'linkedin\.com/in/([a-zA-Z0-9_-]+)', url)
+        if m:
+            add_identity('LinkedIn', m.group(1), 'browsing history', url)
+        
+        # Twitter/X
+        m = re.search(r'(?:twitter|x)\.com/([a-zA-Z0-9_]+)(?:/|$)', url)
+        if m and m.group(1).lower() not in {'home', 'explore', 'notifications', 'messages', 'settings', 'i', 'search', 'compose'}:
+            # Only add if it looks like the user's own profile (visited multiple times or specific actions)
+            pass  # Skip Twitter for now - too many false positives
+    
+    # 2. Sessions (recently closed tabs)
+    for s in records(pkg.get("sessions.json")):
+        tab = s.get('tab', {}) or {}
+        url = tab.get('url', '') or ''
+        title = tab.get('title', '') or ''
+        
+        # GitHub
+        m = re.search(r'github\.com/([a-zA-Z0-9_-]+)(?:/|$)', url)
+        if m and m.group(1).lower() not in github_skip:
+            add_identity('GitHub', m.group(1), 'recently closed tab', url)
+        
+        # Microsoft from title
+        if any(x in url.lower() for x in ['outlook', 'teams', 'office', 'sharepoint']):
+            m = re.search(r'(?:Mail|Calendar|OneDrive) - (.+?) - (?:Outlook|Microsoft)', title)
+            if m:
+                add_identity('Microsoft', m.group(1), 'recently closed tab', url)
+            for email in email_pattern.findall(title):
+                add_identity('Microsoft', email, 'recently closed tab', url)
+    
+    # 3. Open tabs
+    for t in records(pkg.get("tabsdetailed.json")):
+        url = t.get('url', '') or ''
+        title = t.get('title', '') or ''
+        
+        # GitHub
+        m = re.search(r'github\.com/([a-zA-Z0-9_-]+)(?:/|$)', url)
+        if m and m.group(1).lower() not in github_skip:
+            add_identity('GitHub', m.group(1), 'open tab', url)
+        
+        # Microsoft
+        if any(x in url.lower() for x in ['outlook', 'teams', 'office', 'sharepoint']):
+            m = re.search(r'(?:Mail|Calendar|OneDrive) - (.+?) - (?:Outlook|Microsoft)', title)
+            if m:
+                add_identity('Microsoft', m.group(1), 'open tab', url)
+    
+    # 4. Bookmarks
+    def search_bookmarks(nodes):
+        for n in nodes:
+            if not isinstance(n, dict):
+                continue
+            url = n.get('url', '') or ''
+            title = n.get('title', '') or ''
+            
+            m = re.search(r'github\.com/([a-zA-Z0-9_-]+)(?:/|$)', url)
+            if m and m.group(1).lower() not in github_skip:
+                add_identity('GitHub', m.group(1), 'bookmark', url)
+            
+            if n.get('children'):
+                search_bookmarks(n['children'])
+    
+    for b in records(pkg.get("bookmarks.json")):
+        search_bookmarks([b])
+    
+    # Convert to final format
+    result = {}
+    for service, users in identities.items():
+        result[service] = []
+        for key, info in users.items():
+            result[service].append({
+                'username': info['username'],
+                'sources': list(set(info['sources'])),
+                'source_count': len(set(info['sources'])),
+                'urls': info['urls'][:3]  # Keep first 3 example URLs
+            })
+        # Sort by source count (most corroborated first)
+        result[service].sort(key=lambda x: -x['source_count'])
+    
+    return result
+
+
+# --------------------------------------------------------------------------- #
 # Cross-artifact AiTM view
 # --------------------------------------------------------------------------- #
 
@@ -3061,7 +3203,8 @@ class ReportGenerator:
     def __init__(self, pkg: Dict, findings: List[Dict], aitm_view: Dict,
                  sessions: List[Dict], storage_tokens: List[Dict],
                  events: List[Dict], theft_timeline: Dict,
-                 entra_correlation: Dict = None, tz=None):
+                 entra_correlation: Dict = None, discovered_identities: Dict = None,
+                 tz=None):
         self.pkg = pkg
         self.findings = findings
         self.aitm_view = aitm_view
@@ -3070,6 +3213,7 @@ class ReportGenerator:
         self.events = events
         self.theft_timeline = theft_timeline
         self.entra_correlation = entra_correlation
+        self.discovered_identities = discovered_identities or {}
         self.tz = tz
         
         # Extract common data
@@ -3086,6 +3230,34 @@ class ReportGenerator:
         if isinstance(ts, str):
             return ts
         return fmt(ts, self.tz) if self.tz else str(ts)
+    
+    def _fmt_epoch_dual(self, epoch_ms) -> str:
+        """Format epoch milliseconds as both local timezone and UTC."""
+        if epoch_ms is None:
+            return "Unknown"
+        
+        try:
+            # Handle both ms and seconds
+            if isinstance(epoch_ms, str):
+                epoch_ms = float(epoch_ms)
+            
+            # If it's in milliseconds (> year 2100 in seconds), convert to seconds
+            if epoch_ms > 4102444800:  # Jan 1, 2100 in seconds
+                epoch_s = epoch_ms / 1000.0
+            else:
+                epoch_s = epoch_ms
+            
+            dt_utc = datetime.fromtimestamp(epoch_s, tz=timezone.utc)
+            utc_str = dt_utc.strftime("%Y-%m-%d %H:%M:%S UTC")
+            
+            if self.tz:
+                dt_local = dt_utc.astimezone(self.tz)
+                local_str = dt_local.strftime("%Y-%m-%d %H:%M:%S %Z")
+                return f"{local_str} ({utc_str})"
+            else:
+                return utc_str
+        except (ValueError, TypeError, OSError):
+            return str(epoch_ms)
     
     def _get_mfa_status(self, session: Dict) -> str:
         """Determine MFA status from session claims."""
@@ -3203,10 +3375,7 @@ class ReportGenerator:
         lines.append(f"  Extension:       {tool.get('name', 'BAI')} v{tool.get('version', env.get('extension_version', '?'))}")
         
         pkg_hash = root_hash.get('value', self.manifest.get('package_sha256', 'Not computed'))
-        if pkg_hash and len(pkg_hash) > 40:
-            lines.append(f"  Root Hash:       {pkg_hash[:40]}...")
-        else:
-            lines.append(f"  Root Hash:       {pkg_hash}")
+        lines.append(f"  Root Hash:       {pkg_hash}")
         lines.append("")
         
         # Case information
@@ -3218,42 +3387,23 @@ class ReportGenerator:
         lines.append(f"  Notes:           {case.get('notes', 'None')}")
         lines.append("")
         
-        # Chain of custody - handle both "entries" and "events" field names
+        # Chain of custody summary (full details at end of report)
         coc_entries = self.chain.get("events", self.chain.get("entries", []))
-        lines.append("CHAIN OF CUSTODY")
+        lines.append("CHAIN OF CUSTODY SUMMARY")
         lines.append("-" * 40)
         if coc_entries:
-            # Show key events, not every artifact collection
-            key_events = [e for e in coc_entries if e.get('action') not in ('artifact_collected',)]
-            if not key_events:
-                key_events = coc_entries[:5]  # Show first 5 if all are artifact collections
-            
-            for i, entry in enumerate(key_events[:10], 1):  # Limit to 10
-                ts = entry.get('timestamp_utc', entry.get('timestamp', '?'))
-                operator = entry.get('operator', entry.get('actor', '?'))
-                action = entry.get('action', '?')
-                
-                lines.append(f"  [{i}] {ts}")
-                lines.append(f"      Action:   {action}")
-                lines.append(f"      Operator: {operator}")
-                
-                detail = entry.get('detail', {})
-                if isinstance(detail, dict):
-                    if detail.get('sha256'):
-                        lines.append(f"      Hash:     {detail['sha256'][:40]}...")
-                    if detail.get('record_count'):
-                        lines.append(f"      Records:  {detail['record_count']}")
-                
-                if entry.get('notes'):
-                    lines.append(f"      Notes:    {entry.get('notes')}")
-                lines.append("")
-            
-            if len(coc_entries) > len(key_events):
-                lines.append(f"  ... and {len(coc_entries) - len(key_events)} more events (artifact collections)")
-                lines.append("")
+            lines.append(f"  Total Events:    {len(coc_entries)}")
+            lines.append(f"  Workflow:        {self.chain.get('workflow', 'Unknown')}")
+            # Find start and end times
+            if coc_entries:
+                first_ts = coc_entries[0].get('timestamp_utc', coc_entries[0].get('timestamp', '?'))
+                last_ts = coc_entries[-1].get('timestamp_utc', coc_entries[-1].get('timestamp', '?'))
+                lines.append(f"  First Event:     {first_ts}")
+                lines.append(f"  Last Event:      {last_ts}")
+            lines.append(f"  (See Section 8 for full chain of custody details)")
         else:
             lines.append("  No chain of custody entries recorded.")
-            lines.append("")
+        lines.append("")
         
         # Signature verification - check both SIGNATURE.json and manifest.signing
         sig = self.pkg.get("SIGNATURE.json") or {}
@@ -3269,7 +3419,7 @@ class ReportGenerator:
             
             key_fp = signing.get('public_key_fingerprint_sha256', sig.get('key_id', ''))
             if key_fp:
-                lines.append(f"  Key Fingerprint: {key_fp[:40]}...")
+                lines.append(f"  Key Fingerprint: {key_fp}")
             
             if sig.get("signature"):
                 lines.append(f"  Signature File:  SIGNATURE.json (present)")
@@ -3292,55 +3442,88 @@ class ReportGenerator:
         env = self.manifest.get("environment", {})
         totals = self.manifest.get("totals", {})
         
-        # Get systeminfo records - handle different structures
-        sysinfo_rec = {}
-        if self.sysinfo:
-            if isinstance(self.sysinfo.get("records"), dict):
-                sysinfo_rec = self.sysinfo["records"]
-            elif isinstance(self.sysinfo.get("records"), list) and self.sysinfo["records"]:
-                sysinfo_rec = self.sysinfo["records"][0]
-            elif "navigator" in self.sysinfo:
-                sysinfo_rec = self.sysinfo.get("navigator", {})
+        # Get systeminfo - it has platform, cpu, memory, storage at top level
+        platform_info = self.sysinfo.get("platform", {})
+        cpu_info = self.sysinfo.get("cpu", {})
+        memory_info = self.sysinfo.get("memory", {})
+        storage_info = self.sysinfo.get("storage", [])
         
         # Computer information
         lines.append("COMPUTER INFORMATION")
         lines.append("-" * 40)
-        lines.append(f"  Platform:        {env.get('platform', sysinfo_rec.get('platform', 'Unknown'))}")
-        ua = sysinfo_rec.get('userAgent', env.get('user_agent', 'Unknown'))
-        lines.append(f"  User Agent:      {ua[:70]}..." if len(str(ua)) > 70 else f"  User Agent:      {ua}")
         
-        # Languages can be list or string
-        langs = env.get('languages', sysinfo_rec.get('languages', 'Unknown'))
+        # Platform
+        os_name = platform_info.get("os", env.get("platform", "Unknown"))
+        if os_name == "win":
+            os_name = "Windows"
+        elif os_name == "mac":
+            os_name = "macOS"
+        elif os_name == "linux":
+            os_name = "Linux"
+        elif os_name == "cros":
+            os_name = "Chrome OS"
+        
+        arch = platform_info.get("arch", "Unknown")
+        lines.append(f"  Operating System: {os_name}")
+        lines.append(f"  Architecture:     {arch}")
+        
+        # CPU
+        cpu_model = cpu_info.get("modelName", "Unknown")
+        cpu_cores = cpu_info.get("numOfProcessors", "Unknown")
+        lines.append(f"  CPU Model:        {cpu_model}")
+        lines.append(f"  CPU Cores:        {cpu_cores}")
+        
+        # Memory
+        if memory_info:
+            total_mem = memory_info.get("capacity", 0)
+            avail_mem = memory_info.get("availableCapacity", 0)
+            if total_mem:
+                total_gb = total_mem / (1024**3)
+                avail_gb = avail_mem / (1024**3)
+                lines.append(f"  Total Memory:     {total_gb:.1f} GB")
+                lines.append(f"  Available Memory: {avail_gb:.1f} GB")
+        
+        # Storage
+        if storage_info:
+            for i, disk in enumerate(storage_info[:2]):
+                name = disk.get("name", "").strip("\x00").strip() or f"Disk {i}"
+                capacity = disk.get("capacity", 0)
+                if capacity:
+                    cap_gb = capacity / (1024**3)
+                    lines.append(f"  Storage ({name}):  {cap_gb:.0f} GB")
+        
+        # User Agent - full, no truncation
+        ua = env.get('user_agent', 'Unknown')
+        lines.append(f"  User Agent:       {ua}")
+        
+        # Languages
+        langs = env.get('languages', [])
         if isinstance(langs, list):
             langs = ", ".join(langs)
-        lines.append(f"  Locale:          {env.get('locale', sysinfo_rec.get('language', 'Unknown'))}")
-        lines.append(f"  Languages:       {langs}")
-        lines.append(f"  Timezone:        {env.get('timezone', 'Unknown')}")
-        lines.append(f"  Hardware Cores:  {sysinfo_rec.get('hardwareConcurrency', 'Unknown')}")
-        mem = sysinfo_rec.get('deviceMemory', 'Unknown')
-        lines.append(f"  Device Memory:   {mem} GB" if mem != 'Unknown' else f"  Device Memory:   {mem}")
-        lines.append(f"  Online:          {sysinfo_rec.get('onLine', 'Unknown')}")
+        lines.append(f"  Locale:           {env.get('locale', 'Unknown')}")
+        lines.append(f"  Languages:        {langs}")
+        lines.append(f"  Timezone:         {env.get('timezone', 'Unknown')}")
         lines.append("")
         
         # Browser information
         lines.append("BROWSER INFORMATION")
         lines.append("-" * 40)
-        lines.append(f"  Browser:         Chrome {env.get('chrome_version', 'Unknown')}")
-        lines.append(f"  Extension ID:    {env.get('extension_id', 'Unknown')}")
-        lines.append(f"  Extension Ver:   {env.get('extension_version', 'Unknown')}")
-        lines.append(f"  Clock Source:    {env.get('clock_source', 'Unknown')}")
+        lines.append(f"  Browser:          Chrome {env.get('chrome_version', 'Unknown')}")
+        lines.append(f"  Extension ID:     {env.get('extension_id', 'Unknown')}")
+        lines.append(f"  Extension Ver:    {env.get('extension_version', 'Unknown')}")
+        lines.append(f"  Clock Source:     {env.get('clock_source', 'Unknown')}")
         lines.append("")
         
         # Collection statistics
         log = self.session_log
         lines.append("COLLECTION STATISTICS")
         lines.append("-" * 40)
-        lines.append(f"  Artifacts:       {totals.get('artifact_count', self.manifest.get('artifact_count', '?'))}")
-        lines.append(f"  Total Size:      {totals.get('total_bytes', 0):,} bytes")
-        lines.append(f"  Partial:         {totals.get('partial_artifacts', 0)} artifact(s)")
-        lines.append(f"  Log Entries:     {log.get('entry_count', '?')}")
-        lines.append(f"  Errors:          {log.get('error_count', 0)}")
-        lines.append(f"  Warnings:        {log.get('warning_count', 0)}")
+        lines.append(f"  Artifacts:        {totals.get('artifact_count', self.manifest.get('artifact_count', '?'))}")
+        lines.append(f"  Total Size:       {totals.get('total_bytes', 0):,} bytes")
+        lines.append(f"  Partial:          {totals.get('partial_artifacts', 0)} artifact(s)")
+        lines.append(f"  Log Entries:      {log.get('entry_count', '?')}")
+        lines.append(f"  Errors:           {log.get('error_count', 0)}")
+        lines.append(f"  Warnings:         {log.get('warning_count', 0)}")
         lines.append("")
         
         # List any errors/warnings
@@ -3349,7 +3532,7 @@ class ReportGenerator:
             lines.append("-" * 40)
             for entry in log.get('entries', []):
                 if entry.get('level') in ('error', 'warning'):
-                    lines.append(f"  [{entry['level'].upper()}] {entry.get('message', '?')[:60]}")
+                    lines.append(f"  [{entry['level'].upper()}] {entry.get('message', '?')}")
             lines.append("")
         
         return "\n".join(lines)
@@ -3362,39 +3545,247 @@ class ReportGenerator:
         lines.append("=" * 78)
         lines.append("")
         
-        inventory = self.build_identity_inventory()
-        
-        if not inventory:
-            lines.append("  No authenticated sessions or identity tokens found.")
+        # First, show DISCOVERED USER ACCOUNTS from browsing activity
+        if self.discovered_identities:
+            lines.append("DISCOVERED USER ACCOUNTS")
+            lines.append("-" * 78)
+            lines.append("  (Extracted from browsing history, tabs, and sessions)")
             lines.append("")
-            return "\n".join(lines)
+            
+            for service, users in sorted(self.discovered_identities.items()):
+                for user in users:
+                    username = user['username']
+                    sources = ", ".join(user['sources'])
+                    lines.append(f"  {service}: {username}")
+                    lines.append(f"    Evidence: {sources}")
+            lines.append("")
         
-        lines.append(f"  Total Identities: {len(inventory)}")
+        # Then show AUTHENTICATED SESSIONS table
+        lines.append("AUTHENTICATED SESSIONS")
+        lines.append("-" * 78)
+        lines.append("")
+        lines.append("  Service/IdP                   | Account                        | Auth Factor  | Bearer | Refresh | Persistent")
+        lines.append("  " + "-" * 106)
+        
+        # Build account summary from sessions, correlating with discovered identities
+        account_num = 0
+        for session in self.sessions:
+            idp = session.get("idp", "Unknown")
+            if idp == "(generic auth cookie)":
+                continue  # Skip generic cookies for account summary
+            
+            account_num += 1
+            domain = session.get("domain", "Unknown")
+            
+            # Get account name - check session fields, identity dict, AND discovered identities
+            identity = session.get("identity", {})
+            account_name = (session.get("upn") or
+                          identity.get("upn") or 
+                          identity.get("preferred_username") or 
+                          identity.get("email") or 
+                          session.get("email") or
+                          identity.get("name") or
+                          identity.get("sub"))
+            
+            # Try to match with discovered identities
+            if not account_name:
+                # Map IdP to discovered identity service
+                idp_to_service = {
+                    'GitHub': 'GitHub',
+                    'Google': 'Google',
+                    'Microsoft Entra ID': 'Microsoft',
+                    'Microsoft Entra ID (Azure AD)': 'Microsoft',
+                    'Microsoft consumer (MSA)': 'Microsoft',
+                    'SharePoint Online': 'Microsoft',
+                }
+                service_name = idp_to_service.get(idp)
+                if service_name and service_name in self.discovered_identities:
+                    # Use the most corroborated identity for this service
+                    discovered = self.discovered_identities[service_name]
+                    if discovered:
+                        account_name = discovered[0]['username']
+            
+            # Fall back to tenant_id or domain
+            if not account_name:
+                account_name = session.get("tenant_id") or domain
+            
+            # Determine auth factor
+            mfa_status = self._get_mfa_status(session)
+            if "MFA" in mfa_status or "FIDO" in mfa_status or "OTP" in mfa_status:
+                auth_factor = "Multi-Factor"
+            elif "Password only" in mfa_status:
+                auth_factor = "Single-Factor"
+            else:
+                auth_factor = "Unknown"
+            
+            # Determine token types present
+            token_types = session.get("token_types", [])
+            has_bearer = "Yes" if session.get("any_httponly") or session.get("cookie_names") else "No"
+            has_refresh = "No"
+            has_persistent = "Yes" if "persistent" in token_types else "No"
+            
+            # Check for refresh tokens in identity claims
+            if identity.get("refresh_token") or identity.get("rt"):
+                has_refresh = "Yes"
+            
+            # Format for table
+            idp_short = idp[:29] if len(idp) <= 29 else idp[:26] + "..."
+            acct_short = str(account_name)[:30] if len(str(account_name)) <= 30 else str(account_name)[:27] + "..."
+            
+            lines.append(f"  {idp_short:<29} | {acct_short:<30} | {auth_factor:<12} | {has_bearer:<6} | {has_refresh:<7} | {has_persistent}")
+        
+        # Add storage tokens to account summary
+        for token in self.storage_tokens:
+            account_num += 1
+            identity = token.get("identity", {})
+            
+            account_name = (identity.get("upn") or identity.get("preferred_username") or 
+                          identity.get("email") or token.get("key", "Unknown"))
+            if len(account_name) > 28:
+                account_name = account_name[:25] + "..."
+            
+            mfa_status = self._get_mfa_status({"identity": identity})
+            if "MFA" in mfa_status:
+                auth_factor = "Multi-Factor"
+            elif "Password" in mfa_status:
+                auth_factor = "Single-Factor"
+            else:
+                auth_factor = "Unknown"
+            
+            has_bearer = "Yes"  # Storage tokens are bearer tokens
+            has_refresh = "Yes" if token.get("is_refresh") else "No"
+            has_persistent = "No"  # Storage tokens aren't persistent cookies
+            
+            lines.append(f"  {account_name:<29} | {auth_factor:<12} | {has_bearer:<6} | {has_refresh:<7} | {has_persistent}")
+        
+        lines.append("")
+        lines.append(f"  Total Accounts: {account_num}")
         lines.append("")
         
-        # Group by IdP
-        by_idp = {}
-        for entry in inventory:
-            idp = entry["idp"]
-            if idp not in by_idp:
-                by_idp[idp] = []
-            by_idp[idp].append(entry)
+        # Now show detailed session information
+        lines.append("DETAILED SESSION INFORMATION")
+        lines.append("-" * 78)
+        lines.append("")
         
-        for idp, entries in sorted(by_idp.items()):
-            lines.append(f"[{idp}]")
-            lines.append("-" * 40)
-            for e in entries:
-                lines.append(f"  Identity:      {e['identity']}")
-                if e.get('tenant_id'):
-                    lines.append(f"  Tenant ID:     {e['tenant_id']}")
-                if e.get('object_id'):
-                    lines.append(f"  Object ID:     {e['object_id']}")
-                lines.append(f"  Domain:        {e['domain']}")
-                lines.append(f"  MFA Status:    {e['mfa_status']}")
-                lines.append(f"  Token Types:   {e['token_types']}")
-                lines.append(f"  Valid Until:   {e['valid_until'] or 'Unknown'}")
-                lines.append(f"  HttpOnly:      {e['httponly']}")
+        session_num = 0
+        for session in self.sessions:
+            idp = session.get("idp", "Unknown")
+            if idp == "(generic auth cookie)":
+                continue
+            
+            session_num += 1
+            domain = session.get("domain", "Unknown")
+            identity = session.get("identity", {})
+            
+            lines.append(f"  SESSION {session_num}: {idp}")
+            lines.append(f"  " + "-" * 40)
+            
+            # Identity details
+            lines.append(f"    Domain:           {domain}")
+            
+            if session.get("tenant_id"):
+                lines.append(f"    Tenant ID:        {session['tenant_id']}")
+            if session.get("object_id"):
+                lines.append(f"    Object ID:        {session['object_id']}")
+            
+            # UPN/Email - check session level first, then identity dict
+            upn = (session.get("upn") or 
+                   identity.get("upn") or 
+                   identity.get("preferred_username") or 
+                   identity.get("email") or
+                   session.get("email") or
+                   identity.get("sub"))
+            if upn:
+                lines.append(f"    UPN/Email:        {upn}")
+            
+            name = identity.get("name") or identity.get("given_name")
+            if name:
+                lines.append(f"    Display Name:     {name}")
+            
+            # Authentication details
+            lines.append(f"    Authentication:   {self._get_mfa_status(session)}")
+            
+            # AMR claim if available
+            amr = identity.get("amr", [])
+            if amr:
+                lines.append(f"    Auth Methods:     {', '.join(amr) if isinstance(amr, list) else amr}")
+            
+            # Token details
+            lines.append(f"    Token Types:")
+            token_types = session.get("token_types", [])
+            if "persistent" in token_types:
+                lines.append(f"      - Persistent Session Cookie (ESTSAUTHPERSISTENT)")
+            if session.get("any_httponly"):
+                lines.append(f"      - HttpOnly Bearer Cookie (protected from XSS)")
+            else:
+                lines.append(f"      - Bearer Cookie (accessible to JavaScript)")
+            
+            # Check for refresh tokens
+            if identity.get("refresh_token") or identity.get("rt"):
+                lines.append(f"      - Refresh Token (long-lived, can mint new access tokens)")
+            
+            # Validity
+            if session.get("earliest_expiry"):
+                lines.append(f"    Earliest Expiry:  {session['earliest_expiry']}")
+            if session.get("latest_expiry"):
+                lines.append(f"    Latest Expiry:    {session['latest_expiry']}")
+            
+            # Cookie inventory
+            cookie_names = session.get("cookie_names", [])
+            if cookie_names:
+                lines.append(f"    Cookies ({len(cookie_names)}):")
+                for cn in cookie_names:
+                    lines.append(f"      - {cn}")
+            
+            lines.append("")
+        
+        # Storage tokens
+        if self.storage_tokens:
+            lines.append("WEB STORAGE TOKENS (localStorage/IndexedDB)")
+            lines.append("-" * 78)
+            lines.append("  ⚠️  These tokens are accessible to JavaScript and vulnerable to XSS attacks")
+            lines.append("")
+            
+            for i, token in enumerate(self.storage_tokens, 1):
+                identity = token.get("identity", {})
+                lines.append(f"  TOKEN {i}: {token.get('idp', 'Unknown IdP')}")
+                lines.append(f"    Origin:           {token.get('origin', 'Unknown')}")
+                lines.append(f"    Storage Type:     {token.get('storage_type', 'Unknown')}")
+                lines.append(f"    Key:              {token.get('key', 'Unknown')}")
+                
+                upn = identity.get("upn") or identity.get("preferred_username") or identity.get("email")
+                if upn:
+                    lines.append(f"    Identity:         {upn}")
+                if identity.get("tid"):
+                    lines.append(f"    Tenant ID:        {identity['tid']}")
+                if identity.get("oid"):
+                    lines.append(f"    Object ID:        {identity['oid']}")
+                
+                lines.append(f"    Authentication:   {self._get_mfa_status({'identity': identity})}")
+                
+                if token.get("is_refresh"):
+                    lines.append(f"    Token Type:       Refresh Token")
+                else:
+                    lines.append(f"    Token Type:       Access/ID Token")
+                
+                if token.get("expiration"):
+                    lines.append(f"    Expiration:       {token['expiration']}")
+                
                 lines.append("")
+        
+        # Other sessions (generic auth cookies)
+        generic_sessions = [s for s in self.sessions if s.get("idp") == "(generic auth cookie)"]
+        if generic_sessions:
+            lines.append("OTHER AUTHENTICATED SESSIONS")
+            lines.append("-" * 78)
+            for s in generic_sessions:
+                domain = s.get("domain", "Unknown")
+                cookie_count = len(s.get("cookie_names", []))
+                httponly = "HttpOnly" if s.get("any_httponly") else "Accessible"
+                valid = s.get("latest_expiry") or "Session-based"
+                lines.append(f"  • {domain}")
+                lines.append(f"    Cookies: {cookie_count} | {httponly} | Valid until: {valid}")
+            lines.append("")
         
         return "\n".join(lines)
     
@@ -3567,16 +3958,24 @@ class ReportGenerator:
             lines.append("  THEFT WINDOWS:")
             for i, tw in enumerate(theft_windows[:5], 1):
                 lines.append(f"    [{i}] {tw.get('identity', 'Unknown')}")
-                lines.append(f"        Session Birth: {tw.get('session_birth_lower', '?')} - {tw.get('session_birth_upper', '?')}")
-                lines.append(f"        Birth Source:  {tw.get('birth_source', 'Unknown')}")
+                birth_lower = self._fmt_epoch_dual(tw.get('session_birth_lower'))
+                birth_upper = self._fmt_epoch_dual(tw.get('session_birth_upper'))
+                lines.append(f"        Session Birth Lower: {birth_lower}")
+                lines.append(f"        Session Birth Upper: {birth_upper}")
+                lines.append(f"        Birth Source:        {tw.get('birth_source', 'Unknown')}")
             lines.append("")
         
         # Show recent auth flows
         if auth_flows:
             lines.append("  RECENT AUTHENTICATION FLOWS (last 10):")
             for i, flow in enumerate(auth_flows[-10:], 1):
-                lines.append(f"    [{i}] {flow.get('idp', '?')} @ {flow.get('visit_time', '?')}")
+                visit_time = self._fmt_epoch_dual(flow.get('visit_time'))
+                idp = flow.get('idp') or flow.get('idp_type') or '?'
+                lines.append(f"    [{i}] {idp}")
+                lines.append(f"        Time:     {visit_time}")
                 lines.append(f"        Delivery: {flow.get('delivery_vector', 'Unknown')}")
+                if flow.get('url'):
+                    lines.append(f"        URL:      {flow['url']}")
             lines.append("")
         
         # Entra correlation results
@@ -3664,6 +4063,78 @@ class ReportGenerator:
         
         return "\n".join(lines)
     
+    def _section_chain_of_custody(self) -> str:
+        """Generate full Chain of Custody section."""
+        lines = []
+        lines.append("=" * 78)
+        lines.append("8. CHAIN OF CUSTODY")
+        lines.append("=" * 78)
+        lines.append("")
+        
+        coc_entries = self.chain.get("events", self.chain.get("entries", []))
+        
+        if not coc_entries:
+            lines.append("  No chain of custody entries recorded.")
+            lines.append("")
+            return "\n".join(lines)
+        
+        lines.append(f"  Collection ID: {self.chain.get('collection_id', 'Unknown')}")
+        lines.append(f"  Workflow:      {self.chain.get('workflow', 'Unknown')}")
+        lines.append(f"  Total Events:  {len(coc_entries)}")
+        lines.append("")
+        lines.append("-" * 78)
+        lines.append("")
+        
+        # Show ALL events with full details
+        for i, entry in enumerate(coc_entries, 1):
+            ts = entry.get('timestamp_utc', entry.get('timestamp', '?'))
+            operator = entry.get('operator', entry.get('actor', '?'))
+            action = entry.get('action', '?')
+            detail = entry.get('detail', {})
+            
+            # Format based on action type
+            if action == 'session_started':
+                lines.append(f"  [{i}] SESSION STARTED")
+                lines.append(f"      Timestamp:      {ts}")
+                lines.append(f"      Operator:       {operator}")
+                if isinstance(detail, dict):
+                    lines.append(f"      Collection ID:  {detail.get('collection_id', '?')}")
+                    lines.append(f"      Container:      {detail.get('container', '?')}")
+                    scope = detail.get('scope', [])
+                    if scope:
+                        lines.append(f"      Scope ({len(scope)} artifact types):")
+                        for s in scope:
+                            lines.append(f"        - {s}")
+                lines.append("")
+                
+            elif action == 'artifact_collected':
+                if isinstance(detail, dict):
+                    path = detail.get('path', '?')
+                    records = detail.get('record_count', '?')
+                    sha256 = detail.get('sha256', '')
+                    lines.append(f"  [{i}] ARTIFACT COLLECTED: {path}")
+                    lines.append(f"      Timestamp:      {ts}")
+                    lines.append(f"      Record Count:   {records}")
+                    if sha256:
+                        lines.append(f"      SHA-256:        {sha256}")
+                lines.append("")
+                
+            elif action == 'collection_complete':
+                lines.append(f"  [{i}] COLLECTION COMPLETE")
+                lines.append(f"      Timestamp:      {ts}")
+                lines.append(f"      Operator:       {operator}")
+                lines.append("")
+                
+            else:
+                lines.append(f"  [{i}] {action.upper()}")
+                lines.append(f"      Timestamp:      {ts}")
+                lines.append(f"      Operator:       {operator}")
+                if detail:
+                    lines.append(f"      Detail:         {str(detail)}")
+                lines.append("")
+        
+        return "\n".join(lines)
+    
     def generate_txt(self) -> str:
         """Generate complete TXT report."""
         sections = []
@@ -3672,7 +4143,14 @@ class ReportGenerator:
         sections.append("=" * 78)
         sections.append("BAI OFFLINE ANALYSIS - FORENSIC REPORT")
         sections.append("=" * 78)
-        sections.append(f"Generated: {datetime.now(timezone.utc).isoformat()}")
+        
+        now_utc = datetime.now(timezone.utc)
+        if self.tz:
+            now_local = now_utc.astimezone(self.tz)
+            sections.append(f"Generated: {now_local.strftime('%Y-%m-%d %H:%M:%S %Z')} ({now_utc.strftime('%Y-%m-%d %H:%M:%S UTC')})")
+            sections.append(f"Display Timezone: {self.tz}")
+        else:
+            sections.append(f"Generated: {now_utc.strftime('%Y-%m-%d %H:%M:%S UTC')}")
         sections.append("")
         
         # All sections
@@ -3683,6 +4161,7 @@ class ReportGenerator:
         sections.append(self._section_detailed_findings())
         sections.append(self._section_timelines())
         sections.append(self._section_correlation_guidance())
+        sections.append(self._section_chain_of_custody())
         
         # Footer
         sections.append("=" * 78)
@@ -4270,6 +4749,12 @@ Examples:
         entra_correlation = correlate_entra_logs(theft_timeline, entra_logs)
         print(f"[+] Correlation: {entra_correlation.get('summary', 'complete')}")
     
+    # Discover user identities from browsing artifacts
+    discovered_identities = discover_identities(pkg)
+    if not args.quiet and discovered_identities:
+        total_discovered = sum(len(users) for users in discovered_identities.values())
+        print(f"[+] Discovered {total_discovered} user identities from browsing activity")
+    
     # Write outputs
     os.makedirs(args.out, exist_ok=True)
     
@@ -4292,6 +4777,7 @@ Examples:
         events=events,
         theft_timeline=theft_timeline,
         entra_correlation=entra_correlation,
+        discovered_identities=discovered_identities,
         tz=tz
     )
     
