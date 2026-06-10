@@ -2035,7 +2035,9 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
                 potential_upn = f'{first}.{last}@{dom}.{tld}'
                 add_upn(potential_upn, domain, 'cookie (encoded)', token_type)
     
-    # 2. HISTORY/VISITDETAILS - UPNs in page titles AND URL parameters
+    # 2. HISTORY/VISITDETAILS - Only extract UPNs from page titles that indicate 
+    # the user is logged in (e.g., "Mail - User Name - Outlook")
+    # NOT from URL parameters (which are often search queries for other accounts)
     for fname in ('history.json', 'visitdetails.json'):
         for r in records(pkg.get(fname)):
             title = r.get('title', '') or ''
@@ -2046,21 +2048,27 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
             except:
                 service = 'unknown'
             
-            # UPNs in page titles
+            # Only extract from page titles that show logged-in user context
+            # (e.g., "Mail - shane.shook@gmail.com - Gmail")
+            # Skip if it looks like a search result or investigation page
+            if any(x in url.lower() for x in ['search', 'query=', 'investigate', 'audit']):
+                continue
+            
+            # UPNs in page titles (strong evidence of authenticated session)
             for match in upn_pattern.findall(title):
-                add_upn(match, service, 'page title', 'Authenticated Session')
+                # Only if it's in a typical "logged in as" context
+                if ' - ' in title and (match.lower() in title.lower()):
+                    add_upn(match, service, 'page title', 'Authenticated Session')
             
-            # UPNs in URL parameters (login_hint, username, email, upn, etc.)
-            decoded_url = unquote(url)
-            for match in upn_pattern.findall(decoded_url):
-                add_upn(match, service, 'URL parameter', 'Authenticated Session')
-            
-            # Underscore-encoded UPNs in URLs (e.g., personal/shane_shook_aus_com)
-            for match in underscore_pattern.findall(decoded_url):
-                first, last, dom, tld = match
-                if tld.lower() in valid_tlds:
-                    potential_upn = f'{first}.{last}@{dom}.{tld}'
-                    add_upn(potential_upn, service, 'URL path (encoded)', 'Authenticated Session')
+            # Underscore-encoded UPNs in SharePoint personal site URLs
+            # These ARE strong evidence (personal/shane_shook_aus_com)
+            if '/personal/' in url.lower():
+                decoded_url = unquote(url)
+                for match in underscore_pattern.findall(decoded_url):
+                    first, last, dom, tld = match
+                    if tld.lower() in valid_tlds:
+                        potential_upn = f'{first}.{last}@{dom}.{tld}'
+                        add_upn(potential_upn, service, 'SharePoint personal site', 'Authenticated Session')
     
     # 3. WEBSTORAGE - localStorage
     for ws in records(pkg.get("webstorage.json")):
@@ -3667,34 +3675,15 @@ class ReportGenerator:
                     lines.append(f"  Cookie:     {sess.get('cookie_name', 'Unknown')}")
                     lines.append("")
         
-        # Show AUTHENTICATED SESSION accounts (URL-based evidence only)
-        if session_accounts:
-            lines.append("AUTHENTICATED SESSIONS (URL/Page Title Evidence)")
-            lines.append("-" * 78)
-            lines.append("  These accounts were used to access services (evidence from URLs/titles).")
-            lines.append("")
-            
-            for acct in session_accounts:
-                upn = acct.get('upn', 'Unknown')
-                services = list(acct.get('services', {}).keys())
-                
-                # Skip obvious noise (email addresses from search results)
-                if any(x in upn.lower() for x in ['outbound+', 'e.g.+', 'no-reply@', 'noreply@']):
-                    continue
-                    
-                lines.append(f"  UPN: {upn}")
-                lines.append(f"    Services: {', '.join(services[:5])}")  # First 5 services
-                if len(services) > 5:
-                    lines.append(f"              ... and {len(services)-5} more")
-            lines.append("")
+        # Note: URL-only evidence is NOT shown as it typically contains investigation
+        # subjects (emails searched in Purview/Humio) rather than the user's accounts
         
-        if not primary_accounts and not session_accounts and not self.entra_sessions:
-            lines.append("  No UPN-based accounts discovered.")
+        if not primary_accounts and not self.entra_sessions:
+            lines.append("  No authenticated accounts discovered in cookies or storage.")
             lines.append("")
         
         # Summary counts
-        lines.append(f"  Primary Accounts (with tokens): {len(primary_accounts)}")
-        lines.append(f"  Session Accounts (URL evidence): {len([a for a in session_accounts if not any(x in a.get('upn', '').lower() for x in ['outbound+', 'e.g.+', 'no-reply@', 'noreply@'])])}")
+        lines.append(f"  Total Authenticated Accounts: {len(primary_accounts)}")
         lines.append(f"  Entra Sessions: {len(self.entra_sessions)}")
         lines.append("")
         
