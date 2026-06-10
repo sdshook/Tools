@@ -3818,20 +3818,18 @@ class ReportGenerator:
                 if i == 0:
                     rows.append(f"<tr><td rowspan='{len(token_rows)}' class='upn-cell'>{html_mod.escape(upn)}</td>"
                                f"<td>{html_mod.escape(tr['domain'])}</td>"
-                               f"<td><code>{html_mod.escape(tr['cookie_name'])}</code></td>"
                                f"<td>{tr['token_type']}</td>"
                                f"<td>{tr['protection']}</td>"
                                f"<td class='{tr['risk_class']}'>{tr['theft_risk']}</td></tr>")
                 else:
                     rows.append(f"<tr><td>{html_mod.escape(tr['domain'])}</td>"
-                               f"<td><code>{html_mod.escape(tr['cookie_name'])}</code></td>"
                                f"<td>{tr['token_type']}</td>"
                                f"<td>{tr['protection']}</td>"
                                f"<td class='{tr['risk_class']}'>{tr['theft_risk']}</td></tr>")
         
         return f"""<table class='data-table identity-table'>
 <thead>
-<tr><th>UPN (User)</th><th>Service</th><th>Token/Cookie Name</th><th>Type</th><th>Protection</th><th>Theft Risk</th></tr>
+<tr><th>UPN (User)</th><th>Service</th><th>Type</th><th>Protection</th><th>Theft Risk</th></tr>
 </thead>
 <tbody>
 {''.join(rows)}
