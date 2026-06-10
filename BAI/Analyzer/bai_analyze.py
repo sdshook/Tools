@@ -1969,7 +1969,7 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
     4. localStorage/IndexedDB
     5. Page titles in history/visitdetails
     
-    Returns list of account dicts with services and token types.
+    Returns list of account dicts with services and their stealable tokens.
     """
     import re
     from urllib.parse import unquote, urlparse
@@ -1983,9 +1983,11 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
                      'cookie', 'tracking', 'consent', 'adobe', 'analytics']
     valid_tlds = {'com', 'net', 'org', 'gov', 'edu', 'us', 'io', 'ai', 'co', 'dev'}
     
-    accounts = {}  # upn_lower -> {upn, services: {domain: {sources, token_types}}}
+    # accounts[upn_lower] = {upn, services: {domain: {tokens: []}}}
+    accounts = {}
     
-    def add_upn(upn: str, service: str, source: str, token_type: str):
+    def add_token(upn: str, service: str, token_info: Dict):
+        """Add a token/cookie that evidences this UPN at this service."""
         upn = upn.strip()
         if not upn or '@' not in upn:
             return
@@ -1999,9 +2001,12 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
         if upn_lower not in accounts:
             accounts[upn_lower] = {'upn': upn, 'services': {}}
         if service not in accounts[upn_lower]['services']:
-            accounts[upn_lower]['services'][service] = {'sources': set(), 'token_types': set()}
-        accounts[upn_lower]['services'][service]['sources'].add(source)
-        accounts[upn_lower]['services'][service]['token_types'].add(token_type)
+            accounts[upn_lower]['services'][service] = {'tokens': []}
+        
+        # Avoid duplicate tokens
+        existing = accounts[upn_lower]['services'][service]['tokens']
+        if not any(t.get('cookie_name') == token_info.get('cookie_name') for t in existing):
+            accounts[upn_lower]['services'][service]['tokens'].append(token_info)
     
     # 1. COOKIES - Most important source
     for c in records(pkg.get("cookies.json")):
@@ -2010,15 +2015,21 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
         cookie_name = c.get('name', '') or ''
         httponly = c.get('httpOnly', False)
         
-        token_type = 'Bearer Cookie (HttpOnly)' if httponly else 'Session Cookie (JS-accessible)'
+        # Determine if it's a JWT
+        is_jwt = value.count('.') == 2 and len(value) > 50
         
-        # 1a. Decode JWT cookies
-        if value.count('.') == 2 and len(value) > 50:
+        # 1a. Decode JWT cookies for UPN
+        if is_jwt:
             decoded = decode_jwt_noverify(value)
             if decoded:
                 for claim in ('upn', 'preferred_username', 'email', 'unique_name', 'sub'):
                     if claim in decoded and '@' in str(decoded[claim]):
-                        add_upn(decoded[claim], domain, 'JWT cookie', token_type)
+                        add_token(decoded[claim], domain, {
+                            'cookie_name': cookie_name,
+                            'is_jwt': True,
+                            'httponly': httponly,
+                            'source': 'JWT cookie claim'
+                        })
                         break
         
         # 1b. URL-decoded cookie name + value
@@ -2026,18 +2037,26 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
         
         # Direct UPN patterns
         for match in upn_pattern.findall(combined):
-            add_upn(match, domain, 'cookie value', token_type)
+            add_token(match, domain, {
+                'cookie_name': cookie_name,
+                'is_jwt': is_jwt,
+                'httponly': httponly,
+                'source': 'cookie value'
+            })
         
         # 1c. Underscore-encoded UPNs (SharePoint style)
         for match in underscore_pattern.findall(combined):
             first, last, dom, tld = match
             if tld.lower() in valid_tlds:
                 potential_upn = f'{first}.{last}@{dom}.{tld}'
-                add_upn(potential_upn, domain, 'cookie (encoded)', token_type)
+                add_token(potential_upn, domain, {
+                    'cookie_name': cookie_name,
+                    'is_jwt': is_jwt,
+                    'httponly': httponly,
+                    'source': 'URL-encoded in cookie'
+                })
     
-    # 2. HISTORY/VISITDETAILS - Only extract UPNs from page titles that indicate 
-    # the user is logged in (e.g., "Mail - User Name - Outlook")
-    # NOT from URL parameters (which are often search queries for other accounts)
+    # 2. HISTORY/VISITDETAILS - Only extract UPNs from page titles
     for fname in ('history.json', 'visitdetails.json'):
         for r in records(pkg.get(fname)):
             title = r.get('title', '') or ''
@@ -2048,27 +2067,32 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
             except:
                 service = 'unknown'
             
-            # Only extract from page titles that show logged-in user context
-            # (e.g., "Mail - shane.shook@gmail.com - Gmail")
-            # Skip if it looks like a search result or investigation page
             if any(x in url.lower() for x in ['search', 'query=', 'investigate', 'audit']):
                 continue
             
             # UPNs in page titles (strong evidence of authenticated session)
             for match in upn_pattern.findall(title):
-                # Only if it's in a typical "logged in as" context
                 if ' - ' in title and (match.lower() in title.lower()):
-                    add_upn(match, service, 'page title', 'Authenticated Session')
+                    add_token(match, service, {
+                        'cookie_name': None,
+                        'is_jwt': False,
+                        'httponly': None,
+                        'source': 'page title (logged in)'
+                    })
             
             # Underscore-encoded UPNs in SharePoint personal site URLs
-            # These ARE strong evidence (personal/shane_shook_aus_com)
             if '/personal/' in url.lower():
                 decoded_url = unquote(url)
                 for match in underscore_pattern.findall(decoded_url):
                     first, last, dom, tld = match
                     if tld.lower() in valid_tlds:
                         potential_upn = f'{first}.{last}@{dom}.{tld}'
-                        add_upn(potential_upn, service, 'SharePoint personal site', 'Authenticated Session')
+                        add_token(potential_upn, service, {
+                            'cookie_name': None,
+                            'is_jwt': False,
+                            'httponly': None,
+                            'source': 'SharePoint personal site URL'
+                        })
     
     # 3. WEBSTORAGE - localStorage
     for ws in records(pkg.get("webstorage.json")):
@@ -2081,21 +2105,27 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
         for key, value in local_storage.items():
             value_str = str(value)[:2000]
             
-            # Look for JWTs
             jwt_pattern = re.compile(r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+')
             for jwt_match in jwt_pattern.findall(value_str):
                 decoded = decode_jwt_noverify(jwt_match)
                 if decoded:
                     for claim in ('upn', 'preferred_username', 'email', 'sub'):
                         if claim in decoded and '@' in str(decoded[claim]):
-                            is_refresh = 'refresh' in key.lower()
-                            token_type = 'Refresh Token' if is_refresh else 'Access Token'
-                            add_upn(decoded[claim], origin, 'localStorage JWT', f'{token_type} (JS-accessible)')
+                            add_token(decoded[claim], origin, {
+                                'cookie_name': f'localStorage[{key}]',
+                                'is_jwt': True,
+                                'httponly': False,  # localStorage is always JS-accessible
+                                'source': 'localStorage JWT'
+                            })
                             break
             
-            # Raw UPNs
             for match in upn_pattern.findall(value_str):
-                add_upn(match, origin, 'localStorage', 'Storage Token (JS-accessible)')
+                add_token(match, origin, {
+                    'cookie_name': f'localStorage[{key}]',
+                    'is_jwt': False,
+                    'httponly': False,
+                    'source': 'localStorage value'
+                })
     
     # 4. INDEXEDDB
     for idb in records(pkg.get("indexeddbfull.json")):
@@ -2106,39 +2136,36 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
         
         for db in idb.get('databases', []) or []:
             for store in db.get('objectStores', []) or []:
+                store_name = store.get('name', '')
                 for item in store.get('items', []) or []:
                     value_str = str(item.get('value', ''))[:2000]
                     
-                    # Look for JWTs
                     jwt_pattern = re.compile(r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+')
                     for jwt_match in jwt_pattern.findall(value_str):
                         decoded = decode_jwt_noverify(jwt_match)
                         if decoded:
                             for claim in ('upn', 'preferred_username', 'email', 'sub'):
                                 if claim in decoded and '@' in str(decoded[claim]):
-                                    add_upn(decoded[claim], origin, 'IndexedDB JWT', 'Access Token (JS-accessible)')
+                                    add_token(decoded[claim], origin, {
+                                        'cookie_name': f'IndexedDB[{store_name}]',
+                                        'is_jwt': True,
+                                        'httponly': False,
+                                        'source': 'IndexedDB JWT'
+                                    })
                                     break
     
-    # Convert to list format, prioritizing accounts with strong evidence
+    # Convert to list format
     result = []
     for upn_lower, info in sorted(accounts.items()):
-        services = {}
         has_strong_evidence = False
+        services = {}
         
         for svc, details in info['services'].items():
-            # Check if this account has token/cookie evidence (not just URL mentions)
-            sources = details['sources']
-            token_types = details['token_types']
-            
-            strong_sources = {'JWT cookie', 'cookie value', 'cookie (encoded)', 
-                            'localStorage', 'localStorage JWT', 'IndexedDB JWT'}
-            if sources & strong_sources:
+            tokens = details['tokens']
+            # Has strong evidence if any token has a cookie_name
+            if any(t.get('cookie_name') for t in tokens):
                 has_strong_evidence = True
-            
-            services[svc] = {
-                'sources': sorted(details['sources']),
-                'token_types': sorted(details['token_types'])
-            }
+            services[svc] = {'tokens': tokens}
         
         result.append({
             'upn': info['upn'],
@@ -2146,9 +2173,7 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
             'has_strong_evidence': has_strong_evidence
         })
     
-    # Sort: accounts with strong evidence first
     result.sort(key=lambda x: (not x['has_strong_evidence'], x['upn'].lower()))
-    
     return result
 
 
@@ -3726,7 +3751,7 @@ class ReportGenerator:
         return "\n".join(lines)
     
     def _generate_identity_table_html(self) -> str:
-        """Generate HTML table for identity accounts."""
+        """Generate HTML table for identity accounts with stealable tokens."""
         import html as html_mod
         
         primary_accounts = [a for a in self.upn_accounts if a.get('has_strong_evidence')]
@@ -3734,56 +3759,79 @@ class ReportGenerator:
         if not primary_accounts:
             return "<p>No authenticated accounts discovered.</p>"
         
-        def format_token_type(token_types_str: str) -> tuple:
-            """Convert token types to descriptive format with risk assessment."""
-            is_httponly = 'HttpOnly' in token_types_str
-            is_jwt = 'JWT' in token_types_str or 'Bearer' in token_types_str
-            
-            parts = []
-            if is_jwt:
-                parts.append("JWT")
-            elif 'Cookie' in token_types_str:
-                parts.append("Cookie")
-            elif 'Storage' in token_types_str or 'localStorage' in token_types_str:
-                parts.append("localStorage")
-            else:
-                parts.append("Session")
-            
-            if is_httponly:
-                parts.append("(HttpOnly)")
-                risk_desc = "Replayable if exfiltrated"
-                risk_class = 'low-risk'
-            else:
-                parts.append("(JS-accessible)")
-                risk_desc = "Easily stolen & replayable"
-                risk_class = 'high-risk'
-            
-            return ' '.join(parts) + f" - {risk_desc}", risk_class
-        
         rows = []
         for acct in primary_accounts:
             upn = acct.get('upn', 'Unknown')
             services = acct.get('services', {})
             
-            for i, (domain, svc_info) in enumerate(sorted(services.items())):
-                sources = ', '.join(svc_info.get('sources', []))
-                token_types_raw = ', '.join(svc_info.get('token_types', []))
-                
-                token_desc, risk_class = format_token_type(token_types_raw)
-                
+            # Flatten to one row per token (more informative)
+            token_rows = []
+            for domain, svc_info in sorted(services.items()):
+                for token in svc_info.get('tokens', []):
+                    cookie_name = token.get('cookie_name')
+                    is_jwt = token.get('is_jwt', False)
+                    httponly = token.get('httponly')
+                    source = token.get('source', '')
+                    
+                    # Skip non-cookie evidence for this table
+                    if not cookie_name:
+                        continue
+                    
+                    # Format token type
+                    if is_jwt:
+                        token_type = "JWT"
+                    elif 'localStorage' in (cookie_name or ''):
+                        token_type = "localStorage"
+                    elif 'IndexedDB' in (cookie_name or ''):
+                        token_type = "IndexedDB"
+                    else:
+                        token_type = "Cookie"
+                    
+                    # Format protection and theft risk
+                    if httponly is True:
+                        protection = "HttpOnly"
+                        theft_risk = "Requires malware/browser exploit to steal"
+                        risk_class = 'low-risk'
+                    elif httponly is False:
+                        protection = "JS-accessible"
+                        theft_risk = "Stealable via XSS or malicious extension"
+                        risk_class = 'high-risk'
+                    else:
+                        protection = "N/A"
+                        theft_risk = "Session evidence only"
+                        risk_class = ''
+                    
+                    token_rows.append({
+                        'domain': domain,
+                        'cookie_name': cookie_name,
+                        'token_type': token_type,
+                        'protection': protection,
+                        'theft_risk': theft_risk,
+                        'risk_class': risk_class,
+                    })
+            
+            if not token_rows:
+                continue
+            
+            # Generate rows with rowspan for UPN
+            for i, tr in enumerate(token_rows):
                 if i == 0:
-                    rows.append(f"<tr><td rowspan='{len(services)}' class='upn-cell'>{html_mod.escape(upn)}</td>"
-                               f"<td>{html_mod.escape(domain)}</td>"
-                               f"<td>{html_mod.escape(sources)}</td>"
-                               f"<td class='{risk_class}'>{html_mod.escape(token_desc)}</td></tr>")
+                    rows.append(f"<tr><td rowspan='{len(token_rows)}' class='upn-cell'>{html_mod.escape(upn)}</td>"
+                               f"<td>{html_mod.escape(tr['domain'])}</td>"
+                               f"<td><code>{html_mod.escape(tr['cookie_name'])}</code></td>"
+                               f"<td>{tr['token_type']}</td>"
+                               f"<td>{tr['protection']}</td>"
+                               f"<td class='{tr['risk_class']}'>{tr['theft_risk']}</td></tr>")
                 else:
-                    rows.append(f"<tr><td>{html_mod.escape(domain)}</td>"
-                               f"<td>{html_mod.escape(sources)}</td>"
-                               f"<td class='{risk_class}'>{html_mod.escape(token_desc)}</td></tr>")
+                    rows.append(f"<tr><td>{html_mod.escape(tr['domain'])}</td>"
+                               f"<td><code>{html_mod.escape(tr['cookie_name'])}</code></td>"
+                               f"<td>{tr['token_type']}</td>"
+                               f"<td>{tr['protection']}</td>"
+                               f"<td class='{tr['risk_class']}'>{tr['theft_risk']}</td></tr>")
         
         return f"""<table class='data-table identity-table'>
 <thead>
-<tr><th>UPN (User Account)</th><th>Service</th><th>Evidence Source</th><th>Token Type</th></tr>
+<tr><th>UPN (User)</th><th>Service</th><th>Token/Cookie Name</th><th>Type</th><th>Protection</th><th>Theft Risk</th></tr>
 </thead>
 <tbody>
 {''.join(rows)}
