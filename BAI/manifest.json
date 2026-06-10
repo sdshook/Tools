@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BAI",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "BAI: local forensic acquisition of Chrome profile artifacts with SHA-256 hashing and a sealed evidence manifest. © 2026, Shane Shook, All Rights Reserved - this tool is for testing and analysis.",
   "minimum_chrome_version": "116",
   "icons": {
