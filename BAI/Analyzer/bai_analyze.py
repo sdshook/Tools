@@ -4035,16 +4035,56 @@ class ReportGenerator:
                 if chain_parts:
                     parts.append(f"<strong>Chain {i}:</strong> " + "; ".join(chain_parts))
         
-        # Extensions
+        # Extensions - format consistently with full details
         if 'extensions' in details:
             for ext in details['extensions'][:3]:
                 if isinstance(ext, dict):
-                    name = ext.get('name', ext.get('id', 'Unknown'))
+                    name = ext.get('name', 'Unknown')
                     ext_id = ext.get('id', '')
-                    parts.append(f"Extension: <strong>{html_mod.escape(name)}</strong>" + 
-                               (f" <code style='font-size:10px;'>{html_mod.escape(ext_id)}</code>" if ext_id else ""))
+                    install_type = ext.get('install_type') or ext.get('installType', '')
+                    issues = ext.get('issues', [])
+                    
+                    ext_parts = []
+                    ext_parts.append(f"<strong>{html_mod.escape(name)}</strong>")
+                    if ext_id:
+                        ext_parts.append(f"ID: <code>{html_mod.escape(ext_id)}</code>")
+                    if install_type:
+                        ext_parts.append(f"Install: {html_mod.escape(install_type)}")
+                    if issues:
+                        ext_parts.append(f"Issues: {', '.join(html_mod.escape(str(i)) for i in issues[:3])}")
+                    
+                    parts.append("Extension: " + "<br>&nbsp;&nbsp;&nbsp;&nbsp;".join(ext_parts))
                 else:
                     parts.append(f"Extension: {html_mod.escape(str(ext))}")
+        
+        # Extension correlations (sideloaded with install history)
+        if 'correlations' in details:
+            for corr in details['correlations'][:3]:
+                if isinstance(corr, dict):
+                    name = corr.get('extension_name', 'Unknown')
+                    ext_id = corr.get('extension_id', '')
+                    install_type = corr.get('install_type', '')
+                    history = corr.get('possibly_related_history', [])
+                    
+                    corr_parts = [f"<strong>{html_mod.escape(name)}</strong>"]
+                    if ext_id:
+                        corr_parts.append(f"ID: <code>{html_mod.escape(ext_id)}</code>")
+                    if install_type:
+                        corr_parts.append(f"Install: {html_mod.escape(install_type)}")
+                    if history:
+                        urls = [h.get('url', '')[:50] for h in history[:2] if isinstance(h, dict)]
+                        if urls:
+                            corr_parts.append(f"Related URLs: {', '.join(urls)}")
+                    
+                    parts.append("Extension: " + "<br>&nbsp;&nbsp;&nbsp;&nbsp;".join(corr_parts))
+        
+        # Auth URLs (recently closed tabs)
+        if 'auth_urls' in details:
+            for auth in details['auth_urls'][:5]:
+                if isinstance(auth, dict):
+                    title = auth.get('title', 'Untitled')[:40]
+                    url = auth.get('url', '')[:60]
+                    parts.append(f"Tab: <strong>{html_mod.escape(title)}</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;<code style='font-size:10px;'>{html_mod.escape(url)}</code>")
         
         # Permissions
         if 'permissions' in details and isinstance(details['permissions'], list):
@@ -4070,18 +4110,20 @@ class ReportGenerator:
             if domains:
                 parts.append(f"Domains: {', '.join(html_mod.escape(d) for d in domains)}")
         
-        # Tabs
+        # Tabs (generic)
         if 'tabs' in details:
-            tab_titles = []
             for tab in details['tabs'][:3]:
                 if isinstance(tab, dict):
-                    tab_titles.append(tab.get('title', 'Untitled')[:40])
-            if tab_titles:
-                parts.append(f"Tabs: {', '.join(html_mod.escape(t) for t in tab_titles)}")
+                    title = tab.get('title', 'Untitled')[:40]
+                    url = tab.get('url', '')[:50]
+                    parts.append(f"Tab: <strong>{html_mod.escape(title)}</strong>" + 
+                               (f" <code style='font-size:10px;'>{html_mod.escape(url)}</code>" if url else ""))
         
-        # Other key-value pairs
+        # Other key-value pairs (skip already handled)
+        skip_keys = {'chains', 'extensions', 'correlations', 'auth_urls', 'downloads', 
+                     'urls', 'domains', 'tabs', 'permissions'}
         for key, value in details.items():
-            if key in ('chains', 'extensions', 'downloads', 'urls', 'domains', 'tabs', 'permissions'):
+            if key in skip_keys:
                 continue
             if isinstance(value, (str, int, float, bool)) and value:
                 parts.append(f"{html_mod.escape(key)}: <code>{html_mod.escape(str(value))}</code>")
