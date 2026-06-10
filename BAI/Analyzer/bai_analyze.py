@@ -815,7 +815,14 @@ def analyze_privacy(pkg: Dict) -> List[Dict]:
     if not priv_blob:
         return findings
     
-    settings = priv_blob.get("settings") or priv_blob.get("records", [{}])[0] if priv_blob else {}
+    # Handle both list and dict formats for records
+    raw_records = priv_blob.get("settings") or priv_blob.get("records", {})
+    if isinstance(raw_records, list):
+        settings = raw_records[0] if raw_records else {}
+    elif isinstance(raw_records, dict):
+        settings = raw_records
+    else:
+        settings = {}
     
     issues = []
     
