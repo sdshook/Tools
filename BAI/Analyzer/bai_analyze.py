@@ -3636,7 +3636,6 @@ class ReportGenerator:
         
         # Split accounts by evidence strength
         primary_accounts = [a for a in self.upn_accounts if a.get('has_strong_evidence')]
-        session_accounts = [a for a in self.upn_accounts if not a.get('has_strong_evidence')]
         
         # Show PRIMARY accounts (with cookie/token evidence)
         if primary_accounts or self.entra_sessions:
@@ -3644,50 +3643,101 @@ class ReportGenerator:
             lines.append("-" * 78)
             lines.append("  These accounts have session cookies or tokens that could be stolen/replayed.")
             lines.append("")
-            
-            for acct in primary_accounts:
-                upn = acct.get('upn', 'Unknown')
-                lines.append(f"  UPN: {upn}")
-                lines.append(f"  " + "-" * 50)
-                
-                for domain, svc_info in sorted(acct.get('services', {}).items()):
-                    sources = svc_info.get('sources', [])
-                    token_types = svc_info.get('token_types', [])
-                    
-                    lines.append(f"    Service: {domain}")
-                    lines.append(f"      Sources: {', '.join(sources)}")
-                    lines.append(f"      Tokens: {', '.join(token_types)}")
-                lines.append("")
+            lines.append("TABLE:identity_accounts")  # Marker for HTML table
             
             # Display Microsoft Entra sessions (tenant/object ID based)
             if self.entra_sessions:
-                lines.append("MICROSOFT ENTRA SESSIONS (Tenant/Object ID)")
+                lines.append("")
+                lines.append("MICROSOFT ENTRA SESSIONS")
                 lines.append("-" * 78)
                 lines.append("")
-                
-                for sess in self.entra_sessions:
-                    lines.append(f"  Tenant ID:  {sess.get('tenant_id', 'Unknown')}")
-                    lines.append(f"  Object ID:  {sess.get('object_id', 'Unknown')}")
-                    lines.append(f"  Domain:     {sess.get('domain', 'Unknown')}")
-                    sess_type = sess.get('type', 'SESSION')
-                    httponly = "HttpOnly" if sess.get('httponly') else "JS-Accessible"
-                    lines.append(f"  Type:       {sess_type} Cookie ({httponly})")
-                    lines.append(f"  Cookie:     {sess.get('cookie_name', 'Unknown')}")
-                    lines.append("")
-        
-        # Note: URL-only evidence is NOT shown as it typically contains investigation
-        # subjects (emails searched in Purview/Humio) rather than the user's accounts
+                lines.append("TABLE:entra_sessions")  # Marker for HTML table
         
         if not primary_accounts and not self.entra_sessions:
             lines.append("  No authenticated accounts discovered in cookies or storage.")
             lines.append("")
         
         # Summary counts
+        lines.append("")
         lines.append(f"  Total Authenticated Accounts: {len(primary_accounts)}")
         lines.append(f"  Entra Sessions: {len(self.entra_sessions)}")
         lines.append("")
         
         return "\n".join(lines)
+    
+    def _generate_identity_table_html(self) -> str:
+        """Generate HTML table for identity accounts."""
+        import html as html_mod
+        
+        primary_accounts = [a for a in self.upn_accounts if a.get('has_strong_evidence')]
+        
+        if not primary_accounts:
+            return "<p>No authenticated accounts discovered.</p>"
+        
+        rows = []
+        for acct in primary_accounts:
+            upn = acct.get('upn', 'Unknown')
+            services = acct.get('services', {})
+            
+            for i, (domain, svc_info) in enumerate(sorted(services.items())):
+                sources = ', '.join(svc_info.get('sources', []))
+                token_types = ', '.join(svc_info.get('token_types', []))
+                
+                # Determine if token is HttpOnly (protected) or JS-accessible (vulnerable)
+                is_httponly = 'HttpOnly' in token_types
+                risk_class = 'low-risk' if is_httponly else 'high-risk'
+                
+                if i == 0:
+                    rows.append(f"<tr><td rowspan='{len(services)}' class='upn-cell'>{html_mod.escape(upn)}</td>"
+                               f"<td>{html_mod.escape(domain)}</td>"
+                               f"<td>{html_mod.escape(sources)}</td>"
+                               f"<td class='{risk_class}'>{html_mod.escape(token_types)}</td></tr>")
+                else:
+                    rows.append(f"<tr><td>{html_mod.escape(domain)}</td>"
+                               f"<td>{html_mod.escape(sources)}</td>"
+                               f"<td class='{risk_class}'>{html_mod.escape(token_types)}</td></tr>")
+        
+        return f"""<table class='data-table identity-table'>
+<thead>
+<tr><th>UPN (User Account)</th><th>Service</th><th>Evidence Source</th><th>Token Type</th></tr>
+</thead>
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>"""
+    
+    def _generate_entra_table_html(self) -> str:
+        """Generate HTML table for Entra sessions."""
+        import html as html_mod
+        
+        if not self.entra_sessions:
+            return "<p>No Entra sessions discovered.</p>"
+        
+        rows = []
+        for sess in self.entra_sessions:
+            tenant_id = sess.get('tenant_id', 'Unknown')
+            object_id = sess.get('object_id', 'Unknown')
+            domain = sess.get('domain', 'Unknown')
+            sess_type = sess.get('type', 'SESSION')
+            httponly = "HttpOnly" if sess.get('httponly') else "JS-Accessible"
+            cookie_name = sess.get('cookie_name', 'Unknown')
+            
+            risk_class = 'low-risk' if sess.get('httponly') else 'high-risk'
+            
+            rows.append(f"<tr><td><code>{html_mod.escape(tenant_id)}</code></td>"
+                       f"<td><code>{html_mod.escape(object_id)}</code></td>"
+                       f"<td>{html_mod.escape(domain)}</td>"
+                       f"<td>{html_mod.escape(cookie_name)}</td>"
+                       f"<td class='{risk_class}'>{sess_type} ({httponly})</td></tr>")
+        
+        return f"""<table class='data-table entra-table'>
+<thead>
+<tr><th>Tenant ID</th><th>Object ID</th><th>Domain</th><th>Cookie</th><th>Type</th></tr>
+</thead>
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>"""
     
     def _section_risk_assessment(self) -> str:
         """Generate Risk Assessment Summary section."""
@@ -3820,16 +3870,104 @@ class ReportGenerator:
             for f in by_severity[sev]:
                 lines.append(f"  • {f['title']}")
                 lines.append(f"    Category: {f.get('category', 'Unknown')}")
+                
+                # Show evidence details
+                details = f.get('details', {})
+                if details:
+                    lines.append("    Evidence:")
+                    self._format_finding_details(lines, details)
+                
                 if f.get('recommendation'):
                     # Word wrap recommendation
                     rec = f['recommendation']
-                    wrapped = [rec[i:i+60] for i in range(0, len(rec), 60)]
+                    wrapped = [rec[i:i+65] for i in range(0, len(rec), 65)]
                     lines.append(f"    Action: {wrapped[0]}")
                     for w in wrapped[1:]:
                         lines.append(f"            {w}")
                 lines.append("")
         
         return "\n".join(lines)
+    
+    def _format_finding_details(self, lines: List[str], details: Dict):
+        """Format finding details for display."""
+        # SEO poisoning chains
+        if 'chains' in details:
+            for i, chain in enumerate(details['chains'][:3], 1):
+                if chain.get('search_query'):
+                    lines.append(f"      Chain {i}: Searched '{chain['search_query']}'")
+                if chain.get('suspicious_visits'):
+                    lines.append(f"               Visited {chain['suspicious_visits']} suspicious domains")
+                if chain.get('suspicious_domains'):
+                    domains = chain['suspicious_domains'][:3]
+                    lines.append(f"               Domains: {', '.join(str(d) for d in domains)}")
+                if chain.get('downloads'):
+                    files = [str(d) for d in chain['downloads'] if d][:3]
+                    if files:
+                        lines.append(f"               Downloads: {', '.join(files)}")
+        
+        # Extensions
+        if 'extensions' in details:
+            for ext in details['extensions'][:5]:
+                if isinstance(ext, dict):
+                    name = ext.get('name', ext.get('id', 'Unknown'))
+                    ext_id = ext.get('id', '')
+                    install_type = ext.get('installType', '')
+                    lines.append(f"      - {name}")
+                    if ext_id:
+                        lines.append(f"        ID: {ext_id}")
+                    if install_type:
+                        lines.append(f"        Install: {install_type}")
+                    if ext.get('install_time'):
+                        lines.append(f"        Time: {self._fmt_epoch_dual(ext['install_time'])}")
+                else:
+                    lines.append(f"      - {ext}")
+        
+        # Extension permissions
+        if 'permissions' in details and isinstance(details['permissions'], list):
+            perms = details['permissions'][:10]
+            if perms:
+                lines.append(f"      Permissions: {', '.join(str(p) for p in perms)}")
+        
+        # Downloads
+        if 'downloads' in details and not 'chains' in details:
+            for dl in details['downloads'][:5]:
+                if isinstance(dl, dict):
+                    filename = dl.get('filename', 'Unknown')
+                    url = dl.get('url', dl.get('finalUrl', ''))
+                    when = dl.get('startTime', dl.get('endTime'))
+                    lines.append(f"      - {filename}")
+                    if url:
+                        lines.append(f"        URL: {url[:80]}")
+                    if when:
+                        lines.append(f"        Time: {self._fmt_epoch_dual(when)}")
+                else:
+                    lines.append(f"      - {dl}")
+        
+        # URLs/domains
+        if 'urls' in details:
+            for url in details['urls'][:5]:
+                lines.append(f"      - {url[:80]}")
+        
+        if 'domains' in details:
+            domains = details['domains'][:5]
+            lines.append(f"      Domains: {', '.join(str(d) for d in domains)}")
+        
+        # Tabs
+        if 'tabs' in details:
+            for tab in details['tabs'][:5]:
+                if isinstance(tab, dict):
+                    title = tab.get('title', 'Untitled')[:50]
+                    url = tab.get('url', '')
+                    lines.append(f"      - {title}")
+                    if url:
+                        lines.append(f"        URL: {url[:70]}")
+        
+        # Generic key-value pairs
+        for key, value in details.items():
+            if key in ('chains', 'extensions', 'downloads', 'urls', 'domains', 'tabs', 'permissions'):
+                continue  # Already handled
+            if isinstance(value, (str, int, float, bool)):
+                lines.append(f"      {key}: {value}")
     
     def _section_timelines(self) -> str:
         """Generate Timelines section."""
@@ -4085,6 +4223,14 @@ class ReportGenerator:
         in_section = False
         
         for line in lines:
+            # Handle table markers (not escaped)
+            if "TABLE:identity_accounts" in line:
+                html_lines.append(self._generate_identity_table_html())
+                continue
+            elif "TABLE:entra_sessions" in line:
+                html_lines.append(self._generate_entra_table_html())
+                continue
+            
             if line.startswith("=" * 20):
                 if in_section:
                     html_lines.append("</div>")
@@ -4176,6 +4322,51 @@ class ReportGenerator:
         .severity-medium {{ color: #ff8c00; font-weight: bold; }}
         .severity-low {{ color: #b8860b; }}
         .severity-info {{ color: #0066cc; }}
+        /* Data tables */
+        .data-table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 12px;
+        }}
+        .data-table th, .data-table td {{
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+        }}
+        .data-table th {{
+            background: #1a1a2e;
+            color: white;
+            font-weight: bold;
+        }}
+        .data-table tr:nth-child(even) {{
+            background: #f9f9f9;
+        }}
+        .data-table tr:hover {{
+            background: #f0f0f0;
+        }}
+        .upn-cell {{
+            font-weight: bold;
+            background: #e8f4e8;
+            font-family: monospace;
+        }}
+        .high-risk {{
+            color: #cc0000;
+            font-weight: bold;
+        }}
+        .low-risk {{
+            color: #228b22;
+        }}
+        .identity-table td:first-child {{
+            white-space: nowrap;
+        }}
+        .entra-table code {{
+            font-size: 10px;
+            background: #f0f0f0;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }}
         .footer {{
             text-align: center;
             padding: 10px;
