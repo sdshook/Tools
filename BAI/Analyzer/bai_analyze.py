@@ -1957,145 +1957,186 @@ def analyze_cookies(cookie_blob: Dict, include_values: bool = False) -> Tuple[Li
 
 
 # --------------------------------------------------------------------------- #
-# Cross-artifact Identity Discovery
+# UPN-Centric Identity Discovery
 # --------------------------------------------------------------------------- #
 
-def discover_identities(pkg: Dict) -> Dict[str, List[Dict]]:
+def discover_upn_accounts(pkg: Dict) -> List[Dict]:
     """
-    Discover user identities from history, sessions, tabs, and other artifacts.
-    Returns dict mapping service names to list of discovered identities.
+    Discover user accounts by scanning for UPNs (name@domain.suffix) in cookies,
+    localStorage, and IndexedDB. Associates each UPN with services and token types.
+    
+    Returns list of account dicts:
+    {
+        'upn': 'user@domain.com',
+        'services': {
+            'domain.com': {
+                'tokens': [{'type': 'Bearer', 'name': 'cookie_name', 'httponly': True, ...}]
+            }
+        }
+    }
     """
     import re
     
-    identities = {}
-    email_pattern = re.compile(r'[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}')
+    upn_pattern = re.compile(r'\b([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b')
     
-    # Skip list for GitHub usernames that are actually paths
-    github_skip = {'login', 'signup', 'settings', 'notifications', 'issues', 
-                   'pulls', 'explore', 'orgs', 'search', 'topics', 'trending',
-                   'collections', 'events', 'sponsors', 'pricing', 'features',
-                   'enterprise', 'team', 'marketplace', 'apps', 'account',
-                   'sessions', 'security', 'codespaces', 'new', 'organizations'}
+    # Skip patterns that look like UPNs but aren't user accounts
+    skip_patterns = ['example.com', 'namprd', 'prod.outlook', 'mail.gmail.com']
     
-    def add_identity(service: str, username: str, source: str, url: str = None):
-        if not username or not service:
+    accounts = {}  # upn -> {services: {domain: {tokens: []}}}
+    
+    def add_token(upn: str, domain: str, token_info: Dict):
+        # Skip non-user patterns
+        if any(p in upn.lower() for p in skip_patterns):
             return
-        key = username.lower()
-        if service not in identities:
-            identities[service] = {}
-        if key not in identities[service]:
-            identities[service][key] = {
-                'username': username,
-                'sources': [],
-                'urls': []
-            }
-        identities[service][key]['sources'].append(source)
-        if url:
-            identities[service][key]['urls'].append(url)
-    
-    # 1. History - URLs and titles
-    for h in records(pkg.get("history.json")):
-        url = h.get('url', '') or ''
-        title = h.get('title', '') or ''
-        
-        # GitHub profile/repo URLs
-        m = re.search(r'github\.com/([a-zA-Z0-9_-]+)(?:/|$)', url)
-        if m and m.group(1).lower() not in github_skip:
-            add_identity('GitHub', m.group(1), 'browsing history', url)
-        
-        # Google - email in title
-        if 'google' in url.lower() or 'gmail' in url.lower():
-            for email in email_pattern.findall(title):
-                add_identity('Google', email, 'browsing history', url)
-        
-        # Microsoft/Office 365
-        if any(x in url.lower() for x in ['microsoft', 'outlook', 'office', 'sharepoint', 'teams']):
-            for email in email_pattern.findall(title):
-                add_identity('Microsoft', email, 'browsing history', url)
-            # Name from title like "Mail - Name - Outlook"
-            m = re.search(r'(?:Mail|Calendar|OneDrive) - (.+?) - (?:Outlook|Microsoft)', title)
-            if m:
-                add_identity('Microsoft', m.group(1), 'browsing history', url)
-        
-        # LinkedIn
-        m = re.search(r'linkedin\.com/in/([a-zA-Z0-9_-]+)', url)
-        if m:
-            add_identity('LinkedIn', m.group(1), 'browsing history', url)
-        
-        # Twitter/X
-        m = re.search(r'(?:twitter|x)\.com/([a-zA-Z0-9_]+)(?:/|$)', url)
-        if m and m.group(1).lower() not in {'home', 'explore', 'notifications', 'messages', 'settings', 'i', 'search', 'compose'}:
-            # Only add if it looks like the user's own profile (visited multiple times or specific actions)
-            pass  # Skip Twitter for now - too many false positives
-    
-    # 2. Sessions (recently closed tabs)
-    for s in records(pkg.get("sessions.json")):
-        tab = s.get('tab', {}) or {}
-        url = tab.get('url', '') or ''
-        title = tab.get('title', '') or ''
-        
-        # GitHub
-        m = re.search(r'github\.com/([a-zA-Z0-9_-]+)(?:/|$)', url)
-        if m and m.group(1).lower() not in github_skip:
-            add_identity('GitHub', m.group(1), 'recently closed tab', url)
-        
-        # Microsoft from title
-        if any(x in url.lower() for x in ['outlook', 'teams', 'office', 'sharepoint']):
-            m = re.search(r'(?:Mail|Calendar|OneDrive) - (.+?) - (?:Outlook|Microsoft)', title)
-            if m:
-                add_identity('Microsoft', m.group(1), 'recently closed tab', url)
-            for email in email_pattern.findall(title):
-                add_identity('Microsoft', email, 'recently closed tab', url)
-    
-    # 3. Open tabs
-    for t in records(pkg.get("tabsdetailed.json")):
-        url = t.get('url', '') or ''
-        title = t.get('title', '') or ''
-        
-        # GitHub
-        m = re.search(r'github\.com/([a-zA-Z0-9_-]+)(?:/|$)', url)
-        if m and m.group(1).lower() not in github_skip:
-            add_identity('GitHub', m.group(1), 'open tab', url)
-        
-        # Microsoft
-        if any(x in url.lower() for x in ['outlook', 'teams', 'office', 'sharepoint']):
-            m = re.search(r'(?:Mail|Calendar|OneDrive) - (.+?) - (?:Outlook|Microsoft)', title)
-            if m:
-                add_identity('Microsoft', m.group(1), 'open tab', url)
-    
-    # 4. Bookmarks
-    def search_bookmarks(nodes):
-        for n in nodes:
-            if not isinstance(n, dict):
-                continue
-            url = n.get('url', '') or ''
-            title = n.get('title', '') or ''
+        # Skip if local part is too long (likely encoded data, not a real UPN)
+        local_part = upn.split('@')[0]
+        if len(local_part) > 50:
+            return
             
-            m = re.search(r'github\.com/([a-zA-Z0-9_-]+)(?:/|$)', url)
-            if m and m.group(1).lower() not in github_skip:
-                add_identity('GitHub', m.group(1), 'bookmark', url)
-            
-            if n.get('children'):
-                search_bookmarks(n['children'])
+        upn_lower = upn.lower()
+        if upn_lower not in accounts:
+            accounts[upn_lower] = {'upn': upn, 'services': {}}
+        if domain not in accounts[upn_lower]['services']:
+            accounts[upn_lower]['services'][domain] = {'tokens': []}
+        accounts[upn_lower]['services'][domain]['tokens'].append(token_info)
     
-    for b in records(pkg.get("bookmarks.json")):
-        search_bookmarks([b])
-    
-    # Convert to final format
-    result = {}
-    for service, users in identities.items():
-        result[service] = []
-        for key, info in users.items():
-            result[service].append({
-                'username': info['username'],
-                'sources': list(set(info['sources'])),
-                'source_count': len(set(info['sources'])),
-                'urls': info['urls'][:3]  # Keep first 3 example URLs
+    # 1. Scan cookies
+    for c in records(pkg.get("cookies.json")):
+        value = c.get('value', '') or ''
+        domain = (c.get('domain', '') or '').lstrip('.')
+        cookie_name = c.get('name', '') or ''
+        httponly = c.get('httpOnly', False)
+        secure = c.get('secure', False)
+        expiry = c.get('expirationDate')
+        
+        # Try to decode as JWT
+        if value.count('.') == 2 and len(value) > 50:
+            decoded = decode_jwt_noverify(value)
+            if decoded:
+                # Look for UPN in JWT claims
+                for claim in ('upn', 'preferred_username', 'email', 'unique_name', 'sub'):
+                    if claim in decoded and '@' in str(decoded[claim]):
+                        upn = decoded[claim]
+                        add_token(upn, domain, {
+                            'type': 'JWT Bearer Cookie',
+                            'name': cookie_name,
+                            'httponly': httponly,
+                            'secure': secure,
+                            'claim': claim,
+                            'expiry': expiry
+                        })
+                        break
+        
+        # Also check raw cookie value for UPN
+        for match in upn_pattern.findall(value):
+            add_token(match, domain, {
+                'type': 'Session Cookie',
+                'name': cookie_name,
+                'httponly': httponly,
+                'secure': secure,
+                'expiry': expiry
             })
-        # Sort by source count (most corroborated first)
-        result[service].sort(key=lambda x: -x['source_count'])
+    
+    # 2. Scan localStorage
+    for ws in records(pkg.get("webstorage.json")):
+        origin = (ws.get('origin', '') or '').replace('https://', '').replace('http://', '').split('/')[0]
+        local_storage = ws.get('localStorage', {}) or {}
+        
+        for key, value in local_storage.items():
+            value_str = str(value)
+            
+            # Look for JWTs in the value
+            jwt_pattern = re.compile(r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+')
+            for jwt_match in jwt_pattern.findall(value_str):
+                decoded = decode_jwt_noverify(jwt_match)
+                if decoded:
+                    for claim in ('upn', 'preferred_username', 'email', 'sub'):
+                        if claim in decoded and '@' in str(decoded[claim]):
+                            upn = decoded[claim]
+                            is_refresh = 'refresh' in key.lower()
+                            add_token(upn, origin, {
+                                'type': 'Refresh Token (localStorage)' if is_refresh else 'Access Token (localStorage)',
+                                'key': key,
+                                'httponly': False,  # localStorage is always JS-accessible
+                                'claim': claim
+                            })
+                            break
+            
+            # Also check raw value for UPNs
+            for match in upn_pattern.findall(value_str[:1000]):
+                add_token(match, origin, {
+                    'type': 'localStorage',
+                    'key': key,
+                    'httponly': False
+                })
+    
+    # 3. Scan IndexedDB
+    for idb in records(pkg.get("indexeddbfull.json")):
+        origin = (idb.get('origin', '') or '').replace('https://', '').replace('http://', '').split('/')[0]
+        for db in idb.get('databases', []) or []:
+            for store in db.get('objectStores', []) or []:
+                store_name = store.get('name', '')
+                for item in store.get('items', []) or []:
+                    value_str = str(item.get('value', ''))
+                    
+                    # Look for JWTs
+                    jwt_pattern = re.compile(r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+')
+                    for jwt_match in jwt_pattern.findall(value_str):
+                        decoded = decode_jwt_noverify(jwt_match)
+                        if decoded:
+                            for claim in ('upn', 'preferred_username', 'email', 'sub'):
+                                if claim in decoded and '@' in str(decoded[claim]):
+                                    upn = decoded[claim]
+                                    is_refresh = 'refresh' in store_name.lower()
+                                    add_token(upn, origin, {
+                                        'type': 'Refresh Token (IndexedDB)' if is_refresh else 'Access Token (IndexedDB)',
+                                        'store': f"{db.get('name', '')}/{store_name}",
+                                        'httponly': False,
+                                        'claim': claim
+                                    })
+                                    break
+    
+    # Convert to list format
+    result = []
+    for upn_lower, info in sorted(accounts.items()):
+        result.append({
+            'upn': info['upn'],
+            'services': info['services']
+        })
     
     return result
+
+
+def discover_entra_sessions(pkg: Dict) -> List[Dict]:
+    """
+    Extract Microsoft Entra sessions from ESTSAUTH/ESTSAUTHPERSISTENT cookies.
+    These contain tenant_id and object_id even when UPN is encrypted.
+    """
+    sessions = []
+    
+    for c in records(pkg.get("cookies.json")):
+        cookie_name = (c.get('name', '') or '').lower()
+        if cookie_name not in ('estsauth', 'estsauthpersistent'):
+            continue
+        
+        value = c.get('value', '') or ''
+        domain = (c.get('domain', '') or '').lstrip('.')
+        httponly = c.get('httpOnly', False)
+        expiry = c.get('expirationDate')
+        
+        decoded = decode_entra_home_account(value)
+        if decoded and decoded.get('tenant_id'):
+            sessions.append({
+                'tenant_id': decoded.get('tenant_id'),
+                'object_id': decoded.get('object_id'),
+                'domain': domain,
+                'type': 'PERSISTENT' if 'persistent' in cookie_name else 'SESSION',
+                'httponly': httponly,
+                'cookie_name': c.get('name', ''),
+                'expiry': expiry
+            })
+    
+    return sessions
 
 
 # --------------------------------------------------------------------------- #
@@ -3203,7 +3244,9 @@ class ReportGenerator:
     def __init__(self, pkg: Dict, findings: List[Dict], aitm_view: Dict,
                  sessions: List[Dict], storage_tokens: List[Dict],
                  events: List[Dict], theft_timeline: Dict,
-                 entra_correlation: Dict = None, discovered_identities: Dict = None,
+                 entra_correlation: Dict = None, 
+                 upn_accounts: List[Dict] = None,
+                 entra_sessions: List[Dict] = None,
                  tz=None):
         self.pkg = pkg
         self.findings = findings
@@ -3213,7 +3256,8 @@ class ReportGenerator:
         self.events = events
         self.theft_timeline = theft_timeline
         self.entra_correlation = entra_correlation
-        self.discovered_identities = discovered_identities or {}
+        self.upn_accounts = upn_accounts or []
+        self.entra_sessions = entra_sessions or []
         self.tz = tz
         
         # Extract common data
@@ -3545,247 +3589,63 @@ class ReportGenerator:
         lines.append("=" * 78)
         lines.append("")
         
-        # First, show DISCOVERED USER ACCOUNTS from browsing activity
-        if self.discovered_identities:
-            lines.append("DISCOVERED USER ACCOUNTS")
+        # Show UPN-centric account inventory
+        if self.upn_accounts or self.entra_sessions:
+            lines.append("USER ACCOUNTS (UPN → Service → Tokens)")
             lines.append("-" * 78)
-            lines.append("  (Extracted from browsing history, tabs, and sessions)")
             lines.append("")
             
-            for service, users in sorted(self.discovered_identities.items()):
-                for user in users:
-                    username = user['username']
-                    sources = ", ".join(user['sources'])
-                    lines.append(f"  {service}: {username}")
-                    lines.append(f"    Evidence: {sources}")
-            lines.append("")
-        
-        # Then show AUTHENTICATED SESSIONS table
-        lines.append("AUTHENTICATED SESSIONS")
-        lines.append("-" * 78)
-        lines.append("")
-        lines.append("  Service/IdP                   | Account                        | Auth Factor  | Bearer | Refresh | Persistent")
-        lines.append("  " + "-" * 106)
-        
-        # Build account summary from sessions, correlating with discovered identities
-        account_num = 0
-        for session in self.sessions:
-            idp = session.get("idp", "Unknown")
-            if idp == "(generic auth cookie)":
-                continue  # Skip generic cookies for account summary
-            
-            account_num += 1
-            domain = session.get("domain", "Unknown")
-            
-            # Get account name - check session fields, identity dict, AND discovered identities
-            identity = session.get("identity", {})
-            account_name = (session.get("upn") or
-                          identity.get("upn") or 
-                          identity.get("preferred_username") or 
-                          identity.get("email") or 
-                          session.get("email") or
-                          identity.get("name") or
-                          identity.get("sub"))
-            
-            # Try to match with discovered identities
-            if not account_name:
-                # Map IdP to discovered identity service
-                idp_to_service = {
-                    'GitHub': 'GitHub',
-                    'Google': 'Google',
-                    'Microsoft Entra ID': 'Microsoft',
-                    'Microsoft Entra ID (Azure AD)': 'Microsoft',
-                    'Microsoft consumer (MSA)': 'Microsoft',
-                    'SharePoint Online': 'Microsoft',
-                }
-                service_name = idp_to_service.get(idp)
-                if service_name and service_name in self.discovered_identities:
-                    # Use the most corroborated identity for this service
-                    discovered = self.discovered_identities[service_name]
-                    if discovered:
-                        account_name = discovered[0]['username']
-            
-            # Fall back to tenant_id or domain
-            if not account_name:
-                account_name = session.get("tenant_id") or domain
-            
-            # Determine auth factor
-            mfa_status = self._get_mfa_status(session)
-            if "MFA" in mfa_status or "FIDO" in mfa_status or "OTP" in mfa_status:
-                auth_factor = "Multi-Factor"
-            elif "Password only" in mfa_status:
-                auth_factor = "Single-Factor"
-            else:
-                auth_factor = "Unknown"
-            
-            # Determine token types present
-            token_types = session.get("token_types", [])
-            has_bearer = "Yes" if session.get("any_httponly") or session.get("cookie_names") else "No"
-            has_refresh = "No"
-            has_persistent = "Yes" if "persistent" in token_types else "No"
-            
-            # Check for refresh tokens in identity claims
-            if identity.get("refresh_token") or identity.get("rt"):
-                has_refresh = "Yes"
-            
-            # Format for table
-            idp_short = idp[:29] if len(idp) <= 29 else idp[:26] + "..."
-            acct_short = str(account_name)[:30] if len(str(account_name)) <= 30 else str(account_name)[:27] + "..."
-            
-            lines.append(f"  {idp_short:<29} | {acct_short:<30} | {auth_factor:<12} | {has_bearer:<6} | {has_refresh:<7} | {has_persistent}")
-        
-        # Add storage tokens to account summary
-        for token in self.storage_tokens:
-            account_num += 1
-            identity = token.get("identity", {})
-            
-            account_name = (identity.get("upn") or identity.get("preferred_username") or 
-                          identity.get("email") or token.get("key", "Unknown"))
-            if len(account_name) > 28:
-                account_name = account_name[:25] + "..."
-            
-            mfa_status = self._get_mfa_status({"identity": identity})
-            if "MFA" in mfa_status:
-                auth_factor = "Multi-Factor"
-            elif "Password" in mfa_status:
-                auth_factor = "Single-Factor"
-            else:
-                auth_factor = "Unknown"
-            
-            has_bearer = "Yes"  # Storage tokens are bearer tokens
-            has_refresh = "Yes" if token.get("is_refresh") else "No"
-            has_persistent = "No"  # Storage tokens aren't persistent cookies
-            
-            lines.append(f"  {account_name:<29} | {auth_factor:<12} | {has_bearer:<6} | {has_refresh:<7} | {has_persistent}")
-        
-        lines.append("")
-        lines.append(f"  Total Accounts: {account_num}")
-        lines.append("")
-        
-        # Now show detailed session information
-        lines.append("DETAILED SESSION INFORMATION")
-        lines.append("-" * 78)
-        lines.append("")
-        
-        session_num = 0
-        for session in self.sessions:
-            idp = session.get("idp", "Unknown")
-            if idp == "(generic auth cookie)":
-                continue
-            
-            session_num += 1
-            domain = session.get("domain", "Unknown")
-            identity = session.get("identity", {})
-            
-            lines.append(f"  SESSION {session_num}: {idp}")
-            lines.append(f"  " + "-" * 40)
-            
-            # Identity details
-            lines.append(f"    Domain:           {domain}")
-            
-            if session.get("tenant_id"):
-                lines.append(f"    Tenant ID:        {session['tenant_id']}")
-            if session.get("object_id"):
-                lines.append(f"    Object ID:        {session['object_id']}")
-            
-            # UPN/Email - check session level first, then identity dict
-            upn = (session.get("upn") or 
-                   identity.get("upn") or 
-                   identity.get("preferred_username") or 
-                   identity.get("email") or
-                   session.get("email") or
-                   identity.get("sub"))
-            if upn:
-                lines.append(f"    UPN/Email:        {upn}")
-            
-            name = identity.get("name") or identity.get("given_name")
-            if name:
-                lines.append(f"    Display Name:     {name}")
-            
-            # Authentication details
-            lines.append(f"    Authentication:   {self._get_mfa_status(session)}")
-            
-            # AMR claim if available
-            amr = identity.get("amr", [])
-            if amr:
-                lines.append(f"    Auth Methods:     {', '.join(amr) if isinstance(amr, list) else amr}")
-            
-            # Token details
-            lines.append(f"    Token Types:")
-            token_types = session.get("token_types", [])
-            if "persistent" in token_types:
-                lines.append(f"      - Persistent Session Cookie (ESTSAUTHPERSISTENT)")
-            if session.get("any_httponly"):
-                lines.append(f"      - HttpOnly Bearer Cookie (protected from XSS)")
-            else:
-                lines.append(f"      - Bearer Cookie (accessible to JavaScript)")
-            
-            # Check for refresh tokens
-            if identity.get("refresh_token") or identity.get("rt"):
-                lines.append(f"      - Refresh Token (long-lived, can mint new access tokens)")
-            
-            # Validity
-            if session.get("earliest_expiry"):
-                lines.append(f"    Earliest Expiry:  {session['earliest_expiry']}")
-            if session.get("latest_expiry"):
-                lines.append(f"    Latest Expiry:    {session['latest_expiry']}")
-            
-            # Cookie inventory
-            cookie_names = session.get("cookie_names", [])
-            if cookie_names:
-                lines.append(f"    Cookies ({len(cookie_names)}):")
-                for cn in cookie_names:
-                    lines.append(f"      - {cn}")
-            
-            lines.append("")
-        
-        # Storage tokens
-        if self.storage_tokens:
-            lines.append("WEB STORAGE TOKENS (localStorage/IndexedDB)")
-            lines.append("-" * 78)
-            lines.append("  ⚠️  These tokens are accessible to JavaScript and vulnerable to XSS attacks")
-            lines.append("")
-            
-            for i, token in enumerate(self.storage_tokens, 1):
-                identity = token.get("identity", {})
-                lines.append(f"  TOKEN {i}: {token.get('idp', 'Unknown IdP')}")
-                lines.append(f"    Origin:           {token.get('origin', 'Unknown')}")
-                lines.append(f"    Storage Type:     {token.get('storage_type', 'Unknown')}")
-                lines.append(f"    Key:              {token.get('key', 'Unknown')}")
+            # Display UPN accounts
+            for acct in self.upn_accounts:
+                upn = acct.get('upn', 'Unknown')
+                lines.append(f"  UPN: {upn}")
+                lines.append(f"  " + "-" * 40)
                 
-                upn = identity.get("upn") or identity.get("preferred_username") or identity.get("email")
-                if upn:
-                    lines.append(f"    Identity:         {upn}")
-                if identity.get("tid"):
-                    lines.append(f"    Tenant ID:        {identity['tid']}")
-                if identity.get("oid"):
-                    lines.append(f"    Object ID:        {identity['oid']}")
-                
-                lines.append(f"    Authentication:   {self._get_mfa_status({'identity': identity})}")
-                
-                if token.get("is_refresh"):
-                    lines.append(f"    Token Type:       Refresh Token")
-                else:
-                    lines.append(f"    Token Type:       Access/ID Token")
-                
-                if token.get("expiration"):
-                    lines.append(f"    Expiration:       {token['expiration']}")
-                
+                for domain, svc_info in sorted(acct.get('services', {}).items()):
+                    lines.append(f"    Service: {domain}")
+                    
+                    for token in svc_info.get('tokens', []):
+                        token_type = token.get('type', 'Unknown')
+                        httponly = "HttpOnly" if token.get('httponly') else "JS-Accessible"
+                        
+                        if token.get('name'):
+                            lines.append(f"      • {token_type} ({httponly})")
+                            lines.append(f"        Cookie: {token['name']}")
+                        elif token.get('key'):
+                            lines.append(f"      • {token_type} ({httponly})")
+                            lines.append(f"        Key: {token['key']}")
+                        elif token.get('store'):
+                            lines.append(f"      • {token_type} ({httponly})")
+                            lines.append(f"        Store: {token['store']}")
+                        else:
+                            lines.append(f"      • {token_type} ({httponly})")
                 lines.append("")
-        
-        # Other sessions (generic auth cookies)
-        generic_sessions = [s for s in self.sessions if s.get("idp") == "(generic auth cookie)"]
-        if generic_sessions:
-            lines.append("OTHER AUTHENTICATED SESSIONS")
-            lines.append("-" * 78)
-            for s in generic_sessions:
-                domain = s.get("domain", "Unknown")
-                cookie_count = len(s.get("cookie_names", []))
-                httponly = "HttpOnly" if s.get("any_httponly") else "Accessible"
-                valid = s.get("latest_expiry") or "Session-based"
-                lines.append(f"  • {domain}")
-                lines.append(f"    Cookies: {cookie_count} | {httponly} | Valid until: {valid}")
+            
+            # Display Microsoft Entra sessions (tenant/object ID based)
+            if self.entra_sessions:
+                lines.append("MICROSOFT ENTRA SESSIONS (Tenant/Object ID)")
+                lines.append("-" * 78)
+                lines.append("")
+                
+                for sess in self.entra_sessions:
+                    lines.append(f"  Tenant ID:  {sess.get('tenant_id', 'Unknown')}")
+                    lines.append(f"  Object ID:  {sess.get('object_id', 'Unknown')}")
+                    lines.append(f"  Domain:     {sess.get('domain', 'Unknown')}")
+                    sess_type = sess.get('type', 'SESSION')
+                    httponly = "HttpOnly" if sess.get('httponly') else "JS-Accessible"
+                    lines.append(f"  Type:       {sess_type} Cookie ({httponly})")
+                    lines.append(f"  Cookie:     {sess.get('cookie_name', 'Unknown')}")
+                    lines.append("")
+        else:
+            lines.append("  No UPN-based accounts discovered in cookies or storage.")
             lines.append("")
+        
+        # Summary counts
+        total_upns = len(self.upn_accounts)
+        total_entra = len(self.entra_sessions)
+        lines.append(f"  Total UPN Accounts: {total_upns}")
+        lines.append(f"  Total Entra Sessions: {total_entra}")
+        lines.append("")
         
         return "\n".join(lines)
     
@@ -4749,11 +4609,14 @@ Examples:
         entra_correlation = correlate_entra_logs(theft_timeline, entra_logs)
         print(f"[+] Correlation: {entra_correlation.get('summary', 'complete')}")
     
-    # Discover user identities from browsing artifacts
-    discovered_identities = discover_identities(pkg)
-    if not args.quiet and discovered_identities:
-        total_discovered = sum(len(users) for users in discovered_identities.values())
-        print(f"[+] Discovered {total_discovered} user identities from browsing activity")
+    # Discover user accounts using UPN-centric approach
+    upn_accounts = discover_upn_accounts(pkg)
+    entra_sessions = discover_entra_sessions(pkg)
+    if not args.quiet:
+        if upn_accounts:
+            print(f"[+] Discovered {len(upn_accounts)} UPN accounts from cookies/storage")
+        if entra_sessions:
+            print(f"[+] Discovered {len(entra_sessions)} Microsoft Entra sessions")
     
     # Write outputs
     os.makedirs(args.out, exist_ok=True)
@@ -4777,7 +4640,8 @@ Examples:
         events=events,
         theft_timeline=theft_timeline,
         entra_correlation=entra_correlation,
-        discovered_identities=discovered_identities,
+        upn_accounts=upn_accounts,
+        entra_sessions=entra_sessions,
         tz=tz
     )
     
