@@ -1,0 +1,2445 @@
+#!/usr/bin/env python3
+"""
+bai_analyze.py - Offline analyzer for BAI (Browser Audit Inventory) packages.
+
+Builds a unified event timeline from history/visits/downloads/cookies and decodes
+identity-provider session cookies into the anchors needed to correlate browser-side
+evidence with Microsoft Entra sign-in logs and Purview/Unified Audit Log records.
+
+**Mission-Focused Design:**
+  * AiTM Detection: Cross-artifact correlation of redirects, proxy config, timing
+  * Infostealer Detection: Extension analysis, token theft from storage, session hijack
+  * Pure standard library. No pip installs. Runs fully offline.
+  * SECRET-SAFE BY DEFAULT: raw token values are NEVER written unless --include-token-values.
+
+**Artifact Priority (based on detection value):**
+  HIGH: webstorage/indexeddb (token theft), extensions (infostealer vectors),
+        proxy (AiTM), performance/serviceworkers (redirects/persistence)
+  MED:  privacy/searchengines (tampering), sessions/webauthn (context/triage)
+  LOW:  bookmarks, topsites, mediadevices (attribution only)
+
+Usage:
+    python3 bai_analyze.py /path/to/BAI_package_or_zip
+    python3 bai_analyze.py pkg.zip --out ./analysis --tz America/Los_Angeles
+    python3 bai_analyze.py pkg/  --since 2026-06-01 --until 2026-06-11
+    python3 bai_analyze.py pkg/  --include-token-values        # opt-in, dangerous
+
+(c) Provided as analysis support for BAI by Shane Shook. Standard-library only.
+"""
+
+import argparse
+import base64
+import csv
+import json
+import os
+import re
+import struct
+import sys
+import zipfile
+from collections import defaultdict
+from datetime import datetime, timezone, timedelta
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
+# --------------------------------------------------------------------------- #
+# Severity and Finding types
+# --------------------------------------------------------------------------- #
+
+class Severity(Enum):
+    CRITICAL = "CRITICAL"
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+    INFO = "INFO"
+
+    def __lt__(self, other):
+        order = [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO]
+        return order.index(self) < order.index(other)
+
+
+class FindingCategory(Enum):
+    AITM = "AiTM Indicator"
+    INFOSTEALER = "Infostealer Indicator"
+    TAMPERING = "Tampering/Hijack"
+    PERSISTENCE = "Persistence Mechanism"
+    TOKEN_EXPOSURE = "Token/Session Exposure"
+    CONFIG_DRIFT = "Insecure Configuration"
+    SEO_POISONING = "SEO Poisoning Indicator"
+    MALVERTISING = "Malvertising Indicator"
+    SUSPICIOUS_DOWNLOAD = "Suspicious Download"
+    DELIVERY_VECTOR = "Delivery Vector"
+
+
+# --------------------------------------------------------------------------- #
+# Time helpers
+# --------------------------------------------------------------------------- #
+
+def _try_zoneinfo(tzname):
+    if not tzname:
+        return timezone.utc
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(tzname)
+    except Exception:
+        sys.stderr.write(f"[warn] timezone {tzname!r} unavailable; using UTC\n")
+        return timezone.utc
+
+
+def from_chrome_micros(v):
+    """Chrome history/visit time = ms since epoch (BAI emits ms as float)."""
+    if v is None:
+        return None
+    try:
+        return datetime.fromtimestamp(float(v) / 1000.0, timezone.utc)
+    except Exception:
+        return None
+
+
+def from_epoch_seconds(v):
+    """Cookie expirationDate and download start/end are epoch seconds (float)."""
+    if v is None:
+        return None
+    try:
+        return datetime.fromtimestamp(float(v), timezone.utc)
+    except Exception:
+        return None
+
+
+def parse_iso(v):
+    if not v:
+        return None
+    try:
+        s = v.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def fmt(dt, tz):
+    if dt is None:
+        return ""
+    return dt.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + dt.astimezone(tz).strftime(" %z")
+
+
+# --------------------------------------------------------------------------- #
+# Package loading - expanded artifact list
+# --------------------------------------------------------------------------- #
+
+ARTIFACT_FILES = [
+    # Core
+    "history.json", "visitdetails.json", "downloads.json", "cookies.json",
+    "MANIFEST.json", "session_log.json", "chain_of_custody.json",
+    # High priority
+    "webstorage.json", "indexeddb.json", "indexeddbfull.json",
+    "extensions.json", "permissions.json",
+    "proxy.json",
+    "performance.json", "serviceworkers.json",
+    # Medium priority
+    "privacy.json", "searchengines.json",
+    "sessions.json", "webauthn.json",
+    "tabsdetailed.json", "windows.json",
+    # Low priority (loaded but not prioritized in findings)
+    "bookmarks.json", "topsites.json", "mediadevices.json",
+    "storageestimates.json", "contentsettings.json", "readinglist.json",
+    "systeminfo.json", "account.json",
+]
+
+
+def load_package(path: str) -> Dict[str, Any]:
+    """Return dict {basename: parsed_json} for all available artifacts."""
+    data = {}
+    if os.path.isdir(path):
+        root = path
+        names = os.listdir(path)
+        if "MANIFEST.json" not in names:
+            subs = [os.path.join(path, n) for n in names
+                    if os.path.isdir(os.path.join(path, n))]
+            for s in subs:
+                if os.path.exists(os.path.join(s, "MANIFEST.json")):
+                    root = s
+                    break
+        for fn in ARTIFACT_FILES:
+            fp = os.path.join(root, fn)
+            if os.path.exists(fp):
+                try:
+                    with open(fp, "r", encoding="utf-8", errors="replace") as fh:
+                        data[fn] = json.load(fh)
+                except json.JSONDecodeError as e:
+                    sys.stderr.write(f"[warn] failed to parse {fn}: {e}\n")
+        # Also check for snapshots directory
+        snap_dir = os.path.join(root, "snapshots")
+        if os.path.isdir(snap_dir):
+            data["_snapshots_dir"] = snap_dir
+            data["_snapshot_files"] = os.listdir(snap_dir)
+    elif zipfile.is_zipfile(path):
+        with zipfile.ZipFile(path) as z:
+            members = z.namelist()
+            for fn in ARTIFACT_FILES:
+                hit = next((m for m in members if m.endswith("/" + fn) or m == fn), None)
+                if hit:
+                    try:
+                        with z.open(hit) as fh:
+                            data[fn] = json.loads(fh.read().decode("utf-8", "replace"))
+                    except json.JSONDecodeError as e:
+                        sys.stderr.write(f"[warn] failed to parse {fn}: {e}\n")
+            # Check for snapshots
+            snap_files = [m for m in members if "/snapshots/" in m and m.endswith(".mhtml")]
+            if snap_files:
+                data["_snapshot_files"] = [os.path.basename(m) for m in snap_files]
+    else:
+        raise SystemExit(f"[fatal] {path} is neither a directory nor a zip")
+    return data
+
+
+def records(blob) -> List[Dict]:
+    if not blob:
+        return []
+    return blob.get("records") or []
+
+
+# --------------------------------------------------------------------------- #
+# Base64 / JWT / GUID decoders
+# --------------------------------------------------------------------------- #
+
+def _b64u(s: str) -> bytes:
+    s = s.strip()
+    s += "=" * (-len(s) % 4)
+    return base64.urlsafe_b64decode(s)
+
+
+def _b64(s: str) -> bytes:
+    s = s.strip()
+    s += "=" * (-len(s) % 4)
+    return base64.b64decode(s)
+
+
+def _guid_le(b: bytes) -> Optional[str]:
+    """Decode a 16-byte .NET little-endian GUID."""
+    if len(b) < 16:
+        return None
+    a = struct.unpack("<I", b[0:4])[0]
+    c = struct.unpack("<H", b[4:6])[0]
+    d = struct.unpack("<H", b[6:8])[0]
+    rest = b[8:16]
+    return "%08x-%04x-%04x-%02x%02x-%s" % (a, c, d, rest[0], rest[1], rest[2:8].hex())
+
+
+def _printable_strings(b: bytes, minlen: int = 4) -> List[str]:
+    out, cur = [], []
+    for ch in b:
+        if 32 <= ch < 127:
+            cur.append(chr(ch))
+        else:
+            if len(cur) >= minlen:
+                out.append("".join(cur))
+            cur = []
+    if len(cur) >= minlen:
+        out.append("".join(cur))
+    return out
+
+
+def decode_jwt_noverify(value: str) -> Dict[str, Any]:
+    """Extract claims from a JWT without signature verification."""
+    out = {}
+    try:
+        segs = value.split(".")
+        if len(segs) >= 2:
+            payload = json.loads(_b64u(segs[1]))
+            for k in ("tid", "oid", "upn", "preferred_username", "unique_name",
+                      "email", "sub", "iss", "aud", "iat", "exp", "nbf", "sid",
+                      "name", "given_name", "family_name", "azp", "appid", "scp"):
+                if k in payload:
+                    out[k] = payload[k]
+    except Exception:
+        pass
+    return out
+
+
+def decode_entra_home_account(value: str) -> Dict[str, Any]:
+    """Extract tenant/object IDs from ESTSAUTH cookies."""
+    out = {}
+    try:
+        parts = value.split(".")
+        if len(parts) >= 2 and parts[0] in ("1", "2"):
+            raw = _b64u(parts[1])
+            if len(raw) >= 35:
+                out["tenant_id"] = _guid_le(raw[3:19])
+                out["object_id"] = _guid_le(raw[19:35])
+    except Exception:
+        pass
+    return out
+
+
+def decode_entra_ccstate(value: str) -> Dict[str, Any]:
+    """Extract UPN from CCState cookie."""
+    out = {}
+    try:
+        raw = _b64(value)
+        for s in _printable_strings(raw, 6):
+            if "@" in s and "." in s.split("@")[-1]:
+                out["upn"] = s.strip()
+                break
+    except Exception:
+        pass
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Token patterns for web storage analysis
+# --------------------------------------------------------------------------- #
+
+JWT_PATTERN = re.compile(r'^eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$')
+BEARER_TOKEN_KEYS = {
+    # Common OAuth/OIDC token storage keys
+    "access_token", "accesstoken", "id_token", "idtoken", "refresh_token",
+    "refreshtoken", "auth_token", "authtoken", "bearer", "jwt",
+    # MSAL patterns
+    "msal.", "oidc.", "oauth",
+    # Provider-specific
+    "msalaccount", "msalaccesstoken", "msalrefreshtoken", "msalidtoken",
+    "__session", "session_token", "user_token",
+}
+
+
+def looks_like_token(key: str, value: str) -> Tuple[bool, str]:
+    """Check if a storage key/value looks like an auth token."""
+    kl = key.lower()
+    
+    # Check key name patterns
+    for pattern in BEARER_TOKEN_KEYS:
+        if pattern in kl:
+            return True, f"key matches '{pattern}'"
+    
+    # Check if value is a JWT
+    if isinstance(value, str) and JWT_PATTERN.match(value):
+        return True, "value is JWT format"
+    
+    # Check if value is JSON with token-like structure
+    if isinstance(value, str) and value.startswith("{"):
+        try:
+            obj = json.loads(value)
+            if isinstance(obj, dict):
+                obj_keys = {k.lower() for k in obj.keys()}
+                token_keys = {"access_token", "accesstoken", "id_token", "refresh_token", "expiresIn", "expires_in"}
+                if obj_keys & token_keys:
+                    return True, "JSON contains token fields"
+        except (json.JSONDecodeError, TypeError):
+            pass
+    
+    return False, ""
+
+
+# --------------------------------------------------------------------------- #
+# IdP classification
+# --------------------------------------------------------------------------- #
+
+def classify_idp(domain: str) -> Optional[str]:
+    d = domain.lower().lstrip(".")
+    table = [
+        ("login.microsoftonline.com", "Microsoft Entra ID (Azure AD)"),
+        ("login.microsoftonline.us", "Microsoft Entra ID (US Gov)"),
+        ("login.microsoft.com",      "Microsoft Entra ID"),
+        ("login.live.com",           "Microsoft consumer (MSA)"),
+        ("sts.",                     "AD FS / STS"),
+        ("adfs",                     "AD FS"),
+        ("accounts.google.com",      "Google"),
+        ("okta.com",                 "Okta"),
+        ("auth0.com",                "Auth0"),
+        ("keycloak",                 "Keycloak"),
+        ("github.com",               "GitHub"),
+        ("chatgpt.com",              "OpenAI"),
+        ("openai.com",               "OpenAI"),
+        ("sharepoint.com",           "SharePoint Online"),
+        ("cognito",                  "AWS Cognito"),
+        ("firebase",                 "Firebase Auth"),
+    ]
+    for needle, label in table:
+        if needle in d:
+            return label
+    return None
+
+
+STRONG_AUTH_NAMES = {
+    "estsauth", "estsauthpersistent", "estsauthlight", "buid", "ccstate",
+    "msisauth", "msisauthenticated", "fedauth", "rtfa", "fpc",
+    "sapisid", "__secure-1psid", "__host-1psid", "__secure-3psid",
+    "auth_session_id", "keycloak_session", "keycloak_auth",
+    "kc-access", "user_session", "_gh_sess", "dotcom_user",
+    "oai-client-auth-info", "unified_session_manifest", "x-ms-cpim-sso",
+}
+
+STRONG_AUTH_PREFIXES = (
+    "estsauth", "__secure-next-auth.session-token", "__host-next-auth",
+    "msal.", "msisauth",
+)
+
+
+def is_auth_cookie(name: str) -> bool:
+    n = name.lower()
+    if n in STRONG_AUTH_NAMES:
+        return True
+    return any(n.startswith(p) for p in STRONG_AUTH_PREFIXES)
+
+
+# --------------------------------------------------------------------------- #
+# HIGH PRIORITY: Extension analysis (infostealer vector #1)
+# --------------------------------------------------------------------------- #
+
+HIGH_RISK_PERMISSIONS = {
+    "cookies": "Can read all cookies including auth tokens",
+    "webRequest": "Can intercept/modify all network traffic",
+    "webRequestBlocking": "Can block/modify requests synchronously",
+    "debugger": "Can attach debugger to any tab (full control)",
+    "scripting": "Can inject scripts into any page",
+    "tabs": "Can access tab URLs and content",
+    "history": "Can read/modify browsing history",
+    "storage": "Can access extension storage",
+    "nativeMessaging": "Can communicate with native applications",
+    "management": "Can manage other extensions",
+    "proxy": "Can configure proxy settings",
+    "downloads": "Can initiate/access downloads",
+    "clipboardRead": "Can read clipboard content",
+    "clipboardWrite": "Can write to clipboard",
+}
+
+BROAD_HOST_PATTERNS = {"<all_urls>", "*://*/*", "http://*/*", "https://*/*"}
+
+
+def analyze_extensions(pkg: Dict) -> List[Dict]:
+    """Analyze extensions for infostealer indicators."""
+    findings = []
+    ext_blob = pkg.get("extensions.json")
+    perm_blob = pkg.get("permissions.json")
+    
+    for ext in records(ext_blob):
+        ext_id = ext.get("id", "unknown")
+        name = ext.get("name", "Unknown Extension")
+        install_type = ext.get("installType", "")
+        enabled = ext.get("enabled", False)
+        permissions = ext.get("permissions", []) or []
+        host_permissions = ext.get("hostPermissions", []) or []
+        
+        issues = []
+        severity = Severity.INFO
+        
+        # Check for sideloaded extensions (not from store)
+        if install_type == "sideload":
+            issues.append("SIDELOADED (not from Chrome Web Store)")
+            severity = Severity.HIGH
+        elif install_type == "development":
+            issues.append("DEVELOPMENT mode extension")
+            severity = max(severity, Severity.MEDIUM)
+        
+        # Check for high-risk permissions
+        risky_perms = []
+        for perm in permissions:
+            if perm in HIGH_RISK_PERMISSIONS:
+                risky_perms.append(f"{perm}: {HIGH_RISK_PERMISSIONS[perm]}")
+        
+        if risky_perms:
+            if any(p in permissions for p in ["cookies", "webRequest", "debugger"]):
+                severity = max(severity, Severity.HIGH)
+            else:
+                severity = max(severity, Severity.MEDIUM)
+            issues.append(f"High-risk permissions: {', '.join(risky_perms)}")
+        
+        # Check for broad host access
+        broad_hosts = [h for h in host_permissions if h in BROAD_HOST_PATTERNS]
+        if broad_hosts:
+            issues.append(f"Broad host access: {', '.join(broad_hosts)}")
+            severity = max(severity, Severity.HIGH)
+        
+        # Only report if there are actual issues (not just INFO level) and extension is enabled
+        if issues and enabled and severity != Severity.INFO:
+            findings.append({
+                "category": FindingCategory.INFOSTEALER.value,
+                "severity": severity.value,
+                "title": f"Suspicious extension: {name}",
+                "details": {
+                    "extension_id": ext_id,
+                    "name": name,
+                    "install_type": install_type,
+                    "issues": issues,
+                    "permissions": permissions,
+                    "host_permissions": host_permissions,
+                },
+                "recommendation": "Review extension legitimacy and permissions. Sideloaded extensions with broad permissions are a primary infostealer vector."
+            })
+    
+    return findings
+
+
+# --------------------------------------------------------------------------- #
+# HIGH PRIORITY: Proxy analysis (AiTM critical)
+# --------------------------------------------------------------------------- #
+
+def analyze_proxy(pkg: Dict) -> List[Dict]:
+    """Analyze proxy configuration for AiTM indicators."""
+    findings = []
+    proxy_blob = pkg.get("proxy.json")
+    
+    if not proxy_blob:
+        findings.append({
+            "category": FindingCategory.AITM.value,
+            "severity": Severity.INFO.value,
+            "title": "Proxy configuration not collected",
+            "details": {"status": "artifact_missing"},
+            "recommendation": "Re-run collection to capture proxy settings."
+        })
+        return findings
+    
+    settings = proxy_blob.get("settings") or proxy_blob.get("records", [{}])[0] if proxy_blob else {}
+    mode = settings.get("mode", "")
+    pac_script = settings.get("pacScript", {})
+    rules = settings.get("rules", {})
+    
+    if mode in ("system", "direct"):
+        # Clean configuration
+        findings.append({
+            "category": FindingCategory.AITM.value,
+            "severity": Severity.INFO.value,
+            "title": f"Proxy mode is '{mode}' (normal)",
+            "details": {"mode": mode, "status": "clean"},
+            "recommendation": None
+        })
+    elif mode == "pac_script":
+        # PAC script - potential AiTM
+        pac_url = pac_script.get("url", "")
+        findings.append({
+            "category": FindingCategory.AITM.value,
+            "severity": Severity.HIGH.value,
+            "title": "PAC script proxy detected",
+            "details": {
+                "mode": mode,
+                "pac_url": pac_url,
+                "pac_data_present": bool(pac_script.get("data")),
+            },
+            "recommendation": "PAC scripts can redirect traffic through attacker infrastructure. Verify the PAC URL is legitimate and authorized."
+        })
+    elif mode == "fixed_servers":
+        # Fixed proxy - check if expected
+        proxy_rules = rules.get("singleProxy") or rules.get("proxyForHttp") or {}
+        findings.append({
+            "category": FindingCategory.AITM.value,
+            "severity": Severity.MEDIUM.value,
+            "title": "Fixed proxy server configured",
+            "details": {
+                "mode": mode,
+                "proxy_host": proxy_rules.get("host"),
+                "proxy_port": proxy_rules.get("port"),
+                "proxy_scheme": proxy_rules.get("scheme"),
+            },
+            "recommendation": "Verify this proxy is authorized. Unexpected proxy configurations may indicate AiTM attack setup."
+        })
+    elif mode:
+        # Unknown mode
+        findings.append({
+            "category": FindingCategory.AITM.value,
+            "severity": Severity.MEDIUM.value,
+            "title": f"Unusual proxy mode: {mode}",
+            "details": {"mode": mode, "full_settings": settings},
+            "recommendation": "Investigate this proxy configuration."
+        })
+    
+    return findings
+
+
+# --------------------------------------------------------------------------- #
+# HIGH PRIORITY: Web storage / IndexedDB token analysis
+# --------------------------------------------------------------------------- #
+
+def analyze_webstorage(pkg: Dict, include_values: bool = False) -> Tuple[List[Dict], List[Dict]]:
+    """Analyze localStorage/sessionStorage for auth tokens."""
+    findings = []
+    token_inventory = []
+    
+    ws_blob = pkg.get("webstorage.json")
+    if not ws_blob:
+        findings.append({
+            "category": FindingCategory.TOKEN_EXPOSURE.value,
+            "severity": Severity.INFO.value,
+            "title": "Web storage not collected",
+            "details": {"status": "artifact_missing"},
+            "recommendation": "Re-run collection with content script enabled to capture web storage."
+        })
+        return findings, token_inventory
+    
+    for item in records(ws_blob):
+        origin = item.get("origin", item.get("url", ""))
+        storage_type = item.get("type", "localStorage")
+        storage_data = item.get("data", {}) or item.get("localStorage", {}) or item.get("sessionStorage", {})
+        
+        for key, value in storage_data.items():
+            is_token, reason = looks_like_token(key, str(value) if value else "")
+            if is_token:
+                # Decode if JWT
+                decoded = {}
+                val_str = str(value) if value else ""
+                if JWT_PATTERN.match(val_str):
+                    decoded = decode_jwt_noverify(val_str)
+                
+                token_entry = {
+                    "origin": origin,
+                    "storage_type": storage_type,
+                    "key": key,
+                    "detection_reason": reason,
+                    "value_length": len(val_str),
+                    "decoded": decoded if decoded else None,
+                }
+                if include_values:
+                    token_entry["value"] = val_str
+                token_inventory.append(token_entry)
+    
+    if token_inventory:
+        # Group by origin for reporting
+        by_origin = defaultdict(list)
+        for t in token_inventory:
+            by_origin[t["origin"]].append(t)
+        
+        findings.append({
+            "category": FindingCategory.TOKEN_EXPOSURE.value,
+            "severity": Severity.HIGH.value,
+            "title": f"Auth tokens found in web storage ({len(token_inventory)} tokens across {len(by_origin)} origins)",
+            "details": {
+                "total_tokens": len(token_inventory),
+                "origins": list(by_origin.keys()),
+                "tokens_by_origin": {k: [{"key": t["key"], "type": t["storage_type"]} for t in v] 
+                                     for k, v in by_origin.items()}
+            },
+            "recommendation": "Tokens stored in localStorage/sessionStorage are vulnerable to XSS-based theft. These should be cross-referenced with authentication logs."
+        })
+    
+    return findings, token_inventory
+
+
+def analyze_indexeddb(pkg: Dict, include_values: bool = False) -> Tuple[List[Dict], List[Dict]]:
+    """Analyze IndexedDB for auth tokens and sensitive data."""
+    findings = []
+    token_inventory = []
+    
+    idb_blob = pkg.get("indexeddbfull.json") or pkg.get("indexeddb.json")
+    if not idb_blob:
+        findings.append({
+            "category": FindingCategory.TOKEN_EXPOSURE.value,
+            "severity": Severity.INFO.value,
+            "title": "IndexedDB not collected",
+            "details": {"status": "artifact_missing"},
+            "recommendation": "Re-run collection with content script enabled to capture IndexedDB."
+        })
+        return findings, token_inventory
+    
+    for item in records(idb_blob):
+        origin = item.get("origin", "")
+        databases = item.get("databases", [])
+        
+        for db in databases:
+            db_name = db.get("name", "")
+            stores = db.get("objectStores", [])
+            
+            for store in stores:
+                store_name = store.get("name", "")
+                store_records = store.get("records", [])
+                
+                for rec in store_records:
+                    # Check both key and value for tokens
+                    rec_str = json.dumps(rec) if isinstance(rec, (dict, list)) else str(rec)
+                    
+                    # Check for JWT patterns in values
+                    jwt_matches = JWT_PATTERN.findall(rec_str) if isinstance(rec_str, str) else []
+                    
+                    # Check for token-like keys
+                    is_token = False
+                    reason = ""
+                    
+                    if jwt_matches:
+                        is_token = True
+                        reason = f"Contains {len(jwt_matches)} JWT(s)"
+                    elif isinstance(rec, dict):
+                        for k in rec.keys():
+                            t, r = looks_like_token(str(k), str(rec.get(k, "")))
+                            if t:
+                                is_token = True
+                                reason = r
+                                break
+                    
+                    if is_token:
+                        decoded = {}
+                        if jwt_matches:
+                            decoded = decode_jwt_noverify(jwt_matches[0])
+                        
+                        token_entry = {
+                            "origin": origin,
+                            "database": db_name,
+                            "store": store_name,
+                            "detection_reason": reason,
+                            "decoded": decoded if decoded else None,
+                        }
+                        if include_values:
+                            token_entry["record"] = rec
+                        token_inventory.append(token_entry)
+    
+    if token_inventory:
+        findings.append({
+            "category": FindingCategory.TOKEN_EXPOSURE.value,
+            "severity": Severity.HIGH.value,
+            "title": f"Auth tokens found in IndexedDB ({len(token_inventory)} records)",
+            "details": {
+                "total_records": len(token_inventory),
+                "summary": [{"origin": t["origin"], "db": t["database"], "store": t["store"]} 
+                           for t in token_inventory[:10]],  # First 10 for summary
+            },
+            "recommendation": "IndexedDB tokens are as vulnerable to XSS theft as localStorage. Modern SPAs often store JWTs and refresh tokens here."
+        })
+    
+    return findings, token_inventory
+
+
+# --------------------------------------------------------------------------- #
+# HIGH PRIORITY: Performance / Service Workers (AiTM & persistence)
+# --------------------------------------------------------------------------- #
+
+def analyze_performance(pkg: Dict) -> List[Dict]:
+    """Analyze performance timing for redirect anomalies (AiTM indicator)."""
+    findings = []
+    perf_blob = pkg.get("performance.json")
+    
+    if not perf_blob:
+        findings.append({
+            "category": FindingCategory.AITM.value,
+            "severity": Severity.INFO.value,
+            "title": "Performance timing not collected",
+            "details": {"status": "artifact_missing"},
+            "recommendation": "Re-run collection to capture performance timing data."
+        })
+        return findings
+    
+    redirect_anomalies = []
+    
+    for item in records(perf_blob):
+        url = item.get("url", item.get("name", ""))
+        timing = item.get("timing", item)
+        
+        # Check for redirects
+        redirect_count = timing.get("redirectCount", 0)
+        redirect_start = timing.get("redirectStart", 0)
+        redirect_end = timing.get("redirectEnd", 0)
+        redirect_time = redirect_end - redirect_start if redirect_end and redirect_start else 0
+        
+        # Check navigation type
+        nav_type = timing.get("type", "")
+        
+        if redirect_count > 0 or redirect_time > 0:
+            # Check if redirect went through suspicious domains
+            redirect_anomalies.append({
+                "url": url,
+                "redirect_count": redirect_count,
+                "redirect_time_ms": redirect_time,
+                "navigation_type": nav_type,
+                "dns_time_ms": timing.get("domainLookupEnd", 0) - timing.get("domainLookupStart", 0),
+                "connect_time_ms": timing.get("connectEnd", 0) - timing.get("connectStart", 0),
+            })
+    
+    if redirect_anomalies:
+        findings.append({
+            "category": FindingCategory.AITM.value,
+            "severity": Severity.MEDIUM.value,
+            "title": f"Redirect chains detected ({len(redirect_anomalies)} pages with redirects)",
+            "details": {
+                "redirect_anomalies": redirect_anomalies[:20],  # Cap at 20 for report
+            },
+            "recommendation": "Cross-reference redirect chains with visitdetails to identify AiTM proxy hops."
+        })
+    
+    return findings
+
+
+def analyze_serviceworkers(pkg: Dict) -> List[Dict]:
+    """Analyze service workers for persistence mechanisms."""
+    findings = []
+    sw_blob = pkg.get("serviceworkers.json")
+    
+    if not sw_blob:
+        return findings  # SW collection failure is common, don't over-report
+    
+    suspicious_workers = []
+    
+    for item in records(sw_blob):
+        scope = item.get("scope", "")
+        script_url = item.get("scriptURL", item.get("active", {}).get("scriptURL", ""))
+        state = item.get("state", item.get("active", {}).get("state", ""))
+        
+        # Flag workers on sensitive origins
+        is_suspicious = False
+        reason = ""
+        
+        if any(idp in scope.lower() for idp in ["login.", "auth.", "sso.", "accounts."]):
+            is_suspicious = True
+            reason = "Service worker on authentication-related origin"
+        
+        if is_suspicious:
+            suspicious_workers.append({
+                "scope": scope,
+                "script_url": script_url,
+                "state": state,
+                "reason": reason,
+            })
+    
+    if suspicious_workers:
+        findings.append({
+            "category": FindingCategory.PERSISTENCE.value,
+            "severity": Severity.MEDIUM.value,
+            "title": f"Service workers on sensitive origins ({len(suspicious_workers)} found)",
+            "details": {"workers": suspicious_workers},
+            "recommendation": "Service workers can persist malicious code and intercept requests. Verify these are legitimate."
+        })
+    
+    return findings
+
+
+# --------------------------------------------------------------------------- #
+# MEDIUM PRIORITY: Privacy / Search engines (tampering indicators)
+# --------------------------------------------------------------------------- #
+
+def analyze_privacy(pkg: Dict) -> List[Dict]:
+    """Analyze privacy settings for security deviations."""
+    findings = []
+    priv_blob = pkg.get("privacy.json")
+    
+    if not priv_blob:
+        return findings
+    
+    settings = priv_blob.get("settings") or priv_blob.get("records", [{}])[0] if priv_blob else {}
+    
+    issues = []
+    
+    # Check Safe Browsing
+    safe_browsing = settings.get("safeBrowsingEnabled", {}).get("value", True)
+    if not safe_browsing:
+        issues.append({
+            "setting": "safeBrowsingEnabled",
+            "value": False,
+            "expected": True,
+            "risk": "Phishing and malware protection disabled"
+        })
+    
+    # Check Do Not Track
+    dnt = settings.get("doNotTrackEnabled", {}).get("value")
+    
+    # Check third-party cookies
+    third_party = settings.get("thirdPartyCookiesAllowed", {}).get("value")
+    
+    # Check hyperlink auditing
+    hyperlink_audit = settings.get("hyperlinkAuditingEnabled", {}).get("value", True)
+    
+    if issues:
+        findings.append({
+            "category": FindingCategory.CONFIG_DRIFT.value,
+            "severity": Severity.MEDIUM.value,
+            "title": "Security settings deviate from secure defaults",
+            "details": {"issues": issues},
+            "recommendation": "Safe Browsing disabled significantly increases phishing risk. This may indicate intentional tampering."
+        })
+    
+    return findings
+
+
+def analyze_search_engines(pkg: Dict) -> List[Dict]:
+    """Analyze search engine settings for hijacking."""
+    findings = []
+    se_blob = pkg.get("searchengines.json")
+    
+    if not se_blob:
+        return findings
+    
+    # Known legitimate default search engines
+    LEGITIMATE_ENGINES = {
+        "google.com", "bing.com", "duckduckgo.com", "yahoo.com",
+        "ecosia.org", "brave.com", "startpage.com", "qwant.com"
+    }
+    
+    for item in records(se_blob):
+        is_default = item.get("isDefault", False)
+        name = item.get("name", "")
+        url = item.get("url", "") or item.get("searchUrl", "")
+        
+        if is_default and url:
+            # Extract domain from search URL
+            import urllib.parse
+            try:
+                parsed = urllib.parse.urlparse(url)
+                domain = parsed.netloc.lower()
+                base_domain = ".".join(domain.split(".")[-2:]) if domain.count(".") > 1 else domain
+                
+                if base_domain not in LEGITIMATE_ENGINES:
+                    findings.append({
+                        "category": FindingCategory.TAMPERING.value,
+                        "severity": Severity.MEDIUM.value,
+                        "title": f"Non-standard default search engine: {name}",
+                        "details": {
+                            "engine_name": name,
+                            "search_url": url,
+                            "domain": domain,
+                        },
+                        "recommendation": "Non-standard search engines may indicate adware/browser hijacking or could be used for data collection."
+                    })
+            except Exception:
+                pass
+    
+    return findings
+
+
+# --------------------------------------------------------------------------- #
+# MEDIUM PRIORITY: Sessions / WebAuthn (context & triage)
+# --------------------------------------------------------------------------- #
+
+def analyze_sessions(pkg: Dict) -> List[Dict]:
+    """Analyze recently closed sessions for timeline context."""
+    findings = []
+    sess_blob = pkg.get("sessions.json")
+    
+    if not sess_blob:
+        return findings
+    
+    # Extract recently closed tabs for timeline enrichment
+    recently_closed = []
+    for item in records(sess_blob):
+        tab = item.get("tab", {})
+        window = item.get("window", {})
+        
+        if tab:
+            recently_closed.append({
+                "type": "tab",
+                "url": tab.get("url", ""),
+                "title": tab.get("title", ""),
+                "lastModified": item.get("lastModified"),
+            })
+        elif window:
+            tabs = window.get("tabs", [])
+            for t in tabs:
+                recently_closed.append({
+                    "type": "window_tab",
+                    "url": t.get("url", ""),
+                    "title": t.get("title", ""),
+                    "lastModified": item.get("lastModified"),
+                })
+    
+    # Check for auth-related URLs in recently closed
+    auth_urls = [rc for rc in recently_closed 
+                 if any(x in rc.get("url", "").lower() 
+                       for x in ["login", "auth", "signin", "oauth", "sso"])]
+    
+    if auth_urls:
+        findings.append({
+            "category": FindingCategory.TOKEN_EXPOSURE.value,
+            "severity": Severity.INFO.value,
+            "title": f"Auth-related pages in recently closed ({len(auth_urls)} tabs)",
+            "details": {
+                "auth_urls": [{"url": u["url"], "title": u["title"]} for u in auth_urls[:10]],
+            },
+            "recommendation": "Review recently closed auth pages for context on user's authentication activity."
+        })
+    
+    return findings
+
+
+def analyze_webauthn(pkg: Dict) -> List[Dict]:
+    """Analyze WebAuthn/FIDO support for AiTM triage."""
+    findings = []
+    wa_blob = pkg.get("webauthn.json")
+    
+    if not wa_blob:
+        findings.append({
+            "category": FindingCategory.AITM.value,
+            "severity": Severity.INFO.value,
+            "title": "WebAuthn capabilities not collected",
+            "details": {"status": "artifact_missing"},
+            "recommendation": "WebAuthn/FIDO2 support indicates whether passkeys could have defeated an AiTM attack."
+        })
+        return findings
+    
+    settings = wa_blob.get("settings") or wa_blob.get("records", [{}])[0] if wa_blob else {}
+    
+    platform_auth = settings.get("isUserVerifyingPlatformAuthenticatorAvailable", False)
+    conditional_ui = settings.get("isConditionalMediationAvailable", False)
+    
+    if platform_auth or conditional_ui:
+        findings.append({
+            "category": FindingCategory.AITM.value,
+            "severity": Severity.INFO.value,
+            "title": "WebAuthn/FIDO2 support available",
+            "details": {
+                "platform_authenticator": platform_auth,
+                "conditional_ui": conditional_ui,
+            },
+            "recommendation": "If targeted services supported FIDO2/passkeys and user had them configured, AiTM token theft should have been defeated. Verify if passkeys were in use."
+        })
+    
+    return findings
+
+
+# --------------------------------------------------------------------------- #
+# Domain Intelligence (Online + Offline Heuristics)
+# --------------------------------------------------------------------------- #
+
+import socket
+import math
+
+# Cache for WHOIS results to avoid repeated lookups
+_whois_cache: Dict[str, Dict] = {}
+
+# WHOIS servers by TLD
+WHOIS_SERVERS = {
+    'com': 'whois.verisign-grs.com',
+    'net': 'whois.verisign-grs.com',
+    'org': 'whois.pir.org',
+    'info': 'whois.afilias.net',
+    'io': 'whois.nic.io',
+    'co': 'whois.nic.co',
+    'xyz': 'whois.nic.xyz',
+    'top': 'whois.nic.top',
+    'club': 'whois.nic.club',
+    'online': 'whois.nic.online',
+    'site': 'whois.nic.site',
+    'tech': 'whois.nic.tech',
+    'app': 'whois.nic.google',
+    'dev': 'whois.nic.google',
+}
+
+# RDAP bootstrap servers
+RDAP_BOOTSTRAP = "https://rdap.org/domain/"
+
+
+def query_whois(domain: str, timeout: int = 5) -> Optional[Dict]:
+    """Query WHOIS for domain registration info. Returns creation date if found."""
+    if domain in _whois_cache:
+        return _whois_cache[domain]
+    
+    # Extract TLD
+    parts = domain.lower().split('.')
+    if len(parts) < 2:
+        return None
+    tld = parts[-1]
+    
+    whois_server = WHOIS_SERVERS.get(tld)
+    if not whois_server:
+        # Try generic lookup
+        whois_server = f"whois.nic.{tld}"
+    
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((whois_server, 43))
+        sock.send(f"{domain}\r\n".encode())
+        
+        response = b""
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+        sock.close()
+        
+        response_text = response.decode('utf-8', errors='replace')
+        
+        # Parse creation date (various formats)
+        creation_date = None
+        creation_patterns = [
+            r'Creation Date:\s*(\d{4}-\d{2}-\d{2})',
+            r'Created Date:\s*(\d{4}-\d{2}-\d{2})',
+            r'Registration Time:\s*(\d{4}-\d{2}-\d{2})',
+            r'created:\s*(\d{4}-\d{2}-\d{2})',
+            r'Creation Date:\s*(\d{4}\.\d{2}\.\d{2})',
+            r'Registered on:\s*(\d{2}-\w{3}-\d{4})',  # UK format
+        ]
+        
+        for pattern in creation_patterns:
+            match = re.search(pattern, response_text, re.IGNORECASE)
+            if match:
+                date_str = match.group(1)
+                # Try parsing various formats
+                for fmt in ['%Y-%m-%d', '%Y.%m.%d', '%d-%b-%Y']:
+                    try:
+                        creation_date = datetime.strptime(date_str, fmt)
+                        break
+                    except ValueError:
+                        continue
+                if creation_date:
+                    break
+        
+        result = {
+            "creation_date": creation_date,
+            "raw_length": len(response_text),
+            "whois_server": whois_server,
+        }
+        _whois_cache[domain] = result
+        return result
+        
+    except (socket.timeout, socket.error, ConnectionRefusedError) as e:
+        _whois_cache[domain] = {"error": str(e)}
+        return None
+
+
+def query_rdap(domain: str, timeout: int = 5) -> Optional[Dict]:
+    """Query RDAP for domain info (JSON-based, more reliable than WHOIS)."""
+    if domain in _whois_cache:
+        return _whois_cache[domain]
+    
+    try:
+        import urllib.request
+        import ssl
+        
+        url = f"{RDAP_BOOTSTRAP}{domain}"
+        ctx = ssl.create_default_context()
+        
+        req = urllib.request.Request(url, headers={'Accept': 'application/rdap+json'})
+        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        
+        # Extract registration date from events
+        creation_date = None
+        for event in data.get('events', []):
+            if event.get('eventAction') == 'registration':
+                date_str = event.get('eventDate', '')
+                try:
+                    # RDAP uses ISO format
+                    creation_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                except ValueError:
+                    pass
+        
+        result = {
+            "creation_date": creation_date,
+            "registrar": data.get('entities', [{}])[0].get('vcardArray', [[],[]])[1] if data.get('entities') else None,
+            "status": data.get('status', []),
+        }
+        _whois_cache[domain] = result
+        return result
+        
+    except Exception as e:
+        _whois_cache[domain] = {"error": str(e)}
+        return None
+
+
+def calculate_domain_entropy(domain: str) -> float:
+    """Calculate Shannon entropy of domain name (high entropy = possibly DGA)."""
+    # Remove TLD for analysis
+    parts = domain.lower().split('.')
+    if len(parts) > 1:
+        name = '.'.join(parts[:-1])
+    else:
+        name = domain
+    
+    if not name:
+        return 0.0
+    
+    # Calculate character frequency
+    freq = {}
+    for char in name:
+        freq[char] = freq.get(char, 0) + 1
+    
+    # Shannon entropy
+    entropy = 0.0
+    length = len(name)
+    for count in freq.values():
+        p = count / length
+        entropy -= p * math.log2(p)
+    
+    return entropy
+
+
+def calculate_levenshtein(s1: str, s2: str) -> int:
+    """Calculate Levenshtein distance between two strings."""
+    if len(s1) < len(s2):
+        return calculate_levenshtein(s2, s1)
+    
+    if len(s2) == 0:
+        return len(s1)
+    
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    
+    return previous_row[-1]
+
+
+# Popular brands for typosquatting detection
+POPULAR_BRANDS = [
+    'google', 'microsoft', 'apple', 'amazon', 'facebook', 'netflix', 'paypal',
+    'instagram', 'twitter', 'linkedin', 'dropbox', 'github', 'zoom', 'slack',
+    'adobe', 'oracle', 'salesforce', 'shopify', 'stripe', 'coinbase', 'binance',
+    'chase', 'wellsfargo', 'bankofamerica', 'citibank', 'usbank',
+    'outlook', 'office365', 'onedrive', 'sharepoint', 'teams',
+    'gmail', 'youtube', 'drive', 'docs', 'sheets',
+]
+
+
+def check_brand_similarity(domain: str) -> Optional[Tuple[str, int]]:
+    """Check if domain is similar to a popular brand (typosquatting)."""
+    # Remove TLD
+    parts = domain.lower().split('.')
+    if len(parts) > 1:
+        name = parts[0]  # Just the main part
+    else:
+        name = domain
+    
+    # Remove common prefixes/suffixes
+    for prefix in ['www', 'login', 'secure', 'account', 'my', 'get', 'go']:
+        if name.startswith(prefix) and len(name) > len(prefix) + 3:
+            name = name[len(prefix):]
+    
+    for suffix in ['login', 'secure', 'account', 'online', 'verify', 'update', 'help']:
+        if name.endswith(suffix) and len(name) > len(suffix) + 3:
+            name = name[:-len(suffix)]
+    
+    best_match = None
+    best_distance = float('inf')
+    
+    for brand in POPULAR_BRANDS:
+        distance = calculate_levenshtein(name, brand)
+        # Flag if very close but not exact
+        if 0 < distance <= 2 and len(name) >= 4:
+            if distance < best_distance:
+                best_distance = distance
+                best_match = brand
+    
+    if best_match:
+        return (best_match, best_distance)
+    return None
+
+
+def is_dga_like(domain: str) -> Tuple[bool, str]:
+    """Check if domain looks like it was generated by a DGA."""
+    parts = domain.lower().split('.')
+    if len(parts) > 1:
+        name = parts[0]
+    else:
+        name = domain
+    
+    if len(name) < 6:
+        return False, ""
+    
+    # High entropy (random-looking)
+    entropy = calculate_domain_entropy(domain)
+    if entropy > 4.0 and len(name) > 10:
+        return True, f"High entropy ({entropy:.2f})"
+    
+    # Consonant/vowel ratio analysis
+    vowels = set('aeiou')
+    consonants = set('bcdfghjklmnpqrstvwxyz')
+    
+    v_count = sum(1 for c in name if c in vowels)
+    c_count = sum(1 for c in name if c in consonants)
+    
+    if c_count > 0 and v_count > 0:
+        ratio = c_count / v_count
+        # Normal English has ratio around 1.5-2.5
+        if ratio > 5.0 or ratio < 0.3:
+            return True, f"Unusual consonant/vowel ratio ({ratio:.2f})"
+    
+    # Long strings of consonants
+    consonant_runs = re.findall(r'[bcdfghjklmnpqrstvwxyz]{5,}', name)
+    if consonant_runs:
+        return True, f"Long consonant sequences: {consonant_runs}"
+    
+    # Numeric patterns mixed with letters
+    if re.search(r'[a-z]+\d+[a-z]+\d+', name) or re.search(r'\d+[a-z]+\d+[a-z]+', name):
+        return True, "Mixed letter/number pattern"
+    
+    return False, ""
+
+
+def analyze_domain_reputation(domain: str, online: bool = False) -> Dict:
+    """Comprehensive domain analysis combining online and offline heuristics."""
+    result = {
+        "domain": domain,
+        "issues": [],
+        "risk_score": 0,
+        "creation_date": None,
+        "age_days": None,
+    }
+    
+    tld = _get_tld(domain)
+    
+    # Offline heuristics (always run)
+    
+    # 1. Suspicious TLD
+    if tld in SUSPICIOUS_TLDS:
+        result["issues"].append(f"Suspicious TLD: {tld}")
+        result["risk_score"] += 30
+    
+    # 2. Typosquatting check
+    typo = _check_typosquatting(domain)
+    if typo:
+        result["issues"].append(typo)
+        result["risk_score"] += 50
+    
+    # 3. Brand similarity (Levenshtein)
+    brand_match = check_brand_similarity(domain)
+    if brand_match:
+        result["issues"].append(f"Similar to '{brand_match[0]}' (distance: {brand_match[1]})")
+        result["risk_score"] += 40
+    
+    # 4. DGA-like pattern
+    is_dga, dga_reason = is_dga_like(domain)
+    if is_dga:
+        result["issues"].append(f"DGA-like pattern: {dga_reason}")
+        result["risk_score"] += 35
+    
+    # 5. Entropy check
+    entropy = calculate_domain_entropy(domain)
+    if entropy > 3.8:
+        result["issues"].append(f"High domain entropy ({entropy:.2f})")
+        result["risk_score"] += 15
+    
+    # 6. Suspicious keywords in domain
+    suspicious_keywords = ['secure', 'login', 'verify', 'update', 'account', 'signin', 
+                          'confirm', 'authenticate', 'validate', 'banking', 'wallet']
+    domain_lower = domain.lower()
+    found_keywords = [kw for kw in suspicious_keywords if kw in domain_lower]
+    if found_keywords and tld in SUSPICIOUS_TLDS:
+        result["issues"].append(f"Phishing keywords + suspicious TLD: {found_keywords}")
+        result["risk_score"] += 40
+    
+    # Online heuristics (only if enabled)
+    if online:
+        # Try RDAP first (more reliable), fall back to WHOIS
+        whois_data = query_rdap(domain) or query_whois(domain)
+        
+        if whois_data and whois_data.get("creation_date"):
+            creation = whois_data["creation_date"]
+            result["creation_date"] = creation.isoformat() if creation else None
+            
+            # Calculate age
+            now = datetime.now(timezone.utc) if creation.tzinfo else datetime.now()
+            age = now - creation
+            result["age_days"] = age.days
+            
+            # Flag newly registered domains
+            if age.days < 30:
+                result["issues"].append(f"Newly registered domain ({age.days} days old)")
+                result["risk_score"] += 50
+            elif age.days < 90:
+                result["issues"].append(f"Recently registered domain ({age.days} days old)")
+                result["risk_score"] += 25
+    
+    return result
+
+
+# --------------------------------------------------------------------------- #
+# SEO Poisoning Detection
+# --------------------------------------------------------------------------- #
+
+# Search engine patterns
+SEARCH_ENGINE_PATTERNS = [
+    r'google\.[a-z]+/search',
+    r'bing\.com/search',
+    r'duckduckgo\.com/',
+    r'yahoo\.com/search',
+    r'yandex\.[a-z]+/search',
+    r'baidu\.com/s\?',
+    r'ecosia\.org/search',
+]
+
+# Suspicious TLDs often used in SEO poisoning
+SUSPICIOUS_TLDS = {
+    '.xyz', '.top', '.club', '.work', '.click', '.link', '.download',
+    '.gq', '.ml', '.cf', '.ga', '.tk',  # Free TLDs abused for phishing
+    '.zip', '.mov',  # New confusable TLDs
+    '.buzz', '.surf', '.monster', '.cam', '.rest',
+}
+
+# High-risk download extensions
+HIGH_RISK_EXTENSIONS = {
+    '.exe', '.msi', '.dll', '.scr', '.bat', '.cmd', '.ps1', '.vbs',
+    '.js', '.jse', '.wsf', '.wsh', '.hta', '.jar', '.com', '.pif',
+    '.application', '.gadget', '.msp', '.msc', '.cpl',
+    '.iso', '.img', '.dmg',  # Disk images often used for malware delivery
+}
+
+# Software terms commonly targeted by SEO poisoning
+SEO_POISON_BAIT_TERMS = [
+    'crack', 'keygen', 'serial', 'patch', 'activator', 'loader',
+    'free download', 'full version', 'portable', 'nulled', 'warez',
+    'driver', 'update', 'installer', 'setup',
+    'zoom', 'teams', 'slack', 'discord',  # Popular app names
+    'adobe', 'office', 'windows', 'antivirus',
+    'vpn', 'password manager', 'recovery tool',
+]
+
+
+def _extract_domain(url: str) -> str:
+    """Extract domain from URL."""
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        return parsed.netloc.lower()
+    except Exception:
+        return ""
+
+
+def _get_tld(domain: str) -> str:
+    """Extract TLD from domain."""
+    parts = domain.split('.')
+    if len(parts) >= 2:
+        return '.' + parts[-1]
+    return ''
+
+
+def _is_search_url(url: str) -> Tuple[bool, Optional[str]]:
+    """Check if URL is a search engine results page, return (is_search, query)."""
+    url_lower = url.lower()
+    for pattern in SEARCH_ENGINE_PATTERNS:
+        if re.search(pattern, url_lower):
+            # Try to extract query
+            try:
+                from urllib.parse import urlparse, parse_qs
+                parsed = urlparse(url)
+                params = parse_qs(parsed.query)
+                query = params.get('q', params.get('query', params.get('wd', [None])))[0]
+                return True, query
+            except Exception:
+                return True, None
+    return False, None
+
+
+def _check_typosquatting(domain: str) -> Optional[str]:
+    """Check for common typosquatting patterns."""
+    legitimate_domains = {
+        'google': ['gooogle', 'googel', 'g00gle', 'gogle', 'googlle'],
+        'microsoft': ['mircosoft', 'microsft', 'micros0ft', 'micosoft'],
+        'amazon': ['amaz0n', 'amazn', 'amazonn', 'arnazon'],
+        'facebook': ['faceb00k', 'facebok', 'faceboook'],
+        'apple': ['appel', 'aple', 'app1e'],
+        'paypal': ['paypa1', 'paypai', 'paypall'],
+        'netflix': ['netfiix', 'netfl1x', 'netfllx'],
+        'zoom': ['z00m', 'zooom', 'zom'],
+        'dropbox': ['dr0pbox', 'dropb0x', 'dropboxs'],
+        'github': ['githud', 'g1thub', 'glthub'],
+    }
+    
+    domain_lower = domain.lower()
+    for legit, typos in legitimate_domains.items():
+        for typo in typos:
+            if typo in domain_lower:
+                return f"Possible typosquat of '{legit}'"
+    
+    # Check for homograph attacks (mixed scripts) - simplified check
+    if any(ord(c) > 127 for c in domain):
+        return "Contains non-ASCII characters (possible homograph attack)"
+    
+    return None
+
+
+def analyze_seo_poisoning(pkg: Dict, online: bool = False) -> List[Dict]:
+    """Detect SEO poisoning attack patterns.
+    
+    Args:
+        pkg: BAI package data
+        online: If True, perform WHOIS/RDAP lookups for domain age analysis
+    """
+    findings = []
+    
+    history = records(pkg.get("history.json"))
+    visits = records(pkg.get("visitdetails.json"))
+    downloads = records(pkg.get("downloads.json"))
+    
+    if not history:
+        return findings
+    
+    # Build timeline of events
+    events = []
+    
+    for h in history:
+        ts = from_chrome_micros(h.get("lastVisitTime"))
+        url = h.get("url", "")
+        is_search, query = _is_search_url(url)
+        events.append({
+            "ts": ts,
+            "type": "search" if is_search else "visit",
+            "url": url,
+            "query": query,
+            "title": h.get("title", ""),
+        })
+    
+    for d in downloads:
+        ts = parse_iso(d.get("startTime")) or from_epoch_seconds(d.get("startTime"))
+        events.append({
+            "ts": ts,
+            "type": "download",
+            "url": d.get("finalUrl") or d.get("url", ""),
+            "filename": d.get("filename", ""),
+            "danger": d.get("danger", ""),
+            "mime": d.get("mime", ""),
+        })
+    
+    # Sort by timestamp
+    events = [e for e in events if e["ts"]]
+    events.sort(key=lambda e: e["ts"])
+    
+    # Pattern 1: Search → Suspicious domain visit → Download within short window
+    seo_chains = []
+    for i, event in enumerate(events):
+        if event["type"] != "search":
+            continue
+        
+        query = event.get("query", "") or ""
+        # Check if search query contains bait terms
+        is_bait_query = any(term in query.lower() for term in SEO_POISON_BAIT_TERMS)
+        
+        # Look for suspicious activity within 5 minutes of search
+        window_end = event["ts"] + timedelta(minutes=5) if event["ts"] else None
+        
+        chain = {"search": event, "visits": [], "downloads": []}
+        
+        for j in range(i + 1, len(events)):
+            next_event = events[j]
+            if window_end and next_event["ts"] and next_event["ts"] > window_end:
+                break
+            
+            if next_event["type"] == "visit":
+                domain = _extract_domain(next_event["url"])
+                
+                # Use enhanced domain reputation analysis
+                domain_analysis = analyze_domain_reputation(domain, online=online)
+                
+                if domain_analysis["risk_score"] > 20 or domain_analysis["issues"]:
+                    chain["visits"].append({
+                        **next_event,
+                        "domain": domain,
+                        "domain_analysis": domain_analysis,
+                    })
+            
+            elif next_event["type"] == "download":
+                filename = next_event.get("filename", "").lower()
+                ext = os.path.splitext(filename)[1] if filename else ""
+                
+                if ext in HIGH_RISK_EXTENSIONS:
+                    chain["downloads"].append({
+                        **next_event,
+                        "high_risk_extension": ext,
+                    })
+        
+        # Report if we found suspicious activity after search
+        if chain["visits"] or chain["downloads"]:
+            severity = Severity.HIGH if (is_bait_query and chain["downloads"]) else Severity.MEDIUM
+            seo_chains.append({
+                "chain": chain,
+                "bait_query": is_bait_query,
+                "severity": severity,
+            })
+    
+    if seo_chains:
+        # Deduplicate and report most severe
+        high_severity = [c for c in seo_chains if c["severity"] == Severity.HIGH]
+        
+        if high_severity:
+            findings.append({
+                "category": FindingCategory.SEO_POISONING.value,
+                "severity": Severity.HIGH.value,
+                "title": f"SEO poisoning pattern detected ({len(high_severity)} high-risk chains)",
+                "details": {
+                    "chains": [{
+                        "search_query": c["chain"]["search"].get("query"),
+                        "search_url": c["chain"]["search"].get("url"),
+                        "suspicious_visits": len(c["chain"]["visits"]),
+                        "downloads": [d.get("filename") for d in c["chain"]["downloads"]],
+                    } for c in high_severity[:5]],  # Top 5
+                },
+                "recommendation": "User searched for potentially risky terms (cracks, keygens, drivers), "
+                                  "visited suspicious domains, and downloaded executables. Classic SEO "
+                                  "poisoning infostealer delivery pattern. Investigate downloaded files."
+            })
+        
+        med_severity = [c for c in seo_chains if c["severity"] == Severity.MEDIUM]
+        if med_severity and not high_severity:
+            findings.append({
+                "category": FindingCategory.SEO_POISONING.value,
+                "severity": Severity.MEDIUM.value,
+                "title": f"Potential SEO poisoning activity ({len(med_severity)} suspicious chains)",
+                "details": {
+                    "chains": [{
+                        "search_query": c["chain"]["search"].get("query"),
+                        "suspicious_domains": [v.get("domain") for v in c["chain"]["visits"]],
+                    } for c in med_severity[:5]],
+                },
+                "recommendation": "Search activity followed by visits to suspicious TLDs or typosquatting "
+                                  "domains. May indicate SEO poisoning attempt."
+            })
+    
+    # Pattern 2: Check all downloads for suspicious characteristics
+    suspicious_downloads = []
+    for d in downloads:
+        url = d.get("finalUrl") or d.get("url", "")
+        domain = _extract_domain(url)
+        filename = d.get("filename", "").lower()
+        ext = os.path.splitext(filename)[1] if filename else ""
+        danger = d.get("danger", "")
+        
+        issues = []
+        severity = Severity.INFO
+        
+        # Check file extension
+        if ext in HIGH_RISK_EXTENSIONS:
+            issues.append(f"High-risk file type: {ext}")
+            severity = Severity.MEDIUM
+        
+        # Check domain TLD
+        tld = _get_tld(domain)
+        if tld in SUSPICIOUS_TLDS:
+            issues.append(f"Download from suspicious TLD: {tld}")
+            severity = Severity.HIGH
+        
+        # Check for typosquatting
+        typo = _check_typosquatting(domain)
+        if typo:
+            issues.append(typo)
+            severity = Severity.HIGH
+        
+        # Check Chrome's danger assessment
+        if danger and danger not in ("safe", "accepted"):
+            issues.append(f"Chrome flagged as: {danger}")
+            if danger in ("dangerous", "uncommon", "potentially_unwanted"):
+                severity = Severity.HIGH
+        
+        if issues:
+            suspicious_downloads.append({
+                "filename": d.get("filename"),
+                "url": url,
+                "domain": domain,
+                "issues": issues,
+                "severity": severity.value,
+                "danger": danger,
+                "timestamp": d.get("startTime"),
+            })
+    
+    if suspicious_downloads:
+        high_risk = [d for d in suspicious_downloads if d["severity"] == "HIGH"]
+        if high_risk:
+            findings.append({
+                "category": FindingCategory.SUSPICIOUS_DOWNLOAD.value,
+                "severity": Severity.HIGH.value,
+                "title": f"High-risk downloads detected ({len(high_risk)} files)",
+                "details": {
+                    "downloads": high_risk[:10],
+                },
+                "recommendation": "Downloads from suspicious sources with high-risk file types. "
+                                  "Likely infostealer or malware delivery. Verify file hashes against "
+                                  "threat intel and check for execution evidence."
+            })
+    
+    return findings
+
+
+# --------------------------------------------------------------------------- #
+# Malvertising Detection
+# --------------------------------------------------------------------------- #
+
+# Ad network and tracking domains
+AD_NETWORK_PATTERNS = [
+    r'doubleclick\.net', r'googlesyndication\.com', r'googleadservices\.com',
+    r'adsense', r'adnxs\.com', r'advertising\.com', r'taboola\.com',
+    r'outbrain\.com', r'criteo\.', r'amazon-adsystem\.com', r'fbcdn\.net',
+    r'ad\.', r'ads\.', r'adserver\.', r'tracking\.', r'pixel\.',
+    r'analytics\.', r'telemetry\.', r'beacon\.',
+]
+
+
+def _is_ad_domain(domain: str) -> bool:
+    """Check if domain appears to be an ad/tracking domain."""
+    domain_lower = domain.lower()
+    for pattern in AD_NETWORK_PATTERNS:
+        if re.search(pattern, domain_lower):
+            return True
+    return False
+
+
+def analyze_malvertising(pkg: Dict) -> List[Dict]:
+    """Detect malvertising indicators."""
+    findings = []
+    
+    # Check for service workers registered by ad domains
+    sw_blob = pkg.get("serviceworkers.json")
+    ad_serviceworkers = []
+    
+    for item in records(sw_blob):
+        scope = item.get("scope", "")
+        script_url = item.get("scriptURL", item.get("active", {}).get("scriptURL", ""))
+        
+        scope_domain = _extract_domain(scope)
+        script_domain = _extract_domain(script_url)
+        
+        if _is_ad_domain(scope_domain) or _is_ad_domain(script_domain):
+            ad_serviceworkers.append({
+                "scope": scope,
+                "script_url": script_url,
+                "scope_domain": scope_domain,
+            })
+    
+    if ad_serviceworkers:
+        findings.append({
+            "category": FindingCategory.MALVERTISING.value,
+            "severity": Severity.MEDIUM.value,
+            "title": f"Service workers from ad/tracking domains ({len(ad_serviceworkers)} found)",
+            "details": {"workers": ad_serviceworkers},
+            "recommendation": "Ad network service workers can persist malicious code. While some are "
+                              "legitimate for ad functionality, they can also be abused for malvertising. "
+                              "Review if unexpected or if user experienced suspicious ad behavior."
+        })
+    
+    # Check for downloads initiated shortly after ad domain visits
+    history = records(pkg.get("history.json"))
+    downloads = records(pkg.get("downloads.json"))
+    
+    # Build ad visit timeline
+    ad_visits = []
+    for h in history:
+        url = h.get("url", "")
+        domain = _extract_domain(url)
+        if _is_ad_domain(domain):
+            ts = from_chrome_micros(h.get("lastVisitTime"))
+            ad_visits.append({"ts": ts, "url": url, "domain": domain})
+    
+    # Check for downloads within 60 seconds of ad domain activity
+    ad_triggered_downloads = []
+    for d in downloads:
+        dl_ts = parse_iso(d.get("startTime")) or from_epoch_seconds(d.get("startTime"))
+        if not dl_ts:
+            continue
+        
+        for av in ad_visits:
+            if av["ts"] and abs((dl_ts - av["ts"]).total_seconds()) < 60:
+                filename = d.get("filename", "").lower()
+                ext = os.path.splitext(filename)[1] if filename else ""
+                
+                if ext in HIGH_RISK_EXTENSIONS:
+                    ad_triggered_downloads.append({
+                        "download": d.get("filename"),
+                        "download_url": d.get("finalUrl") or d.get("url"),
+                        "ad_domain": av["domain"],
+                        "time_delta_seconds": abs((dl_ts - av["ts"]).total_seconds()),
+                    })
+    
+    if ad_triggered_downloads:
+        findings.append({
+            "category": FindingCategory.MALVERTISING.value,
+            "severity": Severity.HIGH.value,
+            "title": f"Downloads triggered near ad activity ({len(ad_triggered_downloads)} instances)",
+            "details": {"downloads": ad_triggered_downloads[:10]},
+            "recommendation": "Executable downloads occurred within seconds of ad network activity. "
+                              "This is a strong indicator of malvertising-based malware delivery. "
+                              "Investigate the downloaded files for infostealer payloads."
+        })
+    
+    # Check for extensions that might be ad-injectors
+    ext_blob = pkg.get("extensions.json")
+    ad_injector_indicators = []
+    
+    for ext in records(ext_blob):
+        if not ext.get("enabled"):
+            continue
+        
+        name = ext.get("name", "").lower()
+        desc = ext.get("description", "").lower()
+        permissions = ext.get("permissions", []) or []
+        host_perms = ext.get("hostPermissions", []) or []
+        
+        # Check for ad-injector patterns
+        issues = []
+        
+        # Extensions that modify web requests and have broad access
+        if "webRequest" in permissions and ("<all_urls>" in host_perms or "*://*/*" in host_perms):
+            if any(term in name + desc for term in ["ad", "shop", "deal", "coupon", "price", "save"]):
+                issues.append("Ad/shopping extension with network interception capability")
+        
+        # Check for scripting + broad access (can inject content)
+        if "scripting" in permissions and ("<all_urls>" in host_perms or "*://*/*" in host_perms):
+            issues.append("Can inject scripts into any page")
+        
+        if issues and ext.get("installType") in ("sideload", "development"):
+            ad_injector_indicators.append({
+                "name": ext.get("name"),
+                "id": ext.get("id"),
+                "install_type": ext.get("installType"),
+                "issues": issues,
+            })
+    
+    if ad_injector_indicators:
+        findings.append({
+            "category": FindingCategory.MALVERTISING.value,
+            "severity": Severity.HIGH.value,
+            "title": f"Potential ad-injector extensions ({len(ad_injector_indicators)} found)",
+            "details": {"extensions": ad_injector_indicators},
+            "recommendation": "Sideloaded extensions with ad/shopping functionality and broad permissions "
+                              "are commonly used for malvertising. They can inject malicious ads, redirect "
+                              "traffic, or steal data. Verify legitimacy and consider removal."
+        })
+    
+    return findings
+
+
+# --------------------------------------------------------------------------- #
+# Extension Timeline Correlation (install time vs visit history)
+# --------------------------------------------------------------------------- #
+
+def analyze_extension_timeline(pkg: Dict) -> List[Dict]:
+    """Correlate extension installations with browsing history."""
+    findings = []
+    
+    ext_blob = pkg.get("extensions.json")
+    history = records(pkg.get("history.json"))
+    
+    if not ext_blob or not history:
+        return findings
+    
+    # Check for sideloaded extensions and try to find related history
+    suspicious_correlations = []
+    
+    for ext in records(ext_blob):
+        if ext.get("installType") not in ("sideload", "development"):
+            continue
+        if not ext.get("enabled"):
+            continue
+        
+        name = ext.get("name", "")
+        ext_id = ext.get("id", "")
+        
+        # Look for history entries that might relate to this extension
+        # (download pages, install prompts, etc.)
+        related_history = []
+        
+        for h in history:
+            url = h.get("url", "").lower()
+            title = h.get("title", "").lower()
+            
+            # Check if history entry might be related to extension install
+            if any(term in url + title for term in [
+                ext_id.lower()[:10] if ext_id else "",
+                name.lower().split()[0] if name else "",
+                "extension", "addon", "chrome-extension", "crx",
+                "install", "download",
+            ]) and ext_id.lower()[:10]:  # Only if we have a meaningful ext_id
+                ts = from_chrome_micros(h.get("lastVisitTime"))
+                related_history.append({
+                    "url": h.get("url"),
+                    "title": h.get("title"),
+                    "timestamp": ts.isoformat() if ts else None,
+                })
+        
+        # Also check for suspicious domains visited around the same time
+        # (This is heuristic - we don't have exact install time from BAI)
+        
+        if related_history:
+            suspicious_correlations.append({
+                "extension_name": name,
+                "extension_id": ext_id,
+                "install_type": ext.get("installType"),
+                "possibly_related_history": related_history[:5],
+            })
+    
+    if suspicious_correlations:
+        findings.append({
+            "category": FindingCategory.DELIVERY_VECTOR.value,
+            "severity": Severity.MEDIUM.value,
+            "title": f"Sideloaded extensions with possible install history ({len(suspicious_correlations)} found)",
+            "details": {"correlations": suspicious_correlations},
+            "recommendation": "Review the browsing history around extension installation to understand "
+                              "how the user was led to install these sideloaded extensions. May indicate "
+                              "social engineering or malicious download site."
+        })
+    
+    return findings
+
+
+# --------------------------------------------------------------------------- #
+# Cookie analysis (existing functionality enhanced)
+# --------------------------------------------------------------------------- #
+
+def analyze_cookies(cookie_blob: Dict, include_values: bool = False) -> Tuple[List[Dict], List[Dict]]:
+    """Return (auth_sessions, all_idp_cookies)."""
+    sessions = {}
+    idp_cookies = []
+    
+    for c in records(cookie_blob):
+        dom = c.get("domain", "")
+        idp = classify_idp(dom)
+        name = c.get("name", "")
+        if idp is None and not is_auth_cookie(name):
+            continue
+        
+        val = c.get("value", "") or ""
+        exp = from_epoch_seconds(c.get("expirationDate"))
+        row = {
+            "idp": idp or "(generic auth cookie)",
+            "domain": dom,
+            "cookie": name,
+            "httpOnly": c.get("httpOnly"),
+            "secure": c.get("secure"),
+            "sameSite": c.get("sameSite"),
+            "session_cookie": c.get("session"),
+            "expires_utc": exp.isoformat() if exp else "session",
+            "value_len": len(val),
+        }
+        if include_values:
+            row["value"] = val
+        
+        decoded = {}
+        nl = name.lower()
+        if nl in ("estsauth", "estsauthpersistent"):
+            decoded.update(decode_entra_home_account(val))
+            decoded["token_type"] = ("persistent" if "persistent" in nl else "session")
+        elif nl == "ccstate":
+            decoded.update(decode_entra_ccstate(val))
+        elif val.count(".") == 2 and len(val) > 40:
+            decoded.update(decode_jwt_noverify(val))
+        if decoded:
+            row["decoded"] = decoded
+        idp_cookies.append(row)
+        
+        # Aggregate identity per (idp, registrable-ish domain)
+        key = (idp or "generic", dom.lstrip("."))
+        s = sessions.setdefault(key, {
+            "idp": idp or "(generic auth cookie)",
+            "domain": dom.lstrip("."),
+            "tenant_id": None, "object_id": None, "upn": None,
+            "token_types": set(), "cookie_names": set(),
+            "earliest_expiry": None, "latest_expiry": None,
+            "any_persistent": False, "any_httponly": False,
+        })
+        s["cookie_names"].add(name)
+        if c.get("httpOnly"):
+            s["any_httponly"] = True
+        for k in ("tenant_id", "object_id", "upn", "tid", "oid"):
+            if k in decoded and decoded[k]:
+                tgt = {"tid": "tenant_id", "oid": "object_id"}.get(k, k)
+                s[tgt] = s[tgt] or decoded[k]
+        if "upn" not in decoded:
+            for k in ("preferred_username", "unique_name", "email"):
+                if k in decoded and decoded[k] and not s["upn"]:
+                    s["upn"] = decoded[k]
+        if decoded.get("token_type") == "persistent" or "persistent" in nl:
+            s["any_persistent"] = True
+            s["token_types"].add("persistent")
+        elif nl.startswith("estsauth"):
+            s["token_types"].add("session")
+        if exp:
+            s["earliest_expiry"] = min(s["earliest_expiry"] or exp, exp)
+            s["latest_expiry"] = max(s["latest_expiry"] or exp, exp)
+    
+    final = []
+    for s in sessions.values():
+        s["token_types"] = sorted(s["token_types"])
+        s["cookie_names"] = sorted(s["cookie_names"])
+        s["earliest_expiry"] = s["earliest_expiry"].isoformat() if s["earliest_expiry"] else None
+        s["latest_expiry"] = s["latest_expiry"].isoformat() if s["latest_expiry"] else None
+        final.append(s)
+    final.sort(key=lambda x: (x["idp"], x["domain"]))
+    return final, idp_cookies
+
+
+# --------------------------------------------------------------------------- #
+# Cross-artifact AiTM view
+# --------------------------------------------------------------------------- #
+
+def build_aitm_view(pkg: Dict, findings: List[Dict]) -> Dict:
+    """Build a cross-artifact AiTM analysis joining redirect chains + timing + proxy."""
+    aitm_view = {
+        "proxy_status": "unknown",
+        "redirect_chains": [],
+        "timing_anomalies": [],
+        "overall_risk": Severity.INFO.value,
+        "summary": "",
+    }
+    
+    # Extract proxy status from findings
+    proxy_findings = [f for f in findings if "proxy" in f.get("title", "").lower()]
+    if proxy_findings:
+        pf = proxy_findings[0]
+        mode = pf.get("details", {}).get("mode", "unknown")
+        aitm_view["proxy_status"] = mode
+        if mode not in ("system", "direct", ""):
+            aitm_view["overall_risk"] = Severity.HIGH.value
+    
+    # Extract redirect data from visitdetails
+    visit_blob = pkg.get("visitdetails.json")
+    if visit_blob:
+        redirect_chains = []
+        for visit in records(visit_blob):
+            url = visit.get("url", "")
+            transitions = visit.get("visits", [])
+            
+            for v in transitions:
+                transition = v.get("transition", "")
+                referring = v.get("referringVisitId", 0)
+                
+                if "redirect" in transition.lower() or referring:
+                    redirect_chains.append({
+                        "url": url,
+                        "transition": transition,
+                        "referring_visit": referring,
+                        "visit_time": v.get("visitTime"),
+                    })
+        
+        if redirect_chains:
+            aitm_view["redirect_chains"] = redirect_chains[:50]  # Cap for report size
+            if len(redirect_chains) > 10:
+                aitm_view["overall_risk"] = max(
+                    Severity[aitm_view["overall_risk"]], 
+                    Severity.MEDIUM
+                ).value
+    
+    # Extract performance anomalies from findings
+    perf_findings = [f for f in findings if "redirect" in f.get("title", "").lower()]
+    if perf_findings:
+        aitm_view["timing_anomalies"] = perf_findings[0].get("details", {}).get("redirect_anomalies", [])
+    
+    # Build summary
+    risk_factors = []
+    if aitm_view["proxy_status"] not in ("system", "direct", "unknown", ""):
+        risk_factors.append(f"Non-standard proxy ({aitm_view['proxy_status']})")
+    if aitm_view["redirect_chains"]:
+        risk_factors.append(f"{len(aitm_view['redirect_chains'])} redirect transitions")
+    if aitm_view["timing_anomalies"]:
+        risk_factors.append(f"{len(aitm_view['timing_anomalies'])} pages with timing anomalies")
+    
+    if risk_factors:
+        aitm_view["summary"] = "AiTM risk factors: " + "; ".join(risk_factors)
+    else:
+        aitm_view["summary"] = "No significant AiTM indicators detected"
+    
+    return aitm_view
+
+
+# --------------------------------------------------------------------------- #
+# Timeline builder
+# --------------------------------------------------------------------------- #
+
+def build_timeline(pkg: Dict, since: datetime = None, until: datetime = None) -> List[Dict]:
+    events = []
+    
+    # History entries
+    for h in records(pkg.get("history.json")):
+        ts = from_chrome_micros(h.get("lastVisitTime"))
+        events.append({
+            "ts": ts, "kind": "history",
+            "detail": h.get("url", ""),
+            "title": h.get("title", ""),
+            "extra": f"visits={h.get('visitCount')} typed={h.get('typedCount')}",
+        })
+    
+    # Visit details (more granular)
+    for v in records(pkg.get("visitdetails.json")):
+        url = v.get("url", "")
+        for visit in v.get("visits", []):
+            ts = from_chrome_micros(visit.get("visitTime"))
+            events.append({
+                "ts": ts, "kind": "visit",
+                "detail": url,
+                "title": v.get("title", ""),
+                "extra": f"transition={visit.get('transition')} referring={visit.get('referringVisitId')}",
+            })
+    
+    # Downloads
+    for d in records(pkg.get("downloads.json")):
+        st = parse_iso(d.get("startTime")) or from_epoch_seconds(d.get("startTime"))
+        en = parse_iso(d.get("endTime")) or from_epoch_seconds(d.get("endTime"))
+        danger = d.get("danger")
+        base = (f"{d.get('filename','')} <- {d.get('finalUrl') or d.get('url','')} "
+                f"[{d.get('mime','')}] danger={danger} state={d.get('state')}")
+        if st:
+            events.append({"ts": st, "kind": "download_start", "detail": base,
+                           "title": "", "extra": f"bytes={d.get('totalBytes')}"})
+        if en:
+            events.append({"ts": en, "kind": "download_end", "detail": base,
+                           "title": "", "extra": f"received={d.get('bytesReceived')}"})
+    
+    # Cookie expiry anchors
+    for c in records(pkg.get("cookies.json")):
+        if not (classify_idp(c.get("domain", "")) or is_auth_cookie(c.get("name", ""))):
+            continue
+        exp = from_epoch_seconds(c.get("expirationDate"))
+        if exp:
+            events.append({
+                "ts": exp, "kind": "cookie_expiry",
+                "detail": f"{c.get('domain','')} {c.get('name','')}",
+                "title": "", "extra": f"httpOnly={c.get('httpOnly')} secure={c.get('secure')}",
+            })
+    
+    # Chain of custody
+    coc = pkg.get("chain_of_custody.json") or {}
+    for ev in coc.get("events", []) or []:
+        t = parse_iso(ev.get("timestamp_utc"))
+        events.append({
+            "ts": t, "kind": "acquisition",
+            "detail": ev.get("action", ""), "title": "",
+            "extra": f"operator={ev.get('operator','')}",
+        })
+    
+    # Filter
+    def keep(e):
+        if e["ts"] is None:
+            return False
+        if since and e["ts"] < since:
+            return False
+        if until and e["ts"] > until:
+            return False
+        return True
+    
+    events = [e for e in events if keep(e)]
+    events.sort(key=lambda e: e["ts"])
+    return events
+
+
+# --------------------------------------------------------------------------- #
+# Findings aggregation
+# --------------------------------------------------------------------------- #
+
+def aggregate_findings(pkg: Dict, include_values: bool = False, online: bool = False) -> Tuple[List[Dict], Dict]:
+    """Run all analyzers and aggregate findings.
+    
+    Args:
+        pkg: BAI package data
+        include_values: If True, include raw token values in output
+        online: If True, perform WHOIS/RDAP lookups for domain age analysis
+    """
+    all_findings = []
+    supplementary_data = {
+        "storage_tokens": [],
+        "indexeddb_tokens": [],
+    }
+    
+    # HIGH PRIORITY - Direct AiTM/Infostealer indicators
+    all_findings.extend(analyze_extensions(pkg))
+    all_findings.extend(analyze_proxy(pkg))
+    
+    ws_findings, ws_tokens = analyze_webstorage(pkg, include_values)
+    all_findings.extend(ws_findings)
+    supplementary_data["storage_tokens"].extend(ws_tokens)
+    
+    idb_findings, idb_tokens = analyze_indexeddb(pkg, include_values)
+    all_findings.extend(idb_findings)
+    supplementary_data["indexeddb_tokens"].extend(idb_tokens)
+    
+    all_findings.extend(analyze_performance(pkg))
+    all_findings.extend(analyze_serviceworkers(pkg))
+    
+    # HIGH PRIORITY - Delivery vector detection (SEO poisoning, malvertising)
+    all_findings.extend(analyze_seo_poisoning(pkg, online=online))
+    all_findings.extend(analyze_malvertising(pkg))
+    all_findings.extend(analyze_extension_timeline(pkg))
+    
+    # MEDIUM PRIORITY - Tampering and context
+    all_findings.extend(analyze_privacy(pkg))
+    all_findings.extend(analyze_search_engines(pkg))
+    all_findings.extend(analyze_sessions(pkg))
+    all_findings.extend(analyze_webauthn(pkg))
+    
+    # Sort by severity
+    severity_order = {s.value: i for i, s in enumerate(Severity)}
+    all_findings.sort(key=lambda f: severity_order.get(f["severity"], 99))
+    
+    return all_findings, supplementary_data
+
+
+# --------------------------------------------------------------------------- #
+# Output writers
+# --------------------------------------------------------------------------- #
+
+def write_timeline_csv(events: List[Dict], tz, path: str):
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["timestamp_local", "timestamp_utc", "kind", "detail", "title", "extra"])
+        for e in events:
+            w.writerow([
+                fmt(e["ts"], tz),
+                e["ts"].astimezone(timezone.utc).isoformat(),
+                e["kind"], e["detail"], e["title"], e["extra"],
+            ])
+
+
+def write_findings_json(findings: List[Dict], aitm_view: Dict, path: str):
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({
+            "findings": findings,
+            "aitm_view": aitm_view,
+            "summary": {
+                "total_findings": len(findings),
+                "by_severity": {s.value: len([f for f in findings if f["severity"] == s.value]) 
+                               for s in Severity},
+                "by_category": {c.value: len([f for f in findings if f["category"] == c.value])
+                               for c in FindingCategory},
+            },
+        }, fh, indent=2)
+
+
+def write_auth_json(sessions: List[Dict], idp_cookies: List[Dict], 
+                    storage_tokens: List[Dict], path: str):
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({
+            "auth_sessions": sessions,
+            "idp_cookies": idp_cookies,
+            "storage_tokens": storage_tokens,
+            "correlation_guidance": {
+                "entra_join_keys": ["tenant_id", "object_id", "upn", "time_window"],
+                "entra_missing_from_cookie": ["correlationId", "sessionId", "uniqueTokenIdentifier(UTI)"],
+                "entra_hunt": "Same user/session reused from a new IP/ASN/device/UA than the "
+                              "original interactive MFA sign-in within the token validity window.",
+                "purview_join_key": "SessionId in Unified Audit Log / Exchange & SharePoint audit records",
+                "storage_note": "localStorage/IndexedDB tokens are XSS-vulnerable and may contain "
+                               "refresh tokens with extended validity windows.",
+            },
+        }, fh, indent=2)
+
+
+# --------------------------------------------------------------------------- #
+# Console report
+# --------------------------------------------------------------------------- #
+
+def print_findings_report(findings: List[Dict], aitm_view: Dict):
+    print()
+    print("=" * 78)
+    print("FINDINGS (Severity-Ranked)")
+    print("=" * 78)
+    
+    if not findings:
+        print("  No findings to report.")
+        return
+    
+    # Group by severity for display
+    for severity in Severity:
+        sev_findings = [f for f in findings if f["severity"] == severity.value]
+        if not sev_findings:
+            continue
+        
+        print()
+        print(f"[{severity.value}]")
+        print("-" * 40)
+        
+        for f in sev_findings:
+            print(f"  • {f['title']}")
+            print(f"    Category: {f['category']}")
+            if f.get("recommendation"):
+                rec = f["recommendation"]
+                # Wrap long recommendations
+                if len(rec) > 70:
+                    words = rec.split()
+                    lines = []
+                    current = "    → "
+                    for w in words:
+                        if len(current) + len(w) > 76:
+                            lines.append(current)
+                            current = "      " + w + " "
+                        else:
+                            current += w + " "
+                    lines.append(current)
+                    print("\n".join(lines))
+                else:
+                    print(f"    → {rec}")
+            print()
+
+
+def print_aitm_summary(aitm_view: Dict):
+    print()
+    print("=" * 78)
+    print("CROSS-ARTIFACT AiTM VIEW")
+    print("=" * 78)
+    print(f"  Overall Risk: {aitm_view['overall_risk']}")
+    print(f"  Proxy Status: {aitm_view['proxy_status']}")
+    print(f"  Redirect Chains: {len(aitm_view['redirect_chains'])} transitions")
+    print(f"  Timing Anomalies: {len(aitm_view['timing_anomalies'])} pages")
+    print()
+    print(f"  Summary: {aitm_view['summary']}")
+
+
+def print_auth_report(sessions: List[Dict], storage_tokens: List[Dict], tz):
+    print()
+    print("=" * 78)
+    print("AUTH SESSIONS / IdP IDENTITY ANCHORS")
+    print("=" * 78)
+    
+    idp_sessions = [s for s in sessions if not s["idp"].startswith("(generic")]
+    generic = [s for s in sessions if s["idp"].startswith("(generic")]
+    
+    if not idp_sessions and not storage_tokens:
+        print("  (no IdP-classified cookies or storage tokens found)")
+        return
+    
+    for s in idp_sessions:
+        print(f"* {s['idp']}  [{s['domain']}]")
+        if s.get("upn"):
+            print(f"    UPN        : {s['upn']}")
+        if s.get("tenant_id"):
+            print(f"    Tenant ID  : {s['tenant_id']}")
+        if s.get("object_id"):
+            print(f"    Object ID  : {s['object_id']}")
+        if s.get("token_types"):
+            print(f"    Token types: {', '.join(s['token_types'])}"
+                  f"{'  (PERSISTENT/stay-signed-in)' if s['any_persistent'] else ''}")
+        if s.get("latest_expiry"):
+            print(f"    Valid until: {s['latest_expiry']}  (replay window upper bound)")
+        print(f"    Cookies    : {len(s['cookie_names'])} "
+              f"({'has HttpOnly session bearer' if s['any_httponly'] else 'no HttpOnly'})")
+        print()
+    
+    if generic:
+        print(f"  + {len(generic)} other domain(s) carry a recognized strong bearer cookie.")
+    
+    if storage_tokens:
+        print()
+        print(f"  + {len(storage_tokens)} token(s) found in localStorage/IndexedDB")
+        # Group by origin
+        by_origin = defaultdict(list)
+        for t in storage_tokens:
+            by_origin[t.get("origin", "unknown")].append(t)
+        for origin, tokens in list(by_origin.items())[:5]:
+            print(f"    - {origin}: {len(tokens)} token(s)")
+
+
+def print_report(pkg: Dict, findings: List[Dict], aitm_view: Dict, 
+                 sessions: List[Dict], storage_tokens: List[Dict], 
+                 events: List[Dict], tz):
+    man = pkg.get("MANIFEST.json") or {}
+    env = man.get("environment", {})
+    case = man.get("case", {})
+    
+    print("=" * 78)
+    print("BAI OFFLINE ANALYSIS - MISSION-FOCUSED REPORT")
+    print("=" * 78)
+    print(f"Case        : {case.get('case_id','?')}   Examiner: {case.get('examiner','?')}")
+    print(f"Browser     : {env.get('platform','?')} / Chrome {env.get('chrome_version','?')}  "
+          f"tz={env.get('timezone','?')}")
+    print(f"Collection  : {man.get('collection_id','?')}")
+    print(f"Events      : {len(events)}")
+    if events:
+        print(f"Window      : {fmt(events[0]['ts'], tz)}  ->  {fmt(events[-1]['ts'], tz)}")
+    
+    # Summary stats
+    print()
+    print("ARTIFACT SUMMARY")
+    print("-" * 40)
+    artifact_counts = {
+        "cookies": len(records(pkg.get("cookies.json"))),
+        "history": len(records(pkg.get("history.json"))),
+        "downloads": len(records(pkg.get("downloads.json"))),
+        "extensions": len(records(pkg.get("extensions.json"))),
+        "webstorage_origins": len(records(pkg.get("webstorage.json"))),
+        "indexeddb_origins": len(records(pkg.get("indexeddb.json") or pkg.get("indexeddbfull.json"))),
+    }
+    for name, count in artifact_counts.items():
+        print(f"  {name}: {count}")
+    
+    # Findings section
+    print_findings_report(findings, aitm_view)
+    
+    # AiTM view
+    print_aitm_summary(aitm_view)
+    
+    # Auth sessions
+    print_auth_report(sessions, storage_tokens, tz)
+    
+    print()
+    print("=" * 78)
+    print("CORRELATION GUIDANCE")
+    print("=" * 78)
+    print("• Entra Sign-in Logs: Join on tenant_id + object_id + UPN within token")
+    print("  validity window. Hunt for same session reused from new IP/ASN/device.")
+    print("• Purview/UAL: Pivot on SessionId in audit records.")
+    print("• Storage Tokens: localStorage/IndexedDB tokens may have longer validity")
+    print("  than cookies. Check for refresh token reuse.")
+
+
+# --------------------------------------------------------------------------- #
+# Main
+# --------------------------------------------------------------------------- #
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Mission-focused offline analyzer for BAI packages. "
+                    "Prioritizes AiTM and infostealer detection.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    python3 bai_analyze.py /path/to/BAI_package_or_zip
+    python3 bai_analyze.py pkg.zip --out ./analysis --tz America/Los_Angeles
+    python3 bai_analyze.py pkg/  --since 2026-06-01 --until 2026-06-11
+    python3 bai_analyze.py pkg/  --include-token-values  # DANGEROUS: writes raw tokens
+    python3 bai_analyze.py pkg/  --online  # Enable WHOIS/RDAP lookups for domain age
+        """
+    )
+    ap.add_argument("package", help="BAI package folder or .zip")
+    ap.add_argument("--out", default="./bai_analysis", help="output directory")
+    ap.add_argument("--tz", default=None, help="display timezone, e.g. America/Los_Angeles")
+    ap.add_argument("--since", default=None, help="filter events on/after YYYY-MM-DD")
+    ap.add_argument("--until", default=None, help="filter events on/before YYYY-MM-DD")
+    ap.add_argument("--include-token-values", action="store_true",
+                    help="DANGEROUS: write raw token values into output JSON")
+    ap.add_argument("--online", action="store_true",
+                    help="Enable online lookups (WHOIS/RDAP) for domain age analysis")
+    ap.add_argument("--quiet", "-q", action="store_true",
+                    help="minimal console output (just write files)")
+    args = ap.parse_args()
+    
+    tz = _try_zoneinfo(args.tz)
+    since = parse_iso(args.since + "T00:00:00+00:00") if args.since else None
+    until = parse_iso(args.until + "T23:59:59+00:00") if args.until else None
+    
+    pkg = load_package(args.package)
+    if "cookies.json" not in pkg and "history.json" not in pkg:
+        raise SystemExit("[fatal] no cookies.json or history.json found in package")
+    
+    if args.online:
+        print("[*] Online mode enabled - will perform WHOIS/RDAP lookups for domain analysis")
+    
+    # Run all analyzers
+    sessions, idp_cookies = analyze_cookies(pkg.get("cookies.json"), 
+                                            include_values=args.include_token_values)
+    findings, supplementary = aggregate_findings(pkg, include_values=args.include_token_values,
+                                                 online=args.online)
+    aitm_view = build_aitm_view(pkg, findings)
+    events = build_timeline(pkg, since=since, until=until)
+    
+    # Combine storage tokens
+    all_storage_tokens = supplementary["storage_tokens"] + supplementary["indexeddb_tokens"]
+    
+    # Write outputs
+    os.makedirs(args.out, exist_ok=True)
+    
+    tl_csv = os.path.join(args.out, "timeline.csv")
+    findings_json = os.path.join(args.out, "findings.json")
+    auth_json = os.path.join(args.out, "auth_sessions.json")
+    
+    write_timeline_csv(events, tz, tl_csv)
+    write_findings_json(findings, aitm_view, findings_json)
+    write_auth_json(sessions, idp_cookies, all_storage_tokens, auth_json)
+    
+    # Console report
+    if not args.quiet:
+        print_report(pkg, findings, aitm_view, sessions, all_storage_tokens, events, tz)
+    
+    print()
+    print(f"[+] timeline written      : {tl_csv}  ({len(events)} events)")
+    print(f"[+] findings written      : {findings_json}  ({len(findings)} findings)")
+    print(f"[+] auth sessions written : {auth_json}  ({len(sessions)} sessions, "
+          f"{len(all_storage_tokens)} storage tokens)")
+    
+    if args.include_token_values:
+        print("[!] WARNING: raw token values were written - treat output as live credentials.")
+    
+    # Exit with non-zero if critical/high findings
+    critical_high = [f for f in findings 
+                     if f["severity"] in (Severity.CRITICAL.value, Severity.HIGH.value)]
+    if critical_high:
+        print(f"\n[!] {len(critical_high)} CRITICAL/HIGH severity finding(s) detected!")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

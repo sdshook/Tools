@@ -223,6 +223,19 @@ Browser extension plug-in for AiTM and Infostealer evidence collection (requires
   - **Forensic Packaging**: SHA-256 hashing, sealed manifests, chain of custody, ECDSA signatures
   - **Supported Browsers**: Chrome, Edge, Brave, Opera (Chromium-based); Firefox and Safari planned
 
+* **[BAI/Analyzer/](BAI/Analyzer/)** - Offline BAI Package Analyzer
+  - **Mission-Focused Analysis**: Prioritizes AiTM and infostealer detection over broad artifact coverage
+  - **Severity-Ranked Findings**: CRITICAL/HIGH/MEDIUM/LOW/INFO with actionable recommendations
+  - **Token Decoder**: Extracts identity claims from cookies, localStorage, sessionStorage, and IndexedDB (JWT, ESTSAUTH, CCState)
+  - **SEO Poisoning Detection**: Search → suspicious domain → download pattern correlation with bait term detection
+  - **Malvertising Detection**: Ad-triggered downloads, ad-injector extensions, ad network service workers
+  - **Domain Intelligence**: Typosquatting (Levenshtein), brand similarity, DGA detection, suspicious TLDs, homograph attacks
+  - **Online Mode (`--online`)**: WHOIS/RDAP lookups for domain registration age (newly registered domain detection)
+  - **Cross-Artifact AiTM View**: Correlates redirect chains + performance timing + proxy config
+  - **Enterprise Correlation**: Extracts tenant_id, object_id, UPN for Entra Sign-in Log and Purview/UAL correlation
+  - **Standard Library Only**: Pure Python, no pip installs, runs fully offline
+  - **Secret-Safe by Default**: Raw token values never written unless `--include-token-values`
+
 ### Other Security Utilities
 
 * **[wildcard_xyz_hunter.py](Other/wildcard_xyz_hunter.py)** - Specialized security utility for wildcard domain hunting

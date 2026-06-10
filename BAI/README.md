@@ -183,6 +183,46 @@ lines.
 - Very large histories may truncate at a timestamp boundary. This is flagged in
   the manifest (`partial: true`).
 
+## Offline Analyzer
+
+The **[Analyzer/](Analyzer/)** subdirectory contains a mission-focused offline analysis tool for BAI packages:
+
+```bash
+python3 Analyzer/bai_analyze.py /path/to/BAI_package_or_zip
+python3 Analyzer/bai_analyze.py pkg.zip --out ./analysis --tz America/Los_Angeles
+python3 Analyzer/bai_analyze.py pkg/ --online   # Enable WHOIS/RDAP domain age lookups
+```
+
+### Key Analysis Capabilities
+
+| Category | Detection |
+|----------|-----------|
+| **AiTM Detection** | Proxy config, redirect chains, performance timing, cross-artifact correlation |
+| **Infostealer Detection** | Sideloaded extensions, dangerous permissions, token theft from storage |
+| **Token Exposure** | JWT/auth tokens in localStorage, sessionStorage, IndexedDB |
+| **SEO Poisoning** | Search → suspicious domain → download patterns, bait term detection |
+| **Malvertising** | Ad-triggered downloads, ad-injector extensions, ad network service workers |
+| **Domain Intelligence** | Typosquatting, brand similarity, DGA detection, suspicious TLDs, domain age |
+
+### Findings Output
+
+The analyzer produces severity-ranked findings (CRITICAL/HIGH/MEDIUM/LOW/INFO) with actionable recommendations:
+
+- **findings.json** - Severity-ranked findings with AiTM cross-artifact view
+- **auth_sessions.json** - Cookie and storage token inventory with decoded identity claims
+- **timeline.csv** - Chronological event timeline for correlation
+
+### Enterprise Log Correlation
+
+Extracted identity anchors (tenant_id, object_id, UPN, token validity window) enable correlation with:
+- Microsoft Entra Sign-in Logs
+- Purview/Unified Audit Log
+- SIEM/SOAR platforms
+
+See **[Analyzer/README.md](Analyzer/README.md)** for complete documentation.
+
+---
+
 ## Not Yet Built (Roadmap)
 
 ### Browser Ports
@@ -196,12 +236,6 @@ lines.
 - **Geolocation**: Requires user gesture; not suitable for silent collection.
 - **Clipboard contents**: Requires user gesture; not suitable for silent collection.
 - **WebAuthn credential enumeration**: Cannot enumerate actual credentials (security).
-
-### Features
-- A normalized **timeline** view across artifacts and a human-readable report.
-- **Trusted timestamps**: RFC 3161 timestamp authority integration.
-- **Anomaly detection**: Flag suspicious patterns (unexpected redirects, proxy configs).
-- **Differential analysis**: Compare two packages to identify changes.
 
 ## License
 
