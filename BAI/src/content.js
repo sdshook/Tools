@@ -9,6 +9,11 @@
 
   // Respond to messages from the extension
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // Ping handler - used to check if content script is loaded
+    if (request.action === 'ping') {
+      sendResponse({ status: 'ok', origin: window.location.origin });
+      return false; // Synchronous response
+    }
     if (request.action === 'collectStorage') {
       collectStorage().then(sendResponse);
       return true; // Keep channel open for async response

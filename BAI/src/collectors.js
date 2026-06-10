@@ -15,6 +15,37 @@
 const RESTRICTED_URL = /^(chrome|chrome-extension|chrome-untrusted|devtools|view-source|about|edge|file):/i;
 
 /**
+ * Ensure content script is injected into a tab before messaging.
+ * In Manifest V3, content scripts declared in manifest.json are only injected
+ * into tabs loaded AFTER the extension is installed. Tabs already open need
+ * programmatic injection via chrome.scripting.executeScript().
+ * 
+ * @param {number} tabId - The tab ID to inject into
+ * @returns {Promise<boolean>} - True if injection succeeded or wasn't needed
+ */
+async function ensureContentScriptInjected(tabId) {
+  try {
+    // Try to ping the content script first
+    await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+    return true; // Content script already loaded
+  } catch (e) {
+    // Content script not loaded, inject it programmatically
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['src/content.js'],
+      });
+      // Small delay to allow script to initialize
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return true;
+    } catch (injectErr) {
+      // Injection failed (e.g., restricted page)
+      return false;
+    }
+  }
+}
+
+/**
  * Full browsing history via windowed pagination. chrome.history.search caps
  * results per call, so we walk backwards in time using the oldest lastVisitTime
  * seen, de-duplicating by id. Very large histories with many identical
@@ -531,6 +562,17 @@ export async function collectWebStorage(onProgress) {
     }
 
     try {
+      // Ensure content script is injected before sending message
+      const injected = await ensureContentScriptInjected(tab.id);
+      if (!injected) {
+        results.push({
+          origin: tab.url,
+          tabId: tab.id,
+          error: 'Could not inject content script (restricted page)',
+        });
+        continue;
+      }
+
       // Send message to content script
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectStorage' });
       if (response) {
@@ -575,6 +617,17 @@ export async function collectIndexedDBInfo(onProgress) {
     }
 
     try {
+      // Ensure content script is injected before sending message
+      const injected = await ensureContentScriptInjected(tab.id);
+      if (!injected) {
+        results.push({
+          origin: tab.url,
+          tabId: tab.id,
+          error: 'Could not inject content script (restricted page)',
+        });
+        continue;
+      }
+
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectIndexedDB' });
       if (response) {
         results.push(response);
@@ -627,6 +680,17 @@ export async function collectServiceWorkers(onProgress) {
     }
 
     try {
+      // Ensure content script is injected before sending message
+      const injected = await ensureContentScriptInjected(tab.id);
+      if (!injected) {
+        results.push({
+          origin: tab.url,
+          tabId: tab.id,
+          error: 'Could not inject content script (restricted page)',
+        });
+        continue;
+      }
+
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectServiceWorkers' });
       if (response) {
         results.push(response);
@@ -679,6 +743,17 @@ export async function collectCacheStorage(onProgress) {
     }
 
     try {
+      // Ensure content script is injected before sending message
+      const injected = await ensureContentScriptInjected(tab.id);
+      if (!injected) {
+        results.push({
+          origin: tab.url,
+          tabId: tab.id,
+          error: 'Could not inject content script (restricted page)',
+        });
+        continue;
+      }
+
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectCacheStorage' });
       if (response) {
         results.push(response);
@@ -730,6 +805,17 @@ export async function collectStorageEstimates(onProgress) {
     }
 
     try {
+      // Ensure content script is injected before sending message
+      const injected = await ensureContentScriptInjected(tab.id);
+      if (!injected) {
+        results.push({
+          origin: tab.url,
+          tabId: tab.id,
+          error: 'Could not inject content script (restricted page)',
+        });
+        continue;
+      }
+
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectStorageEstimate' });
       if (response) {
         results.push(response);
@@ -772,6 +858,17 @@ export async function collectPerformanceTiming(onProgress) {
     }
 
     try {
+      // Ensure content script is injected before sending message
+      const injected = await ensureContentScriptInjected(tab.id);
+      if (!injected) {
+        results.push({
+          origin: tab.url,
+          tabId: tab.id,
+          error: 'Could not inject content script (restricted page)',
+        });
+        continue;
+      }
+
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectPerformance' });
       if (response) {
         results.push(response);
@@ -907,6 +1004,17 @@ export async function collectWebAuthnInfo(onProgress) {
     }
 
     try {
+      // Ensure content script is injected before sending message
+      const injected = await ensureContentScriptInjected(tab.id);
+      if (!injected) {
+        results.push({
+          origin: tab.url,
+          tabId: tab.id,
+          error: 'Could not inject content script (restricted page)',
+        });
+        continue;
+      }
+
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectWebAuthn' });
       if (response) {
         results.push(response);
@@ -958,6 +1066,17 @@ export async function collectMediaDevicesInfo(onProgress) {
     }
 
     try {
+      // Ensure content script is injected before sending message
+      const injected = await ensureContentScriptInjected(tab.id);
+      if (!injected) {
+        results.push({
+          origin: tab.url,
+          tabId: tab.id,
+          error: 'Could not inject content script (restricted page)',
+        });
+        continue;
+      }
+
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectMediaDevices' });
       if (response) {
         results.push(response);
@@ -1009,6 +1128,17 @@ export async function collectIndexedDBFull(onProgress) {
     }
 
     try {
+      // Ensure content script is injected before sending message
+      const injected = await ensureContentScriptInjected(tab.id);
+      if (!injected) {
+        results.push({
+          origin: tab.url,
+          tabId: tab.id,
+          error: 'Could not inject content script (restricted page)',
+        });
+        continue;
+      }
+
       const response = await chrome.tabs.sendMessage(tab.id, { 
         action: 'collectIndexedDBFull',
       });
