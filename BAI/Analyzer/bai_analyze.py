@@ -4198,7 +4198,6 @@ class ReportGenerator:
         sections.append(self._section_risk_assessment())
         sections.append(self._section_detailed_findings())
         sections.append(self._section_timelines())
-        sections.append(self._section_correlation_guidance())
         sections.append(self._section_chain_of_custody())
         
         # Footer
