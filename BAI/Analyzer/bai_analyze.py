@@ -2369,6 +2369,477 @@ def build_session_theft_timeline(pkg: Dict, auth_sessions: List[Dict]) -> Dict:
 
 
 # --------------------------------------------------------------------------- #
+# Entra / Purview Log Correlation
+# --------------------------------------------------------------------------- #
+
+# Log file name patterns for auto-detection
+ENTRA_LOG_PATTERNS = {
+    "interactive": ["interactive", "interactivesignin"],
+    "noninteractive": ["noninteractive", "non-interactive", "noninteractivesignin"],
+    "serviceprincipal": ["serviceprincipal", "service-principal", "application", "appsignin"],
+    "managedidentity": ["managedidentity", "managed-identity", "msi"],
+    "audit": ["audit", "auditlog"],
+    "purview": ["unified", "ual", "purview", "unifiedauditlog"],
+}
+
+
+def load_log_file(path: str) -> List[Dict]:
+    """Load a log file (JSON or CSV) and return list of records."""
+    records = []
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            content = f.read().strip()
+        
+        # Try JSON first
+        if content.startswith("[") or content.startswith("{"):
+            data = json.loads(content)
+            if isinstance(data, list):
+                records = data
+            elif isinstance(data, dict):
+                # Some exports wrap records in a "value" key
+                records = data.get("value", [data])
+        else:
+            # Parse as CSV
+            import csv
+            from io import StringIO
+            reader = csv.DictReader(StringIO(content))
+            records = list(reader)
+    except Exception as e:
+        print(f"[!] Warning: Could not load {path}: {e}")
+    
+    return records
+
+
+def discover_entra_logs(folder: str) -> Dict[str, List[Dict]]:
+    """Auto-discover and load Entra/Purview log files from a folder."""
+    logs = {
+        "interactive_signins": [],
+        "noninteractive_signins": [],
+        "serviceprincipal_signins": [],
+        "managedidentity_signins": [],
+        "audit_logs": [],
+        "purview_ual": [],
+    }
+    
+    if not os.path.isdir(folder):
+        print(f"[!] Warning: Entra logs folder not found: {folder}")
+        return logs
+    
+    for filename in os.listdir(folder):
+        filepath = os.path.join(folder, filename)
+        if not os.path.isfile(filepath):
+            continue
+        
+        lower = filename.lower()
+        
+        # Skip non-data files
+        if not (lower.endswith(".json") or lower.endswith(".csv")):
+            continue
+        
+        # Match against patterns
+        matched = False
+        for log_type, patterns in ENTRA_LOG_PATTERNS.items():
+            if any(p in lower for p in patterns):
+                records = load_log_file(filepath)
+                if records:
+                    if log_type == "interactive":
+                        logs["interactive_signins"].extend(records)
+                    elif log_type == "noninteractive":
+                        logs["noninteractive_signins"].extend(records)
+                    elif log_type == "serviceprincipal":
+                        logs["serviceprincipal_signins"].extend(records)
+                    elif log_type == "managedidentity":
+                        logs["managedidentity_signins"].extend(records)
+                    elif log_type == "audit":
+                        logs["audit_logs"].extend(records)
+                    elif log_type == "purview":
+                        logs["purview_ual"].extend(records)
+                    print(f"[+] Loaded {len(records)} records from {filename} ({log_type})")
+                    matched = True
+                    break
+        
+        if not matched and (lower.endswith(".json") or lower.endswith(".csv")):
+            print(f"[*] Skipped unrecognized file: {filename}")
+    
+    return logs
+
+
+def normalize_signin_record(rec: Dict, log_type: str) -> Dict:
+    """Normalize sign-in record fields across different export formats."""
+    # Handle various field name conventions (Azure portal vs Graph API vs PowerShell)
+    normalized = {
+        "log_type": log_type,
+        "timestamp": None,
+        "user_id": None,
+        "user_principal_name": None,
+        "app_id": None,
+        "app_display_name": None,
+        "ip_address": None,
+        "location": None,
+        "device_detail": None,
+        "status": None,
+        "error_code": None,
+        "mfa_detail": None,
+        "session_id": None,
+        "correlation_id": None,
+        "resource_id": None,
+        "resource_display_name": None,
+        "conditional_access": None,
+        "risk_level": None,
+        "original": rec,
+    }
+    
+    # Timestamp
+    for k in ["createdDateTime", "CreatedDateTime", "timestamp", "Timestamp", 
+              "activityDateTime", "ActivityDateTime"]:
+        if k in rec and rec[k]:
+            normalized["timestamp"] = rec[k]
+            break
+    
+    # User ID
+    for k in ["userId", "UserId", "user_id", "id"]:
+        if k in rec and rec[k]:
+            normalized["user_id"] = rec[k]
+            break
+    
+    # UPN
+    for k in ["userPrincipalName", "UserPrincipalName", "upn", "UPN", 
+              "userDisplayName", "UserDisplayName"]:
+        if k in rec and rec[k]:
+            normalized["user_principal_name"] = rec[k]
+            break
+    
+    # App ID
+    for k in ["appId", "AppId", "applicationId", "ApplicationId", "clientAppUsed"]:
+        if k in rec and rec[k]:
+            normalized["app_id"] = rec[k]
+            break
+    
+    # App name
+    for k in ["appDisplayName", "AppDisplayName", "applicationDisplayName", "resourceDisplayName"]:
+        if k in rec and rec[k]:
+            normalized["app_display_name"] = rec[k]
+            break
+    
+    # IP address
+    for k in ["ipAddress", "IpAddress", "ip", "IP", "clientIP", "ClientIP"]:
+        if k in rec and rec[k]:
+            normalized["ip_address"] = rec[k]
+            break
+    
+    # Location
+    for k in ["location", "Location"]:
+        if k in rec and rec[k]:
+            loc = rec[k]
+            if isinstance(loc, dict):
+                city = loc.get("city", "")
+                state = loc.get("state", "")
+                country = loc.get("countryOrRegion", "")
+                normalized["location"] = f"{city}, {state}, {country}".strip(", ")
+            else:
+                normalized["location"] = str(loc)
+            break
+    
+    # Device
+    for k in ["deviceDetail", "DeviceDetail"]:
+        if k in rec and rec[k]:
+            dev = rec[k]
+            if isinstance(dev, dict):
+                normalized["device_detail"] = {
+                    "device_id": dev.get("deviceId"),
+                    "display_name": dev.get("displayName"),
+                    "os": dev.get("operatingSystem"),
+                    "browser": dev.get("browser"),
+                    "trust_type": dev.get("trustType"),
+                }
+            else:
+                normalized["device_detail"] = str(dev)
+            break
+    
+    # Status
+    for k in ["status", "Status"]:
+        if k in rec and rec[k]:
+            st = rec[k]
+            if isinstance(st, dict):
+                normalized["status"] = st.get("errorCode", 0) == 0
+                normalized["error_code"] = st.get("errorCode")
+            else:
+                normalized["status"] = str(st).lower() in ("success", "0", "true")
+            break
+    
+    # MFA
+    for k in ["mfaDetail", "MfaDetail", "authenticationDetails"]:
+        if k in rec and rec[k]:
+            normalized["mfa_detail"] = rec[k]
+            break
+    
+    # Session ID
+    for k in ["sessionId", "SessionId", "correlationId", "CorrelationId"]:
+        if k in rec and rec[k]:
+            normalized["session_id"] = rec[k]
+            break
+    
+    # Correlation ID
+    for k in ["correlationId", "CorrelationId"]:
+        if k in rec and rec[k]:
+            normalized["correlation_id"] = rec[k]
+            break
+    
+    # Resource
+    for k in ["resourceId", "ResourceId"]:
+        if k in rec and rec[k]:
+            normalized["resource_id"] = rec[k]
+            break
+    
+    for k in ["resourceDisplayName", "ResourceDisplayName"]:
+        if k in rec and rec[k]:
+            normalized["resource_display_name"] = rec[k]
+            break
+    
+    # Risk
+    for k in ["riskLevelDuringSignIn", "riskLevelAggregated", "riskLevel"]:
+        if k in rec and rec[k]:
+            normalized["risk_level"] = rec[k]
+            break
+    
+    return normalized
+
+
+def correlate_entra_logs(theft_timeline: Dict, entra_logs: Dict) -> Dict:
+    """
+    Correlate BAI theft timeline with Entra sign-in/audit logs.
+    
+    Finds:
+    - First TA replay (anomalous sign-in for same identity)
+    - Complete theft windows
+    - Post-compromise activity
+    """
+    correlation = {
+        "identities_matched": 0,
+        "signins_analyzed": 0,
+        "anomalous_signins": [],
+        "first_ta_replays": [],
+        "completed_theft_windows": [],
+        "post_compromise_activity": [],
+        "session_correlations": [],
+        "summary": "",
+    }
+    
+    # Collect all sign-ins and normalize
+    all_signins = []
+    for log_type, log_records in [
+        ("interactive", entra_logs.get("interactive_signins", [])),
+        ("noninteractive", entra_logs.get("noninteractive_signins", [])),
+        ("serviceprincipal", entra_logs.get("serviceprincipal_signins", [])),
+        ("managedidentity", entra_logs.get("managedidentity_signins", [])),
+    ]:
+        for rec in log_records:
+            normalized = normalize_signin_record(rec, log_type)
+            all_signins.append(normalized)
+    
+    correlation["signins_analyzed"] = len(all_signins)
+    
+    # Get stealable sessions from theft timeline
+    stealable = theft_timeline.get("stealable_sessions", [])
+    theft_windows = theft_timeline.get("theft_windows", [])
+    
+    # Build lookup of identities from BAI
+    bai_identities = {}
+    for session in stealable:
+        obj_id = session.get("object_id")
+        upn = session.get("upn")
+        tenant = session.get("tenant_id")
+        
+        if obj_id:
+            bai_identities[obj_id.lower()] = {
+                "object_id": obj_id,
+                "upn": upn,
+                "tenant_id": tenant,
+                "session_birth": session.get("estimated_birth"),
+                "expiration": session.get("expiration"),
+                "signins": [],
+            }
+        if upn:
+            bai_identities[upn.lower()] = bai_identities.get(obj_id.lower(), {
+                "object_id": obj_id,
+                "upn": upn,
+                "tenant_id": tenant,
+                "session_birth": session.get("estimated_birth"),
+                "expiration": session.get("expiration"),
+                "signins": [],
+            })
+    
+    # Match sign-ins to BAI identities
+    for signin in all_signins:
+        user_id = (signin.get("user_id") or "").lower()
+        upn = (signin.get("user_principal_name") or "").lower()
+        
+        matched_identity = None
+        if user_id in bai_identities:
+            matched_identity = bai_identities[user_id]
+        elif upn in bai_identities:
+            matched_identity = bai_identities[upn]
+        
+        if matched_identity:
+            matched_identity["signins"].append(signin)
+    
+    # Count matched identities
+    matched_count = sum(1 for i in bai_identities.values() if i.get("signins"))
+    correlation["identities_matched"] = matched_count
+    
+    # Analyze each identity for anomalous sign-ins
+    for identity_key, identity in bai_identities.items():
+        if not identity.get("signins"):
+            continue
+        
+        signins = identity["signins"]
+        session_birth = identity.get("session_birth")
+        
+        # Sort by timestamp
+        signins.sort(key=lambda x: x.get("timestamp") or "")
+        
+        # Group by IP to find baseline
+        ip_counts = {}
+        for s in signins:
+            ip = s.get("ip_address")
+            if ip:
+                ip_counts[ip] = ip_counts.get(ip, 0) + 1
+        
+        # Find most common IPs (likely legitimate)
+        if ip_counts:
+            baseline_ips = set(ip for ip, count in ip_counts.items() 
+                              if count >= max(1, len(signins) * 0.1))
+        else:
+            baseline_ips = set()
+        
+        # Find anomalous sign-ins (different IP after session birth)
+        for signin in signins:
+            signin_time = signin.get("timestamp")
+            signin_ip = signin.get("ip_address")
+            
+            # Check if after session birth and from unusual IP
+            is_after_birth = True
+            if session_birth and signin_time:
+                try:
+                    birth_dt = datetime.fromisoformat(session_birth.replace("Z", "+00:00"))
+                    signin_dt = datetime.fromisoformat(signin_time.replace("Z", "+00:00"))
+                    is_after_birth = signin_dt >= birth_dt
+                except:
+                    pass
+            
+            is_anomalous_ip = signin_ip and signin_ip not in baseline_ips
+            
+            # Flag non-interactive sign-ins from unusual IPs (token replay signature)
+            is_token_replay = (signin.get("log_type") == "noninteractive" and 
+                              is_anomalous_ip and is_after_birth)
+            
+            if is_anomalous_ip and is_after_birth:
+                anomaly = {
+                    "identity": identity.get("upn") or identity.get("object_id"),
+                    "timestamp": signin_time,
+                    "ip_address": signin_ip,
+                    "location": signin.get("location"),
+                    "log_type": signin.get("log_type"),
+                    "app": signin.get("app_display_name"),
+                    "resource": signin.get("resource_display_name"),
+                    "is_token_replay_signature": is_token_replay,
+                    "baseline_ips": list(baseline_ips)[:5],
+                    "risk_level": signin.get("risk_level"),
+                    "note": (
+                        "Non-interactive sign-in from unusual IP after session birth - "
+                        "HIGH confidence token replay" if is_token_replay else
+                        "Sign-in from unusual IP after session birth"
+                    ),
+                }
+                correlation["anomalous_signins"].append(anomaly)
+                
+                # Track first TA replay per identity
+                if is_token_replay:
+                    existing = [r for r in correlation["first_ta_replays"] 
+                               if r.get("identity") == anomaly["identity"]]
+                    if not existing:
+                        correlation["first_ta_replays"].append({
+                            "identity": anomaly["identity"],
+                            "first_replay_time": signin_time,
+                            "ip_address": signin_ip,
+                            "location": signin.get("location"),
+                            "session_birth": session_birth,
+                            "theft_window": f"[{session_birth}, {signin_time}]",
+                        })
+                        
+                        # Add completed theft window
+                        correlation["completed_theft_windows"].append({
+                            "identity": anomaly["identity"],
+                            "session_birth": session_birth,
+                            "first_ta_replay": signin_time,
+                            "theft_ip": signin_ip,
+                            "theft_location": signin.get("location"),
+                        })
+    
+    # Analyze audit logs for post-compromise activity
+    audit_logs = entra_logs.get("audit_logs", [])
+    suspicious_operations = [
+        "add member to role", "add app role assignment", "consent to application",
+        "add service principal", "update application", "add delegated permission",
+        "add owner", "update user", "reset password", "update authentication method",
+        "register security info", "delete security info", "add member to group",
+    ]
+    
+    for audit in audit_logs:
+        activity = (audit.get("activityDisplayName") or 
+                   audit.get("Activity") or 
+                   audit.get("operationName") or "").lower()
+        
+        if any(op in activity for op in suspicious_operations):
+            # Check if actor matches BAI identity
+            actor = (audit.get("initiatedBy", {}).get("user", {}).get("userPrincipalName") or
+                    audit.get("UserId") or audit.get("userPrincipalName") or "").lower()
+            
+            if actor in bai_identities or any(actor in k for k in bai_identities.keys()):
+                correlation["post_compromise_activity"].append({
+                    "timestamp": audit.get("activityDateTime") or audit.get("CreationTime"),
+                    "activity": activity,
+                    "actor": actor,
+                    "target": (audit.get("targetResources", [{}])[0].get("displayName") 
+                              if audit.get("targetResources") else None),
+                    "details": audit.get("additionalDetails"),
+                })
+    
+    # Analyze Purview/UAL for session correlation
+    purview_logs = entra_logs.get("purview_ual", [])
+    for ual in purview_logs[:1000]:  # Limit for performance
+        session_id = ual.get("SessionId") or ual.get("sessionId")
+        user_id = (ual.get("UserId") or ual.get("userId") or "").lower()
+        
+        if session_id and user_id in bai_identities:
+            correlation["session_correlations"].append({
+                "timestamp": ual.get("CreationTime") or ual.get("creationTime"),
+                "operation": ual.get("Operation") or ual.get("operation"),
+                "workload": ual.get("Workload") or ual.get("workload"),
+                "session_id": session_id,
+                "user_id": user_id,
+                "client_ip": ual.get("ClientIP") or ual.get("clientIP"),
+            })
+    
+    # Build summary
+    summary_parts = []
+    if correlation["identities_matched"]:
+        summary_parts.append(f"{correlation['identities_matched']} BAI identities matched in Entra logs")
+    if correlation["anomalous_signins"]:
+        summary_parts.append(f"{len(correlation['anomalous_signins'])} anomalous sign-ins detected")
+    if correlation["first_ta_replays"]:
+        summary_parts.append(f"{len(correlation['first_ta_replays'])} potential token replays identified")
+    if correlation["completed_theft_windows"]:
+        summary_parts.append(f"{len(correlation['completed_theft_windows'])} theft windows completed")
+    if correlation["post_compromise_activity"]:
+        summary_parts.append(f"{len(correlation['post_compromise_activity'])} suspicious post-compromise actions")
+    
+    correlation["summary"] = "; ".join(summary_parts) if summary_parts else "No correlations found"
+    
+    return correlation
+
+
+# --------------------------------------------------------------------------- #
 # Timeline builder
 # --------------------------------------------------------------------------- #
 
@@ -2516,23 +2987,41 @@ def write_timeline_csv(events: List[Dict], tz, path: str):
 
 
 def write_findings_json(findings: List[Dict], aitm_view: Dict, 
-                        theft_timeline: Dict, path: str):
+                        theft_timeline: Dict, path: str, 
+                        entra_correlation: Dict = None):
+    output = {
+        "findings": findings,
+        "aitm_view": aitm_view,
+        "session_theft_timeline": theft_timeline,
+        "summary": {
+            "total_findings": len(findings),
+            "by_severity": {s.value: len([f for f in findings if f["severity"] == s.value]) 
+                           for s in Severity},
+            "by_category": {c.value: len([f for f in findings if f["category"] == c.value])
+                           for c in FindingCategory},
+            "stealable_sessions": len(theft_timeline.get("stealable_sessions", [])),
+            "authentication_flows": len(theft_timeline.get("authentication_flows", [])),
+            "dropper_downloads": len(theft_timeline.get("dropper_downloads", [])),
+        },
+    }
+    
+    # Add Entra correlation summary if available
+    if entra_correlation:
+        output["entra_correlation_summary"] = {
+            "identities_matched": entra_correlation.get("identities_matched", 0),
+            "signins_analyzed": entra_correlation.get("signins_analyzed", 0),
+            "anomalous_signins": len(entra_correlation.get("anomalous_signins", [])),
+            "token_replays_detected": len(entra_correlation.get("first_ta_replays", [])),
+            "completed_theft_windows": len(entra_correlation.get("completed_theft_windows", [])),
+            "post_compromise_actions": len(entra_correlation.get("post_compromise_activity", [])),
+            "summary": entra_correlation.get("summary", ""),
+        }
+        # Include completed theft windows in main output for easy access
+        if entra_correlation.get("completed_theft_windows"):
+            output["completed_theft_windows"] = entra_correlation["completed_theft_windows"]
+    
     with open(path, "w", encoding="utf-8") as fh:
-        json.dump({
-            "findings": findings,
-            "aitm_view": aitm_view,
-            "session_theft_timeline": theft_timeline,
-            "summary": {
-                "total_findings": len(findings),
-                "by_severity": {s.value: len([f for f in findings if f["severity"] == s.value]) 
-                               for s in Severity},
-                "by_category": {c.value: len([f for f in findings if f["category"] == c.value])
-                               for c in FindingCategory},
-                "stealable_sessions": len(theft_timeline.get("stealable_sessions", [])),
-                "authentication_flows": len(theft_timeline.get("authentication_flows", [])),
-                "dropper_downloads": len(theft_timeline.get("dropper_downloads", [])),
-            },
-        }, fh, indent=2)
+        json.dump(output, fh, indent=2)
 
 
 def write_auth_json(sessions: List[Dict], idp_cookies: List[Dict], 
@@ -2756,9 +3245,79 @@ def print_theft_timeline(theft_timeline: Dict, tz):
                     print(f"    • {line.strip()}.")
 
 
+def print_entra_correlation(correlation: Dict):
+    """Print Entra/Purview log correlation results."""
+    print()
+    print("=" * 78)
+    print("ENTRA/PURVIEW LOG CORRELATION")
+    print("=" * 78)
+    
+    print(f"\n  Identities Matched:    {correlation.get('identities_matched', 0)}")
+    print(f"  Sign-ins Analyzed:     {correlation.get('signins_analyzed', 0)}")
+    print(f"  Anomalous Sign-ins:    {len(correlation.get('anomalous_signins', []))}")
+    print(f"  Token Replays:         {len(correlation.get('first_ta_replays', []))}")
+    print(f"  Post-Compromise Acts:  {len(correlation.get('post_compromise_activity', []))}")
+    
+    # Token replays (most critical)
+    replays = correlation.get("first_ta_replays", [])
+    if replays:
+        print()
+        print("-" * 40)
+        print("🚨 TOKEN REPLAYS DETECTED (HIGH CONFIDENCE)")
+        print("-" * 40)
+        for i, replay in enumerate(replays[:5], 1):
+            print(f"  [{i}] {replay.get('identity', '?')}")
+            print(f"      First Replay: {replay.get('first_replay_time', '?')}")
+            print(f"      Theft IP:     {replay.get('ip_address', '?')}")
+            print(f"      Location:     {replay.get('location', '?')}")
+            print(f"      Session Birth: {replay.get('session_birth', '?')}")
+            print(f"      THEFT WINDOW: {replay.get('theft_window', '?')}")
+    
+    # Completed theft windows
+    completed = correlation.get("completed_theft_windows", [])
+    if completed:
+        print()
+        print("-" * 40)
+        print("COMPLETED THEFT WINDOWS")
+        print("-" * 40)
+        for tw in completed[:5]:
+            print(f"  • {tw.get('identity', '?')}")
+            print(f"    Birth → Replay: {tw.get('session_birth', '?')} → {tw.get('first_ta_replay', '?')}")
+            print(f"    Theft from: {tw.get('theft_ip', '?')} ({tw.get('theft_location', '?')})")
+    
+    # Anomalous sign-ins
+    anomalies = correlation.get("anomalous_signins", [])
+    if anomalies:
+        print()
+        print("-" * 40)
+        print(f"ANOMALOUS SIGN-INS ({len(anomalies)} detected)")
+        print("-" * 40)
+        for i, a in enumerate(anomalies[:10], 1):
+            replay_tag = " [TOKEN REPLAY]" if a.get("is_token_replay_signature") else ""
+            print(f"  [{i}] {a.get('identity', '?')} @ {a.get('timestamp', '?')}{replay_tag}")
+            print(f"      IP: {a.get('ip_address', '?')} | {a.get('location', '?')}")
+            print(f"      Type: {a.get('log_type', '?')} | App: {a.get('app', '?')}")
+            if a.get("baseline_ips"):
+                print(f"      Baseline IPs: {', '.join(a['baseline_ips'][:3])}")
+    
+    # Post-compromise activity
+    post_comp = correlation.get("post_compromise_activity", [])
+    if post_comp:
+        print()
+        print("-" * 40)
+        print(f"POST-COMPROMISE ACTIVITY ({len(post_comp)} suspicious actions)")
+        print("-" * 40)
+        for i, act in enumerate(post_comp[:10], 1):
+            print(f"  [{i}] {act.get('timestamp', '?')}: {act.get('activity', '?')}")
+            print(f"      Actor: {act.get('actor', '?')}")
+            if act.get("target"):
+                print(f"      Target: {act.get('target')}")
+
+
 def print_report(pkg: Dict, findings: List[Dict], aitm_view: Dict, 
                  sessions: List[Dict], storage_tokens: List[Dict], 
-                 events: List[Dict], tz, theft_timeline: Dict = None):
+                 events: List[Dict], tz, theft_timeline: Dict = None,
+                 entra_correlation: Dict = None):
     man = pkg.get("MANIFEST.json") or {}
     env = man.get("environment", {})
     case = man.get("case", {})
@@ -2802,6 +3361,10 @@ def print_report(pkg: Dict, findings: List[Dict], aitm_view: Dict,
     if theft_timeline:
         print_theft_timeline(theft_timeline, tz)
     
+    # Entra/Purview correlation (if available)
+    if entra_correlation:
+        print_entra_correlation(entra_correlation)
+    
     print()
     print("=" * 78)
     print("CORRELATION GUIDANCE")
@@ -2829,9 +3392,22 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+    # Basic BAI-only analysis
     python3 bai_analyze.py /path/to/BAI_package_or_zip
     python3 bai_analyze.py pkg.zip --out ./analysis --tz America/Los_Angeles
     python3 bai_analyze.py pkg/  --since 2026-06-01 --until 2026-06-11
+    
+    # With Entra/Purview log correlation (complete theft window analysis)
+    python3 bai_analyze.py pkg.zip --entra-logs /path/to/logs/
+    
+    # Entra logs folder should contain (CSV or JSON, auto-detected by filename):
+    #   - InteractiveSignIns.csv/json
+    #   - NonInteractiveSignIns.csv/json  
+    #   - ServicePrincipalSignIns.csv/json (optional)
+    #   - ManagedIdentitySignIns.csv/json (optional)
+    #   - AuditLogs.csv/json
+    #   - UnifiedAuditLog.csv/json (Purview/UAL)
+    
     python3 bai_analyze.py pkg/  --include-token-values  # DANGEROUS: writes raw tokens
     python3 bai_analyze.py pkg/  --online  # Enable WHOIS/RDAP lookups for domain age
         """
@@ -2841,6 +3417,10 @@ Examples:
     ap.add_argument("--tz", default=None, help="display timezone, e.g. America/Los_Angeles")
     ap.add_argument("--since", default=None, help="filter events on/after YYYY-MM-DD")
     ap.add_argument("--until", default=None, help="filter events on/before YYYY-MM-DD")
+    ap.add_argument("--entra-logs", default=None, metavar="FOLDER",
+                    help="Folder containing Entra sign-in logs, audit logs, and Purview UAL "
+                         "(CSV or JSON). Auto-detects: Interactive, NonInteractive, "
+                         "ServicePrincipal, ManagedIdentity, Audit, UnifiedAuditLog")
     ap.add_argument("--include-token-values", action="store_true",
                     help="DANGEROUS: write raw token values into output JSON")
     ap.add_argument("--online", action="store_true",
@@ -2860,6 +3440,14 @@ Examples:
     if args.online:
         print("[*] Online mode enabled - will perform WHOIS/RDAP lookups for domain analysis")
     
+    # Load Entra/Purview logs if provided
+    entra_logs = None
+    if args.entra_logs:
+        print(f"[*] Loading Entra/Purview logs from: {args.entra_logs}")
+        entra_logs = discover_entra_logs(args.entra_logs)
+        total_logs = sum(len(v) for v in entra_logs.values())
+        print(f"[+] Loaded {total_logs} total log records for correlation")
+    
     # Run all analyzers
     sessions, idp_cookies = analyze_cookies(pkg.get("cookies.json"), 
                                             include_values=args.include_token_values)
@@ -2876,6 +3464,13 @@ Examples:
     all_auth_sessions = sessions + all_storage_tokens
     theft_timeline = build_session_theft_timeline(pkg, all_auth_sessions)
     
+    # Correlate with Entra logs if provided
+    entra_correlation = None
+    if entra_logs:
+        print("[*] Correlating BAI identities with Entra/Purview logs...")
+        entra_correlation = correlate_entra_logs(theft_timeline, entra_logs)
+        print(f"[+] Correlation: {entra_correlation.get('summary', 'complete')}")
+    
     # Write outputs
     os.makedirs(args.out, exist_ok=True)
     
@@ -2884,13 +3479,20 @@ Examples:
     auth_json = os.path.join(args.out, "auth_sessions.json")
     
     write_timeline_csv(events, tz, tl_csv)
-    write_findings_json(findings, aitm_view, theft_timeline, findings_json)
+    write_findings_json(findings, aitm_view, theft_timeline, findings_json, entra_correlation)
     write_auth_json(sessions, idp_cookies, all_storage_tokens, auth_json)
+    
+    # Write Entra correlation if available
+    if entra_correlation:
+        correlation_json = os.path.join(args.out, "entra_correlation.json")
+        with open(correlation_json, "w", encoding="utf-8") as f:
+            json.dump(entra_correlation, f, indent=2, default=str)
+        print(f"[+] entra correlation     : {correlation_json}")
     
     # Console report
     if not args.quiet:
         print_report(pkg, findings, aitm_view, sessions, all_storage_tokens, events, tz, 
-                     theft_timeline)
+                     theft_timeline, entra_correlation)
     
     print()
     print(f"[+] timeline written      : {tl_csv}  ({len(events)} events)")
@@ -2901,9 +3503,14 @@ Examples:
     if args.include_token_values:
         print("[!] WARNING: raw token values were written - treat output as live credentials.")
     
-    # Exit with non-zero if critical/high findings
+    # Exit with non-zero if critical/high findings or token replays detected
     critical_high = [f for f in findings 
                      if f["severity"] in (Severity.CRITICAL.value, Severity.HIGH.value)]
+    token_replays = entra_correlation.get("first_ta_replays", []) if entra_correlation else []
+    
+    if token_replays:
+        print(f"\n[!!!] {len(token_replays)} TOKEN REPLAY(S) DETECTED - likely active compromise!")
+        return 2
     if critical_high:
         print(f"\n[!] {len(critical_high)} CRITICAL/HIGH severity finding(s) detected!")
         return 1

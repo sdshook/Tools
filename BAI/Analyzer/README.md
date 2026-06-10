@@ -53,6 +53,30 @@ The analyzer builds a **causal chain** for token theft investigations:
 - **Theft windows**: Estimated brackets for Entra sign-in log correlation
 - **Correlation guidance**: Query templates for Entra sign-in logs
 
+### Entra / Purview Log Correlation (Optional)
+When provided with Entra sign-in logs, audit logs, and Purview/UAL exports, the analyzer **completes the theft window** by finding the first TA replay:
+
+```bash
+python3 bai_analyze.py pkg.zip --entra-logs /path/to/logs/
+```
+
+**Auto-detected log files (CSV or JSON):**
+| Log Type | Filename Patterns |
+|----------|-------------------|
+| Interactive Sign-ins | `interactive*.json/csv` |
+| Non-Interactive Sign-ins | `noninteractive*.json/csv` |
+| Service Principal Sign-ins | `serviceprincipal*.json/csv`, `application*.json/csv` |
+| Managed Identity Sign-ins | `managedidentity*.json/csv`, `msi*.json/csv` |
+| Audit Logs | `audit*.json/csv` |
+| Purview/UAL | `unified*.json/csv`, `ual*.json/csv`, `purview*.json/csv` |
+
+**What's correlated:**
+- **Token replays**: Non-interactive sign-ins from unusual IPs after session birth (HIGH confidence)
+- **Completed theft windows**: `[session_birth_from_BAI, first_TA_replay_from_Entra]`
+- **Anomalous sign-ins**: Sign-ins from IPs not in the user's baseline
+- **Post-compromise activity**: Suspicious audit log actions (role changes, app consent, MFA changes)
+- **Session correlations**: Purview/UAL activity matching BAI sessions
+
 ### Token Decoder (localStorage/IndexedDB)
 Modern SPAs store JWTs and refresh tokens in web storage, not cookies. The analyzer:
 - Scans localStorage/sessionStorage for token patterns
@@ -69,7 +93,7 @@ Flags high-risk extensions:
 ## Usage
 
 ```bash
-# Basic analysis
+# Basic BAI-only analysis (default)
 python3 bai_analyze.py /path/to/BAI_package
 
 # With timezone and output directory
@@ -77,6 +101,9 @@ python3 bai_analyze.py pkg.zip --out ./analysis --tz America/Los_Angeles
 
 # Filter by date range
 python3 bai_analyze.py pkg/ --since 2026-06-01 --until 2026-06-11
+
+# With Entra/Purview log correlation (completes theft windows)
+python3 bai_analyze.py pkg.zip --entra-logs /path/to/entra_logs/
 
 # Include raw token values (DANGEROUS - treat output as live credentials)
 python3 bai_analyze.py pkg/ --include-token-values
