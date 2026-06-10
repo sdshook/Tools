@@ -79,6 +79,26 @@ python3 bai_analyze.py pkg.zip --entra-logs /path/to/logs/
 - **Post-compromise activity**: Suspicious audit log actions (role changes, app consent, MFA changes)
 - **Session correlations**: Purview/UAL activity matching BAI sessions
 
+### Identity Inventory (UPN-Centric)
+The analyzer discovers user accounts by scanning cookies, localStorage, and IndexedDB for authentication evidence, then presents a theft-risk-focused table:
+
+| Column | Description |
+|--------|-------------|
+| **UPN (User)** | User Principal Name (email format) |
+| **Service** | Domain where token is valid |
+| **Type** | JWT, Cookie, localStorage, or IndexedDB |
+| **Protection** | HttpOnly (protected from JS) or JS-accessible |
+| **Theft Risk** | How the token can be stolen |
+
+**Theft Risk Assessment:**
+- **JS-accessible**: "Stealable via XSS or malicious extension" (HIGH risk)
+- **HttpOnly**: "Requires malware/browser exploit to steal" (MEDIUM risk)
+
+**Microsoft Entra Sessions** are shown separately with:
+- UPN associated via `login_hint` correlation from Microsoft login URLs
+- Tenant ID and Object ID for log correlation
+- Cookie name (ESTSAUTH/ESTSAUTHPERSISTENT)
+
 ### Token Decoder (localStorage/IndexedDB)
 Modern SPAs store JWTs and refresh tokens in web storage, not cookies. The analyzer:
 - Scans localStorage/sessionStorage for token patterns
@@ -176,11 +196,11 @@ python3 bai_analyze.py pkg.zip \
 The generated report includes:
 1. **Evidence Provenance** - Collection metadata, case info, chain of custody, integrity verification
 2. **System Context** - Computer info, browser details, collection statistics
-3. **Identity Inventory** - All accounts with MFA status and token types
+3. **Identity Inventory** - UPN-centric account inventory with token theft risk assessment
 4. **Risk Assessment Summary** - Executive summary, severity counts, key threats, recommended actions
-5. **Detailed Findings** - Full finding details by severity
+5. **Detailed Findings** - Full finding details by severity (HTML tables with evidence)
 6. **Timeline Analysis** - Session theft timeline, authentication flows, Entra correlation
-7. **Correlation Guidance** - Query templates for Entra sign-in logs and Purview/UAL
+7. **Chain of Custody** - Evidence handling documentation
 
 ### Generating DOCX/PDF Reports
 
