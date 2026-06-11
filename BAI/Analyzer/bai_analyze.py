@@ -36,6 +36,7 @@ import os
 import re
 import struct
 import sys
+import textwrap
 import zipfile
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
@@ -54,7 +55,9 @@ class Severity(Enum):
     INFO = "INFO"
 
     def __lt__(self, other):
-        order = [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO]
+        # Order ascending by severity so that max() returns the MORE severe level
+        # (previously reversed, which made max(sev, MEDIUM) silently downgrade).
+        order = [Severity.INFO, Severity.LOW, Severity.MEDIUM, Severity.HIGH, Severity.CRITICAL]
         return order.index(self) < order.index(other)
 
 
@@ -253,7 +256,7 @@ def decode_jwt_noverify(value: str) -> Dict[str, Any]:
             # auth_time = interactive authentication instant (MFA moment)
             # iat = token issuance (can be silent refresh, less useful)
             for k in ("tid", "oid", "upn", "preferred_username", "unique_name",
-                      "email", "sub", "iss", "aud", "iat", "exp", "nbf", "sid",
+                      "email", "sub", "iss", "aud", "iat", "exp", "nbf", "sid", "uti",
                       "name", "given_name", "family_name", "azp", "appid", "scp",
                       "auth_time", "amr", "acr", "nonce"):
                 if k in payload:
@@ -263,16 +266,40 @@ def decode_jwt_noverify(value: str) -> Dict[str, Any]:
     return out
 
 
+def _looks_guidish(g: Optional[str]) -> bool:
+    """Reject obvious garbage from the heuristic GUID decode. NOTE: any 16 bytes
+    form a syntactically valid GUID, so this only filters all-zero / single-nibble
+    runs - it is NOT validation. Real trust requires corroboration with a token claim."""
+    if not g:
+        return False
+    h = g.replace("-", "")
+    if len(h) != 32:
+        return False
+    if len(set(h)) <= 2:  # all-zero or single repeated nibble -> not a real GUID
+        return False
+    return True
+
+
 def decode_entra_home_account(value: str) -> Dict[str, Any]:
-    """Extract tenant/object IDs from ESTSAUTH cookies."""
+    """HEURISTIC byte-offset decode of an ESTSAUTH/ESTSAUTHPERSISTENT cookie.
+
+    WARNING: reads tenant/object GUIDs from fixed offsets of an opaque, largely
+    encrypted cookie. It is unvalidated and can emit fabricated GUIDs, so output
+    is tagged confidence='heuristic'. Do NOT attribute on it alone - corroborate
+    against a token claim (oid/tid) before relying on it.
+    """
     out = {}
     try:
         parts = value.split(".")
         if len(parts) >= 2 and parts[0] in ("1", "2"):
             raw = _b64u(parts[1])
             if len(raw) >= 35:
-                out["tenant_id"] = _guid_le(raw[3:19])
-                out["object_id"] = _guid_le(raw[19:35])
+                tid = _guid_le(raw[3:19])
+                oid = _guid_le(raw[19:35])
+                if _looks_guidish(tid) and _looks_guidish(oid):
+                    out["tenant_id"] = tid
+                    out["object_id"] = oid
+                    out["confidence"] = "heuristic"
     except Exception:
         pass
     return out
@@ -292,11 +319,24 @@ def decode_entra_ccstate(value: str) -> Dict[str, Any]:
     return out
 
 
+def confidence_label(conf: Optional[str]) -> str:
+    """Human-readable label for an identity-attribution confidence tag."""
+    return {
+        "token_claim": "Token claim (high)",
+        "cookie_plaintext": "Cookie plaintext",
+        "ests_heuristic": "ESTS heuristic (unverified)",
+        "url_login_hint": "URL login_hint (attacker-influenceable)",
+    }.get(conf, "Unknown")
+
+
 # --------------------------------------------------------------------------- #
 # Token patterns for web storage analysis
 # --------------------------------------------------------------------------- #
 
 JWT_PATTERN = re.compile(r'^eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$')
+# Unanchored variant: finds JWTs embedded inside JSON envelopes (e.g. MSAL stores
+# the token in a ".secret" field), where the anchored pattern above never matches.
+JWT_FINDALL = re.compile(r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+')
 BEARER_TOKEN_KEYS = {
     # Common OAuth/OIDC token storage keys
     "access_token", "accesstoken", "id_token", "idtoken", "refresh_token",
@@ -574,18 +614,34 @@ def analyze_webstorage(pkg: Dict, include_values: bool = False) -> Tuple[List[Di
     
     for item in records(ws_blob):
         origin = item.get("origin", item.get("url", ""))
-        storage_type = item.get("type", "localStorage")
-        storage_data = item.get("data", {}) or item.get("localStorage", {}) or item.get("sessionStorage", {})
-        
-        for key, value in storage_data.items():
-            is_token, reason = looks_like_token(key, str(value) if value else "")
-            if is_token:
-                # Decode if JWT
-                decoded = {}
+        # BAI's content.js wraps each store as {itemCount, items:{k:v}, totalSize}.
+        # Read BOTH localStorage and sessionStorage, descending into ".items".
+        for storage_type in ("localStorage", "sessionStorage"):
+            container = item.get(storage_type)
+            if not isinstance(container, dict):
+                continue
+            storage_data = container.get("items")
+            if not isinstance(storage_data, dict):
+                # tolerate a flat {k:v} map from other versions
+                storage_data = {k: v for k, v in container.items()
+                                if k not in ("itemCount", "totalSize", "error")
+                                and isinstance(v, str)}
+
+            for key, value in storage_data.items():
                 val_str = str(value) if value else ""
-                if JWT_PATTERN.match(val_str):
-                    decoded = decode_jwt_noverify(val_str)
-                
+                is_token, reason = looks_like_token(key, val_str)
+                # Find JWTs embedded anywhere in the value (covers MSAL's JSON
+                # envelope where the token lives in a ".secret" field).
+                jwt_list = JWT_FINDALL.findall(val_str)
+                if not is_token and not jwt_list:
+                    continue
+
+                decoded = {}
+                if jwt_list:
+                    decoded = decode_jwt_noverify(jwt_list[0])
+                    if not reason:
+                        reason = f"embedded JWT ({len(jwt_list)})"
+
                 token_entry = {
                     "origin": origin,
                     "storage_type": storage_type,
@@ -652,8 +708,9 @@ def analyze_indexeddb(pkg: Dict, include_values: bool = False) -> Tuple[List[Dic
                     # Check both key and value for tokens
                     rec_str = json.dumps(rec) if isinstance(rec, (dict, list)) else str(rec)
                     
-                    # Check for JWT patterns in values
-                    jwt_matches = JWT_PATTERN.findall(rec_str) if isinstance(rec_str, str) else []
+                    # Check for JWT patterns in values (unanchored: rec_str is a
+                    # JSON dump, so the anchored pattern would never match).
+                    jwt_matches = JWT_FINDALL.findall(rec_str) if isinstance(rec_str, str) else []
                     
                     # Check for token-like keys
                     is_token = False
@@ -1904,13 +1961,21 @@ def analyze_cookies(cookie_blob: Dict, include_values: bool = False) -> Tuple[Li
         
         decoded = {}
         nl = name.lower()
+        identity_source = None
         if nl in ("estsauth", "estsauthpersistent"):
-            decoded.update(decode_entra_home_account(val))
+            home = decode_entra_home_account(val)
+            decoded.update(home)
             decoded["token_type"] = ("persistent" if "persistent" in nl else "session")
+            if home.get("tenant_id") or home.get("object_id"):
+                identity_source = "ests_heuristic"
         elif nl == "ccstate":
             decoded.update(decode_entra_ccstate(val))
+            if decoded.get("upn"):
+                identity_source = "cookie_plaintext"
         elif val.count(".") == 2 and len(val) > 40:
             decoded.update(decode_jwt_noverify(val))
+            if any(decoded.get(k) for k in ("tid", "oid", "upn", "preferred_username", "email")):
+                identity_source = "token_claim"
         if decoded:
             row["decoded"] = decoded
         idp_cookies.append(row)
@@ -1924,7 +1989,14 @@ def analyze_cookies(cookie_blob: Dict, include_values: bool = False) -> Tuple[Li
             "token_types": set(), "cookie_names": set(),
             "earliest_expiry": None, "latest_expiry": None,
             "any_persistent": False, "any_httponly": False,
+            "identity_confidence": None,
         })
+        # Track the strongest identity-attribution source seen for this session
+        if identity_source:
+            _rank = {"ests_heuristic": 0, "cookie_plaintext": 1, "token_claim": 2}
+            cur = s.get("identity_confidence")
+            if cur is None or _rank.get(identity_source, -1) > _rank.get(cur, -1):
+                s["identity_confidence"] = identity_source
         s["cookie_names"].add(name)
         if c.get("httpOnly"):
             s["any_httponly"] = True
@@ -2094,40 +2166,47 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
                             'source': 'SharePoint personal site URL'
                         })
     
-    # 3. WEBSTORAGE - localStorage
+    # 3. WEBSTORAGE - localStorage AND sessionStorage (entries live under <store>.items)
     for ws in records(pkg.get("webstorage.json")):
         try:
             origin = ws.get('origin', '').replace('https://', '').replace('http://', '').split('/')[0]
         except:
             origin = 'unknown'
-        
-        local_storage = ws.get('localStorage', {}) or {}
-        for key, value in local_storage.items():
-            value_str = str(value)[:2000]
-            
-            jwt_pattern = re.compile(r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+')
-            for jwt_match in jwt_pattern.findall(value_str):
-                decoded = decode_jwt_noverify(jwt_match)
-                if decoded:
-                    for claim in ('upn', 'preferred_username', 'email', 'sub'):
-                        if claim in decoded and '@' in str(decoded[claim]):
-                            add_token(decoded[claim], origin, {
-                                'cookie_name': f'localStorage[{key}]',
-                                'is_jwt': True,
-                                'httponly': False,  # localStorage is always JS-accessible
-                                'source': 'localStorage JWT'
-                            })
-                            break
-            
-            for match in upn_pattern.findall(value_str):
-                add_token(match, origin, {
-                    'cookie_name': f'localStorage[{key}]',
-                    'is_jwt': False,
-                    'httponly': False,
-                    'source': 'localStorage value'
-                })
+
+        for stype in ('localStorage', 'sessionStorage'):
+            container = ws.get(stype)
+            if not isinstance(container, dict):
+                continue
+            store = container.get('items')
+            if not isinstance(store, dict):
+                store = {k: v for k, v in container.items()
+                         if k not in ('itemCount', 'totalSize', 'error') and isinstance(v, str)}
+
+            for key, value in store.items():
+                value_str = str(value)[:4000]
+
+                for jwt_match in JWT_FINDALL.findall(value_str):
+                    decoded = decode_jwt_noverify(jwt_match)
+                    if decoded:
+                        for claim in ('upn', 'preferred_username', 'email', 'sub'):
+                            if claim in decoded and '@' in str(decoded[claim]):
+                                add_token(decoded[claim], origin, {
+                                    'cookie_name': f'{stype}[{key}]',
+                                    'is_jwt': True,
+                                    'httponly': False,  # web storage is JS-accessible
+                                    'source': f'{stype} JWT'
+                                })
+                                break
+
+                for match in upn_pattern.findall(value_str):
+                    add_token(match, origin, {
+                        'cookie_name': f'{stype}[{key}]',
+                        'is_jwt': False,
+                        'httponly': False,
+                        'source': f'{stype} value'
+                    })
     
-    # 4. INDEXEDDB
+    # 4. INDEXEDDB (content.js emits objectStores[].records = [{key, value}])
     for idb in records(pkg.get("indexeddbfull.json")):
         try:
             origin = idb.get('origin', '').replace('https://', '').replace('http://', '').split('/')[0]
@@ -2137,11 +2216,10 @@ def discover_upn_accounts(pkg: Dict) -> List[Dict]:
         for db in idb.get('databases', []) or []:
             for store in db.get('objectStores', []) or []:
                 store_name = store.get('name', '')
-                for item in store.get('items', []) or []:
-                    value_str = str(item.get('value', ''))[:2000]
+                for item in (store.get('records') or store.get('items') or []):
+                    value_str = (json.dumps(item) if isinstance(item, (dict, list)) else str(item))[:4000]
                     
-                    jwt_pattern = re.compile(r'eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+')
-                    for jwt_match in jwt_pattern.findall(value_str):
+                    for jwt_match in JWT_FINDALL.findall(value_str):
                         decoded = decode_jwt_noverify(jwt_match)
                         if decoded:
                             for claim in ('upn', 'preferred_username', 'email', 'sub'):
@@ -2252,13 +2330,17 @@ def discover_entra_sessions(pkg: Dict, tenant_upn_map: Dict[str, str] = None) ->
         if decoded and decoded.get('tenant_id'):
             tenant_id = decoded.get('tenant_id', '').lower()
             
-            # Look up UPN for this tenant
+            # Look up UPN for this tenant. NOTE: this UPN comes from a login_hint
+            # in a URL, which is attacker-influenceable in an AiTM lure - it is not
+            # token-grade attribution.
             upn = tenant_upn_map.get(tenant_id, None)
             
             sessions.append({
                 'tenant_id': decoded.get('tenant_id'),
                 'object_id': decoded.get('object_id'),
-                'upn': upn,  # Associated UPN from login URLs
+                'upn': upn,  # Associated UPN from login URLs (url_login_hint)
+                'upn_source': 'url_login_hint' if upn else None,
+                'identity_confidence': 'ests_heuristic',  # tenant/object are byte-offset heuristic
                 'domain': domain,
                 'type': 'PERSISTENT' if 'persistent' in cookie_name else 'SESSION',
                 'httponly': httponly,
@@ -2388,84 +2470,219 @@ def build_session_theft_timeline(pkg: Dict, auth_sessions: List[Dict]) -> Dict:
     }
     
     # -------------------------------------------------------------------------
-    # 1. Extract Stealable Sessions (ESTS cookies)
+    # 0. Normalize heterogeneous inputs into one identity shape.
+    #    auth_sessions mixes cookie sessions (analyze_cookies: flat tenant_id/
+    #    object_id/upn/cookie_names/token_types) with storage tokens
+    #    (analyze_webstorage/indexeddb: origin/key/decoded claims). The previous
+    #    code read session["type"]/session["identity"], which NEITHER producer
+    #    emits, so stealable_sessions and correlation_anchors were always empty.
     # -------------------------------------------------------------------------
-    for session in auth_sessions:
-        if session.get("type") in ("ESTSAUTH", "ESTSAUTHPERSISTENT"):
-            stealable = {
-                "cookie_name": session.get("name"),
-                "domain": session.get("domain"),
-                "tenant_id": session.get("identity", {}).get("tenant_id"),
-                "object_id": session.get("identity", {}).get("object_id"),
-                "upn": session.get("identity", {}).get("upn"),
-                "expiration": session.get("expiration"),
-                "is_persistent": session.get("type") == "ESTSAUTHPERSISTENT",
-                "estimated_birth": None,
-                "theft_note": None,
-            }
-            
-            # Estimate session birth from expiration (exp - 90 days for persistent)
-            if stealable["is_persistent"] and stealable["expiration"]:
-                try:
-                    exp_dt = datetime.fromisoformat(stealable["expiration"].replace("Z", "+00:00"))
-                    birth_estimate = exp_dt - timedelta(days=ESTS_PERSISTENT_LIFETIME_DAYS)
-                    stealable["estimated_birth"] = birth_estimate.isoformat()
-                    stealable["theft_note"] = (
-                        f"Session birth estimated as {birth_estimate.strftime('%Y-%m-%d')} "
-                        f"(expiration - {ESTS_PERSISTENT_LIFETIME_DAYS} days). "
-                        "Note: Conditional Access sign-in-frequency may alter this. "
-                        "This is the 'loaded gun' - correlate with Entra sign-in logs for first TA replay."
-                    )
-                except Exception:
-                    pass
-            
-            # Add correlation anchor for Entra
-            if stealable["tenant_id"] and stealable["object_id"]:
-                timeline["correlation_anchors"].append({
-                    "type": "Entra",
-                    "tenant_id": stealable["tenant_id"],
-                    "object_id": stealable["object_id"],
-                    "upn": stealable.get("upn"),
-                    "query_guidance": (
-                        "In Entra Sign-in Logs, filter by: "
-                        f"userId eq '{stealable['object_id']}' or "
-                        f"userPrincipalName eq '{stealable.get('upn', 'UNKNOWN')}'. "
-                        "Look for: (1) SessionId match, (2) MFA inherited without prompt, "
-                        "(3) Location/IP inconsistent with user."
-                    ),
-                })
-            
-            timeline["stealable_sessions"].append(stealable)
-    
+    def _norm(session):
+        claims = session.get("decoded") or session.get("identity") or {}
+        cookie_names = session.get("cookie_names") or (
+            [session.get("key")] if session.get("key") else [])
+        token_types = session.get("token_types") or []
+        is_ests = any("estsauth" in (c or "").lower() for c in cookie_names)
+        is_persistent = bool(session.get("any_persistent")) or ("persistent" in token_types) \
+            or any("persistent" in (c or "").lower() for c in cookie_names)
+        # Identity-attribution confidence: a decoded JWT (storage token / JWT cookie)
+        # is a token_claim; otherwise fall back to the cookie session's tracked source
+        # (ests_heuristic / cookie_plaintext / token_claim). ESTS-derived tenant/object
+        # GUIDs are heuristic and must not be presented as hard attribution.
+        if claims and any(claims.get(k) for k in
+                          ("oid", "tid", "upn", "preferred_username", "email", "uti", "auth_time")):
+            identity_confidence = "token_claim"
+        else:
+            identity_confidence = session.get("identity_confidence")
+        return {
+            "tenant_id": session.get("tenant_id") or claims.get("tid") or claims.get("tenant_id"),
+            "object_id": session.get("object_id") or claims.get("oid") or claims.get("object_id"),
+            "upn": (session.get("upn") or claims.get("upn") or claims.get("preferred_username")
+                    or claims.get("unique_name") or claims.get("email")),
+            "uti": claims.get("uti"),
+            "sid": claims.get("sid"),
+            "auth_time": claims.get("auth_time"),
+            "iat": claims.get("iat"),
+            "amr": claims.get("amr"),
+            "is_ests": is_ests,
+            "is_persistent": is_persistent,
+            "identity_confidence": identity_confidence,
+            "domain": session.get("domain") or session.get("origin"),
+            "source": (cookie_names[0] if cookie_names else session.get("storage_type") or "storage"),
+            "expiration": session.get("latest_expiry") or session.get("expiration"),
+        }
+
+    normalized = [_norm(s) for s in auth_sessions]
+
+    # -------------------------------------------------------------------------
+    # 1. Stealable sessions: any artifact carrying a recoverable identity or an
+    #    ESTS cookie (the replayable session "loaded gun").
+    # -------------------------------------------------------------------------
+    for n in normalized:
+        if not (n["is_ests"] or n["object_id"] or n["upn"]):
+            continue
+        stealable = {
+            "cookie_name": n["source"],
+            "domain": n["domain"],
+            "tenant_id": n["tenant_id"],
+            "object_id": n["object_id"],
+            "upn": n["upn"],
+            "uti": n["uti"],
+            "sid": n["sid"],
+            "expiration": n["expiration"],
+            "is_persistent": n["is_persistent"],
+            "identity_confidence": n["identity_confidence"],
+            "estimated_birth": None,
+            "theft_note": None,
+        }
+
+        # Estimate session birth from expiration (exp - lifetime for persistent)
+        if n["is_persistent"] and n["expiration"]:
+            try:
+                exp_dt = datetime.fromisoformat(str(n["expiration"]).replace("Z", "+00:00"))
+                birth_estimate = exp_dt - timedelta(days=ESTS_PERSISTENT_LIFETIME_DAYS)
+                stealable["estimated_birth"] = birth_estimate.isoformat()
+                stealable["theft_note"] = (
+                    f"Session birth estimated as {birth_estimate.strftime('%Y-%m-%d')} "
+                    f"(expiration - {ESTS_PERSISTENT_LIFETIME_DAYS} days; approximates the LAST "
+                    "refresh of a rolling persistent session, not original sign-in). "
+                    "Conditional Access sign-in-frequency may alter this. Correlate with Entra "
+                    "sign-in logs for first TA replay."
+                )
+            except Exception:
+                pass
+
+        # Add correlation anchor for Entra. Thread BOTH linkable identifiers and
+        # frame them as DISTINCT pivots:
+        #   uti -> traces this one specific token's actions (UniqueTokenId)
+        #   sid -> enumerates the whole session, INCLUDING tokens the attacker
+        #          mints from a replayed cookie, which inherit the session's SID
+        #          (AADSessionId). For replay hunting, sid is the broader sweep.
+        if stealable["tenant_id"] and stealable["object_id"]:
+            pivots = []
+            if n["sid"]:
+                pivots.append(
+                    f"SID PIVOT (session sweep): linkable Session ID '{n['sid']}' "
+                    "= AADSessionId in Unified Audit Log / Exchange / Graph activity logs. "
+                    "Tokens minted from a replayed cookie inherit this SID, so this enumerates "
+                    "the FULL session including attacker activity."
+                )
+            if n["uti"]:
+                pivots.append(
+                    f"UTI PIVOT (single token): unique token id '{n['uti']}' "
+                    "= UniqueTokenId in those same logs. Traces only THIS token's actions; "
+                    "a replay mints new tokens with different UTIs, so use UTI to confirm the "
+                    "recovered token, not to catch the replay."
+                )
+            if not pivots:
+                pivots.append(
+                    "No uti/sid recovered from host artifacts (ESTS cookie is opaque). "
+                    "Pivot on userId/SessionId from the sign-in logs directly."
+                )
+            conf = n["identity_confidence"]
+            conf_hint = ("" if conf == "token_claim" else
+                         " NOTE: tenant/object derived from an UNVALIDATED ESTS byte-offset "
+                         "heuristic - corroborate against a token claim before attributing."
+                         if conf == "ests_heuristic" else "")
+            timeline["correlation_anchors"].append({
+                "type": "Entra",
+                "tenant_id": stealable["tenant_id"],
+                "object_id": stealable["object_id"],
+                "upn": stealable.get("upn"),
+                "uti": n["uti"],
+                "sid": n["sid"],
+                "identity_confidence": conf,
+                "pivots": pivots,
+                "query_guidance": (
+                    "In Entra Sign-in Logs, filter by: "
+                    f"userId eq '{stealable['object_id']}' or "
+                    f"userPrincipalName eq '{stealable.get('upn') or 'UNKNOWN'}'. "
+                    + " ".join(pivots)
+                    + f"{conf_hint}"
+                ),
+            })
+
+        timeline["stealable_sessions"].append(stealable)
+
+    # -------------------------------------------------------------------------
+    # 1b. Cross-artifact identity merge for correlation anchors.
+    #     The same identity (object_id) often appears in MULTIPLE artifacts - e.g.
+    #     an ESTS cookie (ests_heuristic, no UPN/uti) AND a storage token
+    #     (token_claim, with UPN + uti). Collapse those into one anchor per oid,
+    #     keeping the highest-confidence attribution and the richest fields, so the
+    #     report shows one corroborated identity instead of two partial rows.
+    # -------------------------------------------------------------------------
+    def _conf_rank(c):
+        return {"token_claim": 3, "cookie_plaintext": 2,
+                "ests_heuristic": 1, "url_login_hint": 1}.get(c, 0)
+
+    _merged, _order = {}, []
+    for a in timeline["correlation_anchors"]:
+        oid = (a.get("object_id") or "").lower()
+        key = oid or f"_nooid_{len(_order)}"  # anchors without an oid stay distinct
+        if key not in _merged:
+            rec = dict(a)
+            rec["merged_from"] = [a["identity_confidence"]] if a.get("identity_confidence") else []
+            _merged[key] = rec
+            _order.append(key)
+            continue
+        rec = _merged[key]
+        if a.get("identity_confidence"):
+            rec["merged_from"].append(a["identity_confidence"])
+        # enrich any missing fields from this duplicate
+        rec["upn"] = rec.get("upn") or a.get("upn")
+        rec["uti"] = rec.get("uti") or a.get("uti")
+        rec["sid"] = rec.get("sid") or a.get("sid")
+        rec["tenant_id"] = rec.get("tenant_id") or a.get("tenant_id")
+        # if this duplicate is higher-confidence, promote its attribution +
+        # token-grade identifiers + caveat-free guidance/pivots
+        if _conf_rank(a.get("identity_confidence")) > _conf_rank(rec.get("identity_confidence")):
+            rec["identity_confidence"] = a.get("identity_confidence")
+            rec["tenant_id"] = a.get("tenant_id") or rec.get("tenant_id")
+            rec["query_guidance"] = a.get("query_guidance")
+            rec["pivots"] = a.get("pivots") or rec.get("pivots")
+            if a.get("upn"):
+                rec["upn"] = a["upn"]
+            if a.get("uti"):
+                rec["uti"] = a["uti"]
+            if a.get("sid"):
+                rec["sid"] = a["sid"]
+    for rec in _merged.values():
+        # de-duplicate provenance, strongest first
+        rec["merged_from"] = sorted(set(rec.get("merged_from", [])),
+                                    key=_conf_rank, reverse=True)
+    timeline["correlation_anchors"] = [_merged[k] for k in _order]
+
     # -------------------------------------------------------------------------
     # 2. Extract auth_time from cleartext tokens (best session birth anchor)
     # -------------------------------------------------------------------------
-    for session in auth_sessions:
-        claims = session.get("identity", {})
-        if "auth_time" in claims:
-            auth_time = claims["auth_time"]
-            try:
-                if isinstance(auth_time, (int, float)):
-                    auth_dt = datetime.utcfromtimestamp(auth_time)
-                    auth_time_iso = auth_dt.isoformat() + "Z"
-                else:
-                    auth_time_iso = str(auth_time)
-                
-                timeline["session_birth_anchors"].append({
-                    "source": session.get("name", "unknown"),
-                    "domain": session.get("domain"),
-                    "auth_time": auth_time_iso,
-                    "auth_time_epoch": auth_time if isinstance(auth_time, (int, float)) else None,
-                    "iat": claims.get("iat"),
-                    "amr": claims.get("amr"),  # Authentication methods (mfa, pwd, etc.)
-                    "note": (
-                        "auth_time is the interactive authentication instant (MFA moment). "
-                        "This is more precise than iat (which can be a silent refresh). "
-                        f"Authentication methods: {claims.get('amr', 'unknown')}"
-                    ),
-                })
-            except Exception:
-                pass
+    for n in normalized:
+        auth_time = n["auth_time"]
+        if auth_time is None:
+            continue
+        try:
+            if isinstance(auth_time, (int, float)):
+                auth_time_iso = datetime.fromtimestamp(auth_time, timezone.utc).isoformat()
+            else:
+                auth_time_iso = str(auth_time)
+
+            timeline["session_birth_anchors"].append({
+                "source": n["source"],
+                "domain": n["domain"],
+                "object_id": n["object_id"],   # for per-identity matching in step 5
+                "tenant_id": n["tenant_id"],
+                "auth_time": auth_time_iso,
+                "auth_time_epoch": auth_time if isinstance(auth_time, (int, float)) else None,
+                "iat": n["iat"],
+                "amr": n["amr"],  # Authentication methods (mfa, pwd, etc.)
+                "note": (
+                    "auth_time is the interactive authentication instant (MFA moment). "
+                    "This is more precise than iat (which can be a silent refresh). "
+                    f"Authentication methods: {n['amr'] if n['amr'] is not None else 'unknown'}"
+                ),
+            })
+        except Exception:
+            pass
     
     # -------------------------------------------------------------------------
     # 3. Reconstruct IdP Authentication Flows from visitdetails
@@ -2639,10 +2856,12 @@ def build_session_theft_timeline(pkg: Dict, auth_sessions: List[Dict]) -> Dict:
             "investigation_guidance": [],
         }
         
-        # Use auth_time if available for this identity
+        # Use auth_time if available for THIS identity (match by object_id, not
+        # "first anchor wins" which stamped every window with one identity's time).
+        sess_oid = session.get("object_id")
         for anchor in timeline["session_birth_anchors"]:
-            # Try to match by domain/tenant
-            if anchor.get("auth_time"):
+            if anchor.get("auth_time") and anchor.get("object_id") \
+                    and anchor.get("object_id") == sess_oid:
                 theft_window["session_birth_lower"] = anchor.get("auth_time")
                 theft_window["session_birth_upper"] = anchor.get("auth_time")
                 theft_window["birth_source"] = "auth_time claim (precise)"
@@ -2693,14 +2912,18 @@ def build_session_theft_timeline(pkg: Dict, auth_sessions: List[Dict]) -> Dict:
 # Entra / Purview Log Correlation
 # --------------------------------------------------------------------------- #
 
-# Log file name patterns for auto-detection
+# Log file name patterns for auto-detection.
+# ORDER MATTERS: more-specific names must be tested first because of substring
+# collisions - "interactive" is a substring of "noninteractive", and "audit" is a
+# substring of "unifiedauditlog". Dict iteration order is insertion order and the
+# matcher breaks on first hit, so purview/noninteractive precede audit/interactive.
 ENTRA_LOG_PATTERNS = {
-    "interactive": ["interactive", "interactivesignin"],
+    "purview": ["unifiedauditlog", "unified", "purview", "ual"],
     "noninteractive": ["noninteractive", "non-interactive", "noninteractivesignin"],
-    "serviceprincipal": ["serviceprincipal", "service-principal", "application", "appsignin"],
+    "serviceprincipal": ["serviceprincipal", "service-principal", "appsignin", "application"],
     "managedidentity": ["managedidentity", "managed-identity", "msi"],
+    "interactive": ["interactive", "interactivesignin"],
     "audit": ["audit", "auditlog"],
-    "purview": ["unified", "ual", "purview", "unifiedauditlog"],
 }
 
 
@@ -2793,8 +3016,10 @@ def normalize_signin_record(rec: Dict, log_type: str) -> Dict:
         "timestamp": None,
         "user_id": None,
         "user_principal_name": None,
+        "user_display_name": None,
         "app_id": None,
         "app_display_name": None,
+        "client_app_used": None,
         "ip_address": None,
         "location": None,
         "device_detail": None,
@@ -2823,21 +3048,35 @@ def normalize_signin_record(rec: Dict, log_type: str) -> Dict:
             normalized["user_id"] = rec[k]
             break
     
-    # UPN
-    for k in ["userPrincipalName", "UserPrincipalName", "upn", "UPN", 
-              "userDisplayName", "UserDisplayName"]:
+    # UPN - a real userPrincipalName only. Display name is NOT a UPN and would
+    # never match BAI identities; capture it separately instead.
+    for k in ["userPrincipalName", "UserPrincipalName", "upn", "UPN"]:
         if k in rec and rec[k]:
             normalized["user_principal_name"] = rec[k]
             break
     
-    # App ID
-    for k in ["appId", "AppId", "applicationId", "ApplicationId", "clientAppUsed"]:
+    # Display name (distinct from UPN)
+    for k in ["userDisplayName", "UserDisplayName"]:
+        if k in rec and rec[k]:
+            normalized["user_display_name"] = rec[k]
+            break
+    
+    # App ID - an application identifier only. clientAppUsed is a transport
+    # CATEGORY (e.g. "Browser", "Mobile Apps and Desktop clients"), not an app id.
+    for k in ["appId", "AppId", "applicationId", "ApplicationId"]:
         if k in rec and rec[k]:
             normalized["app_id"] = rec[k]
             break
     
-    # App name
-    for k in ["appDisplayName", "AppDisplayName", "applicationDisplayName", "resourceDisplayName"]:
+    # Client app category (transport), kept separate from app_id
+    for k in ["clientAppUsed", "ClientAppUsed"]:
+        if k in rec and rec[k]:
+            normalized["client_app_used"] = rec[k]
+            break
+    
+    # App name - the application's display name. Do NOT fall back to
+    # resourceDisplayName (the resource/audience is a different field, mapped below).
+    for k in ["appDisplayName", "AppDisplayName", "applicationDisplayName"]:
         if k in rec and rec[k]:
             normalized["app_display_name"] = rec[k]
             break
@@ -2894,8 +3133,10 @@ def normalize_signin_record(rec: Dict, log_type: str) -> Dict:
             normalized["mfa_detail"] = rec[k]
             break
     
-    # Session ID
-    for k in ["sessionId", "SessionId", "correlationId", "CorrelationId"]:
+    # Session ID. Do NOT fall back to correlationId: SessionId and CorrelationId
+    # are distinct Entra concepts, and the Purview/UAL pivot relies on a real
+    # SessionId. Conflating them produces join keys that silently never match.
+    for k in ["sessionId", "SessionId"]:
         if k in rec and rec[k]:
             normalized["session_id"] = rec[k]
             break
@@ -2964,31 +3205,66 @@ def correlate_entra_logs(theft_timeline: Dict, entra_logs: Dict) -> Dict:
     stealable = theft_timeline.get("stealable_sessions", [])
     theft_windows = theft_timeline.get("theft_windows", [])
     
-    # Build lookup of identities from BAI
+    # Build lookup of identities from BAI. An identity may be keyed by BOTH
+    # object_id and upn, but both keys must alias the SAME record so we don't
+    # process (and count) it twice. Guard against object_id being None (a
+    # storage token / JWT cookie may carry a UPN but no oid) - the previous
+    # obj_id.lower() unconditionally crashed in that case.
+    # Precise session-birth anchors (auth_time) keyed by object_id, preferred over
+    # the coarse exp-minus-lifetime estimate when reconstructing the theft window.
+    birth_by_oid = {}
+    for a in theft_timeline.get("session_birth_anchors", []):
+        oid = (a.get("object_id") or "").lower()
+        if oid and a.get("auth_time") and oid not in birth_by_oid:
+            birth_by_oid[oid] = a["auth_time"]
+
     bai_identities = {}
+    identity_objs = []  # unique identity records (iterate these, not aliased keys)
     for session in stealable:
         obj_id = session.get("object_id")
         upn = session.get("upn")
         tenant = session.get("tenant_id")
-        
-        if obj_id:
-            bai_identities[obj_id.lower()] = {
+        if not (obj_id or upn):
+            continue
+
+        precise_birth = birth_by_oid.get((obj_id or "").lower())
+        birth = precise_birth or session.get("estimated_birth")
+        birth_source = ("auth_time" if precise_birth
+                        else ("estimated" if session.get("estimated_birth") else None))
+
+        rec = None
+        if obj_id and obj_id.lower() in bai_identities:
+            rec = bai_identities[obj_id.lower()]
+        elif upn and upn.lower() in bai_identities:
+            rec = bai_identities[upn.lower()]
+        if rec is None:
+            rec = {
                 "object_id": obj_id,
                 "upn": upn,
                 "tenant_id": tenant,
-                "session_birth": session.get("estimated_birth"),
+                "session_birth": birth,
+                "birth_source": birth_source,
                 "expiration": session.get("expiration"),
                 "signins": [],
             }
+            identity_objs.append(rec)
+        else:
+            # enrich an existing record with any newly-seen identifiers
+            rec["object_id"] = rec.get("object_id") or obj_id
+            rec["upn"] = rec.get("upn") or upn
+            rec["tenant_id"] = rec.get("tenant_id") or tenant
+            # upgrade to a precise birth if one became available
+            if precise_birth and rec.get("birth_source") != "auth_time":
+                rec["session_birth"] = precise_birth
+                rec["birth_source"] = "auth_time"
+            elif rec.get("session_birth") is None and birth:
+                rec["session_birth"] = birth
+                rec["birth_source"] = birth_source
+
+        if obj_id:
+            bai_identities[obj_id.lower()] = rec
         if upn:
-            bai_identities[upn.lower()] = bai_identities.get(obj_id.lower(), {
-                "object_id": obj_id,
-                "upn": upn,
-                "tenant_id": tenant,
-                "session_birth": session.get("estimated_birth"),
-                "expiration": session.get("expiration"),
-                "signins": [],
-            })
+            bai_identities[upn.lower()] = rec
     
     # Match sign-ins to BAI identities
     for signin in all_signins:
@@ -3004,12 +3280,12 @@ def correlate_entra_logs(theft_timeline: Dict, entra_logs: Dict) -> Dict:
         if matched_identity:
             matched_identity["signins"].append(signin)
     
-    # Count matched identities
-    matched_count = sum(1 for i in bai_identities.values() if i.get("signins"))
+    # Count matched identities (unique records, not aliased keys)
+    matched_count = sum(1 for i in identity_objs if i.get("signins"))
     correlation["identities_matched"] = matched_count
     
     # Analyze each identity for anomalous sign-ins
-    for identity_key, identity in bai_identities.items():
+    for identity in identity_objs:
         if not identity.get("signins"):
             continue
         
@@ -3019,19 +3295,42 @@ def correlate_entra_logs(theft_timeline: Dict, entra_logs: Dict) -> Dict:
         # Sort by timestamp
         signins.sort(key=lambda x: x.get("timestamp") or "")
         
-        # Group by IP to find baseline
+        # Establish a baseline of "known-good" IPs. The old rule (an IP is baseline
+        # if it appears in >=10% of all sign-ins) treated a single attacker IP as
+        # baseline whenever volume was low - in a handful of sign-ins, every IP
+        # appears once and so every IP cleared the bar, hiding the replay entirely.
+        # Instead, baseline = IPs the user genuinely signed in from INTERACTIVELY
+        # (real, MFA-backed logins) plus any IP seen BEFORE session birth. A
+        # non-interactive sign-in from an IP outside that set is the replay signature.
+        birth_dt = None
+        if session_birth:
+            try:
+                birth_dt = datetime.fromisoformat(session_birth.replace("Z", "+00:00"))
+            except Exception:
+                birth_dt = None
+
         ip_counts = {}
+        baseline_ips = set()
         for s in signins:
             ip = s.get("ip_address")
-            if ip:
-                ip_counts[ip] = ip_counts.get(ip, 0) + 1
-        
-        # Find most common IPs (likely legitimate)
-        if ip_counts:
-            baseline_ips = set(ip for ip, count in ip_counts.items() 
-                              if count >= max(1, len(signins) * 0.1))
-        else:
-            baseline_ips = set()
+            if not ip:
+                continue
+            ip_counts[ip] = ip_counts.get(ip, 0) + 1
+            if s.get("log_type") == "interactive":
+                baseline_ips.add(ip)
+            elif birth_dt and s.get("timestamp"):
+                try:
+                    if datetime.fromisoformat(s["timestamp"].replace("Z", "+00:00")) < birth_dt:
+                        baseline_ips.add(ip)
+                except Exception:
+                    pass
+
+        # Fallback only when we have no interactive/pre-birth context at all:
+        # treat the single most frequent IP as baseline (best-effort), so we still
+        # flag clearly anomalous outliers rather than nothing.
+        if not baseline_ips and ip_counts:
+            top = max(ip_counts.values())
+            baseline_ips = {ip for ip, c in ip_counts.items() if c == top}
         
         # Find anomalous sign-ins (different IP after session birth)
         for signin in signins:
@@ -3085,6 +3384,7 @@ def correlate_entra_logs(theft_timeline: Dict, entra_logs: Dict) -> Dict:
                             "ip_address": signin_ip,
                             "location": signin.get("location"),
                             "session_birth": session_birth,
+                            "session_birth_source": identity.get("birth_source"),
                             "theft_window": f"[{session_birth}, {signin_time}]",
                         })
                         
@@ -3092,6 +3392,7 @@ def correlate_entra_logs(theft_timeline: Dict, entra_logs: Dict) -> Dict:
                         correlation["completed_theft_windows"].append({
                             "identity": anomaly["identity"],
                             "session_birth": session_birth,
+                            "session_birth_source": identity.get("birth_source"),
                             "first_ta_replay": signin_time,
                             "theft_ip": signin_ip,
                             "theft_location": signin.get("location"),
@@ -3116,7 +3417,7 @@ def correlate_entra_logs(theft_timeline: Dict, entra_logs: Dict) -> Dict:
             actor = (audit.get("initiatedBy", {}).get("user", {}).get("userPrincipalName") or
                     audit.get("UserId") or audit.get("userPrincipalName") or "").lower()
             
-            if actor in bai_identities or any(actor in k for k in bai_identities.keys()):
+            if actor and actor in bai_identities:
                 correlation["post_compromise_activity"].append({
                     "timestamp": audit.get("activityDateTime") or audit.get("CreationTime"),
                     "activity": activity,
@@ -3489,16 +3790,18 @@ class ReportGenerator:
         for session in self.sessions:
             idp = session.get("idp", "Unknown")
             domain = session.get("domain", "Unknown")
-            identity = session.get("identity", {})
+            identity = session.get("identity") or {}
             
             entry = {
-                "identity": identity.get("upn") or identity.get("preferred_username") or 
-                           identity.get("email") or identity.get("name") or 
-                           f"[{domain}]",
+                "identity": (session.get("upn") or identity.get("upn")
+                           or identity.get("preferred_username")
+                           or identity.get("email") or identity.get("name")
+                           or f"[{domain}]"),
                 "idp": idp,
                 "domain": domain,
                 "tenant_id": session.get("tenant_id") or identity.get("tid"),
                 "object_id": session.get("object_id") or identity.get("oid"),
+                "attribution": confidence_label(session.get("identity_confidence")),
                 "mfa_status": self._get_mfa_status(session),
                 "token_types": self._get_token_types(session),
                 "valid_until": session.get("latest_expiry") or session.get("earliest_expiry"),
@@ -3509,7 +3812,7 @@ class ReportGenerator:
         
         # Add storage tokens
         for token in self.storage_tokens:
-            identity = token.get("identity", {})
+            identity = token.get("decoded") or token.get("identity") or {}
             entry = {
                 "identity": identity.get("upn") or identity.get("preferred_username") or 
                            identity.get("email") or token.get("key", "Unknown"),
@@ -3517,6 +3820,7 @@ class ReportGenerator:
                 "domain": token.get("origin", "Unknown"),
                 "tenant_id": identity.get("tid"),
                 "object_id": identity.get("oid"),
+                "attribution": confidence_label("token_claim") if identity else "Unknown",
                 "mfa_status": self._get_mfa_status({"identity": identity}),
                 "token_types": "Storage Token" + (" (Refresh)" if token.get("is_refresh") else ""),
                 "valid_until": token.get("expiration"),
@@ -3851,6 +4155,9 @@ class ReportGenerator:
             sess_type = sess.get('type', 'SESSION')
             httponly = sess.get('httponly', False)
             cookie_name = sess.get('cookie_name', 'Unknown')
+            conf = sess.get('identity_confidence')
+            conf_text = confidence_label(conf)
+            conf_class = 'low-risk' if conf == 'token_claim' else 'high-risk'
             
             # Token type with replayability info
             if httponly:
@@ -3861,16 +4168,19 @@ class ReportGenerator:
                 risk_class = 'high-risk'
             
             upn_html = html_mod.escape(upn) if upn and upn != '<em>Unknown</em>' else upn
+            if sess.get('upn_source') == 'url_login_hint' and upn != '<em>Unknown</em>':
+                upn_html += " <span style='font-size:8px;color:#cc0000;'>(from URL login_hint)</span>"
             
             rows.append(f"<tr><td><strong>{upn_html}</strong></td>"
                        f"<td><code style='font-size:9px;'>{html_mod.escape(tenant_id)}</code></td>"
                        f"<td><code style='font-size:9px;'>{html_mod.escape(object_id)}</code></td>"
+                       f"<td class='{conf_class}'>{html_mod.escape(conf_text)}</td>"
                        f"<td>{html_mod.escape(cookie_name)}</td>"
                        f"<td class='{risk_class}'>{token_desc}</td></tr>")
         
         return f"""<table class='data-table entra-table'>
 <thead>
-<tr><th>UPN (User)</th><th>Tenant ID</th><th>Object ID</th><th>Cookie</th><th>Token Type &amp; Risk</th></tr>
+<tr><th>UPN (User)</th><th>Tenant ID</th><th>Object ID</th><th>Attribution</th><th>Cookie</th><th>Token Type &amp; Risk</th></tr>
 </thead>
 <tbody>
 {''.join(rows)}
@@ -4291,10 +4601,27 @@ class ReportGenerator:
         anchors = self.theft_timeline.get("correlation_anchors", []) if self.theft_timeline else []
         if anchors:
             for a in anchors[:3]:
-                lines.append(f"  Identity: {a.get('upn', a.get('object_id', 'Unknown'))}")
-                lines.append(f"  Tenant:   {a.get('tenant_id', 'Unknown')}")
-                lines.append(f"  Query:    Filter by userId eq '{a.get('object_id', '?')}'")
-                lines.append(f"            within {a.get('validity_start', '?')} to {a.get('validity_end', '?')}")
+                lines.append(f"  Identity:    {a.get('upn') or a.get('object_id') or 'Unknown'}")
+                lines.append(f"  Tenant:      {a.get('tenant_id', 'Unknown')}")
+                lines.append(f"  Attribution: {confidence_label(a.get('identity_confidence'))}")
+                mf = a.get('merged_from') or []
+                if len(mf) > 1:
+                    lines.append("  Corroboration: "
+                                 + ", ".join(confidence_label(m) for m in mf)
+                                 + " (same object_id across artifacts)")
+                if a.get('uti'):
+                    lines.append(f"  Token uti:   {a.get('uti')}  (single-token pivot -> UniqueTokenId)")
+                if a.get('sid'):
+                    lines.append(f"  Session sid: {a.get('sid')}  (session-sweep pivot -> AADSessionId)")
+                lines.append(f"  Query:       Filter by userId eq '{a.get('object_id', '?')}'")
+                lines.append(f"               within {a.get('validity_start', '?')} to {a.get('validity_end', '?')}")
+                for p in (a.get('pivots') or []):
+                    wrapped = textwrap.wrap(p, 72) or [p]
+                    for i, ln in enumerate(wrapped):
+                        lines.append(f"    • {ln}" if i == 0 else f"      {ln}")
+                if a.get('identity_confidence') == 'ests_heuristic':
+                    lines.append("  ⚠ tenant/object from UNVALIDATED ESTS heuristic — corroborate")
+                    lines.append("    against a token claim before attributing.")
                 lines.append("")
         else:
             lines.append("  No specific correlation anchors extracted.")
@@ -4303,10 +4630,17 @@ class ReportGenerator:
         
         lines.append("PURVIEW/UAL GUIDANCE")
         lines.append("-" * 40)
-        lines.append("  • Pivot on SessionId in audit records")
-        lines.append("  • Look for same SessionId used from different ClientIP")
-        lines.append("  • Storage tokens (localStorage/IndexedDB) may have longer validity than cookies")
-        lines.append("  • Check for refresh token reuse patterns")
+        lines.append("  • Linkable identifiers (Entra preview, 2025+) appear in the Unified Audit")
+        lines.append("    Log export as: UniqueTokenId (= uti) and AADSessionId (= sid).")
+        lines.append("  • sid / AADSessionId = SESSION SWEEP: links every token issued in the")
+        lines.append("    login session, including tokens minted from a replayed cookie. Best")
+        lines.append("    pivot to enumerate the full scope of attacker activity.")
+        lines.append("  • uti / UniqueTokenId = SINGLE TOKEN: traces only the one recovered")
+        lines.append("    token's actions; a replay mints new tokens with different uti values.")
+        lines.append("  • Look for the same sid/AADSessionId used from a different ClientIP.")
+        lines.append("  • Coverage is preview-era and varies by workload + retention window —")
+        lines.append("    confirm these fields are populated for your incident window before relying on them.")
+        lines.append("  • Storage tokens (localStorage/IndexedDB) may have longer validity than cookies.")
         lines.append("")
         
         return "\n".join(lines)
@@ -4383,7 +4717,236 @@ class ReportGenerator:
         
         return "\n".join(lines)
     
-    def generate_txt(self) -> str:
+    def _section_validation_checklist(self) -> str:
+        """Standing list of the assumptions this analyzer makes, so an examiner has
+        a per-case prompt to confirm each before relying on it. Items are tagged
+        [IN USE] when the current package/logs actually exercise that assumption."""
+        tl = self.theft_timeline or {}
+        anchors = tl.get("correlation_anchors", [])
+        stealables = tl.get("stealable_sessions", [])
+        ec = self.entra_correlation or {}
+
+        def _any(seq, pred):
+            return any(pred(x) for x in seq)
+
+        ests_used = (_any(stealables, lambda s: s.get("identity_confidence") == "ests_heuristic")
+                     or _any(anchors, lambda a: "ests_heuristic" in (a.get("merged_from") or []))
+                     or _any(self.entra_sessions, lambda s: s.get("identity_confidence") == "ests_heuristic"))
+        sid_used = _any(anchors, lambda a: a.get("sid")) or _any(stealables, lambda s: s.get("sid"))
+        uti_used = _any(anchors, lambda a: a.get("uti")) or _any(stealables, lambda s: s.get("uti"))
+        persistent_est = _any(stealables, lambda s: s.get("estimated_birth"))
+        authtime_used = bool(tl.get("session_birth_anchors")) or _any(
+            ec.get("first_ta_replays", []), lambda r: r.get("session_birth_source") == "auth_time")
+        corr_ran = bool(self.entra_correlation)
+        host_collection = bool(self.upn_accounts or stealables or self.storage_tokens)
+
+        def tag(flag):
+            return "[IN USE]   " if flag else "[ n/a  ]   "
+
+        lines = []
+        lines.append("=" * 78)
+        lines.append("9. ANALYST VALIDATION CHECKLIST")
+        lines.append("=" * 78)
+        lines.append("")
+        lines.append("  These are the analyzer's assumptions. Confirm each before relying on the")
+        lines.append("  conclusions above. [IN USE] = this package/log set exercises the assumption.")
+        lines.append("")
+
+        items = [
+            (ests_used,
+             "ESTS tenant/object GUIDs are HEURISTIC",
+             ["decode_entra_home_account reads tenant_id/object_id from fixed byte",
+              "offsets of the opaque ESTS cookie; any 16 bytes form a valid-looking GUID.",
+              "VERIFY: corroborate each ESTS-derived GUID against a token claim (oid/tid)",
+              "or the tenant's known IDs. Do not attribute on the heuristic alone."]),
+            (sid_used,
+             "sid claim == AADSessionId (linkable identifier)",
+             ["The analyzer treats the token's sid as the AADSessionId used in the logs.",
+              "VERIFY: confirm against one known-good sign-in in THIS tenant that the",
+              "recovered sid matches the logged AADSessionId before using it to sweep."]),
+            (uti_used,
+             "uti claim == UniqueTokenId (linkable identifier)",
+             ["The analyzer treats the token's uti as the UniqueTokenId used in the logs.",
+              "VERIFY: confirm the recovered uti matches a logged UniqueTokenId; remember",
+              "a replay mints NEW tokens with different utis (uti confirms, sid sweeps)."]),
+            (corr_ran or sid_used or uti_used,
+             "Linkable-identifier coverage is preview-era",
+             ["uti/sid surfaced in logs (Entra, 2025+) is preview and rolling out;",
+              "coverage varies by workload and retention window.",
+              "VERIFY: confirm UniqueTokenId/AADSessionId are actually populated for your",
+              "incident window in the specific log sources you queried."]),
+            (persistent_est and not authtime_used,
+             "Persistent session-birth is ESTIMATED (exp - 90d)",
+             ["estimated_birth approximates the LAST refresh of a rolling persistent",
+              "cookie, NOT the original interactive sign-in. Conditional Access sign-in",
+              "frequency changes the lifetime.",
+              "VERIFY: prefer the precise auth_time anchor where present; treat the",
+              "estimate as an approximate upper bound on the window."]),
+            (corr_ran,
+             "Replay baseline = interactive / pre-birth IPs",
+             ["Replay detection treats interactive (and pre-birth) sign-in IPs as the",
+              "user baseline and flags non-interactive sign-ins from other IPs after birth.",
+              "VERIFY: confirm the baseline interactive sign-ins are genuinely the user and",
+              "not attacker-interactive; clear flagged IPs against known VPN/egress/travel."]),
+            (corr_ran,
+             "Timestamps are reconciled to UTC",
+             ["All correlation is timestamp-based across host artifacts and log sources.",
+              "VERIFY: host clock integrity and that every log source's times are in (or",
+              "converted to) UTC; a skewed clock distorts the theft window."]),
+            (host_collection,
+             "Web storage = OPEN tabs at collection time only",
+             ["localStorage/sessionStorage tokens are captured only from tabs open during",
+              "collection. Absence of a token is NOT evidence the session never existed.",
+              "VERIFY: note which origins had open tabs; corroborate identity from the",
+              "Cookies store and the server-side sign-in logs."]),
+        ]
+
+        n = 1
+        for flag, title, body in items:
+            lines.append(f"  {tag(flag)}{n}. {title}")
+            for b in body:
+                lines.append(f"             {b}")
+            lines.append("")
+            n += 1
+
+        return "\n".join(lines)
+    
+    def _text_grid(self, headers: List[str], rows: List[List[str]],
+                   widths: List[int]) -> str:
+        """Render an ASCII grid table with per-column wrapping (TXT parity with HTML)."""
+        def cell_lines(text, w):
+            text = "" if text is None else str(text)
+            out = []
+            for para in text.split("\n"):
+                out.extend(textwrap.wrap(para, w) or [""])
+            return out
+
+        sep = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+
+        def fmt(cells):
+            cols = [cell_lines(c, w) for c, w in zip(cells, widths)]
+            h = max((len(c) for c in cols), default=1)
+            for c in cols:
+                c += [""] * (h - len(c))
+            out = []
+            for r in range(h):
+                out.append("| " + " | ".join(cols[i][r].ljust(widths[i])
+                                              for i in range(len(widths))) + " |")
+            return out
+
+        out = [sep] + fmt(headers) + [sep]
+        for row in rows:
+            out += fmt(row)
+        out.append(sep)
+        return "\n".join(out)
+
+    def _generate_identity_table_txt(self) -> str:
+        """TXT version of the identity-accounts table (mirrors the HTML columns)."""
+        primary_accounts = [a for a in self.upn_accounts if a.get('has_strong_evidence')]
+        if not primary_accounts:
+            return "  No authenticated accounts discovered."
+        rows = []
+        for acct in primary_accounts:
+            upn = acct.get('upn', 'Unknown')
+            first = True
+            for domain, svc_info in sorted(acct.get('services', {}).items()):
+                for token in svc_info.get('tokens', []):
+                    cookie_name = token.get('cookie_name')
+                    if not cookie_name:
+                        continue
+                    is_jwt = token.get('is_jwt', False)
+                    httponly = token.get('httponly')
+                    if is_jwt:
+                        ttype = "JWT"
+                    elif 'localStorage' in (cookie_name or ''):
+                        ttype = "localStorage"
+                    elif 'IndexedDB' in (cookie_name or ''):
+                        ttype = "IndexedDB"
+                    else:
+                        ttype = "Cookie"
+                    if httponly is True:
+                        prot, risk = "HttpOnly", "Requires malware/browser exploit to steal"
+                    elif httponly is False:
+                        prot, risk = "JS-accessible", "Stealable via XSS or malicious extension"
+                    else:
+                        prot, risk = "N/A", "Session evidence only"
+                    rows.append([upn if first else "", domain, ttype, prot, risk])
+                    first = False
+        if not rows:
+            return "  No authenticated accounts with cookie/token evidence."
+        return self._text_grid(
+            ["UPN (User)", "Service", "Type", "Protection", "Theft Risk"],
+            rows, [22, 22, 11, 13, 30])
+
+    def _generate_entra_table_txt(self) -> str:
+        """TXT version of the Entra sessions table. Block-per-session because the
+        two 36-char GUIDs make a single-row grid wider than a terminal."""
+        if not self.entra_sessions:
+            return "  No Entra sessions discovered."
+        lines = []
+        for i, sess in enumerate(self.entra_sessions, 1):
+            upn = sess.get('upn') or 'Unknown'
+            if sess.get('upn_source') == 'url_login_hint' and upn != 'Unknown':
+                upn += " (from URL login_hint)"
+            httponly = sess.get('httponly', False)
+            sess_type = sess.get('type', 'SESSION')
+            risk = (f"{sess_type} Cookie (HttpOnly) - Replayable if exfiltrated" if httponly
+                    else f"{sess_type} Cookie (JS-accessible) - Easily stolen & replayable")
+            lines.append(f"  [{i}] {upn}")
+            lines.append(f"      Tenant ID:   {sess.get('tenant_id', 'Unknown')}")
+            lines.append(f"      Object ID:   {sess.get('object_id', 'Unknown')}")
+            lines.append(f"      Attribution: {confidence_label(sess.get('identity_confidence'))}")
+            lines.append(f"      Cookie:      {sess.get('cookie_name', 'Unknown')}")
+            lines.append(f"      Token/Risk:  {risk}")
+            lines.append("")
+        return "\n".join(lines).rstrip()
+
+    def _generate_findings_table_txt(self) -> str:
+        """TXT version of the findings table. Block-per-finding for readability."""
+        if not self.findings:
+            return "  No findings to report."
+        severity_order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+        by_sev = {}
+        for f in self.findings:
+            by_sev.setdefault(f.get("severity", "INFO"), []).append(f)
+        lines = []
+        for sev in severity_order:
+            for f in by_sev.get(sev, []):
+                lines.append(f"  [{sev}] {f.get('title', 'Unknown')}")
+                lines.append(f"         Category: {f.get('category', 'Unknown')}")
+                ev = self._format_evidence_text(f.get('details', {}))
+                if ev:
+                    first = True
+                    for ln in ev:
+                        label = "Evidence: " if first else "          "
+                        lines.append(f"         {label}{ln}")
+                        first = False
+                rec = f.get('recommendation', '')
+                if rec:
+                    wrapped = textwrap.wrap(rec, 64) or [""]
+                    first = True
+                    for ln in wrapped:
+                        label = "Action:   " if first else "          "
+                        lines.append(f"         {label}{ln}")
+                        first = False
+                lines.append("")
+        return "\n".join(lines).rstrip()
+
+    def _format_evidence_text(self, details: Dict) -> List[str]:
+        """Flatten a finding's details dict into readable text lines."""
+        if not details or not isinstance(details, dict):
+            return []
+        out = []
+        for k, v in details.items():
+            if isinstance(v, (list, tuple)):
+                v = ", ".join(str(x) for x in v[:5]) + (" ..." if len(v) > 5 else "")
+            elif isinstance(v, dict):
+                v = "; ".join(f"{ik}={iv}" for ik, iv in list(v.items())[:5])
+            line = f"{k}: {v}"
+            out.extend(textwrap.wrap(line, 64) or [line])
+        return out[:12]
+
+    def generate_txt(self, render_tables: bool = True) -> str:
         """Generate complete TXT report."""
         sections = []
         
@@ -4408,19 +4971,38 @@ class ReportGenerator:
         sections.append(self._section_risk_assessment())
         sections.append(self._section_detailed_findings())
         sections.append(self._section_timelines())
+        sections.append(self._section_correlation_guidance())
         sections.append(self._section_chain_of_custody())
+        sections.append(self._section_validation_checklist())
         
         # Footer
         sections.append("=" * 78)
         sections.append("END OF REPORT")
         sections.append("=" * 78)
         
-        return "\n".join(sections)
+        # Replace table markers with rendered text tables (parity with HTML).
+        # The HTML generator calls this with render_tables=False so it can swap in
+        # real <table> elements instead.
+        text = "\n".join(sections)
+        if not render_tables:
+            return text
+        out_lines = []
+        for line in text.split("\n"):
+            stripped = line.strip()
+            if stripped == "TABLE:identity_accounts":
+                out_lines.append(self._generate_identity_table_txt())
+            elif stripped == "TABLE:entra_sessions":
+                out_lines.append(self._generate_entra_table_txt())
+            elif stripped == "TABLE:findings":
+                out_lines.append(self._generate_findings_table_txt())
+            else:
+                out_lines.append(line)
+        return "\n".join(out_lines)
     
     def generate_html(self) -> str:
         """Generate complete HTML report."""
         # Convert TXT sections to HTML with styling
-        txt_content = self.generate_txt()
+        txt_content = self.generate_txt(render_tables=False)
         
         # Escape HTML and convert structure
         import html as html_mod
@@ -4628,7 +5210,8 @@ class ReportGenerator:
             import csv
             writer = csv.DictWriter(f, fieldnames=[
                 "identity", "idp", "domain", "tenant_id", "object_id",
-                "mfa_status", "token_types", "valid_until", "cookie_count", "httponly"
+                "attribution", "mfa_status", "token_types", "valid_until",
+                "cookie_count", "httponly"
             ])
             writer.writeheader()
             for entry in inventory:
@@ -4769,6 +5352,11 @@ def print_theft_timeline(theft_timeline: Dict, tz):
             print(f"      Tenant: {s.get('tenant_id', '?')}")
             print(f"      Object: {s.get('object_id', '?')}")
             print(f"      UPN:    {s.get('upn', '?')}")
+            print(f"      Attribution: {confidence_label(s.get('identity_confidence'))}")
+            if s.get("uti"):
+                print(f"      uti:    {s.get('uti')}  (single-token pivot)")
+            if s.get("sid"):
+                print(f"      sid:    {s.get('sid')}  (session-sweep pivot)")
             print(f"      Exp:    {s.get('expiration', '?')}")
             if s.get("estimated_birth"):
                 print(f"      Est Birth: {s.get('estimated_birth', '?')}")
@@ -4829,6 +5417,14 @@ def print_theft_timeline(theft_timeline: Dict, tz):
             print(f"  Tenant: {anchor.get('tenant_id', '?')}")
             print(f"  Object: {anchor.get('object_id', '?')}")
             print(f"  UPN:    {anchor.get('upn', '?')}")
+            print(f"  Attribution: {confidence_label(anchor.get('identity_confidence'))}")
+            _mf = anchor.get('merged_from') or []
+            if len(_mf) > 1:
+                print("  Corroboration: " + ", ".join(confidence_label(m) for m in _mf))
+            if anchor.get('uti'):
+                print(f"  uti:    {anchor.get('uti')}  (single-token pivot -> UniqueTokenId)")
+            if anchor.get('sid'):
+                print(f"  sid:    {anchor.get('sid')}  (session-sweep pivot -> AADSessionId)")
             print()
             print("  Query Guidance:")
             guidance = anchor.get("query_guidance", "")
