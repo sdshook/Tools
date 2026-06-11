@@ -1,16 +1,16 @@
-# BAI Report Formatting Prompt
+# AiTM Analyzer Report Formatting Prompt
 
-> © 2026, Shane Shook, All Rights Reserved. This tool is for testing and analysis.
+> © 2026, Shane D. Shook, All Rights Reserved. This tool is for authorized testing and analysis.
 
-Use this prompt with an AI assistant (Claude, ChatGPT, etc.) to generate a professionally formatted DOCX or PDF report from BAI Analyzer output files.
+Use this prompt with an AI assistant (Claude, ChatGPT, etc.) to generate a professionally formatted DOCX or PDF report from AiTM_analyzer output files.
 
 ---
 
 ## Instructions
 
-1. Run the BAI Analyzer to generate report files
+1. Run the AiTM Analyzer to generate report files
 2. Copy the prompt below
-3. Attach the report files (`report.txt` or `report.html`, `identity_inventory.csv`, `findings.json`)
+3. Attach the report files (`report.txt` or `report.html`, `identity_inventory.csv`, `findings.json`, and optionally `logs_report.txt`)
 4. Submit to your preferred AI assistant
 5. Download the generated document
 
@@ -19,7 +19,7 @@ Use this prompt with an AI assistant (Claude, ChatGPT, etc.) to generate a profe
 ## Prompt
 
 ```
-You are a professional technical writer preparing a forensic investigation report. Generate a formatted Microsoft Word document (.docx) or PDF from the attached BAI (Browser Audit Inventory) analysis files.
+You are a professional technical writer preparing a forensic investigation report. Generate a formatted Microsoft Word document (.docx) or PDF from the attached AiTM_analyzer analysis files.
 
 **Document Requirements:**
 
@@ -51,10 +51,11 @@ You are a professional technical writer preparing a forensic investigation repor
    Organize the report with these sections (use the data from the attached files):
 
    **COVER PAGE**
-   - Title: "Browser Audit Inventory - Forensic Analysis Report"
+   - Title: "AiTM / Token-Theft Forensic Analysis Report"
    - Subtitle: "Case: [case_id from report]"
-   - Date: [collection timestamp]
+   - Date: [collection/analysis timestamp]
    - Examiner: [examiner name]
+   - Evidence Mode: [host, logs, or both]
    - Classification: "Privileged and Confidential - DRAFT Work Product"
 
    **TABLE OF CONTENTS**
@@ -62,35 +63,51 @@ You are a professional technical writer preparing a forensic investigation repor
 
    **1. EXECUTIVE SUMMARY**
    - 2-3 paragraph summary of findings
+   - Evidence mode and what was analyzed
+   - Token-grade confirmation status (if both mode)
    - Overall risk assessment
    - Key recommendations
 
    **2. EVIDENCE PROVENANCE**
-   - Collection metadata
-   - Chain of custody
-   - Integrity verification
+   - Host evidence: BAI collection metadata, chain of custody, integrity verification
+   - Log evidence: Log sources, date ranges, record counts
+   - Correlation anchors (uti/sid extracted from host, pivoted into logs)
 
-   **3. SYSTEM CONTEXT**
-   - Computer and browser information
-   - Collection environment
-
-   **4. IDENTITY INVENTORY**
+   **3. IDENTITY INVENTORY**
    - Table of all accounts/identities discovered
-   - Include: Identity, IdP, Domain, MFA Status, Token Types, Validity
+   - Include: UPN, Service, Type, Protection, Theft Risk
+   - Microsoft Entra sessions with tenant/object IDs
    - Format as a professional table with borders
 
+   **4. THREAT ACTOR ATTRIBUTION (if logs analyzed)**
+   - Footprint analysis: TA IPs, ASNs, user agents
+   - Hosting/VPS ASN indicators
+   - Impossible travel detections
+   - Replayed device claims
+
    **5. RISK ASSESSMENT**
-   - Findings summary by severity
-   - Detailed findings with recommendations
+   - Findings summary by severity (CRITICAL/HIGH/MEDIUM/LOW/INFO)
+   - Detailed findings with evidence and recommendations
+   - AiTM indicators (proxy config, redirect chains, timing anomalies)
+   - Infostealer indicators (sideloaded extensions, dangerous permissions)
 
    **6. TIMELINE ANALYSIS**
-   - Authentication timeline
-   - Session theft timeline (if applicable)
-   - Suspicious activity timeline
+   - Session theft timeline with auth_time anchors
+   - Token lineage: stolen token UTI/SID and theft window
+   - Post-compromise activity timeline
+   - Mail exfiltration inventory (if detected)
+   - BEC inbox rule analysis (if detected)
 
-   **7. TECHNICAL APPENDIX**
+   **7. CORRELATION GUIDANCE**
+   - Token lineage limitations (no parent-child tracking in logs)
+   - How to enumerate post-compromise UTIs
+   - Queries for Entra sign-in logs and Purview UAL
+   - 50199 error detection (token replay)
+
+   **8. TECHNICAL APPENDIX**
    - Raw data references
    - Artifact inventory
+   - ASN intelligence sources
    - Methodology notes
 
 6. **Tables:**
@@ -101,6 +118,7 @@ You are a professional technical writer preparing a forensic investigation repor
 7. **Code/Technical Content:**
    - Use Consolas or Courier New, 9pt
    - Light gray background shading for code blocks
+   - GUIDs and token identifiers in monospace
 
 8. **Color Coding for Severity:**
    - CRITICAL: Dark red text
@@ -108,6 +126,10 @@ You are a professional technical writer preparing a forensic investigation repor
    - MEDIUM: Orange text
    - LOW: Dark yellow text
    - INFO: Blue text
+
+9. **Token-Grade Confirmation Highlight:**
+   - If a host-extracted UTI/SID was confirmed in logs, highlight this prominently
+   - Use a call-out box with green border for confirmed replay
 
 Please generate the complete formatted document based on the attached analysis files. Ensure all page numbers are correctly calculated and the document is ready for review.
 ```
@@ -128,10 +150,10 @@ If you prefer a scripted approach, you can use Pandoc:
 pandoc report.txt \
     --from=markdown \
     --to=docx \
-    --reference-doc=bai_template.docx \
+    --reference-doc=aitm_template.docx \
     --toc \
     --toc-depth=3 \
-    -o BAI_Report.docx
+    -o AiTM_Report.docx
 
 # Convert to PDF (requires LaTeX)
 pandoc report.txt \
@@ -140,7 +162,7 @@ pandoc report.txt \
     --toc \
     -V geometry:margin=1in \
     -V header-includes:'\usepackage{fancyhdr}\pagestyle{fancy}\fancyhead[C]{\textit{Privileged and Confidential - DRAFT Work Product}}' \
-    -o BAI_Report.pdf
+    -o AiTM_Report.pdf
 ```
 
 ---
@@ -151,3 +173,4 @@ pandoc report.txt \
 - For bulk processing or automation, consider the Pandoc pipeline
 - Always review AI-generated documents for accuracy before distribution
 - The "DRAFT Work Product" classification should be updated as appropriate for final reports
+- When using **both** mode, the report includes token-grade correlation — highlight this in the executive summary

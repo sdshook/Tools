@@ -1,37 +1,43 @@
 #!/usr/bin/env python3
-# © 2026, Shane Shook, All Rights Reserved - this tool is for testing and analysis.
+# (c) 2026 Shane D. Shook. All rights reserved - for authorized testing and analysis.
 """
-bai_analyze.py - Offline analyzer for BAI (Browser Audit Inventory) packages.
+AiTM_analyzer.py - Unified adversary-in-the-middle (AiTM) / token-theft analyzer.
 
-Builds a unified event timeline from history/visits/downloads/cookies and decodes
-identity-provider session cookies into the anchors needed to correlate browser-side
-evidence with Microsoft Entra sign-in logs and Purview/Unified Audit Log records.
+ONE tool, THREE evidence modes:
 
-**Mission-Focused Design:**
-  * AiTM Detection: Cross-artifact correlation of redirects, proxy config, timing
-  * Infostealer Detection: Extension analysis, token theft from storage, session hijack
-  * Pure standard library. No pip installs. Runs fully offline.
-  * SECRET-SAFE BY DEFAULT: raw token values are NEVER written unless --include-token-values.
+  * host  : a BAI (Browser Audit Inventory) package - decodes browser web-storage
+            MSAL tokens, ESTS cookies, IndexedDB, extensions and proxy config, and
+            reconstructs the session-theft timeline with precise auth_time session
+            birth anchors and the linkable identifiers (uti/sid) from the stolen token.
 
-**Artifact Priority (based on detection value):**
-  HIGH: webstorage/indexeddb (token theft), extensions (infostealer vectors),
-        proxy (AiTM), performance/serviceworkers (redirects/persistence)
-  MED:  privacy/searchengines (tampering), sessions/webauthn (context/triage)
-  LOW:  bookmarks, topsites, mediadevices (attribution only)
+  * logs  : a folder of exported Microsoft Entra sign-in logs + Purview Unified Audit
+            Log - footprint-aware attribution that isolates the threat actor from the
+            user's own activity (network /24-/64 collapsing, hosting-ASN and taint
+            guards, replayed-device handling, AiTM error-chain, MFA-wall, mail-exfil
+            inventory, BEC inbox-rule parameters, containment and TA persistence).
+
+  * both  : host AND logs together - the host-extracted uti/sid are pivoted into the
+            logs for TOKEN-GRADE replay confirmation, and the host auth_time provides
+            the precise session birth that brackets the exact theft window.
+
+Mode is determined by the evidence you supply (--host, --logs, or both). Pure standard library,
+fully offline (no pip installs). Raw token values are never written unless
+--include-token-values is set.
 
 Usage:
-    python3 bai_analyze.py /path/to/BAI_package_or_zip
-    python3 bai_analyze.py pkg.zip --out ./analysis --tz America/Los_Angeles
-    python3 bai_analyze.py pkg/  --since 2026-06-01 --until 2026-06-11
-    python3 bai_analyze.py pkg/  --include-token-values        # opt-in, dangerous
+    python3 AiTM_analyzer.py --host pkg.zip
+    python3 AiTM_analyzer.py --logs ./logs --asn-intel hosting.json
+    python3 AiTM_analyzer.py --host pkg.zip --logs ./logs --out ./case
+    python3 AiTM_analyzer.py ./some_evidence            # single path, auto-classified
 
-(c) Provided as analysis support for BAI by Shane Shook. Standard-library only.
+(c) 2026 Shane D. Shook. Standard-library only.
 """
 
 import argparse
 import base64
 import csv
 import json
+import math
 import os
 import re
 import struct
@@ -43,9 +49,6 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-# --------------------------------------------------------------------------- #
-# Severity and Finding types
-# --------------------------------------------------------------------------- #
 
 class Severity(Enum):
     CRITICAL = "CRITICAL"
@@ -1053,8 +1056,6 @@ def analyze_webauthn(pkg: Dict) -> List[Dict]:
 # Domain Intelligence (Online + Offline Heuristics)
 # --------------------------------------------------------------------------- #
 
-import socket
-import math
 
 # Cache for WHOIS results to avoid repeated lookups
 _whois_cache: Dict[str, Dict] = {}
@@ -5573,183 +5574,2026 @@ def print_report(pkg: Dict, findings: List[Dict], aitm_view: Dict,
 # Main
 # --------------------------------------------------------------------------- #
 
-def main():
-    ap = argparse.ArgumentParser(
-        description="Mission-focused offline analyzer for BAI packages. "
-                    "Prioritizes AiTM and infostealer detection.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-    # Basic BAI-only analysis
-    python3 bai_analyze.py /path/to/BAI_package_or_zip
-    python3 bai_analyze.py pkg.zip --out ./analysis --tz America/Los_Angeles
-    python3 bai_analyze.py pkg/  --since 2026-06-01 --until 2026-06-11
-    
-    # With Entra/Purview log correlation (complete theft window analysis)
-    python3 bai_analyze.py pkg.zip --entra-logs /path/to/logs/
-    
-    # Entra logs folder should contain (CSV or JSON, auto-detected by filename):
-    #   - InteractiveSignIns.csv/json
-    #   - NonInteractiveSignIns.csv/json  
-    #   - ServicePrincipalSignIns.csv/json (optional)
-    #   - ManagedIdentitySignIns.csv/json (optional)
-    #   - AuditLogs.csv/json
-    #   - UnifiedAuditLog.csv/json (Purview/UAL)
-    
-    python3 bai_analyze.py pkg/  --include-token-values  # DANGEROUS: writes raw tokens
-    python3 bai_analyze.py pkg/  --online  # Enable WHOIS/RDAP lookups for domain age
-        """
-    )
-    ap.add_argument("package", help="BAI package folder or .zip")
-    ap.add_argument("--out", default="./bai_analysis", help="output directory")
-    ap.add_argument("--format", choices=["txt", "html"], default="txt",
-                    help="Report output format (default: txt)")
-    ap.add_argument("--tz", default=None, help="display timezone, e.g. America/Los_Angeles")
-    ap.add_argument("--since", default=None, help="filter events on/after YYYY-MM-DD")
-    ap.add_argument("--until", default=None, help="filter events on/before YYYY-MM-DD")
-    ap.add_argument("--entra-logs", default=None, metavar="FOLDER",
-                    help="Folder containing Entra sign-in logs, audit logs, and Purview UAL "
-                         "(CSV or JSON). Auto-detects: Interactive, NonInteractive, "
-                         "ServicePrincipal, ManagedIdentity, Audit, UnifiedAuditLog")
-    ap.add_argument("--include-token-values", action="store_true",
-                    help="DANGEROUS: write raw token values into output JSON")
-    ap.add_argument("--online", action="store_true",
-                    help="Enable online lookups (WHOIS/RDAP) for domain age analysis")
-    ap.add_argument("--quiet", "-q", action="store_true",
-                    help="minimal console output (just write files)")
-    args = ap.parse_args()
-    
-    tz = _try_zoneinfo(args.tz)
-    since = parse_iso(args.since + "T00:00:00+00:00") if args.since else None
-    until = parse_iso(args.until + "T23:59:59+00:00") if args.until else None
-    
-    pkg = load_package(args.package)
+
+def parse_time(v):
+    """Tolerant timestamp parser -> aware UTC datetime, or None."""
+    if v is None or v == "":
+        return None
+    if isinstance(v, (int, float)):
+        try:
+            return datetime.fromtimestamp(v / (1000.0 if v > 1e12 else 1.0), tz=timezone.utc)
+        except Exception:
+            return None
+    s = str(v).strip().strip('"')
+    if not s:
+        return None
+    # normalize Z and space-separated forms
+    iso = s.replace("Z", "+00:00")
+    for candidate in (iso, iso.replace(" ", "T")):
+        try:
+            dt = datetime.fromisoformat(candidate)
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            pass
+    for fmt in ("%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M", "%Y-%m-%d %H:%M:%S",
+                "%d/%m/%Y %H:%M:%S", "%m/%d/%Y %I:%M:%S %p"):
+        try:
+            return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
+        except Exception:
+            pass
+    return None
+
+
+def fmt_dt(dt, tz=None):
+    if dt is None:
+        return "?"
+    if tz is not None:
+        try:
+            return dt.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S %Z")
+        except Exception:
+            pass
+    return dt.strftime("%Y-%m-%d %H:%M:%SZ")
+
+
+def _load_tz(name):
+    if not name:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(name)
+    except Exception:
+        return None
+
+
+# --------------------------------------------------------------------------- #
+# Log discovery + loading
+# --------------------------------------------------------------------------- #
+
+# Order matters: specific names must beat substrings ("interactive" is inside
+# "noninteractive"; "audit" is inside "unifiedauditlog").
+LOG_PATTERNS = [
+    ("purview",         ["unifiedauditlog", "unified", "purview", "ual"]),
+    ("noninteractive",  ["noninteractive", "non-interactive"]),
+    ("serviceprincipal",["serviceprincipal", "service-principal", "appsignin"]),
+    ("managedidentity", ["managedidentity", "managed-identity", "msi"]),
+    ("interactive",     ["interactive", "signin", "sign-in", "logon"]),
+    ("audit",           ["audit", "directoryaudit"]),
+]
+
+BUCKETS = ("interactive", "noninteractive", "serviceprincipal",
+           "managedidentity", "audit", "purview")
+
+
+def load_records(path):
+    """Load one log file (JSON array, JSON {value:[]}, JSONL, or CSV)."""
+    try:
+        with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
+            content = f.read().strip()
+    except Exception as e:
+        print(f"[!] cannot read {path}: {e}")
+        return []
+    if not content:
+        return []
+    if content[0] in "[{":
+        try:
+            data = json.loads(content)
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                return data.get("value", [data])
+        except Exception:
+            # try JSON Lines
+            rows = []
+            for line in content.splitlines():
+                line = line.strip()
+                if line:
+                    try:
+                        rows.append(json.loads(line))
+                    except Exception:
+                        pass
+            if rows:
+                return rows
+    # CSV
+    try:
+        from io import StringIO
+        return list(csv.DictReader(StringIO(content)))
+    except Exception as e:
+        print(f"[!] cannot parse {path}: {e}")
+        return []
+
+
+def discover_logs(folder):
+    logs = {b: [] for b in BUCKETS}
+    if not os.path.isdir(folder):
+        print(f"[!] not a folder: {folder}")
+        return logs
+    for fn in sorted(os.listdir(folder)):
+        fp = os.path.join(folder, fn)
+        if not os.path.isfile(fp):
+            continue
+        low = fn.lower()
+        if not (low.endswith(".json") or low.endswith(".csv") or low.endswith(".jsonl")):
+            continue
+        bucket = None
+        for name, pats in LOG_PATTERNS:
+            if any(p in low for p in pats):
+                bucket = name
+                break
+        if bucket is None:
+            print(f"[*] skipped unrecognized file: {fn}")
+            continue
+        recs = load_records(fp)
+        logs[bucket].extend(recs)
+        if recs:
+            print(f"[+] {len(recs):>6} records  <-  {fn}  ({bucket})")
+    return logs
+
+
+# --------------------------------------------------------------------------- #
+# Field extraction helpers (handle Graph / portal / PowerShell shapes)
+# --------------------------------------------------------------------------- #
+
+def _first(rec, keys, default=None):
+    for k in keys:
+        if k in rec and rec[k] not in (None, ""):
+            return rec[k]
+    return default
+
+
+def _maybe_json(v):
+    """UAL AuditData is often a JSON string; parse if so."""
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, str) and v.strip().startswith("{"):
+        try:
+            return json.loads(v)
+        except Exception:
+            return {}
+    return {}
+
+
+def _loc_parts(loc):
+    if isinstance(loc, dict):
+        country = loc.get("countryOrRegion") or loc.get("country") or ""
+        city = loc.get("city") or ""
+        geo = loc.get("geoCoordinates") or {}
+        lat = geo.get("latitude")
+        lon = geo.get("longitude")
+        return country, city, lat, lon
+    if isinstance(loc, str):
+        return loc, "", None, None
+    return "", "", None, None
+
+
+def normalize_signin(rec, log_type):
+    """Normalize an Entra sign-in record. UPN, app, session, uti kept DISTINCT
+    (no display-name / clientAppUsed / resource conflation)."""
+    loc = _first(rec, ["location", "Location"], {})
+    country, city, lat, lon = _loc_parts(loc)
+    status = _first(rec, ["status", "Status"], {})
+    if isinstance(status, dict):
+        err = status.get("errorCode", 0)
+        success = (str(err) in ("0", "None") or err == 0)
+    else:
+        success = str(status).lower() in ("success", "0", "true")
+        err = None if success else status
+    dev = _first(rec, ["deviceDetail", "DeviceDetail"], {})
+    dev = dev if isinstance(dev, dict) else {}
+
+    # MFA / "satisfied by claim in token" tell
+    auth_req = _first(rec, ["authenticationRequirement", "AuthenticationRequirement"], "")
+    auth_details = _first(rec, ["authenticationDetails", "AuthenticationDetails"], []) or []
+    satisfied_by_token = False
+    if isinstance(auth_details, list):
+        for d in auth_details:
+            if isinstance(d, dict):
+                blob = (str(d.get("authenticationStepResultDetail", "")) + " " +
+                        str(d.get("authenticationStepRequirement", ""))).lower()
+                if ("claim in the token" in blob or "previously satisfied" in blob
+                        or "satisfied by token" in blob):
+                    satisfied_by_token = True
+
+    return {
+        "log_type": log_type,
+        "time": parse_time(_first(rec, ["createdDateTime", "CreatedDateTime",
+                                        "timestamp", "Timestamp", "ActivityDateTime"])),
+        "user_id": (_first(rec, ["userId", "UserId", "userKey"], "") or "").lower(),
+        "upn": (_first(rec, ["userPrincipalName", "UserPrincipalName", "upn"], "") or "").lower(),
+        "user_display": _first(rec, ["userDisplayName", "UserDisplayName"], ""),
+        "ip": _first(rec, ["ipAddress", "IpAddress", "ip", "clientIP", "ClientIP"], ""),
+        "asn": _first(rec, ["autonomousSystemNumber", "AutonomousSystemNumber"], None),
+        "country": country, "city": city, "lat": lat, "lon": lon,
+        "app_id": _first(rec, ["appId", "AppId", "applicationId"], ""),
+        "app": _first(rec, ["appDisplayName", "AppDisplayName"], ""),
+        "resource": _first(rec, ["resourceDisplayName", "ResourceDisplayName"], ""),
+        "client_app": _first(rec, ["clientAppUsed", "ClientAppUsed"], ""),
+        "user_agent": _first(rec, ["userAgent", "UserAgent"], ""),
+        "success": success,
+        "error_code": err,
+        "auth_requirement": auth_req,
+        "satisfied_by_token": satisfied_by_token,
+        # linkable identifiers (preview): names vary by export
+        "session_id": _first(rec, ["sessionId", "SessionId", "AADSessionId", "aadSessionId"], ""),
+        "uti": _first(rec, ["uniqueTokenIdentifier", "UniqueTokenId", "uniqueTokenId", "uti"], ""),
+        "correlation_id": _first(rec, ["correlationId", "CorrelationId"], ""),
+        "incoming_token_type": _first(rec, ["incomingTokenType", "IncomingTokenType"], ""),
+        "device_id": dev.get("deviceId", ""),
+        "device_trust": dev.get("trustType", ""),
+        "device_managed": bool(dev.get("isManaged")) if "isManaged" in dev else None,
+        "risk_level": _first(rec, ["riskLevelDuringSignIn", "riskLevelAggregated", "RiskLevelDuringSignIn"], ""),
+        "risk_state": _first(rec, ["riskState", "RiskState"], ""),
+        "ca_status": _first(rec, ["conditionalAccessStatus", "ConditionalAccessStatus"], ""),
+        "raw": rec,
+    }
+
+
+def normalize_audit(rec):
+    """Entra directory audit record (role/app/consent/secret changes)."""
+    init = _first(rec, ["initiatedBy", "InitiatedBy"], {})
+    actor = ""
+    if isinstance(init, dict):
+        u = init.get("user") or {}
+        actor = (u.get("userPrincipalName") or u.get("id") or "")
+    actor = (actor or _first(rec, ["userPrincipalName", "UserId"], "") or "").lower()
+    targets = _first(rec, ["targetResources", "TargetResources"], []) or []
+    tname = ""
+    if isinstance(targets, list) and targets:
+        tname = (targets[0] or {}).get("displayName", "") if isinstance(targets[0], dict) else ""
+    return {
+        "source": "EntraAudit",
+        "time": parse_time(_first(rec, ["activityDateTime", "ActivityDateTime",
+                                        "createdDateTime", "CreationTime"])),
+        "operation": (_first(rec, ["activityDisplayName", "ActivityDisplayName",
+                                   "operationName", "Operation"], "") or ""),
+        "actor": actor,
+        "target": tname,
+        "ip": _first(rec, ["ipAddress", "IpAddress"], ""),
+        "session_id": _first(rec, ["sessionId", "AADSessionId"], ""),
+        "result": _first(rec, ["result", "Result"], ""),
+        "raw": rec,
+    }
+
+
+def _params_to_dict(p):
+    """Exchange UAL Parameters / ModifiedProperties come as a list of {Name,Value}
+    (or {Name,NewValue}); flatten to a plain dict."""
+    out = {}
+    if isinstance(p, list):
+        for it in p:
+            if isinstance(it, dict) and "Name" in it:
+                out[str(it["Name"])] = it.get("Value", it.get("NewValue", ""))
+    elif isinstance(p, dict):
+        out = dict(p)
+    return out
+
+
+def normalize_ual(rec):
+    """Purview / Unified Audit Log record (Exchange / SharePoint / AAD ops).
+    Also extracts the mail-item evidence (InternetMessageId / folder / size) and
+    subject / client info that the analyst needs to build an exfil inventory."""
+    ad = _maybe_json(_first(rec, ["AuditData", "auditData"], {}))
+    if not isinstance(ad, dict):
+        ad = {}
+    def g(*keys):
+        return _first(rec, list(keys), None) or _first(ad, list(keys), None)
+
+    # MailItemsAccessed / sync ops carry Folders[].FolderItems[].InternetMessageId
+    mail_items = []
+    folders = ad.get("Folders") or ad.get("AffectedItems")
+    if isinstance(folders, list):
+        for fol in folders:
+            if not isinstance(fol, dict):
+                continue
+            path = fol.get("Path") or fol.get("FolderPath") or ""
+            for it in (fol.get("FolderItems") or []):
+                if isinstance(it, dict):
+                    mail_items.append({
+                        "message_id": it.get("InternetMessageId") or it.get("Id") or "",
+                        "folder": path,
+                        "size": it.get("SizeInBytes") or it.get("Size"),
+                    })
+    # Send / Create / Update ops carry the item directly (subject available here)
+    item = ad.get("Item") if isinstance(ad.get("Item"), dict) else {}
+    subject = item.get("Subject") or ad.get("Subject") or ""
+    if item.get("InternetMessageId"):
+        pf = item.get("ParentFolder") or {}
+        mail_items.append({"message_id": item.get("InternetMessageId"),
+                           "folder": pf.get("Path", "") if isinstance(pf, dict) else "",
+                           "size": item.get("SizeInBytes"), "subject": subject})
+
+    return {
+        "source": "UAL",
+        "time": parse_time(g("CreationTime", "creationTime", "CreationDate")),
+        "operation": (g("Operation", "operation") or ""),
+        "workload": (g("Workload", "workload") or ""),
+        "actor": (g("UserId", "userId", "UserKey") or "").lower(),
+        "ip": (g("ClientIP", "clientIP", "ClientIPAddress", "ActorIpAddress") or ""),
+        "session_id": (g("AADSessionId", "SessionId", "sessionId") or ""),
+        "uti": (g("UniqueTokenId", "uniqueTokenId") or ""),
+        "object": (g("ObjectId", "ObjectID") or ""),
+        "app_id": (g("AppId", "ClientAppId", "ApplicationId") or ""),
+        "client_info": (g("ClientInfoString", "ClientProcessName", "ClientProcess") or ""),
+        "subject": subject,
+        "mail_items": mail_items,
+        "params": ad.get("Parameters") or ad.get("ModifiedProperties") or "",
+        "parameters": _params_to_dict(ad.get("Parameters") or ad.get("ModifiedProperties")),
+        "raw": rec,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Reference data
+# --------------------------------------------------------------------------- #
+
+# Entra sign-in error codes worth surfacing
+ERROR_CODES = {
+    "50126": "Invalid username or password (credential failure)",
+    "50053": "Account locked / too many failed attempts (smart lockout)",
+    "50055": "Expired password",
+    "50056": "Invalid or null password",
+    "50074": "Strong auth (MFA) required but NOT satisfied - frequently a TA replaying "
+             "a stolen token/cookie that carries no MFA claim and cannot clear a fresh "
+             "MFA challenge (the attacker hitting the MFA wall)",
+    "50132": "Session/token invalid - fresh token needed (often the AiTM proxy 'warming "
+             "up' a relay, or a session invalidated by password change / revocation)",
+    "50076": "MFA required by Conditional Access - not completed",
+    "50079": "User must enroll for MFA",
+    "500121": "MFA failed or timed out (possible MFA fatigue)",
+    "530032": "Blocked by Conditional Access policy",
+    "53003": "Blocked by Conditional Access policy",
+    "50158": "External security challenge not satisfied",
+    "50199": "CMSI interrupt - anti-spoofing 'confirm this app' challenge. Benign on "
+             "mobile webviews / chrome-extension redirects, but a burst signals an "
+             "EMBEDDED or PROXIED auth context (AiTM kits, webviews) worth examining",
+    "50173": "Fresh auth token required - session/token revoked or password changed "
+             "(seen after a revocation, or when an old stolen token is re-presented)",
+    "65001": "Application consent not granted",
+    "650052": "App needs admin consent",
+    "50097": "Device authentication required",
+    "50057": "User account is disabled - after containment this blocks both the victim "
+             "and the TA; a 50057 from attacker infra confirms a post-disable retry",
+}
+
+# Post-compromise operation -> (category, severity weight, note)
+RISKY_OPS = {
+    # mail rules / forwarding / exfil (BEC after AiTM)
+    "new-inboxrule":        ("mail_rule",  "HIGH",   "Inbox rule created (forward/hide - BEC signature)"),
+    "set-inboxrule":        ("mail_rule",  "HIGH",   "Inbox rule modified"),
+    "updateinboxrules":     ("mail_rule",  "HIGH",   "Inbox rules updated via OWA"),
+    "set-mailbox":          ("forwarding", "HIGH",   "Mailbox setting changed (check forwarding)"),
+    "set-mailboxautoreplyconfiguration": ("forwarding", "MEDIUM", "Auto-reply changed"),
+    "new-transportrule":    ("forwarding", "HIGH",   "Org-wide transport rule created"),
+    "add-mailboxpermission":("mail_access","HIGH",   "Mailbox delegate permission granted"),
+    "add-recipientpermission":("mail_access","HIGH", "SendAs permission granted"),
+    "mailitemsaccessed":    ("mail_access","MEDIUM", "Mail items accessed (possible data access)"),
+    # illicit OAuth consent / app abuse
+    "consent to application":("oauth_consent","HIGH","Application consent granted (illicit consent grant?)"),
+    "add oauth2permissiongrant":("oauth_consent","HIGH","Delegated permission grant added"),
+    "add delegated permission grant":("oauth_consent","HIGH","Delegated permission grant added"),
+    "add app role assignment grant to user.":("oauth_consent","HIGH","App role assignment granted"),
+    "add app role assignment to service principal":("oauth_consent","HIGH","App role assigned to SP"),
+    "add service principal":("app_persist","HIGH","Service principal added"),
+    "add service principal credentials":("app_persist","CRITICAL","Credential/secret added to app (persistence)"),
+    "update application - certificates and secrets management":("app_persist","CRITICAL","App secret/cert added (persistence)"),
+    "update application – certificates and secrets management":("app_persist","CRITICAL","App secret/cert added (persistence)"),
+    "add owner to application":("app_persist","HIGH","Owner added to application"),
+    "add owner to service principal":("app_persist","HIGH","Owner added to service principal"),
+    # privilege escalation
+    "add member to role":   ("privilege",  "HIGH",   "Member added to directory role"),
+    "add eligible member to role (pim)":("privilege","HIGH","PIM eligible role added"),
+    "add member to group":  ("privilege",  "MEDIUM", "Member added to group (check if privileged)"),
+    # MFA / auth method tampering
+    "disable strong authentication":("mfa_tamper","CRITICAL","MFA disabled for user"),
+    "user registered security info":("mfa_tamper","HIGH","Security info (MFA method) registered - attacker may add method"),
+    "admin registered security info":("mfa_tamper","HIGH","Admin registered security info for user"),
+    "user deleted security info":("mfa_tamper","HIGH","Security info deleted"),
+    "update authentication phone":("mfa_tamper","HIGH","Auth phone changed"),
+    "reset user password":  ("password",   "HIGH",   "Password reset"),
+    "change user password": ("password",   "MEDIUM", "Password changed"),
+    # SharePoint / OneDrive exfil
+    "filedownloaded":       ("file_exfil", "MEDIUM", "File downloaded"),
+    "filesyncdownloadedfull":("file_exfil","MEDIUM", "Full file sync download"),
+    "anonymouslinkcreated": ("file_share", "HIGH",   "Anonymous sharing link created"),
+    "sharinginvitationcreated":("file_share","MEDIUM","External sharing invitation"),
+    "addedtosecurelink":    ("file_share", "MEDIUM", "User added to secure link"),
+    "companylinkcreated":   ("file_share", "MEDIUM", "Org-wide sharing link created"),
+}
+
+SEV_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+
+
+# --------------------------------------------------------------------------- #
+# Geo
+# --------------------------------------------------------------------------- #
+
+def haversine_km(lat1, lon1, lat2, lon2):
+    try:
+        r = 6371.0
+        p1, p2 = math.radians(lat1), math.radians(lat2)
+        dp = math.radians(lat2 - lat1)
+        dl = math.radians(lon2 - lon1)
+        a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+        return 2 * r * math.asin(min(1.0, math.sqrt(a)))
+    except Exception:
+        return None
+
+
+# --------------------------------------------------------------------------- #
+# Analyzer
+# --------------------------------------------------------------------------- #
+
+def strip_port(ip):
+    """UAL ClientIP often carries a :port (and IPv6 may be bracketed). Drop it."""
+    if not ip:
+        return ip
+    ip = str(ip).strip()
+    if ip.startswith("["):                      # [v6]:port
+        return ip[1:].split("]")[0]
+    if ip.count(":") == 1 and "." in ip:        # v4:port
+        return ip.split(":")[0]
+    return ip
+
+
+def net_key(ip):
+    """Collapse an IP to a stable NETWORK identity so one user's churn doesn't look
+    like many hosts: IPv4 -> /24, IPv6 -> /64. This is what makes 12.160.226.0/24
+    (a corporate egress block) and rotating IPv6 privacy addresses read as ONE
+    network instead of dozens."""
+    ip = strip_port(ip)
+    if not ip:
+        return ip
+    try:
+        if ":" in ip:                            # IPv6 -> /64 (first 4 hextets)
+            full = ip.split("%")[0]
+            parts = full.split(":")
+            # crude but dependency-free /64
+            head = [p for p in parts if p != ""][:4]
+            return ":".join(head) + "::/64"
+        octs = ip.split(".")
+        if len(octs) == 4:
+            return ".".join(octs[:3]) + ".0/24"
+    except Exception:
+        pass
+    return ip
+
+
+# Built-in defaults for hosting / VPS / proxy ASNs (TA infra tends to live here,
+# users do not). Kept OUT of the trusted baseline and used to spot replayed device
+# claims on datacenter infra. Extend/override at runtime with --asn-intel <file.json>:
+#   {"hosting_asns": {"64500": "SomeVPS", "64501": "AnotherHost"}}
+# (a JSON list of ASN numbers is also accepted). File entries merge with these.
+DEFAULT_HOSTING_ASNS = {
+    14061: "DigitalOcean", 16276: "OVH", 20473: "Vultr/Choopa", 24940: "Hetzner",
+    63949: "Akamai/Linode", 14618: "AWS", 16509: "AWS", 15169: "Google",
+    396982: "Google Cloud", 13335: "Cloudflare", 9009: "M247", 51852: "Private Layer",
+    53667: "FranTech/BuyVM", 62240: "Clouvider", 36352: "ColoCrossing",
+    55286: "B2 Net Solutions/ServerMania", 22612: "Namecheap/Nocix",
+    40021: "NL/Contabo", 51167: "Contabo", 29802: "HVC/Hudson Valley",
+    46844: "ReliableSite", 8100: "QuadraNet", 25820: "IT7", 19318: "Interserver",
+}
+
+
+def load_hosting_asns(path):
+    """Load hosting-ASN intel from a JSON file and merge with the built-in defaults.
+    Accepts either {"hosting_asns": {"<asn>": "name", ...}} / {"<asn>": "name"} or a
+    bare list [asn, asn, ...]. Returns a dict {int_asn: name}."""
+    merged = dict(DEFAULT_HOSTING_ASNS)
+    if not path:
+        return merged
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    if isinstance(data, dict):
+        data = data.get("hosting_asns", data)
+    if isinstance(data, dict):
+        for k, v in data.items():
+            try:
+                merged[int(k)] = v or "(custom)"
+            except (TypeError, ValueError):
+                continue
+    elif isinstance(data, list):
+        for k in data:
+            try:
+                merged[int(k)] = "(custom)"
+            except (TypeError, ValueError):
+                continue
+    return merged
+
+
+class Analyzer:
+    def __init__(self, logs, since=None, until=None, spray_min_users=5,
+                 travel_kmh=900.0, hosting_asns=None):
+        self.hosting_asns = hosting_asns if hosting_asns is not None else dict(DEFAULT_HOSTING_ASNS)
+        self.signins = []
+        for lt in ("interactive", "noninteractive", "serviceprincipal", "managedidentity"):
+            for r in logs.get(lt, []):
+                s = normalize_signin(r, lt)
+                if self._in_window(s["time"], since, until):
+                    self.signins.append(s)
+        self.audits = [a for a in (normalize_audit(r) for r in logs.get("audit", []))
+                       if self._in_window(a["time"], since, until)]
+        self.ual = [u for u in (normalize_ual(r) for r in logs.get("purview", []))
+                    if self._in_window(u["time"], since, until)]
+        self.spray_min_users = spray_min_users
+        self.travel_kmh = travel_kmh
+        self.findings = []
+        self.users = {}          # upn/userid -> user record
+        self.attacker_ips = {}   # ip -> reasons
+        self.suspect_sessions = {}
+
+    @staticmethod
+    def _in_window(t, since, until):
+        if t is None:
+            return True
+        if since and t < since:
+            return False
+        if until and t > until:
+            return False
+        return True
+
+    def add(self, sev, category, title, evidence, recommendation, entity=""):
+        self.findings.append({
+            "severity": sev, "category": category, "title": title,
+            "evidence": evidence, "recommendation": recommendation, "entity": entity,
+        })
+
+    # -- identity index ----------------------------------------------------- #
+    def build_users(self):
+        for s in self.signins:
+            s["ip"] = strip_port(s["ip"])          # normalize once
+            s["net"] = net_key(s["ip"])
+            key = s["upn"] or s["user_id"]
+            if not key:
+                continue
+            u = self.users.setdefault(key, {
+                "key": key, "upn": s["upn"], "user_id": s["user_id"],
+                "display": s["user_display"], "signins": [],
+                "interactive_ips": set(), "all_ips": set(),
+                "countries": set(), "ual": [], "audits": [], "ta_observations": [],
+            })
+            u["upn"] = u["upn"] or s["upn"]
+            u["display"] = u["display"] or s["user_display"]
+            u["signins"].append(s)
+            if s["ip"]:
+                u["all_ips"].add(s["ip"])
+                if s["log_type"] == "interactive" and s["success"]:
+                    u["interactive_ips"].add(s["ip"])
+            if s["country"]:
+                u["countries"].add(s["country"])
+        for u in self.ual:
+            u["ip"] = strip_port(u["ip"])
+            u["net"] = net_key(u["ip"])
+            rec = self.users.get(u["actor"])
+            if rec is not None:
+                rec["ual"].append(u)
+        for a in self.audits:
+            a["ip"] = strip_port(a.get("ip"))
+            rec = self.users.get(a["actor"])
+            if rec is not None:
+                rec["audits"].append(a)
+
+        # Build the user's LEGITIMATE footprint. Two anti-contamination rules are
+        # critical because an AiTM relay produces a SUCCESSFUL sign-in for the attacker
+        # (often with the victim's deviceId replayed and UA spoofed):
+        #   * any network/ASN that EVER carried an AiTM error code (50199/50132/50074)
+        #     or an Entra risk flag is TAINTED and cannot seed the baseline;
+        #   * hosting/VPS ASNs never seed the baseline (users don't log in from VPS).
+        # Without this, the proxy's own /24 becomes "the user's network" and the TA
+        # stops being flagged.
+        AITM_CODES = {"50199", "50132", "50074", "50076"}
+        for u in self.users.values():
+            tainted_nets, tainted_asns = set(), set()
+            for s in u["signins"]:
+                risky = (str(s["error_code"]) in AITM_CODES
+                         or str(s["risk_level"]).lower() in ("high", "medium")
+                         or str(s["risk_state"]).lower() in ("atrisk", "confirmedcompromised"))
+                if risky:
+                    if s["net"]:
+                        tainted_nets.add(s["net"])
+                    if s["asn"]:
+                        tainted_asns.add(s["asn"])
+            u["tainted_nets"], u["tainted_asns"] = tainted_nets, tainted_asns
+
+            succ = [s for s in u["signins"] if s["success"]]
+            # device fleet: only from CLEAN sign-ins (a deviceId first seen on hosting/
+            # tainted infra is a replayed claim, not a real enrolment)
+            u["device_fleet"] = {s["device_id"] for s in succ if s["device_id"]
+                                 and s["net"] not in tainted_nets
+                                 and s["asn"] not in tainted_asns
+                                 and (s["asn"] not in self.hosting_asns)}
+            u["baseline_devices"] = set(u["device_fleet"])
+            trusted = [s for s in succ
+                       if ((s["device_id"] and s["device_id"] in u["device_fleet"])
+                           or s["log_type"] == "interactive")
+                       and s["net"] not in tainted_nets
+                       and s["asn"] not in tainted_asns
+                       and s["asn"] not in self.hosting_asns]
+            if not trusted:
+                trusted = [s for s in succ if s["asn"] not in self.hosting_asns][:1]
+            u["baseline_nets"] = {s["net"] for s in trusted if s["net"]}
+            u["baseline_asns"] = {s["asn"] for s in trusted if s["asn"]}
+            u["baseline_uas"] = {s["user_agent"] for s in trusted if s["user_agent"]}
+            u["baseline_countries"] = {s["country"] for s in trusted if s["country"]}
+            u["baseline_apps"] = {s["app"] for s in trusted if s.get("app")}
+            u["baseline_app_ids"] = {s["app_id"] for s in trusted if s.get("app_id")}
+            u["baseline_client_apps"] = {s["client_app"] for s in trusted if s.get("client_app")}
+            inter = [s for s in trusted if s["log_type"] == "interactive"]
+            u["last_legit_time"] = max((s["time"] for s in (inter or trusted) if s["time"]),
+                                       default=None)
+
+    def _is_user_network(self, u, s):
+        """Is this sign-in on a network/device the user legitimately uses? A fleet
+        deviceId confers trust ONLY off hosting/tainted infrastructure - otherwise it
+        is a replayed claim. (No first-party/Microsoft suppression: every network is
+        evaluated, so a TA operating from Microsoft/Azure infra is not auto-cleared.)"""
+        if s.get("net") and s["net"] in u.get("baseline_nets", set()):
+            return True
+        if s.get("asn") and s["asn"] in u.get("baseline_asns", set()):
+            return True
+        if (s.get("device_id") and s["device_id"] in u.get("device_fleet", set())
+                and s.get("net") not in u.get("tainted_nets", set())
+                and s.get("asn") not in u.get("tainted_asns", set())
+                and s.get("asn") not in self.hosting_asns):
+            return True
+        return False
+
+    def _machine_side(self, u, s):
+        """Classify a sign-in's MACHINE against the user's legitimate footprint. A
+        fleet deviceId is trusted ONLY off hosting/tainted infra; on VPS/proxy infra a
+        matching deviceId is a REPLAYED claim (the TA spoofing the victim's device)."""
+        clean_fleet = (s.get("device_id") and s["device_id"] in u.get("device_fleet", set())
+                       and s.get("net") not in u.get("tainted_nets", set())
+                       and s.get("asn") not in u.get("tainted_asns", set())
+                       and s.get("asn") not in self.hosting_asns)
+        if clean_fleet:
+            return "legit-fleet", "deviceId in user's trusted device fleet"
+        if s.get("device_id") and s["device_id"] in u.get("device_fleet", set()):
+            return "ta", (f"REPLAYED device claim - victim deviceId presented from "
+                          f"hosting/tainted infra (ASN {s.get('asn')})")
+        dev = ("absent" if not s["device_id"] else "mismatch")
+        ua = ("match" if s["user_agent"] in u.get("baseline_uas", set())
+              else ("absent" if not s["user_agent"] else "mismatch"))
+        if dev == "mismatch" or ua == "mismatch":
+            return "ta", f"different machine (deviceId={dev}, UA={ua})"
+        return "verify", f"no fleet deviceId; UA={ua} vs baseline"
+
+    def _flag_ip(self, ip, reason):
+        if ip:
+            self.attacker_ips.setdefault(strip_port(ip), set()).add(reason)
+
+    # -- detections --------------------------------------------------------- #
+    def _user_of(self, key):
+        return self.users.get((key or "").lower())
+
+    def detect_session_redundancy(self):
+        """Replay = a session/token appearing from a network OUTSIDE the user's
+        footprint. NOT 'more than one IP' - a legitimate session routinely spans a
+        laptop, a phone, rotating IPv6, a corporate /24 egress, and Microsoft service
+        IPs. We collapse to /24-/64 networks and flag only networks the user does not
+        normally use (and weight cross-country / concurrent higher)."""
+        by_sid = defaultdict(list)
+        by_uti = defaultdict(list)
+        for s in self.signins:
+            owner = s["upn"] or s["user_id"]
+            if s["session_id"]:
+                by_sid[s["session_id"]].append((owner, s))
+            if s["uti"]:
+                by_uti[s["uti"]].append((owner, s))
+        for u in self.ual:
+            if u["session_id"]:
+                by_sid[u["session_id"]].append((u["actor"], u))
+            if u["uti"]:
+                by_uti[u["uti"]].append((u["actor"], u))
+
+        def owner_user(items):
+            for owner, _ in items:
+                ur = self._user_of(owner)
+                if ur:
+                    return ur
+            return None
+
+        for sid, items in by_sid.items():
+            ur = owner_user(items)
+            if ur is None:
+                continue
+            nets = {it.get("net") for _, it in items if it.get("net")}
+            if len(nets) <= 1:
+                continue
+            outside = [(it.get("net"), it.get("ip"), it.get("country"))
+                       for _, it in items
+                       if it.get("net") and not self._is_user_network(ur, it)]
+            outside_nets = {o[0] for o in outside}
+            if not outside_nets:
+                continue  # multi-IP but all within the user's own footprint -> benign
+            outside_ips = sorted({o[1] for o in outside if o[1]})
+            countries = {o[2] for o in outside if o[2]} | set(ur.get("baseline_countries", set()))
+            sev = "CRITICAL" if len(countries) > 1 else "HIGH"
+            self.suspect_sessions[sid] = outside_ips
+            for ip in outside_ips:
+                self._flag_ip(ip, "session replayed from outside-footprint network")
+            self.add(sev, "Token Replay",
+                     f"Session {sid[:18]} used from {len(outside_nets)} network(s) outside the user footprint",
+                     {"session_id": sid, "outside_ips": outside_ips,
+                      "user_baseline_nets": sorted(ur.get("baseline_nets", set()))[:6],
+                      "countries_involved": sorted(c for c in countries if c)},
+                     "The session was exercised from a network the user does not normally "
+                     "use: session/cookie replay. Revoke the session and sweep all activity "
+                     "under this AADSessionId.",
+                     entity=sid)
+
+        for uti, items in by_uti.items():
+            ur = owner_user(items)
+            if ur is None:
+                continue
+            outside_ips = sorted({it.get("ip") for _, it in items
+                                  if it.get("ip") and not self._is_user_network(ur, it)})
+            nets = {it.get("net") for _, it in items if it.get("net")}
+            if outside_ips and len(nets) > 1:
+                for ip in outside_ips:
+                    self._flag_ip(ip, "token (uti) used from outside-footprint network")
+                self.add("CRITICAL", "Token Replay",
+                         f"Token {uti[:18]} (uti) used from outside the user footprint",
+                         {"uti": uti, "outside_ips": outside_ips},
+                         "A single UniqueTokenId used from a network outside the user "
+                         "footprint is literal bearer-token replay. Revoke immediately.",
+                         entity=uti)
+
+    def detect_replay_and_aitm(self):
+        """Per user: flag token use / MFA-by-token from networks OUTSIDE the user's
+        footprint (not raw 'new IP'), and composite AiTM scoring. De-duplicated per
+        network so one attacker /24 is one finding, not hundreds."""
+        for u in self.users.values():
+            signins = sorted(u["signins"], key=lambda x: x["time"] or datetime.min.replace(tzinfo=timezone.utc))
+            aitm_reasons = []
+            first_interactive = next((s for s in signins
+                                      if s["log_type"] == "interactive" and s["success"]), None)
+            seen_net = set()  # collapse repeated hits from the same outside network
+
+            for s in signins:
+                if not s["success"] or not s["ip"]:
+                    continue
+                if self._is_user_network(u, s):
+                    continue  # the user's own laptop/phone/egress/ISP - not suspicious
+                side, side_detail = self._machine_side(u, s)
+                if side == "legit-fleet":
+                    continue  # trusted device on an unusual network -> roaming, skip
+                net = s["net"]
+                # every outside, non-fleet success enriches the TA profile (apps/appIds/
+                # UA/client-app); the FINDING is deduped to one per network.
+                if s not in u["ta_observations"]:
+                    u["ta_observations"].append(s)
+                # 1) token use from an outside network (one finding per network)
+                if s["log_type"] == "noninteractive" and net not in seen_net:
+                    seen_net.add(net)
+                    self._flag_ip(s["ip"], "token use from outside-footprint network")
+                    sev = "HIGH" if side == "ta" else "MEDIUM"
+                    self.add(sev, "Token Replay",
+                             f"Token used from outside-footprint network {net} for {u['key']}",
+                             {"user": u["key"], "ip": s["ip"], "network": net,
+                              "country": s["country"], "asn": s["asn"],
+                              "device_id": s["device_id"] or "(none)",
+                              "user_agent": (s["user_agent"] or "(none)")[:90],
+                              "app": s["app"], "app_id": s["app_id"],
+                              "client_app": s["client_app"],
+                              "machine_assessment": side_detail,
+                              "resource": s["resource"],
+                              "time": fmt_dt(s["time"]),
+                              "session_id": s["session_id"], "uti": s["uti"]},
+                             "Token exercised from a network the user does not normally use, "
+                             "on a device/UA outside the trusted fleet: stolen-token replay.",
+                             entity=u["key"])
+                    aitm_reasons.append(f"token use from {net} [{side_detail}]")
+                # 2) MFA satisfied by token from an outside network
+                if s["satisfied_by_token"]:
+                    self._flag_ip(s["ip"], "MFA-by-token from outside-footprint network")
+                    aitm_reasons.append(f"MFA satisfied by claim-in-token from {net}")
+                    if s not in u["ta_observations"]:
+                        u["ta_observations"].append(s)
+                # 3) risky sign-in from an outside network
+                if str(s["risk_state"]).lower() in ("atrisk", "confirmedcompromised") or \
+                   str(s["risk_level"]).lower() in ("high", "medium"):
+                    aitm_reasons.append(f"Entra risk={s['risk_level'] or s['risk_state']} at {net}")
+
+            # composite AiTM: interactive success then token use from an outside network
+            if first_interactive:
+                for s in signins:
+                    if (s["time"] and first_interactive["time"]
+                            and s["time"] >= first_interactive["time"]
+                            and s["log_type"] == "noninteractive" and s["success"]
+                            and not self._is_user_network(u, s)
+                            and self._machine_side(u, s)[0] != "legit-fleet"):
+                        gap = ""
+                        try:
+                            mins = (s["time"] - first_interactive["time"]).total_seconds() / 60.0
+                            gap = f" (+{int(mins)}m after interactive login)"
+                        except Exception:
+                            pass
+                        aitm_reasons.append(
+                            f"interactive login then token use from outside network {s['net']}{gap}")
+                        break
+
+            if aitm_reasons:
+                sev = "CRITICAL" if len(set(aitm_reasons)) >= 2 else "HIGH"
+                legit, ta = self._actor_profiles(u)
+                self.add(sev, "AiTM / Account Compromise",
+                         f"AiTM / session-theft indicators for {u['key']}",
+                         {"user": u["key"], "indicators": sorted(set(aitm_reasons)),
+                          "legitimate_profile": legit,
+                          "threat_actor_profile": ta},
+                         "Multiple credential-theft indicators converge on this account. "
+                         "Revoke sessions/refresh tokens, reset credentials, review MFA "
+                         "methods, and audit all O365 actions in the window.",
+                         entity=u["key"])
+                u["compromised"] = True
+                u["legit_profile"] = legit
+                u["ta_profile"] = ta
+
+    def _actor_profiles(self, u):
+        """Contrast the LEGITIMATE machine fingerprint with the THREAT ACTOR's,
+        distinguishing by deviceId / user-agent AND IP / geo / time."""
+        inter = [s for s in u["signins"] if s["log_type"] == "interactive" and s["success"]]
+        legit = {
+            "device_fleet": sorted(d for d in u.get("device_fleet", set())) or ["(none registered)"],
+            "user_agents": sorted(u.get("baseline_uas", set()))[:4] or ["(none)"],
+            "networks": sorted(u.get("baseline_nets", set()))[:8],
+            "asns": sorted(str(a) for a in u.get("baseline_asns", set()) if a),
+            "countries": sorted(c for c in u.get("baseline_countries", set()) if c),
+            "apps": sorted(u.get("baseline_apps", set()))[:10],
+            "client_apps": sorted(u.get("baseline_client_apps", set())),
+            "last_interactive": fmt_dt(u.get("last_legit_time")),
+        }
+        obs = u.get("ta_observations", [])
+        ta = {
+            "device_ids": sorted({s["device_id"] or "(none/unregistered)" for s in obs}),
+            "device_trust": sorted({s["device_trust"] for s in obs if s.get("device_trust")}) or ["(unmanaged/none)"],
+            "user_agents": sorted({(s["user_agent"] or "(none)")[:90] for s in obs}),
+            "apps": sorted({s["app"] for s in obs if s.get("app")}),
+            "app_ids": sorted({s["app_id"] for s in obs if s.get("app_id")}),
+            "resources": sorted({s["resource"] for s in obs if s.get("resource")}),
+            "client_apps": sorted({s["client_app"] for s in obs if s.get("client_app")}),
+            "networks": sorted({s["net"] for s in obs if s.get("net")}),
+            "ips": sorted({s["ip"] for s in obs if s["ip"]}),
+            "asns": sorted({str(s["asn"]) for s in obs if s.get("asn")}),
+            "countries": sorted({s["country"] for s in obs if s["country"]}),
+            "sessions": sorted({s["session_id"] for s in obs if s["session_id"]}),
+            "utis": sorted({s["uti"] for s in obs if s["uti"]}),
+            "first_seen": fmt_dt(min((s["time"] for s in obs if s["time"]), default=None)),
+            "last_seen": fmt_dt(max((s["time"] for s in obs if s["time"]), default=None)),
+        }
+        # time factor: capture -> first replay gap vs the legit interactive login
+        if u.get("last_legit_time") and obs:
+            ft = min((s["time"] for s in obs if s["time"]), default=None)
+            if ft:
+                try:
+                    mins = (ft - u["last_legit_time"]).total_seconds() / 60.0
+                    ta["minutes_after_legit_login"] = round(mins, 1)
+                    ta["concurrent_with_legit_session"] = abs(mins) < 60
+                except Exception:
+                    pass
+        return legit, ta
+
+    def detect_impossible_travel(self):
+        for u in self.users.values():
+            succ = sorted([s for s in u["signins"] if s["success"] and s["ip"]],
+                          key=lambda x: x["time"] or datetime.min.replace(tzinfo=timezone.utc))
+            seen_pairs = set()
+            for a, b in zip(succ, succ[1:]):
+                if not (a["time"] and b["time"]):
+                    continue
+                # both endpoints within the user's footprint -> normal device churn
+                if self._is_user_network(u, a) and self._is_user_network(u, b):
+                    continue
+                if a["net"] == b["net"]:
+                    continue
+                pair = tuple(sorted((a["net"] or a["ip"], b["net"] or b["ip"])))
+                if pair in seen_pairs:
+                    continue
+                dt_h = (b["time"] - a["time"]).total_seconds() / 3600.0
+                if dt_h <= 0:
+                    continue
+                if None not in (a["lat"], a["lon"], b["lat"], b["lon"]):
+                    km = haversine_km(a["lat"], a["lon"], b["lat"], b["lon"])
+                    # require a real distance so geo-jitter within a metro doesn't fire
+                    if km and km > 100 and dt_h < 24 and (km / dt_h) > self.travel_kmh:
+                        seen_pairs.add(pair)
+                        for ip in (a["ip"], b["ip"]):
+                            if not self._is_user_network(u, a if ip == a["ip"] else b):
+                                self._flag_ip(ip, "impossible travel (outside footprint)")
+                        self.add("HIGH", "Impossible Travel",
+                                 f"Impossible travel for {u['key']} ({int(km)} km in {dt_h:.1f}h)",
+                                 {"user": u["key"], "from": f"{a['city']},{a['country']} ({a['ip']})",
+                                  "to": f"{b['city']},{b['country']} ({b['ip']})",
+                                  "km": int(km), "hours": round(dt_h, 2),
+                                  "implied_kmh": int(km / dt_h)},
+                                 "Two successful sign-ins too far apart to travel between, at "
+                                 "least one outside the user footprint. Clear against VPN/egress.",
+                                 entity=u["key"])
+                elif a["country"] and b["country"] and a["country"] != b["country"] and dt_h < 1.0:
+                    seen_pairs.add(pair)
+                    for ip in (a["ip"], b["ip"]):
+                        self._flag_ip(ip, "country change <1h")
+                    self.add("MEDIUM", "Impossible Travel",
+                             f"Country change for {u['key']} within {dt_h:.2f}h",
+                             {"user": u["key"], "from": f"{a['country']} ({a['ip']})",
+                              "to": f"{b['country']} ({b['ip']})", "hours": round(dt_h, 2)},
+                             "Successful sign-ins from two countries within an hour (no geo "
+                             "coords). Verify against VPN/egress.",
+                             entity=u["key"])
+
+    def detect_credential_attacks(self):
+        """Password spray (one IP -> many users failing) and brute (user fails then succeeds)."""
+        fails_by_ip = defaultdict(set)      # ip -> {users with 50126}
+        fail_events_by_ip = defaultdict(int)
+        for s in self.signins:
+            code = str(s["error_code"]) if s["error_code"] is not None else ""
+            if not s["success"] and code in ("50126", "50053", "50056"):
+                if s["ip"]:
+                    fails_by_ip[s["ip"]].add(s["upn"] or s["user_id"])
+                    fail_events_by_ip[s["ip"]] += 1
+        for ip, users in fails_by_ip.items():
+            if len(users) >= self.spray_min_users:
+                self._flag_ip(ip, "password spray source")
+                self.add("HIGH", "Credential Attack",
+                         f"Password spray from {ip} ({len(users)} users, {fail_events_by_ip[ip]} failures)",
+                         {"ip": ip, "distinct_users": len(users),
+                          "failures": fail_events_by_ip[ip],
+                          "sample_users": sorted(u for u in users if u)[:8]},
+                         "One source IP failing auth against many accounts is password "
+                         "spray. Block the IP/ASN and check whether any of these users "
+                         "subsequently succeeded.",
+                         entity=ip)
+
+        # brute success: user with >=5 failures then a success from same IP
+        for u in self.users.values():
+            seq = sorted(u["signins"], key=lambda x: x["time"] or datetime.min.replace(tzinfo=timezone.utc))
+            fails = 0
+            for s in seq:
+                if not s["success"] and str(s["error_code"]) == "50126":
+                    fails += 1
+                elif s["success"] and fails >= 5:
+                    self.add("HIGH", "Credential Attack",
+                             f"Successful sign-in after {fails} failures for {u['key']}",
+                             {"user": u["key"], "preceding_failures": fails,
+                              "success_ip": s["ip"], "time": fmt_dt(s["time"])},
+                             "Repeated credential failures followed by success suggests a "
+                             "guessed/cracked password. Reset credentials and review session.",
+                             entity=u["key"])
+                    fails = 0
+
+        # MFA fatigue: many 500121 for one user
+        mfa_fail = defaultdict(int)
+        for s in self.signins:
+            if str(s["error_code"]) == "500121":
+                mfa_fail[s["upn"] or s["user_id"]] += 1
+        for user, n in mfa_fail.items():
+            if n >= 5:
+                self.add("MEDIUM", "Credential Attack",
+                         f"Possible MFA fatigue against {user} ({n} MFA prompts denied/timed out)",
+                         {"user": user, "mfa_denials": n},
+                         "Repeated MFA challenges (error 500121) can indicate MFA-fatigue "
+                         "push bombing. Confirm with the user; require number-matching.",
+                         entity=user)
+
+    def detect_cmsi_interrupt(self):
+        """AADSTS50199 (CMSI interrupt) clusters. Often benign, but a burst - or any
+        occurrence tied to an already-flagged user/IP - points at an embedded/proxied
+        auth context (AiTM kit / webview / chrome-extension), which is a useful clue."""
+        by_user = defaultdict(list)
+        for s in self.signins:
+            if str(s["error_code"]) == "50199":
+                by_user[s["upn"] or s["user_id"]].append(s)
+        for user, hits in by_user.items():
+            ips = sorted({h["ip"] for h in hits if h["ip"]})
+            apps = sorted({h["app"] for h in hits if h["app"]})
+            tied = (user in (k for k, u in self.users.items() if u.get("compromised"))
+                    or any(ip in self.attacker_ips for ip in ips))
+            sev = "MEDIUM" if (tied or len(hits) >= 5) else "INFO"
+            self.add(sev, "AiTM Clue (CMSI interrupt)",
+                     f"AADSTS50199 CMSI interrupt x{len(hits)} for {user}",
+                     {"user": user, "count": len(hits), "ips": ips, "apps": apps,
+                      "meaning": ERROR_CODES["50199"],
+                      "tied_to_flagged_user_or_ip": tied},
+                     "CMSI interrupt is the anti-spoofing 'confirm this app' challenge. A "
+                     "burst, or any occurrence from a flagged IP/user, suggests the sign-in "
+                     "happened in an embedded/proxied context (AiTM kit, webview, "
+                     "chrome-extension). Correlate the IP/UA with the suspect session.",
+                     entity=user)
+
+    def detect_mfa_wall(self):
+        """AADSTS50074 / 50076 - strong auth required but not satisfied. When this
+        comes from a NON-baseline IP/machine it is the signature of a TA replaying a
+        stolen token/cookie that carries no MFA claim and cannot clear a fresh MFA
+        challenge. Often the EARLIEST trace of an attempted compromise. If the same
+        IP/session later SUCCEEDS, the attacker found an MFA-satisfied path -> escalate."""
+        MFA_WALL_CODES = ("50074", "50076", "50079")
+        for u in self.users.values():
+            signins = sorted(u["signins"], key=lambda x: x["time"] or datetime.min.replace(tzinfo=timezone.utc))
+            wall_hits = [s for s in signins
+                         if (not s["success"]) and str(s["error_code"]) in MFA_WALL_CODES
+                         and not self._is_user_network(u, s)]  # the user's own MFA prompts are normal
+            for s in wall_hits:
+                side, side_detail = self._machine_side(u, s)
+                self._flag_ip(s["ip"], "MFA-wall (attempted stolen-token use)")
+                if s not in u["ta_observations"]:
+                    u["ta_observations"].append(s)
+                sev = "HIGH" if side == "ta" else "MEDIUM"
+                self.add(sev, "Attempted Token Replay (MFA wall)",
+                         f"AADSTS{s['error_code']} strong-auth-required from outside-footprint network for {u['key']}",
+                         {"user": u["key"], "ip": s["ip"], "network": s["net"],
+                          "country": s["country"],
+                          "device_id": s["device_id"] or "(none)",
+                          "user_agent": (s["user_agent"] or "(none)")[:80],
+                          "machine_assessment": side_detail,
+                          "error": ERROR_CODES.get(str(s["error_code"]), s["error_code"]),
+                          "app": s["app"], "time": fmt_dt(s["time"]),
+                          "session_id": s["session_id"], "uti": s["uti"]},
+                         "A stolen token/credential that could not satisfy MFA, used from a "
+                         "network outside the user footprint. Treat as an attempted takeover; "
+                         "check whether the same network/session later succeeded.",
+                         entity=u["key"])
+
+                # composite: MFA wall then success from same network or session = overcame MFA
+                later_success = [x for x in signins
+                                 if x["success"] and x["time"] and s["time"] and x["time"] >= s["time"]
+                                 and ((x["net"] and x["net"] == s["net"])
+                                      or (x["session_id"] and x["session_id"] == s["session_id"]))]
+                if later_success:
+                    win = later_success[0]
+                    self._flag_ip(s["ip"], "overcame MFA wall (block then success)")
+                    self.add("CRITICAL", "Account Compromise (MFA bypassed)",
+                             f"MFA wall ({s['error_code']}) then SUCCESS for {u['key']}",
+                             {"user": u["key"], "attacker_network": s["net"], "ip": s["ip"],
+                              "blocked_at": fmt_dt(s["time"]),
+                              "succeeded_at": fmt_dt(win["time"]),
+                              "via": "same network" if win["net"] == s["net"] else "same session",
+                              "session_id": win["session_id"]},
+                             "An MFA-required failure from this network/session was followed by "
+                             "a success - the attacker overcame MFA (fatigue, fallback method, "
+                             "added auth method, or a newly MFA-satisfied token). Revoke "
+                             "sessions, reset credentials, and audit MFA method changes.",
+                             entity=u["key"])
+                    u["compromised"] = True
+
+    def detect_post_compromise(self):
+        """Risky operations from Entra audit + UAL. Routine high-volume READ ops
+        (MailItemsAccessed, FileAccessed, ...) are AGGREGATED, not emitted per-event -
+        otherwise normal mailbox use produces hundreds of findings. A per-event
+        finding is raised only for high-signal ops (rules, forwarding, consent, app
+        secrets, privilege, MFA tamper) or reads BOUND to a suspect session/IP."""
+        READ_OPS = {"mailitemsaccessed", "fileaccessed", "filepreviewed",
+                    "filedownloaded", "filesyncdownloadedfull", "filemodified",
+                    "fileuploaded", "filerenamed"}
+        events = []
+        for a in self.audits:
+            events.append((a["operation"], a["actor"], a.get("ip"), a["session_id"],
+                           a["time"], a["target"], "EntraAudit", None))
+        for u in self.ual:
+            events.append((u["operation"], u["actor"], u.get("ip"), u["session_id"],
+                           u["time"], u["object"] or u["workload"], "UAL", u))
+
+        read_tied = defaultdict(lambda: {"count": 0, "first": None, "last": None,
+                                         "ips": set(), "items": []})
+        read_free = defaultdict(lambda: {"count": 0, "first": None, "last": None})
+
+        def _span(a, t):
+            if t:
+                a["first"] = min(a["first"], t) if a["first"] else t
+                a["last"] = max(a["last"], t) if a["last"] else t
+
+        for op, actor, ip, sid, t, tgt, src, ualrec in events:
+            key = (op or "").strip().lower()
+            match = next((meta for needle, meta in RISKY_OPS.items() if needle in key), None)
+            if not match:
+                continue
+            category, sev, note = match
+            ipn = strip_port(ip)
+            tied = (sid and sid in self.suspect_sessions) or (ipn and ipn in self.attacker_ips)
+            if key in READ_OPS:
+                if tied:
+                    a = read_tied[(actor, key, net_key(ip) or sid)]
+                    a["count"] += 1; a["ips"].add(ipn); _span(a, t)
+                    if ualrec:  # capture the mail-item evidence for the exfil inventory
+                        for mi in ualrec.get("mail_items", []):
+                            if mi.get("message_id"):
+                                a["items"].append({**mi, "time": fmt_dt(t)})
+                else:
+                    a = read_free[(actor, key)]; a["count"] += 1; _span(a, t)
+                continue
+            # high-signal op -> per-event finding
+            if tied and sev in ("HIGH", "MEDIUM"):
+                sev = "CRITICAL" if sev == "HIGH" else "HIGH"
+            ev = {"operation": op, "actor": actor, "ip": ipn, "session_id": sid,
+                  "target": tgt, "time": fmt_dt(t), "source": src, "category": category}
+            if ualrec and ualrec.get("subject"):
+                ev["subject"] = ualrec["subject"]
+            if ualrec and ualrec.get("client_info"):
+                ev["client_info"] = ualrec["client_info"]
+            # surface inbox-rule / forwarding PARAMETERS (the @domain it hides, where it
+            # moves mail, forward targets) - these are the BEC IOCs
+            if category in ("mail_rule", "forwarding") and ualrec:
+                p = ualrec.get("parameters") or {}
+                def _pv(*names):
+                    for n in names:
+                        for k in p:
+                            if k.lower() == n.lower():
+                                return p[k]
+                    return ""
+                rule = {
+                    "name": _pv("Name"),
+                    "from_contains": _pv("FromAddressContainsWords", "From"),
+                    "subject_contains": _pv("SubjectContainsWords", "SubjectOrBodyContainsWords"),
+                    "move_to": _pv("MoveToFolder"),
+                    "delete": _pv("DeleteMessage"),
+                    "mark_read": _pv("MarkAsRead"),
+                    "forward_to": _pv("ForwardTo", "ForwardAsAttachmentTo", "RedirectTo"),
+                    "smtp_forward": _pv("ForwardingSmtpAddress", "ForwardingAddress"),
+                    "stop_processing": _pv("StopProcessingRules"),
+                }
+                rule = {k: v for k, v in rule.items() if v not in ("", None)}
+                if rule:
+                    ev["rule"] = rule
+                    ev["rule_summary"] = "; ".join(f"{k}={v}" for k, v in rule.items())
+            if tied:
+                ev["tied_to_suspect_session_or_ip"] = True
+            self.add(sev, "Post-Compromise Action", f"{note}  [{actor or 'unknown actor'}]", ev,
+                     "Confirm whether this action was authorized. If under a flagged "
+                     "session/IP, treat as attacker action and remediate.",
+                     entity=actor)
+            rec = self.users.get(actor)
+            if rec is not None:
+                rec.setdefault("post_actions", []).append((category, op, t, ipn, sid, tied))
+
+        # bulk reads BOUND to a suspect session/IP. A stolen session is often used by
+        # BOTH the victim (from their own network) and the TA (from outside) - split
+        # them by network so the analyst sees genuine exfil separately from the
+        # victim's own access under the same shared session.
+        for (actor, key, scope), a in read_tied.items():
+            ur = self.users.get(actor)
+            own_network = bool(ur) and scope in ur.get("baseline_nets", set())
+            # mail-item inventory (InternetMessageId / folder / size / access time)
+            items = a["items"]
+            manifest = items[:60]
+            total_bytes = sum(int(mi["size"]) for mi in items if str(mi.get("size") or "").isdigit())
+            inv = {"accessed_items_total": len(items),
+                   "accessed_bytes": total_bytes,
+                   "sample_items": manifest,
+                   "note": "subjects/senders require eDiscovery or Get-MessageTrace on the "
+                           "InternetMessageId (not present in MailItemsAccessed itself)"} if items else {}
+            if own_network:
+                ev = {"actor": actor, "operation": key, "count": a["count"],
+                      "network": scope, "ips": sorted(i for i in a["ips"] if i),
+                      "window": f"{fmt_dt(a['first'])} -> {fmt_dt(a['last'])}",
+                      "note": "session is shared/stolen but this access came from the "
+                              "user's own network - most likely the victim, not the TA"}
+                ev.update(inv)
+                self.add("MEDIUM", "Data Access (shared session)",
+                         f"{a['count']}x {key} under a suspect session from the user's OWN "
+                         f"network ({scope}) for {actor}", ev,
+                         "Access under the stolen session but from the user's own network. "
+                         "Likely the victim's own activity; confirm against the TA-network "
+                         "access to separate legitimate from attacker reads.",
+                         entity=actor)
+            else:
+                ev = {"actor": actor, "operation": key, "count": a["count"],
+                      "network": scope, "ips": sorted(i for i in a["ips"] if i),
+                      "window": f"{fmt_dt(a['first'])} -> {fmt_dt(a['last'])}",
+                      "tied_to_suspect_session_or_ip": True}
+                ev.update(inv)
+                self.add("HIGH", "Post-Compromise Action",
+                         f"{a['count']}x {key} ({len(items)} items, {total_bytes/1e6:.1f} MB) from an "
+                         f"OUTSIDE network under a suspect session for {actor}", ev,
+                         "Bulk data access from a network OUTSIDE the user footprint under a "
+                         "flagged session - treat as exfiltration. Resolve the listed "
+                         "InternetMessageIds via eDiscovery / Get-MessageTrace for subjects.",
+                         entity=actor)
+            rec = self.users.get(actor)
+            if rec is not None:
+                rec.setdefault("post_actions", []).append(
+                    (key, f"{a['count']}x {key}", a["last"],
+                     sorted(a["ips"])[0] if a["ips"] else "", scope, not own_network))
+        # routine reads NOT bound to anything = normal user activity (informational)
+        for (actor, key), a in read_free.items():
+            self.add("INFO", "Data Access (volume)",
+                     f"{a['count']}x {key} for {actor} (routine, not session-bound)",
+                     {"actor": actor, "operation": key, "count": a["count"],
+                      "window": f"{fmt_dt(a['first'])} -> {fmt_dt(a['last'])}"},
+                     "Read activity not tied to any suspect session/IP - most likely the "
+                     "user's normal access. Review only if the volume is anomalous.",
+                     entity=actor)
+
+    def detect_aitm_chain(self):
+        """AiTM relay signature, robust to UA/device spoofing: a proxy 'warm-up'
+        failure (50132 token-refresh) and/or a 50199 CMSI interrupt from a network
+        OUTSIDE the user footprint, immediately followed by a SUCCESS from that same
+        network. Keys on the error-chain + network + timing, so it still fires even
+        when the TA replays the victim's deviceId and spoofs the victim's user-agent
+        during the relay (as happened in real AiTM kits)."""
+        CHAIN_CODES = ("50132", "50199")
+        for u in self.users.values():
+            signins = sorted(u["signins"], key=lambda x: x["time"] or datetime.min.replace(tzinfo=timezone.utc))
+            for s in signins:
+                if s["success"] or str(s["error_code"]) not in CHAIN_CODES:
+                    continue
+                if self._is_user_network(u, s) or not s["net"]:
+                    continue
+                win = next((x for x in signins
+                            if x["success"] and x["net"] == s["net"] and x["time"] and s["time"]
+                            and 0 <= (x["time"] - s["time"]).total_seconds() <= 1800), None)
+                if not win:
+                    continue
+                self._flag_ip(s["ip"], "AiTM relay (proxy warm-up then success)")
+                for obs in (s, win):
+                    if obs not in u["ta_observations"]:
+                        u["ta_observations"].append(obs)
+                u["compromised"] = True
+                self.add("CRITICAL", "AiTM / Account Compromise",
+                         f"AiTM relay chain (AADSTS{s['error_code']} then success) for {u['key']}",
+                         {"user": u["key"], "network": s["net"], "ip": s["ip"],
+                          "country": s["country"],
+                          "warmup_code": s["error_code"],
+                          "warmup_meaning": ERROR_CODES.get(str(s["error_code"]), ""),
+                          "warmup_at": fmt_dt(s["time"]),
+                          "success_at": fmt_dt(win["time"]),
+                          "spoofed_ua": (win["user_agent"] or "")[:90],
+                          "note": "deviceId/UA may be spoofed to match the victim; IP/network "
+                                  "and the error-chain are the reliable distinguishers here"},
+                         "AiTM proxy relay: a warm-up failure then an immediate success from "
+                         "the same outside network. Robust to UA/device spoofing. Revoke the "
+                         "session, reset credentials, and sweep activity on this network.",
+                         entity=u["key"])
+                break
+
+    def detect_phishing(self):
+        """Surface the phishing lure and any lure propagation. The lure itself is
+        rarely labelled in logs, but the message(s) the victim read from their OWN
+        device in the ~20 min BEFORE the AiTM relay is the strong candidate; and a
+        forward/send during the incident window (especially under the suspect session)
+        is likely the TA propagating the lure or exfiltrating via mail."""
+        for u in self.users.values():
+            if not u.get("compromised"):
+                continue
+            obs = u.get("ta_observations", [])
+            chain_start = min((s["time"] for s in obs if s["time"]), default=None)
+            chain_end = max((s["time"] for s in obs if s["time"]), default=None)
+
+            # 1) candidate lure: victim mail read from a baseline network just before the relay
+            if chain_start:
+                w0 = chain_start - timedelta(minutes=20)
+                lure = []
+                for r in u["ual"]:
+                    if not r["time"] or not (w0 <= r["time"] <= chain_start):
+                        continue
+                    if "mailitems" not in r["operation"].lower() and "messagebind" not in r["operation"].lower():
+                        continue
+                    if not self._is_user_network(u, r):
+                        continue
+                    for mi in r.get("mail_items", []):
+                        if mi.get("message_id"):
+                            lure.append({"message_id": mi["message_id"],
+                                         "folder": mi.get("folder", ""),
+                                         "accessed": fmt_dt(r["time"])})
+                if lure:
+                    self.add("MEDIUM", "Phishing (suspected lure)",
+                             f"Mail read by {u['key']} from their own device just before the AiTM relay",
+                             {"user": u["key"],
+                              "window": f"{fmt_dt(w0)} -> {fmt_dt(chain_start)}",
+                              "candidate_lure_items": lure[:15],
+                              "note": "the message read immediately before the AiTM auth is a "
+                                      "likely phishing lure; resolve subject/sender via eDiscovery "
+                                      "on the InternetMessageId"},
+                             "Pull these InternetMessageIds for analysis of the embedded link / "
+                             "AiTM redirect, and sweep the lure subject from other mailboxes.",
+                             entity=u["key"])
+
+            # 2) lure propagation / mail exfil: forwards/sends in-window or under suspect session
+            for r in u["ual"]:
+                opl = (r["operation"] or "").lower()
+                if opl not in ("send", "create", "forward", "reply", "replyall", "sendas", "sendonbehalf"):
+                    continue
+                subj = r.get("subject", "")
+                in_window = (chain_start and chain_end and r["time"]
+                             and chain_start - timedelta(minutes=20) <= r["time"] <= chain_end + timedelta(minutes=20))
+                tied = (r["session_id"] and r["session_id"] in self.suspect_sessions) \
+                    or (strip_port(r.get("ip")) in self.attacker_ips)
+                if not (in_window or tied):
+                    continue
+                self.add("MEDIUM", "Phishing (possible propagation / mail exfil)",
+                         f"Outbound mail '{(subj or r['operation'])[:60]}' by {u['key']}",
+                         {"user": u["key"], "operation": r["operation"], "subject": subj or "(not in log)",
+                          "time": fmt_dt(r["time"]), "ip": strip_port(r.get("ip")) or "(none in log)",
+                          "session_id": r.get("session_id"),
+                          "under_suspect_session": bool(tied),
+                          "message_ids": [mi["message_id"] for mi in r.get("mail_items", []) if mi.get("message_id")][:5]},
+                         "A forward/send during the incident window - possible lure propagation "
+                         "or mail exfiltration. Recover the recipient via message headers "
+                         "(Get-MessageTrace on the InternetMessageId) and check if sent under "
+                         "the suspect session.",
+                         entity=u["key"])
+
+    def detect_containment_and_persistence(self):
+        """Record the containment action (AADSTS50057 account-disable) and flag any
+        sign-in attempt from OUTSIDE the user footprint AFTER it - a post-containment
+        retry from attacker infra confirms the TA retained the stolen token."""
+        for u in self.users.values():
+            disabled = sorted([s for s in u["signins"]
+                               if str(s["error_code"]) == "50057" and s["time"]],
+                              key=lambda x: x["time"])
+            if not disabled:
+                continue
+            t0 = disabled[0]["time"]
+            self.add("INFO", "Containment",
+                     f"Account disabled (AADSTS50057) for {u['key']} at {fmt_dt(t0)}",
+                     {"user": u["key"], "disabled_at": fmt_dt(t0),
+                      "total_50057_events": len(disabled),
+                      "note": "first 50057 marks containment; later 50057s are blocked "
+                              "attempts by the victim and/or the TA"},
+                     "Confirms containment took effect. Use this timestamp to bound the "
+                     "attacker dwell window and separate pre/post-containment activity.",
+                     entity=u["key"])
+            # persistence: post-containment attempts from outside the footprint
+            seen = set()
+            for s in sorted(u["signins"], key=lambda x: x["time"] or datetime.min.replace(tzinfo=timezone.utc)):
+                if not s["time"] or s["time"] <= t0:
+                    continue
+                if self._is_user_network(u, s):
+                    continue  # victim's own device locked out - not persistence
+                if not s["net"] or s["net"] in seen:
+                    continue
+                seen.add(s["net"])
+                self._flag_ip(s["ip"], "post-containment retry (token retained)")
+                if s not in u["ta_observations"]:
+                    u["ta_observations"].append(s)
+                mins = (s["time"] - t0).total_seconds() / 60.0
+                self.add("HIGH", "TA Persistence",
+                         f"Post-containment retry from attacker network {s['net']} for {u['key']}",
+                         {"user": u["key"], "ip": s["ip"], "network": s["net"], "asn": s["asn"],
+                          "time": fmt_dt(s["time"]), "minutes_after_disable": round(mins, 1),
+                          "error_code": s["error_code"], "app": s["app"],
+                          "user_agent": (s["user_agent"] or "")[:80]},
+                         "A sign-in attempt from attacker infrastructure AFTER the account was "
+                         "disabled confirms the TA retained the stolen token and intended "
+                         "further access. Keep the account disabled until all refresh tokens "
+                         "are revoked and credentials reset.",
+                         entity=u["key"])
+
+    def run(self):
+        self.build_users()
+        self.detect_session_redundancy()
+        self.detect_aitm_chain()      # robust AiTM detection (spoof-resistant), enriches TA profile
+        self.detect_mfa_wall()        # blocked 50074 attempts enrich the TA profile
+        self.detect_replay_and_aitm()
+        self.detect_impossible_travel()
+        self.detect_credential_attacks()
+        self.detect_cmsi_interrupt()
+        self.detect_post_compromise()
+        self.detect_containment_and_persistence()
+        self.detect_phishing()
+        # ensure every compromised user has a legit-vs-TA profile for the report
+        for u in self.users.values():
+            if u.get("compromised") and not u.get("ta_profile"):
+                legit, ta = self._actor_profiles(u)
+                u["legit_profile"], u["ta_profile"] = legit, ta
+        self.findings.sort(key=lambda f: (SEV_ORDER.get(f["severity"], 9), f["category"]))
+        return self.findings
+
+
+# --------------------------------------------------------------------------- #
+# Reporting
+# --------------------------------------------------------------------------- #
+
+def build_summary(az):
+    sev_counts = defaultdict(int)
+    for f in az.findings:
+        sev_counts[f["severity"]] += 1
+    compromised = sorted(k for k, u in az.users.items() if u.get("compromised"))
+    baseline_ips = set()
+    for u in az.users.values():
+        baseline_ips |= u["interactive_ips"]
+    return {
+        "users_analyzed": len(az.users),
+        "signins_analyzed": len(az.signins),
+        "audit_records": len(az.audits),
+        "ual_records": len(az.ual),
+        "findings_total": len(az.findings),
+        "by_severity": dict(sev_counts),
+        "compromised_accounts": compromised,
+        "suspect_sessions": az.suspect_sessions,
+        "baseline_ips": sorted(baseline_ips),
+        "attacker_ips": {ip: sorted(r) for ip, r in az.attacker_ips.items()},
+    }
+
+
+def render_txt(az, summary, tz):
+    L = []
+    W = 78
+    L.append("=" * W)
+    L.append("MS_ANALYZER - ENTRA / PURVIEW LOGS-ONLY COMPROMISE REPORT")
+    L.append("=" * W)
+    L.append(f"Generated: {fmt_dt(datetime.now(timezone.utc), tz)}")
+    L.append("")
+    # 1. Executive summary
+    L.append("-" * W)
+    L.append("1. EXECUTIVE SUMMARY")
+    L.append("-" * W)
+    L.append(f"  Sign-ins analyzed : {summary['signins_analyzed']}")
+    L.append(f"  Entra audit recs  : {summary['audit_records']}")
+    L.append(f"  Purview/UAL recs  : {summary['ual_records']}")
+    L.append(f"  Users analyzed    : {summary['users_analyzed']}")
+    L.append(f"  Findings          : {summary['findings_total']}  " +
+             ", ".join(f"{k}={v}" for k, v in sorted(summary['by_severity'].items(),
+                                                      key=lambda x: SEV_ORDER.get(x[0], 9))))
+    if summary["compromised_accounts"]:
+        L.append(f"  COMPROMISED (AiTM/theft indicators): {', '.join(summary['compromised_accounts'])}")
+    else:
+        L.append("  No accounts met the AiTM/theft composite threshold.")
+    L.append("")
+    # 2. IOCs
+    L.append("-" * W)
+    L.append("2. SUSPECT IPs / SESSIONS (review & corroborate - not all are attacker-owned)")
+    L.append("-" * W)
+    baseline = set(summary.get("baseline_ips", []))
+    if summary["attacker_ips"]:
+        for ip, reasons in sorted(summary["attacker_ips"].items()):
+            note = "  <- user baseline IP (likely victim side of a replayed session)" if ip in baseline else ""
+            L.append(f"  {ip:<22} {', '.join(reasons)}{note}")
+    else:
+        L.append("  None flagged.")
+    if summary["suspect_sessions"]:
+        L.append("")
+        L.append("  Suspect sessions (AADSessionId used from multiple IPs):")
+        for sid, ips in summary["suspect_sessions"].items():
+            L.append(f"    {sid}  <-  {', '.join(ips)}")
+    L.append("")
+    # 3. Findings
+    L.append("-" * W)
+    L.append("3. FINDINGS (highest severity first)")
+    L.append("-" * W)
+    if not az.findings:
+        L.append("  No findings.")
+    for f in az.findings:
+        L.append(f"  [{f['severity']}] {f['title']}")
+        L.append(f"          Category: {f['category']}")
+        for k, v in f["evidence"].items():
+            if isinstance(v, list):
+                v = ", ".join(str(x) for x in v[:8]) + (" ..." if len(v) > 8 else "")
+            L.append(f"          {k}: {v}")
+        L.append(f"          -> {f['recommendation']}")
+        L.append("")
+    # 4. Per-user access & O365 action summary
+    L.append("-" * W)
+    L.append("4. PER-USER ACCESS & O365 ACTION SUMMARY")
+    L.append("-" * W)
+    focus = [u for u in az.users.values() if u.get("compromised") or u.get("post_actions")]
+    if not focus:
+        focus = list(az.users.values())[:10]
+    for u in sorted(focus, key=lambda x: (not x.get("compromised"), x["key"])):
+        flag = "  *** COMPROMISED ***" if u.get("compromised") else ""
+        L.append(f"  USER: {u['key']}{flag}")
+        if u["display"]:
+            L.append(f"    Display name : {u['display']}")
+        L.append(f"    Sign-ins     : {len(u['signins'])}  "
+                 f"(interactive IPs: {len(u['interactive_ips'])}, all IPs: {len(u['all_ips'])})")
+        if u["interactive_ips"]:
+            L.append(f"    Baseline IPs : {', '.join(sorted(u['interactive_ips'])[:6])}")
+        anomalous = sorted(u["all_ips"] - u["interactive_ips"])
+        if anomalous:
+            L.append(f"    Other IPs    : {', '.join(anomalous[:6])}")
+        if u["countries"]:
+            L.append(f"    Countries    : {', '.join(sorted(c for c in u['countries'] if c))}")
+        # apps / resources accessed
+        apps = sorted({s["resource"] or s["app"] for s in u["signins"] if (s["resource"] or s["app"])})
+        if apps:
+            L.append(f"    Resources    : {', '.join(apps[:8])}")
+        # LEGITIMATE vs THREAT ACTOR machine/network contrast
+        if u.get("compromised") and u.get("ta_profile"):
+            lp, tp = u.get("legit_profile", {}), u["ta_profile"]
+            L.append("    .------------------- LEGITIMATE vs THREAT ACTOR -------------------.")
+            L.append(f"      LEGIT  device fleet: {', '.join(lp.get('device_fleet', []))}")
+            L.append(f"             user-agent  : {', '.join(lp.get('user_agents', []))[:66]}")
+            L.append(f"             networks    : {', '.join(lp.get('networks', [])) or '?'}")
+            L.append(f"             ASNs        : {', '.join(lp.get('asns', [])) or '?'}")
+            L.append(f"             geo         : {', '.join(lp.get('countries', [])) or '?'}")
+            L.append(f"             apps used   : {', '.join(lp.get('apps', [])) or '?'}")
+            L.append(f"             last login  : {lp.get('last_interactive', '?')}")
+            L.append(f"      T.A.   device(s)   : {', '.join(tp.get('device_ids', []))}  "
+                     f"(trust: {', '.join(tp.get('device_trust', []))})")
+            L.append(f"             user-agent  : {', '.join(tp.get('user_agents', []))[:66]}")
+            L.append(f"             client app  : {', '.join(tp.get('client_apps', [])) or '?'}")
+            L.append(f"             apps used   : {', '.join(tp.get('apps', [])) or '?'}")
+            L.append(f"             app IDs      : {', '.join(tp.get('app_ids', [])) or '?'}")
+            L.append(f"             resources   : {', '.join(tp.get('resources', [])) or '?'}")
+            L.append(f"             networks    : {', '.join(tp.get('networks', [])) or '?'}")
+            L.append(f"             IP(s)       : {', '.join(tp.get('ips', [])) or '?'}")
+            L.append(f"             ASNs        : {', '.join(tp.get('asns', [])) or '?'}")
+            L.append(f"             geo         : {', '.join(tp.get('countries', [])) or '?'}")
+            L.append(f"             sessions    : {', '.join(tp.get('sessions', [])) or '?'}")
+            if tp.get('utis'):
+                L.append(f"             utis        : {', '.join(tp.get('utis', []))}")
+            tline = f"             timeframe   : {tp.get('first_seen','?')} -> {tp.get('last_seen','?')}"
+            if "minutes_after_legit_login" in tp:
+                tline += f"  (+{tp['minutes_after_legit_login']}m after legit login"
+                tline += ", CONCURRENT" if tp.get("concurrent_with_legit_session") else ""
+                tline += ")"
+            L.append(tline)
+            L.append("    '------------------------------------------------------------------'")
+        # O365 actions
+        pa = u.get("post_actions", [])
+        if pa:
+            cats = defaultdict(int)
+            for c, *_ in pa:
+                cats[c] += 1
+            L.append(f"    O365 ACTIONS : {len(pa)}  ({', '.join(f'{k}={v}' for k, v in sorted(cats.items()))})")
+            for cat, op, t, ip, sid, tied in sorted(pa, key=lambda x: x[2] or datetime.min.replace(tzinfo=timezone.utc))[:12]:
+                mark = "  [under suspect session/IP]" if tied else ""
+                L.append(f"      - {fmt_dt(t, tz)}  {op}  ({cat}) from {ip or '?'}{mark}")
+        L.append("")
+    # 5. Validation
+    L.append("-" * W)
+    L.append("5. ANALYST VALIDATION CHECKLIST")
+    L.append("-" * W)
+    for line in [
+        "Linkable identifiers (AADSessionId/UniqueTokenId) are an Entra preview-era",
+        ">feature; confirm they are populated for your incident window before relying",
+        ">on session/token redundancy findings.",
+        "Replay baseline = IPs the user signed in from INTERACTIVELY. Confirm those",
+        ">interactive sign-ins are genuinely the user (not attacker-interactive).",
+        "Impossible travel uses geo-coordinates when present, else a country-change",
+        ">time proxy. Clear every hit against corporate VPN / egress / known travel.",
+        "Risk fields (riskState / riskLevelDuringSignIn) require Entra ID P2; absence",
+        ">is not evidence of safety.",
+        "All correlation is timestamp-based - confirm every log source is in UTC.",
+        "Attribute O365 actions by actor AND by AADSessionId; an action under a flagged",
+        ">session/IP is attacker activity until proven otherwise.",
+    ]:
+        if line.startswith(">"):
+            L.append(f"      {line[1:]}")
+        else:
+            L.append(f"  - {line}")
+    L.append("")
+    # 6. Indicators of Compromise (handoff)
+    L.append("-" * W)
+    L.append("6. INDICATORS OF COMPROMISE  (handoff: block / hunt / eDiscovery)")
+    L.append("-" * W)
+    # ip -> asn map for annotation
+    ip_asn = {}
+    for s in az.signins:
+        if s.get("ip") and s.get("asn") and s["ip"] not in ip_asn:
+            ip_asn[s["ip"]] = s["asn"]
+    if az.attacker_ips:
+        L.append("  TA INFRASTRUCTURE (block at perimeter / submit to threat intel)")
+        for ip, reasons in sorted(az.attacker_ips.items()):
+            asn = ip_asn.get(ip)
+            asn_s = f"  ASN {asn}" + (f" ({az.hosting_asns[asn]})" if asn in az.hosting_asns else "") if asn else ""
+            L.append(f"    IP   {ip:<24}{asn_s}")
+            L.append(f"         reasons: {', '.join(sorted(reasons))}")
+    if az.suspect_sessions:
+        L.append("  STOLEN / REPLAYED SESSIONS (revoke + sweep by AADSessionId/UniqueTokenId)")
+        for sid, ips in az.suspect_sessions.items():
+            L.append(f"    {sid}")
+            if ips:
+                L.append(f"         seen from: {', '.join(ips)}")
+    # per-compromised-user TA fingerprint
+    for u in az.users.values():
+        tp = u.get("ta_profile")
+        if not (u.get("compromised") and tp):
+            continue
+        L.append(f"  TA FINGERPRINT  [{u['key']}]")
+        def _emit(label, vals):
+            vals = [v for v in (vals or []) if v]
+            if vals:
+                L.append(f"    {label:<13}{', '.join(str(v) for v in vals)}")
+        _emit("networks", tp.get("networks"))
+        _emit("ASNs", tp.get("asns"))
+        _emit("device(s)", tp.get("device_ids"))
+        _emit("user-agents", tp.get("user_agents"))
+        _emit("client app", tp.get("client_apps"))
+        _emit("apps", tp.get("apps"))
+        _emit("app IDs", tp.get("app_ids"))
+        _emit("resources", tp.get("resources"))
+        _emit("sessions", tp.get("sessions"))
+        _emit("UTIs", tp.get("utis"))
+    # phishing lure, exfil manifest, BEC artefacts pulled from findings
+    lure, exfil, total_items, total_bytes, forwards, rules = [], [], 0, 0, [], []
+    bec_addrs, containment, persistence = set(), [], []
+    for f in az.findings:
+        e = f.get("evidence", {})
+        if "candidate_lure_items" in e:
+            lure.extend(e["candidate_lure_items"])
+        if "sample_items" in e and "OUTSIDE network" in f["title"]:
+            exfil.extend(e["sample_items"])
+            total_items += e.get("accessed_items_total", 0)
+            total_bytes += e.get("accessed_bytes", 0)
+        if f["category"].startswith("Phishing (possible propagation"):
+            forwards.append((e.get("subject", ""), e.get("message_ids", [])))
+        if "inbox rule" in f["title"].lower() or "New-InboxRule" in str(e.get("operation", "")):
+            rules.append((e.get("target") or e.get("operation", ""), e.get("rule_summary", "")))
+            r = e.get("rule", {})
+            for v in (r.get("from_contains"), r.get("forward_to"), r.get("smtp_forward")):
+                if v:
+                    bec_addrs.add(str(v))
+        if f["category"] == "Containment":
+            containment.append(e.get("disabled_at", ""))
+        if f["category"] == "TA Persistence":
+            persistence.append((e.get("ip", ""), e.get("network", ""), e.get("time", ""),
+                                e.get("minutes_after_disable", "")))
+    if lure:
+        L.append("  SUSPECTED PHISHING LURE (pull for analysis; sweep other mailboxes)")
+        for mi in lure[:5]:
+            L.append(f"    {mi.get('message_id','')}  {mi.get('folder','')}  read {mi.get('accessed','')}")
+    if forwards:
+        L.append("  OUTBOUND / LURE PROPAGATION (recover recipients via Get-MessageTrace)")
+        for subj, mids in forwards[:8]:
+            L.append(f"    subject: {subj}")
+            for m in (mids or [])[:3]:
+                L.append(f"      {m}")
+    if rules or bec_addrs:
+        L.append("  PERSISTENCE / BEC")
+        for tgt, summary in rules[:8]:
+            L.append(f"    inbox rule -> {tgt}")
+            if summary:
+                L.append(f"      {summary}")
+        for a in sorted(bec_addrs):
+            L.append(f"    BEC address/domain: {a}")
+    if containment:
+        L.append("  CONTAINMENT")
+        for ts in containment[:4]:
+            L.append(f"    account disabled (50057) at {ts}")
+    if persistence:
+        L.append("  TA PERSISTENCE (post-containment retries - token retained)")
+        for ip, net, ts, mins in persistence[:8]:
+            L.append(f"    {ip}  ({net})  at {ts}  (+{mins}m after disable)")
+    if exfil:
+        L.append(f"  MAILBOX ITEMS ACCESSED BY TA  (treat as exfiltrated; resolve subjects via eDiscovery)")
+        L.append(f"    total: {total_items} items / {total_bytes/1e6:.1f} MB  "
+                 f"(InternetMessageIds below, first {min(50, len(exfil))})")
+        for mi in exfil[:50]:
+            L.append(f"      {mi.get('message_id','')}  {mi.get('folder','')}")
+        if len(exfil) > 50:
+            L.append(f"      ... and {len(exfil) - 50} more (see ms_findings.json)")
+    if not (az.attacker_ips or az.suspect_sessions):
+        L.append("  No indicators of compromise identified.")
+    L.append("")
+    L.append("=" * W)
+    L.append("END OF REPORT")
+    L.append("=" * W)
+    return "\n".join(L)
+
+
+# --------------------------------------------------------------------------- #
+# Main
+# --------------------------------------------------------------------------- #
+
+
+# =========================================================================== #
+# UNIFIED DRIVER - mode dispatch, host<->logs correlation bridge, one report
+# =========================================================================== #
+
+def _detect_kind(path):
+    """Classify an evidence path as 'host' or 'logs' (or None if unknown)."""
+    if not path:
+        return None
+    low = path.lower()
+    if low.endswith(".zip"):
+        return "host"
+    if os.path.isdir(path):
+        try:
+            names = [n.lower() for n in os.listdir(path)]
+        except OSError:
+            return None
+        if any(n in ("cookies.json", "history.json") for n in names) or \
+           any(("webstorage" in n or "indexeddb" in n or "extensions" in n) for n in names):
+            return "host"
+        logkw = ("signin", "sign-in", "interactive", "noninteractive", "unifiedaudit",
+                 "unified", "auditlog", "audit", "serviceprincipal", "managedidentity",
+                 "purview", "ual", "logon")
+        if any(any(k in n for k in logkw) for n in names):
+            return "logs"
+        if any(n.endswith((".json", ".csv", ".jsonl")) for n in names):
+            return "logs"  # a dir of json/csv with no host markers -> treat as logs
+    return None
+
+
+def _run_host(args, tz_host, since_host, until_host, quiet):
+    """Replicate the BAI host pipeline. Returns a result dict (or raises SystemExit)."""
+    pkg = load_package(args.host)
     if "cookies.json" not in pkg and "history.json" not in pkg:
-        raise SystemExit("[fatal] no cookies.json or history.json found in package")
-    
-    if args.online:
-        print("[*] Online mode enabled - will perform WHOIS/RDAP lookups for domain analysis")
-    
-    # Load Entra/Purview logs if provided
-    entra_logs = None
-    if args.entra_logs:
-        print(f"[*] Loading Entra/Purview logs from: {args.entra_logs}")
-        entra_logs = discover_entra_logs(args.entra_logs)
-        total_logs = sum(len(v) for v in entra_logs.values())
-        print(f"[+] Loaded {total_logs} total log records for correlation")
-    
-    # Run all analyzers
-    sessions, idp_cookies = analyze_cookies(pkg.get("cookies.json"), 
+        raise SystemExit("[fatal] --host package has no cookies.json or history.json")
+    if args.online and not quiet:
+        print("[*] Online mode enabled - WHOIS/RDAP lookups for domain analysis")
+    sessions, idp_cookies = analyze_cookies(pkg.get("cookies.json"),
                                             include_values=args.include_token_values)
     findings, supplementary = aggregate_findings(pkg, include_values=args.include_token_values,
                                                  online=args.online)
     aitm_view = build_aitm_view(pkg, findings)
-    events = build_timeline(pkg, since=since, until=until)
-    
-    # Combine storage tokens
-    all_storage_tokens = supplementary["storage_tokens"] + supplementary["indexeddb_tokens"]
-    
-    # Build Session Theft Timeline for causal chain reconstruction
-    # Combines auth_sessions with visitdetails to date the lure/auth and bracket the theft
-    all_auth_sessions = sessions + all_storage_tokens
-    theft_timeline = build_session_theft_timeline(pkg, all_auth_sessions)
-    
-    # Correlate with Entra logs if provided
-    entra_correlation = None
-    if entra_logs:
-        print("[*] Correlating BAI identities with Entra/Purview logs...")
-        entra_correlation = correlate_entra_logs(theft_timeline, entra_logs)
-        print(f"[+] Correlation: {entra_correlation.get('summary', 'complete')}")
-    
-    # Discover user accounts using UPN-centric approach
+    events = build_timeline(pkg, since=since_host, until=until_host)
+    storage_tokens = supplementary["storage_tokens"] + supplementary["indexeddb_tokens"]
+    theft_timeline = build_session_theft_timeline(pkg, sessions + storage_tokens)
     upn_accounts = discover_upn_accounts(pkg)
-    
-    # Build tenant-to-UPN mapping from login URLs, then discover Entra sessions
     tenant_upn_map = discover_tenant_upn_mapping(pkg)
     entra_sessions = discover_entra_sessions(pkg, tenant_upn_map)
-    
-    if not args.quiet:
-        if upn_accounts:
-            print(f"[+] Discovered {len(upn_accounts)} UPN accounts from cookies/storage")
-        if entra_sessions:
-            print(f"[+] Discovered {len(entra_sessions)} Microsoft Entra sessions")
-    
-    # Write outputs
-    os.makedirs(args.out, exist_ok=True)
-    
-    tl_csv = os.path.join(args.out, "timeline.csv")
-    findings_json = os.path.join(args.out, "findings.json")
-    auth_json = os.path.join(args.out, "auth_sessions.json")
-    identity_csv = os.path.join(args.out, "identity_inventory.csv")
-    
-    write_timeline_csv(events, tz, tl_csv)
-    write_findings_json(findings, aitm_view, theft_timeline, findings_json, entra_correlation)
-    write_auth_json(sessions, idp_cookies, all_storage_tokens, auth_json)
-    
-    # Generate structured report
-    report_gen = ReportGenerator(
-        pkg=pkg,
-        findings=findings,
-        aitm_view=aitm_view,
-        sessions=sessions,
-        storage_tokens=all_storage_tokens,
-        events=events,
-        theft_timeline=theft_timeline,
-        entra_correlation=entra_correlation,
-        upn_accounts=upn_accounts,
-        entra_sessions=entra_sessions,
-        tz=tz
-    )
-    
-    # Write report in requested format
-    if args.format == "html":
-        report_path = os.path.join(args.out, "report.html")
-        with open(report_path, "w", encoding="utf-8") as f:
-            f.write(report_gen.generate_html())
+    return {
+        "pkg": pkg, "sessions": sessions, "idp_cookies": idp_cookies,
+        "findings": findings, "aitm_view": aitm_view, "events": events,
+        "storage_tokens": storage_tokens, "theft_timeline": theft_timeline,
+        "upn_accounts": upn_accounts, "entra_sessions": entra_sessions,
+    }
+
+
+def _run_logs(args, since_logs, until_logs, quiet):
+    """Replicate the ms_analyzer logs pipeline. Returns a result dict or None."""
+    try:
+        hosting_asns = load_hosting_asns(args.asn_intel)
+    except Exception as e:
+        print(f"[!] Could not read --asn-intel file ({e}); using built-in ASN list.")
+        hosting_asns = dict(DEFAULT_HOSTING_ASNS)
+    if not quiet and args.asn_intel:
+        print(f"[*] Hosting-ASN list: {len(hosting_asns)} entries "
+              f"({len(hosting_asns) - len(DEFAULT_HOSTING_ASNS)} custom)")
+    logs = discover_logs(args.logs)
+    total = sum(len(v) for v in logs.values())
+    if total == 0:
+        print("[!] No recognizable log records in --logs folder.")
+        return None
+    if not quiet:
+        print(f"[*] Analyzing {total} log records...")
+    az = Analyzer(logs, since=since_logs, until=until_logs,
+                  spray_min_users=args.spray_min_users, travel_kmh=args.travel_kmh,
+                  hosting_asns=hosting_asns)
+    az.run()
+    summary = build_summary(az)
+    return {"az": az, "summary": summary, "logs_total": total}
+
+
+def _correlate_host_logs(theft_timeline, az):
+    """Pivot host-extracted linkable identifiers (uti/sid) into the log engine's
+    sign-ins and UAL events for TOKEN-GRADE replay confirmation, and unify identity.
+
+    This is what the 'both' mode buys over running the two engines separately: the
+    host gives the actual stolen token's uti/sid and a precise auth_time birth; the
+    logs show where that exact token/session was exercised."""
+    host_utis, host_sids, host_ids = {}, {}, {}
+    for s in theft_timeline.get("stealable_sessions", []):
+        if s.get("uti"):
+            host_utis[s["uti"]] = s
+        if s.get("sid"):
+            host_sids[s["sid"]] = s
+        for k in (s.get("object_id"), s.get("upn")):
+            if k:
+                host_ids[k.lower()] = s
+    births = {}
+    for a in theft_timeline.get("session_birth_anchors", []):
+        oid = (a.get("object_id") or "").lower()
+        if oid and a.get("auth_time"):
+            births.setdefault(oid, a["auth_time"])
+
+    confirmations = []
+
+    def _scan(events, kind):
+        for e in events:
+            uti = e.get("uti")
+            sid = e.get("session_id")
+            t = e.get("time")
+            base = {"kind": kind, "ip": e.get("ip"), "network": e.get("net"),
+                    "asn": e.get("asn"), "time": fmt_dt(t) if t else None}
+            if uti and uti in host_utis:
+                h = host_utis[uti]
+                confirmations.append({**base, "match": "uti (UniqueTokenId)", "value": uti,
+                                      "host_upn": h.get("upn"), "host_oid": h.get("object_id")})
+            if sid and sid in host_sids:
+                h = host_sids[sid]
+                confirmations.append({**base, "match": "sid (AADSessionId)", "value": sid,
+                                      "host_upn": h.get("upn"), "host_oid": h.get("object_id")})
+
+    _scan(getattr(az, "signins", []), "sign-in")
+    _scan(getattr(az, "ual", []), "UAL")
+
+    matched_users = []
+    for u in getattr(az, "users", {}).values():
+        upn = (u.get("upn") or "").lower()
+        oid = (u.get("user_id") or "").lower()
+        if (upn and upn in host_ids) or (oid and oid in host_ids):
+            matched_users.append(u.get("upn") or u.get("user_id"))
+
+    return {"confirmations": confirmations, "matched_users": sorted(set(matched_users)),
+            "births": births, "host_uti_count": len(host_utis), "host_sid_count": len(host_sids)}
+
+
+def _verdict(host_res, logs_res, corr):
+    if corr and corr.get("confirmations"):
+        return "CONFIRMED token replay (host token seen in logs - token-grade attribution)"
+    host_ch = host_res and any(f["severity"] in (Severity.CRITICAL.value, Severity.HIGH.value)
+                               for f in host_res["findings"])
+    logs_ch = logs_res and any(f["severity"] in ("CRITICAL", "HIGH") for f in logs_res["az"].findings)
+    if host_ch or logs_ch:
+        return "HIGH/CRITICAL indicators present - probable compromise; corroborate"
+    return "No HIGH/CRITICAL indicators in the supplied evidence"
+
+
+def _build_combined_report(mode, host_res, logs_res, corr, tz_host, tz_logs, args):
+    bar = "=" * 78
+    L = [bar,
+         "  AiTM_analyzer - unified host + logs adversary-in-the-middle analysis",
+         "  (c) 2026 Shane D. Shook. All rights reserved.",
+         bar,
+         f"  Evidence mode : {mode}",
+         f"  Host evidence : {args.host or '(none)'}",
+         f"  Log evidence  : {args.logs or '(none)'}",
+         f"  Generated     : {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%SZ')}",
+         f"  Verdict       : {_verdict(host_res, logs_res, corr)}",
+         bar, ""]
+
+    # Correlation FIRST - it is the highest-value output when both are present.
+    if corr is not None:
+        L.append("#" * 78)
+        L.append("# HOST <-> LOG CORRELATION  (token-grade)")
+        L.append("#" * 78)
+        L.append(f"  Host linkable identifiers recovered: {corr['host_uti_count']} uti, "
+                 f"{corr['host_sid_count']} sid")
+        if corr["matched_users"]:
+            L.append("  Identities matched host<->logs: " + ", ".join(corr["matched_users"]))
+        if corr["confirmations"]:
+            L.append("")
+            L.append("  *** TOKEN-GRADE REPLAY CONFIRMATIONS ***")
+            L.append("  A host-extracted token id was exercised in the logs. This is the stolen")
+            L.append("  session by definition - not a heuristic IP/baseline inference.")
+            for c in corr["confirmations"][:50]:
+                where = f"{c.get('ip') or c.get('network') or '?'}"
+                asn = f" ASN {c['asn']}" if c.get("asn") else ""
+                L.append(f"    [{c['kind']}] {c['match']} = {c['value']}")
+                L.append(f"        seen from {where}{asn} at {c.get('time')}  "
+                         f"(host identity {c.get('host_upn') or c.get('host_oid')})")
+            if corr["births"]:
+                L.append("")
+                L.append("  Precise session-birth anchors (auth_time) for theft-window bracketing:")
+                for oid, t in list(corr["births"].items())[:10]:
+                    L.append(f"    oid {oid}: birth {t}")
+        else:
+            L.append("")
+            L.append("  No host uti/sid matched a log record. Possible reasons: linkable")
+            L.append("  identifiers (UniqueTokenId/AADSessionId) not populated in the export, the")
+            L.append("  ESTS cookie was opaque (no recoverable uti/sid), or the log window does")
+            L.append("  not cover the replay. The independent host and log findings below still apply.")
+        L.append("")
+
+    if host_res is not None:
+        L.append("#" * 78)
+        L.append("# HOST EVIDENCE  (BAI browser artifacts)")
+        L.append("#" * 78)
+        rg = ReportGenerator(
+            pkg=host_res["pkg"], findings=host_res["findings"], aitm_view=host_res["aitm_view"],
+            sessions=host_res["sessions"], storage_tokens=host_res["storage_tokens"],
+            events=host_res["events"], theft_timeline=host_res["theft_timeline"],
+            entra_correlation=None, upn_accounts=host_res["upn_accounts"],
+            entra_sessions=host_res["entra_sessions"], tz=tz_host)
+        L.append(rg.generate_txt())
+        L.append("")
+
+    if logs_res is not None:
+        L.append("#" * 78)
+        L.append("# LOG EVIDENCE  (Entra sign-ins + Purview UAL)")
+        L.append("#" * 78)
+        L.append(render_txt(logs_res["az"], logs_res["summary"], tz_logs))
+        L.append("")
+
+    L.append(bar)
+    L.append("  (c) 2026 Shane D. Shook. All rights reserved.")
+    L.append(bar)
+    return "\n".join(L)
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        prog="AiTM_analyzer.py",
+        description="Unified AiTM / token-theft analyzer - host, logs, or both.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent("""
+            Examples:
+              python3 AiTM_analyzer.py --host pkg.zip
+              python3 AiTM_analyzer.py --logs ./logs --asn-intel hosting.json
+              python3 AiTM_analyzer.py --host pkg.zip --logs ./logs --out ./case
+              python3 AiTM_analyzer.py ./evidence_path            # auto-classified
+
+            The --logs folder auto-detects (by filename): Interactive / NonInteractive /
+            ServicePrincipal / ManagedIdentity sign-ins, AuditLogs, and UnifiedAuditLog
+            (Purview). The --host path is a BAI package folder or .zip.
+        """))
+    ap.add_argument("evidence", nargs="?", default=None,
+                    help="optional single evidence path; auto-classified as host or logs")
+    ap.add_argument("--host", default=None, metavar="PATH",
+                    help="BAI package folder or .zip (host evidence)")
+    ap.add_argument("--logs", default=None, metavar="FOLDER",
+                    help="folder of Entra/Purview logs (log evidence)")
+    ap.add_argument("--out", default="./aitm_analysis", help="output directory")
+    ap.add_argument("--format", choices=["txt", "html"], default="txt",
+                    help="also emit the rich host HTML report when 'html' (default: txt)")
+    ap.add_argument("--tz", default=None, help="display timezone, e.g. America/Los_Angeles")
+    ap.add_argument("--since", default=None, help="only events on/after YYYY-MM-DD")
+    ap.add_argument("--until", default=None, help="only events on/before YYYY-MM-DD")
+    # logs passthrough
+    ap.add_argument("--asn-intel", default=None, metavar="FILE",
+                    help="JSON hosting/VPS ASN file merged with the built-in list (logs mode)")
+    ap.add_argument("--spray-min-users", type=int, default=5,
+                    help="distinct users failing from one IP to call it a spray (default 5)")
+    ap.add_argument("--travel-kmh", type=float, default=900.0,
+                    help="implied speed over which travel is 'impossible' (default 900)")
+    # host passthrough
+    ap.add_argument("--include-token-values", action="store_true",
+                    help="DANGEROUS: write raw token values into host output JSON")
+    ap.add_argument("--online", action="store_true",
+                    help="enable WHOIS/RDAP lookups for domain age analysis (host mode)")
+    ap.add_argument("--quiet", "-q", action="store_true", help="minimal console output")
+    args = ap.parse_args()
+
+    # resolve a single positional evidence path
+    if args.evidence and not args.host and not args.logs:
+        k = _detect_kind(args.evidence)
+        if k == "host":
+            args.host = args.evidence
+        elif k == "logs":
+            args.logs = args.evidence
+        else:
+            raise SystemExit("[fatal] could not classify evidence path; use --host or --logs")
+
+    # the evidence you supply IS the mode: --host only = host, --logs only = logs,
+    # both = both (correlated). No separate mode switch.
+    if args.host and args.logs:
+        mode = "both"
+    elif args.host:
+        mode = "host"
+    elif args.logs:
+        mode = "logs"
     else:
-        report_path = os.path.join(args.out, "report.txt")
-        with open(report_path, "w", encoding="utf-8") as f:
-            f.write(report_gen.generate_txt())
-    
-    # Write identity inventory CSV
-    report_gen.write_identity_csv(identity_csv)
-    
-    # Write Entra correlation if available
-    if entra_correlation:
-        correlation_json = os.path.join(args.out, "entra_correlation.json")
-        with open(correlation_json, "w", encoding="utf-8") as f:
-            json.dump(entra_correlation, f, indent=2, default=str)
-    
-    # Console report (legacy format for terminal viewing)
-    if not args.quiet:
-        print_report(pkg, findings, aitm_view, sessions, all_storage_tokens, events, tz, 
-                     theft_timeline, entra_correlation)
-    
-    print()
-    print(f"[+] report written        : {report_path}")
-    print(f"[+] identity inventory    : {identity_csv}  ({len(sessions) + len(all_storage_tokens)} identities)")
-    print(f"[+] timeline written      : {tl_csv}  ({len(events)} events)")
-    print(f"[+] findings written      : {findings_json}  ({len(findings)} findings)")
-    print(f"[+] auth sessions written : {auth_json}  ({len(sessions)} sessions, "
-          f"{len(all_storage_tokens)} storage tokens)")
-    if entra_correlation:
-        print(f"[+] entra correlation     : {os.path.join(args.out, 'entra_correlation.json')}")
-    
+        raise SystemExit("[fatal] provide --host and/or --logs (or a positional evidence path)")
+
+    quiet = args.quiet
+    tz_host = _try_zoneinfo(args.tz)
+    tz_logs = _load_tz(args.tz)
+    since_host = parse_iso(args.since + "T00:00:00+00:00") if args.since else None
+    until_host = parse_iso(args.until + "T23:59:59+00:00") if args.until else None
+    since_logs = parse_time(args.since + "T00:00:00") if args.since else None
+    until_logs = parse_time(args.until + "T23:59:59") if args.until else None
+
+    os.makedirs(args.out, exist_ok=True)
+    host_res = logs_res = corr = None
+
+    if mode in ("host", "both"):
+        if not quiet:
+            print(f"[*] HOST analysis: {args.host}")
+        host_res = _run_host(args, tz_host, since_host, until_host, quiet)
+        write_timeline_csv(host_res["events"], tz_host, os.path.join(args.out, "timeline.csv"))
+        write_findings_json(host_res["findings"], host_res["aitm_view"], host_res["theft_timeline"],
+                            os.path.join(args.out, "findings.json"), None)
+        write_auth_json(host_res["sessions"], host_res["idp_cookies"], host_res["storage_tokens"],
+                        os.path.join(args.out, "auth_sessions.json"))
+
+    if mode in ("logs", "both"):
+        if not quiet:
+            print(f"[*] LOG analysis: {args.logs}")
+        logs_res = _run_logs(args, since_logs, until_logs, quiet)
+        if logs_res:
+            out = {"summary": logs_res["summary"], "findings": list(logs_res["az"].findings)}
+            with open(os.path.join(args.out, "ms_findings.json"), "w", encoding="utf-8") as f:
+                json.dump(out, f, indent=2, default=str)
+
+    if mode == "both" and host_res and logs_res:
+        corr = _correlate_host_logs(host_res["theft_timeline"], logs_res["az"])
+        with open(os.path.join(args.out, "correlation.json"), "w", encoding="utf-8") as f:
+            json.dump(corr, f, indent=2, default=str)
+
+    report = _build_combined_report(mode, host_res, logs_res, corr, tz_host, tz_logs, args)
+    rpath = os.path.join(args.out, "AiTM_report.txt")
+    with open(rpath, "w", encoding="utf-8") as f:
+        f.write(report)
+
+    if args.format == "html" and host_res:
+        rg = ReportGenerator(
+            pkg=host_res["pkg"], findings=host_res["findings"], aitm_view=host_res["aitm_view"],
+            sessions=host_res["sessions"], storage_tokens=host_res["storage_tokens"],
+            events=host_res["events"], theft_timeline=host_res["theft_timeline"],
+            entra_correlation=None, upn_accounts=host_res["upn_accounts"],
+            entra_sessions=host_res["entra_sessions"], tz=tz_host)
+        with open(os.path.join(args.out, "report.html"), "w", encoding="utf-8") as f:
+            f.write(rg.generate_html())
+
+    if not quiet:
+        print("\n" + report)
+    print(f"\n[+] Combined report : {rpath}")
+    if host_res:
+        print(f"[+] Host artifacts  : findings.json, timeline.csv, auth_sessions.json")
+    if logs_res:
+        print(f"[+] Log findings    : ms_findings.json")
+    if corr is not None:
+        print(f"[+] Correlation     : correlation.json "
+              f"({len(corr['confirmations'])} token-grade confirmation(s))")
     if args.include_token_values:
         print("[!] WARNING: raw token values were written - treat output as live credentials.")
-    
-    # Exit with non-zero if critical/high findings or token replays detected
-    critical_high = [f for f in findings 
-                     if f["severity"] in (Severity.CRITICAL.value, Severity.HIGH.value)]
-    token_replays = entra_correlation.get("first_ta_replays", []) if entra_correlation else []
-    
-    if token_replays:
-        print(f"\n[!!!] {len(token_replays)} TOKEN REPLAY(S) DETECTED - likely active compromise!")
+
+    # exit codes: 2 = token-grade confirmed replay, 1 = HIGH/CRITICAL, 0 = clean
+    if corr and corr.get("confirmations"):
         return 2
-    if critical_high:
-        print(f"\n[!] {len(critical_high)} CRITICAL/HIGH severity finding(s) detected!")
-        return 1
-    return 0
+    host_ch = host_res and any(f["severity"] in (Severity.CRITICAL.value, Severity.HIGH.value)
+                               for f in host_res["findings"])
+    logs_ch = logs_res and any(f["severity"] in ("CRITICAL", "HIGH") for f in logs_res["az"].findings)
+    return 1 if (host_ch or logs_ch) else 0
 
 
 if __name__ == "__main__":
