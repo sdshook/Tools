@@ -1,6 +1,6 @@
 # AiTM_analyzer
 
-**Unified adversary-in-the-middle (AiTM) / token-theft analyzer — host evidence, log evidence, or both, in one consistent report.**
+**Unified adversary-in-the-middle (AiTM) / token-theft analyzer - host evidence, log evidence, or both, in one consistent report.**
 
 © 2026 Shane D. Shook. All rights reserved.
 
@@ -10,9 +10,9 @@
 
 `AiTM_analyzer.py` reconstructs an AiTM / session-token-theft intrusion from whatever evidence you have at the time:
 
-- **host** — a BAI (Browser Audit Inventory) package from the victim endpoint, or
-- **logs** — exported Microsoft Entra sign-in logs + Purview Unified Audit Log, or
-- **both** — host *and* logs together, correlated.
+- **host** - a BAI (Browser Audit Inventory) package from the victim endpoint, or
+- **logs** - exported Microsoft Entra sign-in logs + Purview Unified Audit Log, or
+- **both** - host *and* logs together, correlated.
 
 It is a **single Python file with no third-party dependencies** (standard library only) and runs fully offline. Raw token values are never written unless you explicitly pass `--include-token-values`.
 
@@ -20,7 +20,7 @@ The two evidence sides answer different questions, which is why the tool unifies
 
 - The **host** side recovers token-grade ground truth the logs don't contain: the actual stolen token's linkable identifiers (`uti` / `sid`), the precise `auth_time` session birth, the ESTS cookie, and the browser-side AiTM artifacts (proxy config, redirect chains, malicious extensions).
 - The **logs** side shows what the host can't see: where the token was replayed from, the threat-actor infrastructure and ASN, the mailbox exfiltration, BEC inbox rules, containment, and persistence.
-- In **both** mode the host-extracted `uti` / `sid` are pivoted into the logs for **token-grade replay confirmation** — the stolen session identified by token identity, not by a heuristic IP/baseline inference — and the host `auth_time` brackets the exact theft window.
+- In **both** mode the host-extracted `uti` / `sid` are pivoted into the logs for **token-grade replay confirmation** - the stolen session identified by token identity, not by a heuristic IP/baseline inference - and the host `auth_time` brackets the exact theft window.
 
 ---
 
@@ -67,9 +67,9 @@ usage: AiTM_analyzer.py [-h] [--host PATH] [--logs FOLDER] [--out OUT]
 
 | Flag | Default | Applies to | Purpose |
 |---|---|---|---|
-| `evidence` *(positional)* | — | any | a single evidence path, auto-classified as host or logs |
-| `--host` | — | host/both | BAI package folder or `.zip` |
-| `--logs` | — | logs/both | folder of exported Entra/Purview logs (JSON or CSV) |
+| `evidence` *(positional)* | - | any | a single evidence path, auto-classified as host or logs |
+| `--host` | - | host/both | BAI package folder or `.zip` |
+| `--logs` | - | logs/both | folder of exported Entra/Purview logs (JSON or CSV) |
 | `--out` | `./aitm_analysis` | all | output directory |
 | `--format` | `txt` | host | also emit the rich host **HTML** report when set to `html` |
 | `--tz` | UTC | all | display timezone, IANA name (e.g. `America/Los_Angeles`) |
@@ -83,7 +83,7 @@ usage: AiTM_analyzer.py [-h] [--host PATH] [--logs FOLDER] [--out OUT]
 
 ### Mode is the evidence you supply
 
-There is no mode switch — what you pass determines what runs:
+There is no mode switch - what you pass determines what runs:
 
 - `--host` and `--logs` both supplied → **both** (correlated).
 - only `--host` → **host**; only `--logs` → **logs**.
@@ -94,7 +94,7 @@ There is no mode switch — what you pass determines what runs:
 
 | Code | Meaning |
 |---|---|
-| `2` | **Token-grade confirmed replay** — a host-extracted `uti`/`sid` was seen in the logs |
+| `2` | **Token-grade confirmed replay** - a host-extracted `uti`/`sid` was seen in the logs |
 | `1` | HIGH or CRITICAL findings present (host or logs) |
 | `0` | Ran successfully; nothing HIGH/CRITICAL and no token-grade confirmation |
 
@@ -130,37 +130,37 @@ Suggested names: `InteractiveSignIns.json`, `NonInteractiveSignIns.json`, `Servi
 ### Host side (BAI artifacts)
 
 - MSAL access/ID/refresh tokens in `localStorage` / `sessionStorage` / IndexedDB, decoded to claims (`oid`, `tid`, `upn`, `uti`, `sid`, `auth_time`).
-- ESTS authentication cookies (`ESTSAUTH*`) — the replayable session "loaded gun."
+- ESTS authentication cookies (`ESTSAUTH*`) - the replayable session "loaded gun."
 - A **session-theft timeline** with precise `auth_time` session-birth anchors and estimated theft windows.
-- **SID / UTI pivots**: `sid` = `AADSessionId` (session sweep, catches tokens minted from a replayed cookie); `uti` = `UniqueTokenId` (traces a single token) — the linkable identifiers to hunt in the logs.
+- **SID / UTI pivots**: `sid` = `AADSessionId` (session sweep, catches tokens minted from a replayed cookie); `uti` = `UniqueTokenId` (traces a single token) - the linkable identifiers to hunt in the logs.
 - Malicious extensions, proxy configuration, service workers, and redirect chains (AiTM and infostealer vectors).
 
 ### Log side (Entra + Purview)
 
-- **AiTM relay chains** — `AADSTS50132` / `50199` from an outside network followed by a success from that same network (robust to device/UA spoofing).
-- **Session / token replay** — an `AADSessionId` or `UniqueTokenId` exercised from outside the user's footprint.
+- **AiTM relay chains** - `AADSTS50132` / `50199` from an outside network followed by a success from that same network (robust to device/UA spoofing).
+- **Session / token replay** - an `AADSessionId` or `UniqueTokenId` exercised from outside the user's footprint.
 - **MFA-wall** (`50074/50076/50079`) and the "MFA wall then success" bypass.
 - **Impossible travel**, **password spray / brute force / MFA fatigue**.
-- **Post-compromise actions** — inbox rules (with parsed parameters), forwarding, OAuth consent, app secret/credential additions, privilege changes, MFA tampering.
-- **Mail exfiltration inventory** — `MailItemsAccessed` resolved to InternetMessageIds, folders, sizes, times.
+- **Post-compromise actions** - inbox rules (with parsed parameters), forwarding, OAuth consent, app secret/credential additions, privilege changes, MFA tampering.
+- **Mail exfiltration inventory** - `MailItemsAccessed` resolved to InternetMessageIds, folders, sizes, times.
 - **Phishing lure** and **lure propagation / outbound mail**.
 - **Containment** (`AADSTS50057` account-disable) and **TA persistence** (post-containment retries from attacker infrastructure).
 
 ### Both (correlation)
 
-- **Token-grade replay confirmation** — host-extracted `uti` / `sid` matched in the logs' sign-ins and UAL events; reported with the network, ASN, IP, and time of use.
-- **Identity unification** — host `oid` / `upn` matched to the log users.
-- **Precise theft window** — host `auth_time` (true session birth) bracketing the first outside-footprint use.
+- **Token-grade replay confirmation** - host-extracted `uti` / `sid` matched in the logs' sign-ins and UAL events; reported with the network, ASN, IP, and time of use.
+- **Identity unification** - host `oid` / `upn` matched to the log users.
+- **Precise theft window** - host `auth_time` (true session birth) bracketing the first outside-footprint use.
 
 ---
 
 ## How log-side attribution works
 
-Everything is **learned per user from the supplied logs** — there are no incident-specific values hard-coded. For each user the tool builds a legitimate footprint (trusted device fleet, baseline networks collapsed to **/24** and **/64**, baseline ASNs / user-agents / apps / countries), then isolates the threat actor with three guards that stop an AiTM relay from poisoning that baseline:
+Everything is **learned per user from the supplied logs** - there are no incident-specific values hard-coded. For each user the tool builds a legitimate footprint (trusted device fleet, baseline networks collapsed to **/24** and **/64**, baseline ASNs / user-agents / apps / countries), then isolates the threat actor with three guards that stop an AiTM relay from poisoning that baseline:
 
-1. **Taint** — any network/ASN that ever carried an AiTM error code (`50199/50132/50074/50076`) or an Entra risk flag is excluded from the baseline.
-2. **Hosting-ASN exclusion** — sign-ins from hosting/VPS ASNs never seed the baseline.
-3. **Replayed-device handling** — a fleet `deviceId` confers trust only off hosting/tainted infrastructure; the same `deviceId` from a datacenter ASN is treated as a **replayed claim** (the attacker spoofing the victim's device).
+1. **Taint** - any network/ASN that ever carried an AiTM error code (`50199/50132/50074/50076`) or an Entra risk flag is excluded from the baseline.
+2. **Hosting-ASN exclusion** - sign-ins from hosting/VPS ASNs never seed the baseline.
+3. **Replayed-device handling** - a fleet `deviceId` confers trust only off hosting/tainted infrastructure; the same `deviceId` from a datacenter ASN is treated as a **replayed claim** (the attacker spoofing the victim's device).
 
 > This build does **not** suppress Microsoft first-party / Azure ranges. Every network is evaluated on its merits, so a threat actor operating from Microsoft/Azure infrastructure is not auto-cleared. The trade-off is that Microsoft service ranges may appear as findings; recognize and dismiss them, or add their ASNs to `--asn-intel` to keep them out of the baseline.
 
@@ -206,11 +206,11 @@ The combined `AiTM_report.txt` is ordered for triage: the banner gives the mode 
 |---|---|
 | `50126` | Invalid username or password |
 | `50053` | Smart lockout (too many failed attempts) |
-| `50074/50076/50079` | Strong auth (MFA) required but **not satisfied** — stolen token at the MFA wall |
-| `50132` | Session/token invalid — often an AiTM proxy warming a relay |
-| `50199` | CMSI interrupt — anti-spoofing challenge; a burst signals a proxied auth context |
-| `50173` | Fresh auth required — session/token revoked or password changed |
-| `50057` | Account disabled — containment; a `50057` from attacker infra confirms a post-disable retry |
+| `50074/50076/50079` | Strong auth (MFA) required but **not satisfied** - stolen token at the MFA wall |
+| `50132` | Session/token invalid - often an AiTM proxy warming a relay |
+| `50199` | CMSI interrupt - anti-spoofing challenge; a burst signals a proxied auth context |
+| `50173` | Fresh auth required - session/token revoked or password changed |
+| `50057` | Account disabled - containment; a `50057` from attacker infra confirms a post-disable retry |
 | `500121` | MFA failed/timed out (possible MFA fatigue) |
 | `53003 / 530032` | Blocked by Conditional Access |
 
@@ -225,7 +225,7 @@ The combined `AiTM_report.txt` is ordered for triage: the banner gives the mode 
 - **Field-name coverage** spans Graph / portal / PowerShell shapes but is not exhaustive.
 - **Heuristic windows** (AiTM chain 30 min, phishing-lure lookback 20 min, "concurrent" 60 min, impossible-travel ≥100 km) are reasonable defaults; tune for unusually slow or fast intrusions.
 - **Subjects/senders for accessed mail** are not present in `MailItemsAccessed`; the tool outputs InternetMessageIds for resolution via eDiscovery / `Get-MessageTrace`.
-- **Host correlation requires recoverable linkable identifiers.** If the ESTS cookie is opaque (no `uti`/`sid`) or the logs lack them, the bridge cannot make a token-grade match — the independent host and log findings still apply.
+- **Host correlation requires recoverable linkable identifiers.** If the ESTS cookie is opaque (no `uti`/`sid`) or the logs lack them, the bridge cannot make a token-grade match - the independent host and log findings still apply.
 - **`--include-token-values` writes live credentials.** Treat any such output as sensitive and handle accordingly.
 
 ---
