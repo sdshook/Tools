@@ -6965,9 +6965,18 @@ def build_summary(az):
     for f in az.findings:
         sev_counts[f["severity"]] += 1
     compromised = sorted(k for k, u in az.users.items() if u.get("compromised"))
+    # baseline_ips for the IOC annotation: only IPs that genuinely sit in a user's
+    # learned baseline (net in baseline_nets and not tainted/hosting). Using raw
+    # interactive_ips here would mislabel a TA's interactive MFA-relay success (from
+    # hosting infra) as a "user baseline IP".
     baseline_ips = set()
     for u in az.users.values():
-        baseline_ips |= u["interactive_ips"]
+        bnets = u.get("baseline_nets", set())
+        tnets = u.get("tainted_nets", set())
+        for ip in u.get("interactive_ips", set()):
+            net = net_key(ip)
+            if net and net in bnets and net not in tnets:
+                baseline_ips.add(ip)
     return {
         "users_analyzed": len(az.users),
         "signins_analyzed": len(az.signins),
@@ -7052,8 +7061,12 @@ def render_txt(az, summary, tz):
             L.append(f"    Display name : {u['display']}")
         L.append(f"    Sign-ins     : {len(u['signins'])}  "
                  f"(interactive IPs: {len(u['interactive_ips'])}, all IPs: {len(u['all_ips'])})")
-        if u["interactive_ips"]:
-            L.append(f"    Baseline IPs : {', '.join(sorted(u['interactive_ips'])[:6])}")
+        bn = u.get("baseline_nets", set())
+        tn = u.get("tainted_nets", set())
+        base_ips = sorted(ip for ip in u["interactive_ips"]
+                          if net_key(ip) in bn and net_key(ip) not in tn)
+        if base_ips:
+            L.append(f"    Baseline IPs : {', '.join(base_ips[:6])}")
         anomalous = sorted(u["all_ips"] - u["interactive_ips"])
         if anomalous:
             L.append(f"    Other IPs    : {', '.join(anomalous[:6])}")
