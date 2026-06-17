@@ -100,7 +100,7 @@ This classification borrows the ORDERED/CRITICAL/CHAOTIC vocabulary from dynamic
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     COLLECTION LAYER                         │
+│                     COLLECTION LAYER                        │
 │  LDAP Enumerator    Windows Event Logs    Entra ID / AAD    │
 │  ACL Parser         ADFS Federation       Service Principal │
 │  Cert Template Enum Sign-in Logs          PIM Assignments   │
@@ -108,18 +108,18 @@ This classification borrows the ORDERED/CRITICAL/CHAOTIC vocabulary from dynamic
                │                              │
                ▼                              ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                      GRAPH LAYER                             │
-│  Heterogeneous AD Graph  +  Temporal Behavioral Tensors    │
-│  Node Types: User, Computer, Group, CertTemplate, Domain   │
-│  Edge Types: 28 relation types across 6 risk classes       │
-│  ACL Edges: GenericAll, WriteDacl, WriteOwner, DCSync      │
+│                      GRAPH LAYER                            │
+│  Heterogeneous AD Graph  +  Temporal Behavioral Tensors     │
+│  Node Types: User, Computer, Group, CertTemplate, Domain    │
+│  Edge Types: 28 relation types across 6 risk classes        │
+│  ACL Edges: GenericAll, WriteDacl, WriteOwner, DCSync       │
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                       ML LAYER                               │
+│                       ML LAYER                              │
 │                                                             │
-│  Heterogeneous GNN ──edge probs──▶ Markov Stack             │
+│  Heterogeneous GNN ──edge probs──▶ Markov Stack            │
 │  (HGT architecture)               ├─ Transition Matrix P    │
 │                                   ├─ Steady-State π         │
 │                                   └─ Kill-Chain HMM         │
@@ -127,13 +127,13 @@ This classification borrows the ORDERED/CRITICAL/CHAOTIC vocabulary from dynamic
 │                                    Gradient Engine          │
 │                                    ∂π_tier0/∂θ              │
 │                                           │                 │
-│  Random Forest ◀──────────────────────────┘                 │
+│  Random Forest ◀──────────────────────────┘                │
 │  (scenario testing)                                         │
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Regime Classification  │  Kill-Chain Phase  │  Finding Rank │
+│  Regime Classification  │  Kill-Chain Phase  │  Finding Rank│
 └─────────────────────────────────────────────────────────────┘
                                │
               ┌────────────────┴─────────────────┐
