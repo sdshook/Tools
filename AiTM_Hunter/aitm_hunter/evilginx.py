@@ -79,6 +79,38 @@ SUSPICIOUS_CERT_ISSUERS = [
     "Buypass",
 ]
 
+# Lure content patterns (Storm-2755 style phishing lures)
+LURE_CONTENT_PATTERNS = [
+    (r'device\s*activation', "Device Activation lure (Storm-2755)"),
+    (r'security\s*verification', "Security Verification lure"),
+    (r'account\s*verification\s*required', "Account Verification lure"),
+    (r'verify\s*your\s*identity', "Identity Verification lure"),
+    (r'session\s*expired', "Session Expired lure"),
+    (r're-?authenticate', "Re-authentication lure"),
+    (r'your\s*session\s*has\s*timed?\s*out', "Session Timeout lure"),
+    (r'please\s*sign\s*in\s*again', "Re-sign-in lure"),
+    (r'additional\s*verification', "Additional Verification lure"),
+]
+
+# Brand impersonation patterns (Storm-2755 naming conventions)
+BRAND_IMPERSONATION_PATTERNS = [
+    (r'armor\w*', "Armor* brand pattern (Storm-2755)"),
+    (r'security\w*\d+', "Security*N pattern (Storm-2755)"),
+    (r'protect\w*shield', "Protect*Shield pattern"),
+    (r'secure\w*guard', "Secure*Guard pattern"),
+    (r'safe\w*defense', "Safe*Defense pattern"),
+    (r'auth\w*secure', "Auth*Secure pattern"),
+    (r'login\w*verify', "Login*Verify pattern"),
+]
+
+# Known CDN providers used for fronting
+CDN_PROVIDERS = {
+    "cloudflare": ["cloudflare", "cf-ray"],
+    "aws_cloudfront": ["cloudfront", "x-amz-cf"],
+    "akamai": ["akamai"],
+    "fastly": ["fastly"],
+}
+
 
 def check_url_markers(url: str) -> list[str]:
     """Check URL for Evilginx-specific markers."""
@@ -104,6 +136,117 @@ def check_response_markers(content: str, headers: dict) -> list[str]:
         markers.append("openresty server (common Evilginx)")
     
     return markers
+
+
+def check_lure_content(content: str) -> list[str]:
+    """Check page content for phishing lure patterns (Storm-2755 style)."""
+    markers = []
+    content_lower = content.lower()
+    
+    for pattern, description in LURE_CONTENT_PATTERNS:
+        if re.search(pattern, content_lower, re.IGNORECASE):
+            markers.append(description)
+    
+    return markers
+
+
+def check_brand_impersonation(domain: str) -> list[str]:
+    """Check domain for brand impersonation patterns."""
+    markers = []
+    domain_lower = domain.lower()
+    
+    for pattern, description in BRAND_IMPERSONATION_PATTERNS:
+        if re.search(pattern, domain_lower, re.IGNORECASE):
+            markers.append(description)
+    
+    return markers
+
+
+def detect_cdn_fronting(headers: dict) -> dict:
+    """
+    Detect CDN fronting from response headers.
+    
+    Storm-2755 uses Cloudflare-fronted landing pages with AWS backend proxies.
+    """
+    result = {
+        "is_cdn_fronted": False,
+        "cdn_provider": None,
+        "cdn_indicators": [],
+    }
+    
+    headers_lower = {k.lower(): v for k, v in headers.items()}
+    all_headers_str = str(headers_lower).lower()
+    
+    for provider, indicators in CDN_PROVIDERS.items():
+        for indicator in indicators:
+            if indicator in all_headers_str:
+                result["is_cdn_fronted"] = True
+                result["cdn_provider"] = provider
+                result["cdn_indicators"].append(indicator)
+    
+    # Check for specific Cloudflare headers
+    if 'cf-ray' in headers_lower:
+        result["is_cdn_fronted"] = True
+        result["cdn_provider"] = "cloudflare"
+        result["cdn_indicators"].append(f"cf-ray: {headers_lower.get('cf-ray', '')}")
+    
+    return result
+
+
+def trace_backend_infrastructure(domain: str, follow_redirects: bool = True) -> dict:
+    """
+    Attempt to trace backend infrastructure behind CDN fronting.
+    
+    For two-tier AiTM setups (landing page -> backend proxy), this follows
+    redirects and identifies the actual credential-stealing infrastructure.
+    """
+    result = {
+        "landing_domain": domain,
+        "backend_domain": None,
+        "redirect_chain": [],
+        "final_ip": None,
+        "cdn_detected": None,
+        "backend_hosting": None,
+    }
+    
+    try:
+        session = requests.Session()
+        session.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        
+        resp = session.get(
+            f'https://{domain}/',
+            timeout=15,
+            verify=False,
+            allow_redirects=follow_redirects
+        )
+        
+        # Record redirect chain
+        for r in resp.history:
+            result["redirect_chain"].append({
+                "url": r.url,
+                "status": r.status_code,
+            })
+        
+        # Final destination
+        final_parsed = urlparse(resp.url)
+        if final_parsed.netloc != domain:
+            result["backend_domain"] = final_parsed.netloc
+        
+        # Check CDN on final response
+        cdn_info = detect_cdn_fronting(dict(resp.headers))
+        result["cdn_detected"] = cdn_info.get("cdn_provider")
+        
+        # Try to resolve final domain IP
+        try:
+            final_domain = final_parsed.netloc or domain
+            result["final_ip"] = socket.gethostbyname(final_domain)
+        except socket.gaierror:
+            pass
+            
+    except Exception as e:
+        result["error"] = str(e)
+    
+    return result
 
 
 def check_wildcard_dns(domain: str) -> bool:
@@ -272,6 +415,9 @@ def detect_evilginx(url: str, deep_check: bool = True) -> EvilginxDetectionResul
         result.risk_score = 100
         result.reasons.append(f"Matches known Evilginx IOC: {ioc_match.get('notes', domain)}")
         result.markers_found.append("Known malicious domain")
+        # Include threat actor attribution if available
+        if ioc_match.get('threat_actor'):
+            result.reasons.append(f"Threat Actor: {ioc_match.get('threat_actor')}")
         return result
     
     # 2. Check URL for markers
@@ -281,6 +427,13 @@ def detect_evilginx(url: str, deep_check: bool = True) -> EvilginxDetectionResul
         result.risk_score += 30
         result.reasons.extend([f"URL marker: {m}" for m in url_markers])
     
+    # 3. Check for brand impersonation patterns (Storm-2755 style)
+    brand_markers = check_brand_impersonation(domain)
+    if brand_markers:
+        result.markers_found.extend(brand_markers)
+        result.risk_score += 25
+        result.reasons.extend([f"Brand impersonation: {m}" for m in brand_markers])
+    
     if not deep_check:
         # Calculate confidence based on URL markers alone
         if result.risk_score >= 30:
@@ -288,7 +441,7 @@ def detect_evilginx(url: str, deep_check: bool = True) -> EvilginxDetectionResul
             result.is_evilginx = True
         return result
     
-    # 3. Deep checks (network-based)
+    # 4. Deep checks (network-based)
     
     # Check wildcard DNS
     if check_wildcard_dns(domain):
@@ -327,7 +480,7 @@ def detect_evilginx(url: str, deep_check: bool = True) -> EvilginxDetectionResul
         result.risk_score += 20
         result.reasons.append(f"Hosted on suspicious ASN: {ip_info.get('asn_reason')}")
     
-    # Check HTTP response for markers
+    # Check HTTP response for markers and lure content
     try:
         resp = requests.get(f'https://{domain}/', timeout=10, verify=False,
                           headers={'User-Agent': 'Mozilla/5.0'})
@@ -337,11 +490,41 @@ def detect_evilginx(url: str, deep_check: bool = True) -> EvilginxDetectionResul
         if response_markers:
             result.risk_score += 20 * len(response_markers)
             result.reasons.extend([f"Response marker: {m}" for m in response_markers])
+        
+        # Check for lure content patterns (Storm-2755 style)
+        lure_markers = check_lure_content(resp.text)
+        if lure_markers:
+            result.markers_found.extend(lure_markers)
+            result.risk_score += 30
+            result.reasons.extend([f"Lure content: {m}" for m in lure_markers])
+        
+        # Detect CDN fronting (Storm-2755 uses Cloudflare -> AWS pattern)
+        cdn_info = detect_cdn_fronting(dict(resp.headers))
+        result.infrastructure['cdn'] = cdn_info
+        if cdn_info.get('is_cdn_fronted'):
+            result.infrastructure['cdn_provider'] = cdn_info.get('cdn_provider')
+            # CDN fronting alone isn't suspicious, but combined with other markers it is
+            if result.risk_score >= 20:
+                result.reasons.append(f"CDN fronted ({cdn_info.get('cdn_provider')}) - potential two-tier AiTM")
             
         result.infrastructure['server'] = resp.headers.get('Server', 'Unknown')
         
     except Exception:
         pass
+    
+    # Trace backend infrastructure (for two-tier setups)
+    backend_info = trace_backend_infrastructure(domain)
+    result.infrastructure['backend_trace'] = backend_info
+    
+    if backend_info.get('backend_domain'):
+        # Check if backend is a known IOC
+        backend_ioc = signatures.check_domain_ioc(backend_info['backend_domain'])
+        if backend_ioc:
+            result.markers_found.append(f"Backend is known IOC: {backend_info['backend_domain']}")
+            result.risk_score += 50
+            result.reasons.append(f"Redirects to known malicious backend: {backend_info['backend_domain']}")
+        else:
+            result.reasons.append(f"Two-tier architecture: redirects to {backend_info['backend_domain']}")
     
     # Check if proxies IdP
     proxy_check = check_proxies_idp(domain)

@@ -70,6 +70,44 @@ TARGET_BRAND_KEYWORDS = [
     "aws", "amazon",
 ]
 
+# Storm-2755 style malvertising indicators
+# High-risk ad parameter combinations indicating Bing/Microsoft Ads malvertising
+MALVERTISING_AD_PARAMS = {
+    "high_risk_params": {
+        "msclkid": 30,  # Microsoft Advertising click ID - strong indicator
+        "subid": 20,    # Sub-affiliate tracking
+    },
+    "high_risk_values": {
+        "utm_source": {"bing": 15, "microsoft": 15},
+        "utm_medium": {"display": 10, "cpc": 5, "ppc": 5},
+        "subid": {"microsoft.resp.1": 40},  # Specific Storm-2755 indicator
+    },
+    # Combination scoring - if these appear together, significantly elevate risk
+    "combo_indicators": [
+        (["msclkid", "utm_source"], 20),  # msclkid + utm_source together
+        (["msclkid", "utm_medium"], 15),  # msclkid + utm_medium together
+    ],
+}
+
+# Lure content patterns (Storm-2755 style)
+LURE_CONTENT_PATTERNS = [
+    (r'device\s*activation', "Device Activation lure"),
+    (r'security\s*verification', "Security Verification lure"),
+    (r'account\s*verification\s*required', "Account Verification lure"),
+    (r'verify\s*your\s*identity', "Identity Verification lure"),
+    (r'session\s*expired', "Session Expired lure"),
+    (r're-?authenticate', "Re-authentication lure"),
+]
+
+# Brand impersonation patterns (Storm-2755 naming conventions)
+BRAND_IMPERSONATION_PATTERNS = [
+    (r'armor\w*', "Armor* brand pattern (Storm-2755)"),
+    (r'security\w*\d+', "Security*N pattern (Storm-2755)"),
+    (r'protect\w*shield', "Protect*Shield pattern"),
+    (r'secure\w*guard', "Secure*Guard pattern"),
+    (r'safe\w*defense', "Safe*Defense pattern"),
+]
+
 
 def extract_tracking_params(url: str) -> dict:
     """Extract tracking parameters from URL."""
@@ -86,6 +124,54 @@ def extract_tracking_params(url: str) -> dict:
                 break
     
     return tracking
+
+
+def score_ad_parameters(params: dict) -> tuple[int, list[str]]:
+    """
+    Score ad tracking parameters for malvertising indicators.
+    Returns (score, list of reasons).
+    
+    High scores indicate Storm-2755 style Bing/Microsoft Ads malvertising.
+    """
+    score = 0
+    reasons = []
+    
+    # Check for high-risk parameters
+    for param, points in MALVERTISING_AD_PARAMS["high_risk_params"].items():
+        if param in params:
+            score += points
+            reasons.append(f"Contains {param} parameter (+{points})")
+    
+    # Check for high-risk parameter values
+    for param, value_scores in MALVERTISING_AD_PARAMS["high_risk_values"].items():
+        if param in params:
+            param_value = params[param]
+            if isinstance(param_value, list):
+                param_value = param_value[0]
+            param_value = str(param_value).lower()
+            
+            for value, points in value_scores.items():
+                if value.lower() in param_value:
+                    score += points
+                    reasons.append(f"{param}={value} (+{points})")
+    
+    # Check for high-risk combinations
+    param_keys = set(params.keys())
+    for combo_params, points in MALVERTISING_AD_PARAMS["combo_indicators"]:
+        if all(p in param_keys for p in combo_params):
+            score += points
+            reasons.append(f"Combo: {'+'.join(combo_params)} (+{points})")
+    
+    return score, reasons
+
+
+def check_brand_impersonation(domain: str) -> tuple[bool, str | None]:
+    """Check if domain matches known brand impersonation patterns."""
+    domain_lower = domain.lower()
+    for pattern, description in BRAND_IMPERSONATION_PATTERNS:
+        if re.search(pattern, domain_lower, re.IGNORECASE):
+            return True, description
+    return False, None
 
 
 def analyze_ad_url(ad: AdResult) -> AdResult:
@@ -119,6 +205,21 @@ def analyze_ad_url(ad: AdResult) -> AdResult:
     if 'rid' in ad.tracking_params:
         ad.is_suspicious = True
         ad.suspicion_reasons.append("Contains rid= parameter (Evilginx marker)")
+    
+    # Score ad parameters for malvertising indicators
+    param_score, param_reasons = score_ad_parameters(ad.tracking_params)
+    if param_score >= 30:
+        ad.is_suspicious = True
+        ad.suspicion_reasons.append(f"High malvertising score ({param_score}): {', '.join(param_reasons)}")
+    elif param_score >= 15:
+        ad.suspicion_reasons.append(f"Moderate malvertising indicators ({param_score}): {', '.join(param_reasons)}")
+    
+    # Check for brand impersonation patterns (Storm-2755 style)
+    actual_parsed = urlparse(ad.actual_url)
+    is_impersonation, impersonation_desc = check_brand_impersonation(actual_parsed.netloc)
+    if is_impersonation:
+        ad.is_suspicious = True
+        ad.suspicion_reasons.append(f"Brand impersonation: {impersonation_desc}")
     
     return ad
 

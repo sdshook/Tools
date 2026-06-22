@@ -183,6 +183,7 @@ KNOWN_MALWARE_JA3: dict[str, str] = {
 
 KNOWN_EVILGINX_DOMAINS: dict[str, dict] = {
     # --- Confirmed Evilginx AiTM Infrastructure (from Shane Shook investigations) ---
+    # --- Storm-2755 Campaign (April-June 2026) ---
     "armorprotect.com": {
         "type": "evilginx",
         "target": "Enterprise employee portals",
@@ -193,6 +194,7 @@ KNOWN_EVILGINX_DOMAINS: dict[str, dict] = {
         "wildcard_dns": True,
         "markers": ["rid=", "openresty"],
         "first_seen": "2026-06",
+        "threat_actor": "Storm-2755",
         "notes": "Wildcard DNS, self-signed cert, targeted employee login portals",
     },
     "vlm.armorprotect.com": {
@@ -204,6 +206,7 @@ KNOWN_EVILGINX_DOMAINS: dict[str, dict] = {
         "status": "seized",
         "markers": ["rid=", "openresty"],
         "first_seen": "2026-06",
+        "threat_actor": "Storm-2755",
         "notes": "Primary lure subdomain for employee portal phishing campaign",
     },
     "armorproshield.com": {
@@ -215,7 +218,19 @@ KNOWN_EVILGINX_DOMAINS: dict[str, dict] = {
         "status": "seized",
         "markers": ["rid="],
         "first_seen": "2026-06",
+        "threat_actor": "Storm-2755",
         "notes": "Related AiTM campaign infrastructure",
+    },
+    "vlm.armorproshield.com": {
+        "type": "aitm_proxy",
+        "target": "Enterprise employee portals",
+        "hosting": "AWS",
+        "status": "seized",
+        "markers": ["rid="],
+        "first_seen": "2026-04",
+        "threat_actor": "Storm-2755",
+        "delivery": "malvertising",
+        "notes": "Backend AiTM proxy for Storm-2755 campaign, relays credentials to Microsoft auth endpoints",
     },
     "securitytop5.com": {
         "type": "evilginx",
@@ -226,8 +241,55 @@ KNOWN_EVILGINX_DOMAINS: dict[str, dict] = {
         "status": "seized",
         "markers": ["rid="],
         "first_seen": "2026-06",
+        "threat_actor": "Storm-2755",
         "notes": "Related AiTM campaign infrastructure",
     },
+    "pop-up.securitytop5.com": {
+        "type": "lure_landing",
+        "target": "Enterprise employee portals",
+        "hosting": "Cloudflare-fronted",
+        "status": "seized",
+        "markers": ["Device Activation", "Armorproshield"],
+        "first_seen": "2026-04",
+        "threat_actor": "Storm-2755",
+        "delivery": "malvertising",
+        "backend_proxy": "vlm.armorproshield.com",
+        "notes": "Cloudflare-fronted landing page with fake 'Device Activation' lure, redirects to AiTM proxy",
+    },
+}
+
+# Storm-2755 specific indicators
+STORM_2755_INDICATORS: dict[str, list] = {
+    "domains": [
+        "armorprotect.com",
+        "armorproshield.com",
+        "securitytop5.com",
+    ],
+    "brand_patterns": [
+        r"armor\w*",  # Armorprotect, Armorproshield, etc.
+        r"security\w*\d+",  # securitytop5, etc.
+    ],
+    "lure_content": [
+        "Device Activation",
+        "Security Verification",
+        "Account Verification Required",
+        "Verify Your Identity",
+    ],
+    "ad_parameters": {
+        "msclkid": "Microsoft Advertising click ID",
+        "utm_source": ["bing"],
+        "utm_medium": ["display", "cpc", "ppc"],
+        "subid": ["microsoft.resp.1"],
+    },
+    "search_terms_targeted": [
+        "outlook 365 login",
+        "o365 login",
+        "microsoft login",
+        "outlook login",
+        # Generic employee portal terms
+        "employee portal login",
+        "employee email login",
+    ],
 }
 
 # Known malicious IPs associated with Evilginx infrastructure
