@@ -45,6 +45,12 @@ try:
 except ImportError:  # pragma: no cover
     typosquat_mod = None
 
+# Import allowlist module
+try:
+    from aitm_hunter import allowlist as allowlist_mod
+except ImportError:  # pragma: no cover
+    allowlist_mod = None
+
 
 SAFE_BROWSING_ENDPOINT = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
 URLHAUS_ENDPOINT = "https://urlhaus-api.abuse.ch/v1/host/"
@@ -77,6 +83,9 @@ class TriageResult:
     http_error: str = ""
     risk_score: int = 0
     risk_reasons: list[str] = field(default_factory=list)
+    # Allowlist status - if True, skip further analysis
+    is_allowlisted: bool = False
+    allowlist_category: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -271,6 +280,14 @@ def triage_url(
     result.http_error = error
 
     result.final_domain = get_domain(final_url or url)
+
+    # Check allowlist first - skip expensive checks for known-good domains
+    if allowlist_mod and allowlist_mod.is_allowlisted(result.final_domain):
+        result.is_allowlisted = True
+        result.allowlist_category = allowlist_mod.get_allowlist_category(result.final_domain) or ""
+        result.risk_score = 0
+        result.risk_reasons = ["Allowlisted domain - skipped"]
+        return result
 
     age_days, registrar = check_domain_age(result.final_domain)
     result.domain_age_days = age_days

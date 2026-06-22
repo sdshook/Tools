@@ -7,6 +7,8 @@ CLI orchestrator.
     python -m aitm_hunter.main report      --input results/o365_deep.json --out results/o365_report.csv
     python -m aitm_hunter.main evilginx    --url "https://suspicious.com" --out results/evilginx.json
     python -m aitm_hunter.main malvertising --query "o365 login" --out results/ads.json
+    python -m aitm_hunter.main urlscan     --url "https://suspicious.com"
+    python -m aitm_hunter.main ctmonitor   --brands microsoft google okta --days 7
 """
 
 from __future__ import annotations
@@ -24,6 +26,9 @@ from aitm_hunter import report as report_mod
 from aitm_hunter import evilginx as evilginx_mod
 from aitm_hunter import malvertising as malvertising_mod
 from aitm_hunter import signatures
+from aitm_hunter import urlscan as urlscan_mod
+from aitm_hunter import ctmonitor as ctmonitor_mod
+from aitm_hunter import allowlist as allowlist_mod
 
 
 def cmd_search(args: argparse.Namespace) -> None:
@@ -357,6 +362,128 @@ def cmd_signatures(args: argparse.Namespace) -> None:
             print(f"  {domain:30s} [{status:8s}] -> {target}")
 
 
+def cmd_urlscan(args: argparse.Namespace) -> None:
+    """Submit URL to URLScan.io for behavioral analysis."""
+    url = args.url
+    
+    if args.search:
+        # Search for existing scans
+        from urllib.parse import urlparse
+        domain = urlparse(url).netloc or url
+        print(f"Searching URLScan.io for: {domain}")
+        
+        results = urlscan_mod.check_domain_history(domain)
+        if results:
+            print(f"\nFound {len(results)} previous scans:")
+            for r in results:
+                status = "🚨 MALICIOUS" if r.get('malicious') else "✓ Clean"
+                print(f"  {status} | {r.get('time', 'unknown')} | {r.get('url', '')}")
+        else:
+            print("No previous scans found.")
+        return
+    
+    # Submit new scan
+    print(f"Submitting to URLScan.io: {url}")
+    print("(This may take 30-90 seconds...)")
+    
+    result = urlscan_mod.scan_and_wait(url)
+    
+    if result.status == "done":
+        print(f"\n✅ Scan complete!")
+        print(f"   Result: {result.result_url}")
+        print(f"   Screenshot: {result.screenshot_url}")
+        print(f"   Final URL: {result.final_url}")
+        print(f"   Title: {result.page_title}")
+        print(f"   Server: {result.server}")
+        print(f"   IP: {result.ip_address} ({result.country})")
+        print()
+        
+        if result.is_malicious:
+            print(f"🚨 MALICIOUS (score: {result.malicious_score})")
+        else:
+            print(f"✓ Not flagged (score: {result.malicious_score})")
+        
+        if result.verdicts:
+            print(f"   Verdicts: {', '.join(result.verdicts)}")
+        if result.brands_detected:
+            print(f"   Brands detected: {', '.join(result.brands_detected)}")
+        if result.has_login_form:
+            print(f"   ⚠️ Has login form indicators")
+        
+        if args.out:
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            with open(args.out, 'w') as f:
+                json.dump(result.to_dict(), f, indent=2)
+            print(f"\nWrote results to {args.out}")
+    else:
+        print(f"\n❌ Error: {result.error}")
+
+
+def cmd_ctmonitor(args: argparse.Namespace) -> None:
+    """Monitor Certificate Transparency logs for suspicious certs."""
+    brands = args.brands
+    days = args.days
+    
+    print("Certificate Transparency Monitor")
+    print("=" * 60)
+    print(f"Brands: {', '.join(brands)}")
+    print(f"Looking back: {days} days")
+    print()
+    
+    suspicious = ctmonitor_mod.find_suspicious_certs(brands=brands, days=days)
+    
+    if suspicious:
+        print(f"\n🚨 Found {len(suspicious)} suspicious certificates:\n")
+        
+        for cert in suspicious[:20]:  # Limit output
+            print(ctmonitor_mod.format_cert_alert(cert))
+            print()
+        
+        if args.out:
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            with open(args.out, 'w') as f:
+                json.dump([c.to_dict() for c in suspicious], f, indent=2)
+            print(f"Wrote {len(suspicious)} results to {args.out}")
+    else:
+        print("\n✅ No suspicious certificates found.")
+
+
+def cmd_allowlist(args: argparse.Namespace) -> None:
+    """Check domains against allowlist."""
+    if args.list:
+        print("Allowlisted Domains")
+        print("=" * 60)
+        
+        categories = [
+            ("Identity Providers", allowlist_mod.IDENTITY_PROVIDERS),
+            ("Cloud Services", allowlist_mod.CLOUD_SERVICES),
+            ("SaaS Services", allowlist_mod.SAAS_SERVICES),
+            ("CDN/Infrastructure", allowlist_mod.CDN_AND_INFRASTRUCTURE),
+            ("Security Services", allowlist_mod.SECURITY_SERVICES),
+        ]
+        
+        for name, domains in categories:
+            print(f"\n{name} ({len(domains)}):")
+            for d in sorted(domains)[:10]:
+                print(f"  {d}")
+            if len(domains) > 10:
+                print(f"  ... and {len(domains) - 10} more")
+        
+        print(f"\nTotal: {len(allowlist_mod.ALL_ALLOWLISTED_DOMAINS)} domains")
+        return
+    
+    if args.check:
+        print("Allowlist Check")
+        print("=" * 60)
+        for domain in args.check:
+            allowed = allowlist_mod.is_allowlisted(domain)
+            category = allowlist_mod.get_allowlist_category(domain) or "not allowlisted"
+            status = "✓ ALLOWED" if allowed else "⚠ NOT ALLOWED"
+            print(f"{status:15s} | {domain:40s} | {category}")
+    else:
+        print("Use --check <domains> or --list")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="aitm_hunter")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -445,6 +572,38 @@ def build_parser() -> argparse.ArgumentParser:
     p_sigs.add_argument("--list-domains", action="store_true",
                        help="List known Evilginx domains")
     p_sigs.set_defaults(func=cmd_signatures)
+
+    # --- URLScan.io subcommand ---
+    p_urlscan = sub.add_parser(
+        "urlscan",
+        help="Submit URL to URLScan.io for behavioral analysis."
+    )
+    p_urlscan.add_argument("--url", required=True, help="URL to scan")
+    p_urlscan.add_argument("--search", action="store_true",
+                          help="Search for existing scans instead of submitting")
+    p_urlscan.add_argument("--out", type=Path, help="Output JSON file")
+    p_urlscan.set_defaults(func=cmd_urlscan)
+
+    # --- CT Monitor subcommand ---
+    p_ct = sub.add_parser(
+        "ctmonitor",
+        help="Monitor Certificate Transparency logs for suspicious certs."
+    )
+    p_ct.add_argument("--brands", nargs="+", default=["microsoft", "google", "okta"],
+                     help="Brands to monitor (default: microsoft google okta)")
+    p_ct.add_argument("--days", type=int, default=7,
+                     help="Look back N days (default: 7)")
+    p_ct.add_argument("--out", type=Path, help="Output JSON file")
+    p_ct.set_defaults(func=cmd_ctmonitor)
+
+    # --- Allowlist subcommand ---
+    p_allow = sub.add_parser(
+        "allowlist",
+        help="Check if domains are on the allowlist."
+    )
+    p_allow.add_argument("--check", nargs="+", help="Domains to check")
+    p_allow.add_argument("--list", action="store_true", help="List all allowlisted domains")
+    p_allow.set_defaults(func=cmd_allowlist)
 
     return parser
 
