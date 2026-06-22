@@ -70,15 +70,19 @@ TARGET_BRAND_KEYWORDS = [
     "aws", "amazon",
 ]
 
-# Storm-2755 style malvertising indicators
-# High-risk ad parameter combinations indicating Bing/Microsoft Ads malvertising
+# Malvertising indicators for both Bing/Microsoft Ads AND Google Ads
 MALVERTISING_AD_PARAMS = {
     "high_risk_params": {
+        # Microsoft/Bing Ads
         "msclkid": 30,  # Microsoft Advertising click ID - strong indicator
         "subid": 20,    # Sub-affiliate tracking
+        # Google Ads - these alone aren't suspicious, but with domain mismatch they are
+        "gclid": 15,    # Google Ads click ID
+        "gad_campaignid": 10,  # Google Ads campaign ID
+        "gad_source": 10,  # Google Ads source
     },
     "high_risk_values": {
-        "utm_source": {"bing": 15, "microsoft": 15},
+        "utm_source": {"bing": 15, "microsoft": 15, "google": 5},
         "utm_medium": {"display": 10, "cpc": 5, "ppc": 5},
         "subid": {"microsoft.resp.1": 40},  # Specific Storm-2755 indicator
     },
@@ -86,7 +90,14 @@ MALVERTISING_AD_PARAMS = {
     "combo_indicators": [
         (["msclkid", "utm_source"], 20),  # msclkid + utm_source together
         (["msclkid", "utm_medium"], 15),  # msclkid + utm_medium together
+        (["gclid", "gad_campaignid"], 15),  # Google Ads combo
     ],
+}
+
+# Known malicious Google Ads campaign IDs (supplementary IOC, not primary detection)
+# These are stored for reference/correlation but fingerprinting should detect the attack pattern
+KNOWN_MALICIOUS_CAMPAIGN_IDS = {
+    "23869465194": "colinandresw.com AiTM (June 2026)",
 }
 
 # Lure content patterns (Storm-2755 style)
@@ -128,19 +139,25 @@ def extract_tracking_params(url: str) -> dict:
 
 def score_ad_parameters(params: dict) -> tuple[int, list[str]]:
     """
-    Score ad tracking parameters for malvertising indicators.
+    Score ad tracking parameters for malvertising fingerprinting.
     Returns (score, list of reasons).
     
-    High scores indicate Storm-2755 style Bing/Microsoft Ads malvertising.
+    This is BEHAVIORAL fingerprinting - scoring based on parameter patterns
+    that indicate malvertising campaigns, not blacklist matching.
+    
+    Key patterns:
+    - msclkid + utm_source=bing = Bing Ads malvertising (Storm-2755 style)
+    - gclid + gad_campaignid = Google Ads campaign
+    - subid=microsoft.resp.1 = Known Storm-2755 affiliate tracking
     """
     score = 0
     reasons = []
     
-    # Check for high-risk parameters
+    # Check for high-risk parameters (fingerprint patterns)
     for param, points in MALVERTISING_AD_PARAMS["high_risk_params"].items():
         if param in params:
             score += points
-            reasons.append(f"Contains {param} parameter (+{points})")
+            reasons.append(f"{param} (+{points})")
     
     # Check for high-risk parameter values
     for param, value_scores in MALVERTISING_AD_PARAMS["high_risk_values"].items():
@@ -155,12 +172,19 @@ def score_ad_parameters(params: dict) -> tuple[int, list[str]]:
                     score += points
                     reasons.append(f"{param}={value} (+{points})")
     
-    # Check for high-risk combinations
+    # Check for high-risk combinations (fingerprint: these together = campaign)
     param_keys = set(params.keys())
     for combo_params, points in MALVERTISING_AD_PARAMS["combo_indicators"]:
         if all(p in param_keys for p in combo_params):
             score += points
             reasons.append(f"Combo: {'+'.join(combo_params)} (+{points})")
+    
+    # Supplementary: note if campaign ID is in known malicious list (for correlation)
+    gad_campaignid = params.get('gad_campaignid', '')
+    if isinstance(gad_campaignid, list):
+        gad_campaignid = gad_campaignid[0]
+    if str(gad_campaignid) in KNOWN_MALICIOUS_CAMPAIGN_IDS:
+        reasons.append(f"[IOC] Campaign ID in known list: {KNOWN_MALICIOUS_CAMPAIGN_IDS[str(gad_campaignid)]}")
     
     return score, reasons
 
@@ -174,52 +198,130 @@ def check_brand_impersonation(domain: str) -> tuple[bool, str | None]:
     return False, None
 
 
+# High-value brands commonly spoofed in ad malvertising
+SPOOFED_BRANDS = {
+    "microsoft": ["microsoft.com", "office.com", "office365.com", "live.com", "outlook.com"],
+    "google": ["google.com", "gmail.com", "accounts.google.com"],
+    "apple": ["apple.com", "icloud.com"],
+    "amazon": ["amazon.com", "aws.amazon.com"],
+    "okta": ["okta.com"],
+}
+
+
+def check_brand_spoofing_in_ad(displayed_url: str, actual_url: str) -> tuple[bool, str | None]:
+    """
+    Check if an ad is spoofing a trusted brand.
+    
+    This catches scenarios where the displayed URL shows "microsoft.com" 
+    but the actual URL goes to "colinandresw.com" (malicious).
+    """
+    if not displayed_url or not actual_url:
+        return False, None
+    
+    displayed_lower = displayed_url.lower()
+    actual_parsed = urlparse(actual_url if actual_url.startswith('http') else f'https://{actual_url}')
+    actual_domain = actual_parsed.netloc.lower().replace('www.', '')
+    
+    for brand, legitimate_domains in SPOOFED_BRANDS.items():
+        # Check if displayed URL contains a legitimate brand domain
+        for legit_domain in legitimate_domains:
+            if legit_domain in displayed_lower:
+                # Check if actual URL goes to a different domain
+                if actual_domain and legit_domain not in actual_domain:
+                    # It's spoofing the brand!
+                    return True, f"Ad spoofs {brand} (shows '{legit_domain}' but goes to '{actual_domain}')"
+    
+    return False, None
+
+
 def analyze_ad_url(ad: AdResult) -> AdResult:
-    """Analyze an ad URL for suspicious patterns."""
+    """
+    Analyze an ad URL for AiTM/phishing indicators using behavioral fingerprinting.
+    
+    Detection priority:
+    1. BEHAVIORAL FINGERPRINTING (primary) - detect attack patterns regardless of domain
+    2. IOC MATCHING (supplementary) - known malicious infrastructure
+    
+    Key fingerprints for ad-based AiTM:
+    - Brand spoofing: displayed URL shows trusted brand, actual URL is different
+    - Ad tracking params: gclid/msclkid with brand mismatch = malvertising
+    - Evilginx markers: rid= parameter
+    - Domain naming patterns: Armor*, Security*N, etc.
+    """
     url = ad.actual_url.lower()
     displayed = ad.displayed_url.lower()
+    actual_parsed = urlparse(ad.actual_url)
+    actual_domain = actual_parsed.netloc.replace('www.', '')
     
-    # Check for URL pattern mismatches
-    if displayed and ad.actual_url:
-        displayed_domain = displayed.split('/')[0].replace('www.', '')
-        actual_parsed = urlparse(ad.actual_url)
-        actual_domain = actual_parsed.netloc.replace('www.', '')
+    # Extract tracking params first - needed for fingerprinting
+    ad.tracking_params = extract_tracking_params(ad.actual_url)
+    
+    # =========================================================================
+    # BEHAVIORAL FINGERPRINTING (Primary Detection)
+    # =========================================================================
+    
+    # FINGERPRINT 1: Brand spoofing in ad display
+    # Critical detection - ad shows "microsoft.com" but goes to "colinandresw.com"
+    is_spoofing, spoof_desc = check_brand_spoofing_in_ad(ad.displayed_url, ad.actual_url)
+    if is_spoofing:
+        ad.is_suspicious = True
+        ad.suspicion_reasons.append(f"🚨 BRAND SPOOFING: {spoof_desc}")
         
-        if displayed_domain and actual_domain:
+        # If brand spoofing + ad tracking params = high confidence malvertising AiTM
+        if 'gclid' in ad.tracking_params or 'msclkid' in ad.tracking_params:
+            ad.suspicion_reasons.append("AD-BASED AiTM: Brand spoof + ad click tracking")
+    
+    # FINGERPRINT 2: Display/actual URL mismatch (general)
+    # Extract domain from displayed URL properly
+    if displayed and ad.actual_url:
+        # Parse displayed URL to get domain
+        displayed_parsed = urlparse(displayed if displayed.startswith('http') else f'https://{displayed}')
+        displayed_domain = displayed_parsed.netloc.replace('www.', '') if displayed_parsed.netloc else displayed.split('/')[0].replace('www.', '')
+        
+        if displayed_domain and actual_domain and displayed_domain != 'https:':
+            # Check if domains are genuinely different (not just subdomain variations)
             if displayed_domain not in actual_domain and actual_domain not in displayed_domain:
                 ad.is_suspicious = True
                 ad.suspicion_reasons.append(
                     f"Display URL mismatch: shows '{displayed_domain}' but goes to '{actual_domain}'"
                 )
     
-    # Check for suspicious patterns
+    # FINGERPRINT 3: Evilginx session tracking (rid=)
+    if 'rid' in ad.tracking_params:
+        ad.is_suspicious = True
+        ad.suspicion_reasons.append("Evilginx marker: rid= parameter")
+    
+    # FINGERPRINT 4: URL patterns indicating phishing
     for pattern, description in SUSPICIOUS_URL_PATTERNS:
         if re.search(pattern, url, re.IGNORECASE):
             ad.is_suspicious = True
-            ad.suspicion_reasons.append(f"Suspicious pattern: {description}")
+            ad.suspicion_reasons.append(f"URL pattern: {description}")
     
-    # Extract tracking params
-    ad.tracking_params = extract_tracking_params(ad.actual_url)
-    
-    # Check for rid= (Evilginx marker)
-    if 'rid' in ad.tracking_params:
+    # FINGERPRINT 5: Domain naming patterns (Storm-2755 style)
+    is_impersonation, impersonation_desc = check_brand_impersonation(actual_domain)
+    if is_impersonation:
         ad.is_suspicious = True
-        ad.suspicion_reasons.append("Contains rid= parameter (Evilginx marker)")
+        ad.suspicion_reasons.append(f"Domain pattern: {impersonation_desc}")
     
-    # Score ad parameters for malvertising indicators
+    # FINGERPRINT 6: Ad parameter combinations indicating malvertising campaign
+    # (gclid + brand spoof, msclkid + utm_source=bing, etc.)
     param_score, param_reasons = score_ad_parameters(ad.tracking_params)
     if param_score >= 30:
         ad.is_suspicious = True
-        ad.suspicion_reasons.append(f"High malvertising score ({param_score}): {', '.join(param_reasons)}")
+        ad.suspicion_reasons.append(f"Malvertising fingerprint ({param_score}): {', '.join(param_reasons)}")
     elif param_score >= 15:
-        ad.suspicion_reasons.append(f"Moderate malvertising indicators ({param_score}): {', '.join(param_reasons)}")
+        ad.suspicion_reasons.append(f"Ad tracking indicators ({param_score}): {', '.join(param_reasons)}")
     
-    # Check for brand impersonation patterns (Storm-2755 style)
-    actual_parsed = urlparse(ad.actual_url)
-    is_impersonation, impersonation_desc = check_brand_impersonation(actual_parsed.netloc)
-    if is_impersonation:
-        ad.is_suspicious = True
-        ad.suspicion_reasons.append(f"Brand impersonation: {impersonation_desc}")
+    # =========================================================================
+    # IOC MATCHING (Supplementary - confirms known threats)
+    # =========================================================================
+    from . import signatures
+    domain_ioc = signatures.check_domain_ioc(actual_domain)
+    if domain_ioc:
+        # IOC match confirms but doesn't replace fingerprint detection
+        ad.suspicion_reasons.append(f"[IOC MATCH] {domain_ioc.get('notes', actual_domain)}")
+        if not ad.is_suspicious:
+            ad.is_suspicious = True  # Only set if fingerprinting didn't already catch it
     
     return ad
 

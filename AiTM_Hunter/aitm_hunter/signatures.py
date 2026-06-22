@@ -256,6 +256,19 @@ KNOWN_EVILGINX_DOMAINS: dict[str, dict] = {
         "backend_proxy": "vlm.armorproshield.com",
         "notes": "Cloudflare-fronted landing page with fake 'Device Activation' lure, redirects to AiTM proxy",
     },
+    # --- Google Ads AiTM Campaign (June 2026) ---
+    "colinandresw.com": {
+        "type": "aitm_lure",
+        "target": "Microsoft 365 / O365 login",
+        "status": "reported",
+        "markers": ["gclid"],
+        "first_seen": "2026-06-20",
+        "delivery": "google_ads_malvertising",
+        "search_terms": ["o365 login", "365 login"],
+        "gclid": "CjwKCAjw9NjRBhATEiwA_p2J8Sr-7ZV2dL-7G59D2FkKhab9Fcu8i_vAy9vt9zk0zQ1Egbx3bECCBoC84kQAvD_BwE",
+        "gad_campaignid": "23869465194",
+        "notes": "Google Ads malvertising spoofing Microsoft.com in search results for '365 login'",
+    },
 }
 
 # Storm-2755 specific indicators
