@@ -13,8 +13,14 @@ Built for incident responders and threat-intel analysts doing takedown work
 
 - **Search Integration** — Query SerpApi or import manual results (JSON/CSV)
 - **Multi-Signal Triage** — Domain age, typosquat detection, redirect chains, URLhaus, Google Safe Browsing
+- **Typosquat Detection** — dnstwist-style detection (homoglyphs, omissions, keyword additions)
 - **JA4S Fingerprinting** — Real-time TLS server fingerprinting with 93+ malware signatures
+- **Evilginx Detection** — rid= markers, openresty, wildcard DNS, CDN fronting, two-tier architecture
+- **Malvertising Analysis** — Ad parameter scoring (gclid/msclkid), brand spoofing detection
 - **Behavioral Analysis** — Detect AiTM reverse proxies vs. static phishing kits
+- **URLScan.io Integration** — Behavioral validation with rendered screenshots and verdicts
+- **CT Log Monitoring** — Certificate Transparency for early warning on typosquat domains
+- **Allowlist** — 100+ known-good domains to reduce false positives
 - **Safe Deep Crawl** — Isolated Playwright capture (screenshot, DOM, HAR) with no credential submission
 - **Takedown Reports** — CSV/JSON output ready for abuse reports
 
@@ -37,8 +43,19 @@ Built for incident responders and threat-intel analysts doing takedown work
 │  SerpApi or       Domain age          JA4S TLS            Playwright        │
 │  manual import    WHOIS lookup        fingerprint         screenshot        │
 │                   Typosquats          Signature match     DOM snapshot      │
-│                   URLhaus             Proxy behavior      HAR capture       │
-│                   Safe Browsing       Cert inspection                       │
+│                   Allowlist check     Proxy behavior      HAR capture       │
+│                   URLhaus             Cert inspection                       │
+│                   Safe Browsing       Evilginx markers                      │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │ Supplementary Tools (can run independently)                          │   │
+│  ├──────────────────────────────────────────────────────────────────────┤   │
+│  │  urlscan.py      Submit URLs for behavioral analysis (screenshots)   │   │
+│  │  ctmonitor.py    Monitor CT logs for suspicious certificates         │   │
+│  │  evilginx.py     Deep Evilginx detection (rid=, CDN fronting, etc.)  │   │
+│  │  malvertising.py Ad scraping and brand spoof detection               │   │
+│  │  typosquat.py    dnstwist-style domain analysis                      │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 │                              ▼                                              │
 │                         report.py                                           │
@@ -71,6 +88,7 @@ playwright install chromium
 ```bash
 export SERPAPI_KEY="..."                # https://serpapi.com (recommended)
 export GOOGLE_SAFE_BROWSING_KEY="..."   # Optional, improves triage accuracy
+export URLSCAN_API_KEY="..."            # Optional, for URLScan.io integration
 ```
 
 ## Usage
@@ -151,6 +169,61 @@ python -m aitm_hunter.main report --input results_deep.json --out report.csv
 #   --input           JSON from any previous step (required)
 #   --risk-threshold  Filter for summary (default: 50)
 #   --out             Output file (.csv or .json) (required)
+```
+
+#### `evilginx` — Evilginx-specific detection
+
+```bash
+python -m aitm_hunter.main evilginx --url "https://suspicious.com" --out results.json
+
+# Checks for:
+#   - rid= parameter (Evilginx session ID)
+#   - openresty server header
+#   - Wildcard DNS
+#   - Self-signed or Let's Encrypt certificates
+#   - CDN fronting (Cloudflare → backend)
+#   - Two-tier architecture detection
+```
+
+#### `urlscan` — URLScan.io behavioral analysis
+
+```bash
+# Search for existing scans of a domain
+python -m aitm_hunter.main urlscan --url "suspicious.com" --search
+
+# Submit URL for full analysis (requires URLSCAN_API_KEY)
+python -m aitm_hunter.main urlscan --url "https://suspicious.com" --out results.json
+
+# Returns: screenshot URL, verdicts, brand detection, login form indicators
+```
+
+#### `ctmonitor` — Certificate Transparency monitoring
+
+```bash
+python -m aitm_hunter.main ctmonitor --brands microsoft google okta --days 7
+
+# Monitors CT logs for:
+#   - Typosquat domain certificates (micr0soft.com, g00gle.com)
+#   - Brand+keyword certificates (microsoft-login.com)
+#   - Wildcard certificates (Evilginx indicator)
+```
+
+#### `allowlist` — Check/manage known-good domains
+
+```bash
+# Check if domains are allowlisted
+python -m aitm_hunter.main allowlist --check microsoft.com evil-microsoft.com
+
+# List all 100+ allowlisted domains
+python -m aitm_hunter.main allowlist --list
+```
+
+#### `signatures` — View signature database
+
+```bash
+python -m aitm_hunter.main signatures --list-domains
+
+# Shows: 93+ fingerprints, 48+ malware families, known Evilginx IOCs
 ```
 
 ---
@@ -269,9 +342,15 @@ AiTM_Hunter/
 │   ├── main.py          # CLI orchestrator
 │   ├── search.py        # SerpApi integration + manual import
 │   ├── triage.py        # Domain analysis, reputation checks
+│   ├── typosquat.py     # dnstwist-style typosquat detection
 │   ├── fingerprint.py   # TLS/behavioral fingerprinting
 │   ├── ja4.py           # JA4S computation (FoxIO spec)
-│   ├── signatures.py    # Malware signature database
+│   ├── signatures.py    # Malware signature database (93+ fingerprints)
+│   ├── evilginx.py      # Evilginx-specific detection
+│   ├── malvertising.py  # Ad scraping and brand spoof detection
+│   ├── urlscan.py       # URLScan.io API integration
+│   ├── ctmonitor.py     # Certificate Transparency monitoring
+│   ├── allowlist.py     # Known-good domain allowlist (100+ domains)
 │   ├── deepcrawl.py     # Playwright-based capture
 │   └── report.py        # CSV/JSON report generation
 ├── tests/
@@ -283,6 +362,7 @@ AiTM_Hunter/
 ├── requirements.txt
 ├── README.md
 ├── SAFETY.md            # MUST READ before deep crawling
+├── IMPROVEMENTS.md      # Roadmap for future enhancements
 └── pytest.ini
 ```
 
