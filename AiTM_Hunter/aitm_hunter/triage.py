@@ -39,6 +39,12 @@ try:
 except ImportError:  # pragma: no cover
     fuzz = None
 
+# Import typosquat module for dnstwist-style detection
+try:
+    from aitm_hunter import typosquat as typosquat_mod
+except ImportError:  # pragma: no cover
+    typosquat_mod = None
+
 
 SAFE_BROWSING_ENDPOINT = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
 URLHAUS_ENDPOINT = "https://urlhaus-api.abuse.ch/v1/host/"
@@ -152,17 +158,27 @@ def _is_legitimate_domain_or_subdomain(domain: str, brand_domains: dict[str, lis
 
 def typosquat_score(domain: str, brand_domains: dict[str, list[str]] = DEFAULT_BRAND_DOMAINS) -> tuple[str, float]:
     """
-    Fuzzy-match the candidate domain against known brand domains.
+    Detect typosquatting using dnstwist-style analysis (primary) and fuzzy matching (fallback).
     Returns (best_matching_brand, similarity_score 0-100).
-    A high score on a domain that ISN'T actually the real brand domain (or a
-    legitimate subdomain of it) is suspicious -- a high score on the real
-    domain itself is just... the real domain, so we explicitly exclude that
-    case rather than relying on fuzzy-match math alone.
+    
+    Detection methods:
+    1. Homoglyph substitution (g00gle.com, micr0soft.com)
+    2. Character omission/swap (microsft.com, microsfot.com)
+    3. Keyword addition (microsoft-login.com)
+    4. TLD variation (microsoft.net)
+    5. Fuzzy string matching (fallback)
     """
-    if not fuzz:
+    if _is_legitimate_domain_or_subdomain(domain, brand_domains):
         return "", 0.0
 
-    if _is_legitimate_domain_or_subdomain(domain, brand_domains):
+    # Primary: Use typosquat module for dnstwist-style detection
+    if typosquat_mod:
+        result = typosquat_mod.detect_typosquat(domain)
+        if result.is_typosquat:
+            return result.target_brand or "", result.similarity_score
+
+    # Fallback: Fuzzy string matching
+    if not fuzz:
         return "", 0.0
 
     best_brand, best_score = "", 0.0
