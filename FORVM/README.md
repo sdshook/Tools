@@ -1,4 +1,5 @@
-# FORVM (c) 2026, Shane D. Shook, All Rights Reserved
+# FORVM 
+***(c) 2026, Shane D. Shook, All Rights Reserved***
 
 **FORVM** (Forensic VM) is an agentic, human-on-the-loop (HOTL) DFIR
 workstation. It combines standard open-source forensic tooling — plaso,
