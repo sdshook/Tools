@@ -76,6 +76,39 @@ def install_system_deps():
     ]
     apt_install(base_pkgs)
 
+    # pst-utils (readpst, for PST/OST mail containers) and libesedb-utils
+    # (esedbexport, for EDB/Exchange ESE databases) aren't in every Ubuntu
+    # release's default repos - try each, fall back to a note rather than
+    # failing the whole install.
+    print("\n=== Installing PST/OST support (readpst) ===")
+    try:
+        apt_install(["pst-utils"])
+    except subprocess.CalledProcessError:
+        print(textwrap.dedent("""
+            WARNING: pst-utils (readpst) not available via apt on this
+            release. /kw_search will not be able to extract PST/OST mail
+            containers until it's built from source:
+              git clone https://github.com/akkana/pst-utils.git
+              (or build libpst from https://www.five-ten-sg.com/libpst/)
+        """))
+
+    print("\n=== Installing EDB (Exchange ESE database) support (esedbexport) ===")
+    try:
+        apt_install(["libesedb-utils"])
+    except subprocess.CalledProcessError:
+        print(textwrap.dedent("""
+            WARNING: libesedb-utils (esedbexport) not available via apt on
+            this release. /kw_search will not be able to extract EDB
+            evidence until it's built from source:
+              git clone https://github.com/libyal/libesedb.git
+              cd libesedb && ./synclibs.sh && ./autogen.sh && ./configure && make && make install
+            Note even with esedbexport, EDB extraction yields raw ESE
+            table data for keyword search purposes, not fully
+            reconstructed Exchange message threads - true mailbox
+            reconstruction from EDB typically needs specialized tooling
+            beyond what's open-source here.
+        """))
+
     # libbde-utils (bdemount, for BitLocker) is not in every Ubuntu release's
     # default repos - try it, fall back to a note rather than failing the
     # whole install.
@@ -135,6 +168,56 @@ def create_venv_and_python_deps():
          "timesketch-import-client",
          "python-dotenv",
          ])
+
+
+def install_mobile_forensic_tools():
+    """ALEAPP/iLEAPP (LEAPP family, https://leapps.org/) and
+    android-backup-extractor aren't apt packages - clone + install into a
+    vendor directory. Each step is wrapped so a failure here doesn't
+    abort the whole build; mobile evidence support just won't be
+    available until it's completed manually."""
+    print("\n=== Installing mobile forensic tooling (ALEAPP, iLEAPP, android-backup-extractor) ===")
+    vendor_dir = INSTALL_ROOT / "tools" / "vendor"
+    vendor_dir.mkdir(parents=True, exist_ok=True)
+    pip = str(VENV_DIR / "bin" / "pip")
+
+    # ALEAPP and iLEAPP linux dependency per their own docs
+    try:
+        apt_install(["python3-tk", "default-jre"])
+    except subprocess.CalledProcessError:
+        print("WARNING: python3-tk/default-jre install failed - ALEAPP GUI "
+              "bits and android-backup-extractor (Java) may not work.")
+
+    for name, repo in (("aleapp", "https://github.com/abrignoni/ALEAPP.git"),
+                        ("ileapp", "https://github.com/abrignoni/iLEAPP.git")):
+        target = vendor_dir / name
+        try:
+            if not target.exists():
+                run(["git", "clone", "--depth", "1", repo, str(target)])
+            run([pip, "install", "-r", str(target / "requirements.txt")])
+        except subprocess.CalledProcessError as exc:
+            print(f"WARNING: {name} install failed ({exc}). Mobile processing "
+                  f"for that platform won't be available until this is "
+                  f"resolved manually in {target}.")
+
+    abe_target = vendor_dir / "android-backup-extractor"
+    try:
+        if not abe_target.exists():
+            run(["git", "clone", "--depth", "1",
+                 "https://github.com/nelenkov/android-backup-extractor.git", str(abe_target)])
+        gradlew = abe_target / "gradlew"
+        if gradlew.exists():
+            run(["chmod", "+x", str(gradlew)])
+            run([str(gradlew), "build"], cwd=str(abe_target))
+    except subprocess.CalledProcessError as exc:
+        print(textwrap.dedent(f"""
+            WARNING: android-backup-extractor build failed ({exc}).
+            adb backup (.ab) files won't be extractable until this is
+            resolved manually - either fix the gradle build in
+            {abe_target}, or download a pre-built abe.jar release from
+            https://github.com/nelenkov/android-backup-extractor/releases
+            and place it at {abe_target}/abe.jar.
+        """))
 
 
 def write_env_file(api_key: str):
@@ -329,6 +412,269 @@ def write_playbooks():
         """))
 
 
+def write_keyword_search_tool():
+    tools_dir = INSTALL_ROOT / "tools"
+    print(f"\n=== Writing keyword search module to {tools_dir}/keyword_search_tool.py ===")
+    (tools_dir / "keyword_search_tool.py").write_text(textwrap.dedent('''\
+        """Keyword/regex search across mounted evidence, including email
+        containers (PST/OST via readpst, EDB via esedbexport), with export
+        and SHA-256 chain-of-custody logging. Deterministic infrastructure,
+        deliberately NOT exposed to the LLM agent, same reasoning as
+        evidence_tool.py: this is a search-and-copy operation, not a
+        reasoning task.
+
+        LIMITATION: EDB extraction via esedbexport yields raw ESE table
+        data for keyword search purposes, not fully reconstructed Exchange
+        message threads. True mailbox reconstruction from EDB typically
+        needs specialized tooling beyond what's available here - treat EDB
+        keyword hits as leads pointing at raw table records, not polished
+        emails.
+        """
+        import hashlib
+        import re
+        import subprocess
+        from pathlib import Path
+
+        DOC_EXTENSIONS = {
+            ".doc", ".docx", ".pdf", ".txt", ".rtf", ".xls", ".xlsx",
+            ".ppt", ".pptx", ".csv", ".odt", ".ods", ".odp", ".log", ".xml",
+            ".json", ".htm", ".html", ".md",
+        }
+        PIC_EXTENSIONS = {
+            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
+            ".heic", ".webp", ".svg", ".ico",
+        }
+        VID_EXTENSIONS = {
+            ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".mpg", ".mpeg",
+            ".m4v", ".3gp",
+        }
+        EMAIL_EXTENSIONS = {".eml", ".msg", ".mbox", ".pst", ".ost", ".edb"}
+
+
+        def load_keywords(keywords_path: str) -> list[str]:
+            """One term or regex per line. Blank lines and lines starting
+            with # are ignored."""
+            path = Path(keywords_path)
+            if not path.exists():
+                return []
+            terms = []
+            for line in path.read_text(errors="ignore").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    terms.append(line)
+            return terms
+
+
+        def classify_file(filename: str) -> str:
+            """Returns 'docs', 'pics', 'vids', or 'emails' - falls back to
+            'docs' for anything unrecognized rather than silently dropping
+            a responsive file."""
+            ext = Path(filename).suffix.lower()
+            if ext in EMAIL_EXTENSIONS:
+                return "emails"
+            if ext in PIC_EXTENSIONS:
+                return "pics"
+            if ext in VID_EXTENSIONS:
+                return "vids"
+            return "docs"
+
+
+        def compute_sha256(path: str, chunk_size: int = 1024 * 1024) -> str:
+            h = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(chunk_size), b""):
+                    h.update(chunk)
+            return h.hexdigest()
+
+
+        def search_tree_for_keywords(root_path: str, keywords: list[str],
+                                      exclude_patterns: list[str] | None = None) -> list[dict]:
+            """grep -rlZaE across root_path for any of the keyword
+            patterns. File-level responsiveness (a file either contains a
+            match or it doesn't) - the practical, honest baseline for
+            keyword search across arbitrary evidence content without
+            claiming full per-format text extraction. exclude_patterns
+            (glob patterns) lets callers skip container files whose
+            contents are being searched separately post-extraction, so a
+            container isn't double-counted as both a raw blob and its
+            extracted messages. Returns one entry per (file, matched
+            keyword) pair."""
+            if not keywords or not Path(root_path).exists():
+                return []
+            exclude_args = []
+            for pat in (exclude_patterns or []):
+                exclude_args += ["--exclude", pat]
+            hits = []
+            for kw in keywords:
+                cmd = ["grep", "-rlZaEi"] + exclude_args + ["--", kw, root_path]
+                result = subprocess.run(cmd, capture_output=True, text=False)
+                if result.returncode not in (0, 1):
+                    continue  # 1 = no matches, not an error; >1 = real error, skip
+                paths = [p for p in result.stdout.split(b"\\x00") if p]
+                for p in paths:
+                    hits.append({"file_path": p.decode(errors="ignore"), "matched_keyword": kw})
+            return hits
+
+
+        def extract_pst_ost(container_path: str, output_dir: str) -> str:
+            """Extract a PST or OST (both are the Personal Folder File
+            format) to individual message files via readpst."""
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                ["readpst", "-o", output_dir, "-e", "-D", container_path],
+                check=True, capture_output=True,
+            )
+            return output_dir
+
+
+        def extract_edb(container_path: str, output_dir: str) -> str:
+            """Extract raw ESE tables from an Exchange EDB via esedbexport.
+            See module docstring LIMITATION note - this is raw table data,
+            not reconstructed messages."""
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                ["esedbexport", "-t", str(Path(output_dir) / "export"), container_path],
+                check=True, capture_output=True,
+            )
+            return output_dir
+
+
+        def extract_mbox(container_path: str, output_dir: str) -> str:
+            """Split a Unix mbox file (e.g. a Google Takeout or Google
+            Vault Gmail export) into individual per-message .eml files
+            using Python's stdlib mailbox module - no external tool
+            needed. Gives mbox the same per-message export granularity as
+            PST/OST via readpst, rather than treating a multi-gigabyte
+            mbox as one exportable blob."""
+            import mailbox
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            stem = Path(container_path).stem
+            box = mailbox.mbox(container_path)
+            for i, message in enumerate(box):
+                out_path = Path(output_dir) / f"{stem}_{i:06d}.eml"
+                with open(out_path, "wb") as f:
+                    f.write(message.as_bytes())
+            return output_dir
+
+
+        def find_email_containers(root_path: str) -> list[dict]:
+            """Locate .pst/.ost/.edb/.mbox files under a mount tree so
+            they can be extracted before keyword search reaches their
+            contents. .mbox covers Google Takeout and most Google Vault
+            Gmail exports; Vault can also export PST, already covered by
+            the pst_ost path."""
+            containers = []
+            for ext, kind in ((".pst", "pst_ost"), (".ost", "pst_ost"),
+                               (".edb", "edb"), (".mbox", "mbox")):
+                for p in Path(root_path).rglob(f"*{ext}"):
+                    containers.append({"path": str(p), "kind": kind})
+            return containers
+
+
+        def export_responsive_file(src_path: str, exports_root: str, source_id: str,
+                                    matched_keyword: str) -> dict:
+            """Copy a responsive file into exports/<docs|pics|vids|emails>/,
+            compute its SHA-256, and return a record for the export
+            manifest. Filenames are prefixed with a short hash to avoid
+            collisions between same-named files from different locations
+            without losing the original name."""
+            import shutil
+
+            src = Path(src_path)
+            subfolder = classify_file(src.name)
+            dest_dir = Path(exports_root) / subfolder
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            digest = compute_sha256(str(src))
+            dest_name = f"{digest[:12]}_{src.name}"
+            dest_path = dest_dir / dest_name
+            shutil.copy2(src, dest_path)
+
+            return {
+                "original_path": str(src), "source_id": source_id,
+                "matched_keyword": matched_keyword, "subfolder": subfolder,
+                "exported_filename": dest_name, "exported_path": str(dest_path),
+                "sha256": digest,
+            }
+        '''))
+
+
+def write_mobile_backup_tool():
+    tools_dir = INSTALL_ROOT / "tools"
+    print(f"\n=== Writing mobile backup processing module to {tools_dir}/mobile_backup_tool.py ===")
+    (tools_dir / "mobile_backup_tool.py").write_text(textwrap.dedent('''\
+        """Mobile backup extraction and parsing - Android (adb backup ->
+        android-backup-extractor -> ALEAPP) and iOS (decrypted iTunes/
+        Finder backup or filesystem extraction -> iLEAPP). Deterministic
+        infrastructure, deliberately NOT exposed to the LLM agent - same
+        reasoning as evidence_tool.py and keyword_search_tool.py.
+
+        LIMITATIONS, stated plainly:
+          - This does NOT decrypt an encrypted iTunes/Finder iOS backup.
+            Provide an already-decrypted backup directory or a full
+            filesystem extraction; iLEAPP does not handle Apple's backup
+            encryption itself.
+          - android-backup-extractor supports adb backup passwords via
+            extract_android_backup's optional credential argument, but if
+            the .ab file is encrypted with an unknown password, extraction
+            will fail - this tool does not attempt to guess or crack it.
+          - ALEAPP/iLEAPP CLI flags are current as of the LEAPP family
+            (https://leapps.org/) at the time this was written (-t
+            {fs,tar,zip,gz}, -i INPUT_PATH, -o OUTPUT_PATH). Verify
+            against `python3 aleapp.py --help` / `python3 ileapp.py --help`
+            if a LEAPP update changes the interface.
+        """
+        import subprocess
+        from pathlib import Path
+
+        VENDOR_DIR = Path("/opt/dfir-agent/tools/vendor")
+        ALEAPP_SCRIPT = VENDOR_DIR / "aleapp" / "aleapp.py"
+        ILEAPP_SCRIPT = VENDOR_DIR / "ileapp" / "ileapp.py"
+        ABE_JAR = VENDOR_DIR / "android-backup-extractor" / "build" / "libs" / "abe.jar"
+
+
+        def extract_android_backup(ab_path: str, output_dir: str, password: str | None = None) -> str:
+            """Unpack an adb backup (.ab) to a tar via
+            android-backup-extractor. password is used once, in-process,
+            for an encrypted backup - callers must never log it, same
+            discipline as evidence_tool.py's BitLocker/LUKS handling."""
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            tar_path = str(Path(output_dir) / "backup.tar")
+            cmd = ["java", "-jar", str(ABE_JAR), "unpack", ab_path, tar_path]
+            if password:
+                cmd.append(password)
+            subprocess.run(cmd, check=True, capture_output=True)
+            subprocess.run(["tar", "-xf", tar_path, "-C", output_dir], check=True, capture_output=True)
+            return output_dir
+
+
+        def run_aleapp(input_path: str, report_dir: str, input_type: str = "fs") -> str:
+            """input_type: 'fs' (already-extracted directory), 'tar',
+            'zip', or 'gz' - matches what android-backup-extractor (or a
+            full logical/physical extraction) produced."""
+            Path(report_dir).mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                ["python3", str(ALEAPP_SCRIPT), "-t", input_type,
+                 "-i", input_path, "-o", report_dir],
+                check=True, capture_output=True,
+            )
+            return report_dir
+
+
+        def run_ileapp(input_path: str, report_dir: str, input_type: str = "fs") -> str:
+            """input_type: 'fs' for an already-decrypted backup directory
+            or filesystem extraction; 'tar'/'zip'/'gz' if the extraction
+            is still archived."""
+            Path(report_dir).mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                ["python3", str(ILEAPP_SCRIPT), "-t", input_type,
+                 "-i", input_path, "-o", report_dir],
+                check=True, capture_output=True,
+            )
+            return report_dir
+        '''))
+
+
 def write_evidence_tool():
     tools_dir = INSTALL_ROOT / "tools"
     print(f"\n=== Writing evidence mount/decrypt module to {tools_dir}/evidence_tool.py ===")
@@ -336,13 +682,13 @@ def write_evidence_tool():
         """Evidence mounting and decryption - deterministic infrastructure,
         deliberately NOT exposed to the LLM agent as a tool. Mounting and
         decrypting evidence is not a reasoning task, and the model should
-        never see or handle a decryption credential. cli.py's /process
+        never see or handle a decryption credential. dfir_cli.py's /process
         command calls these functions directly; the agent only ever sees
         the resulting read-only mount path and plaso storage file.
 
         Credentials are passed as function arguments and used immediately -
         never written to disk or returned in any value that could end up
-        logged. Callers (cli.py) must never pass a password/passphrase to
+        logged. Callers (dfir_cli.py) must never pass a password/passphrase to
         logger.log_action or logger.log_tool_call.
         """
         import hashlib
@@ -676,15 +1022,15 @@ def write_case_logger():
         '''))
 
 
-def write_cli():
-    print(f"\n=== Writing interactive prompt interface to {INSTALL_ROOT}/cli.py ===")
-    (INSTALL_ROOT / "cli.py").write_text(textwrap.dedent('''\
+def write_dfir_cli():
+    print(f"\n=== Writing interactive prompt interface to {INSTALL_ROOT}/dfir_cli.py ===")
+    (INSTALL_ROOT / "dfir_cli.py").write_text(textwrap.dedent('''\
         #!/usr/bin/env python3
         """
         Interactive DFIR agent console (HOTL prompt interface).
 
         Launch from the desktop shortcut, or directly:
-            /opt/dfir-agent/venv/bin/python /opt/dfir-agent/cli.py
+            /opt/dfir-agent/venv/bin/python /opt/dfir-agent/dfir_cli.py
 
         Starting a new case interactively prompts for case reference details
         and creates /opt/dfir-agent/cases/<case_id>/ with:
@@ -698,6 +1044,7 @@ def write_cli():
         import json
         import os
         import sys
+        import zipfile
         from datetime import datetime, timezone
         from pathlib import Path
 
@@ -706,7 +1053,7 @@ def write_cli():
 
         sys.path.insert(0, "/opt/dfir-agent")
         from tools.case_logger import CaseLogger
-        from tools import evidence_tool, plaso_tool
+        from tools import evidence_tool, plaso_tool, keyword_search_tool, mobile_backup_tool
         import agent
 
         INSTALL_ROOT = Path("/opt/dfir-agent")
@@ -738,26 +1085,42 @@ def write_cli():
                 return False
 
 
-        def prompt_evidence_storage_root(default: str = "") -> str:
+        def paths_overlap(a: Path, b: Path) -> bool:
+            """True if a and b are the same path, or one is nested inside
+            the other. Used to stop the read-only evidence mount location
+            and the plaso/output storage location from ever colliding."""
+            a, b = a.resolve(), b.resolve()
+            return a == b or a in b.parents or b in a.parents
+
+
+        def prompt_storage_path(prompt_text: str, default: str = "",
+                                 avoid: Path | None = None, avoid_label: str = "") -> str:
+            """Prompt for a storage path, create it, warn (without blocking)
+            if it's on the VM's own filesystem, and refuse (looping back to
+            re-prompt) if it overlaps a path it must stay separate from -
+            e.g. the output location must never overlap the read-only
+            evidence mount location, or vice versa."""
             while True:
-                storage_root = input(
-                    "Evidence storage root - external/NAS/network path where "
-                    "mounted evidence and plaso timelines will be written "
-                    f"(never the VM's own disk){f\' [{default}]\' if default else \'\'}: "
+                chosen = input(
+                    f"{prompt_text}{f\' [{default}]\' if default else \'\'}: "
                 ).strip() or default
-                if not storage_root:
-                    print("Required - evidence artifacts are never written under /opt/dfir-agent.")
+                if not chosen:
+                    print("Required - this is never written under /opt/dfir-agent.")
                     continue
-                path = Path(storage_root)
+                path = Path(chosen)
                 path.mkdir(parents=True, exist_ok=True)
+                if avoid is not None and paths_overlap(path, avoid):
+                    print(f"This path overlaps the {avoid_label} ({avoid}). "
+                          f"They must be kept separate - choose a different path.")
+                    continue
                 if is_same_filesystem_as_vm_root(path):
                     confirm = input(
-                        f"WARNING: {storage_root!r} appears to be on the same filesystem "
+                        f"WARNING: {chosen!r} appears to be on the same filesystem "
                         f"as the VM itself, not a separate/external volume. Use it anyway? [y/N]: "
                     ).strip().lower()
                     if confirm != "y":
                         continue
-                return storage_root
+                return chosen
 
 
         def prompt_new_case() -> Path:
@@ -772,7 +1135,18 @@ def write_cli():
                 case_type = input(f"Not found. Choose one of {playbooks}: ").strip()
             description = input("Brief case description: ").strip()
             evidence_note = input("Evidence source(s) (paths - will be mounted read-only): ").strip()
-            evidence_storage_root = prompt_evidence_storage_root()
+
+            print("\\nEvidence is mounted read-only from one location and all processing "
+                  "output (plaso timelines, etc.) is written to a SEPARATE location - "
+                  "nothing is ever written back to the evidence disk or source.")
+            evidence_mount_root = prompt_storage_path(
+                "Evidence mount location (read-only; where evidence images "
+                "will be mounted from)")
+            output_storage_root = prompt_storage_path(
+                "Output storage location (where plaso timelines and other "
+                "processing outputs are written - must be separate from the "
+                "evidence mount location)",
+                avoid=Path(evidence_mount_root), avoid_label="evidence mount location")
 
             case_id = case_ref.replace(" ", "_") or datetime.now(timezone.utc).strftime("case_%Y%m%dT%H%M%SZ")
             case_dir = CASES_DIR / case_id
@@ -790,7 +1164,8 @@ def write_cli():
                 "case_type": case_type,
                 "description": description,
                 "evidence_note": evidence_note,
-                "evidence_storage_root": evidence_storage_root,
+                "evidence_mount_root": evidence_mount_root,
+                "output_storage_root": output_storage_root,
                 "opened_at": datetime.now(timezone.utc).isoformat(),
             }
             (case_dir / "case_meta.json").write_text(json.dumps(meta, indent=2))
@@ -832,17 +1207,27 @@ def write_cli():
           /case                Create a new case and switch to it (this
                                 session stays open, just points at the
                                 new case afterward).
-          /process             Mount evidence (decrypting first if needed)
-                                and build a plaso timeline for it. Run once
+          /process             Process one evidence item - prompts for
+                                Evidence Type (mobile/cloud/PC/Storage) and
+                                branches accordingly: PC/Storage mount
+                                (decrypting if needed) and build a plaso
+                                timeline; mobile extracts an Android adb
+                                backup or runs ALEAPP/iLEAPP against the
+                                extraction; cloud unpacks an export archive
+                                (e.g. Google Takeout) if zipped. Run once
                                 per evidence item - each gets its own
-                                labeled source_id and storage file, and
-                                results are combined with attribution when
-                                the agent queries. Mounts and timelines are
-                                written to the external storage root you
-                                choose (prompted at case creation, and
-                                overridable per source) - never to the VM's
+                                labeled source_id. Read location and output
+                                location are always chosen separately and
+                                can never overlap; neither is ever the VM's
                                 own disk. Never routes through the LLM, and
                                 credentials are never logged.
+          /kw_search           Search processed evidence (including PST/
+                                OST/EDB/mbox mail containers) against the
+                                terms in keywords.txt, and export every
+                                responsive file to a chosen location under
+                                exports/{docs,pics,vids,emails}/, hashing
+                                and recording each one. Deterministic,
+                                never routes through the LLM.
           /playbook            List questions in this case's playbook.
           /findings            Show all findings recorded so far.
           /run <id>            Run a playbook question (or re-run it fresh).
@@ -865,17 +1250,30 @@ def write_cli():
 
 
         def handle_process_evidence(case_dir: Path, meta: dict, logger):
-            """Mount evidence read-only, decrypt if needed, and build a
-            plaso timeline. Entirely deterministic - the LLM is never
-            invoked here, and no credential is ever written to a log.
+            """Mount/extract evidence read-only and build whatever timeline
+            or report the evidence type calls for. Entirely deterministic -
+            the LLM is never invoked here, and no credential is ever
+            written to a log.
 
-            Multi-source: each call processes ONE evidence item into its
-            own storage file (evidence_index/<source_id>.plaso) and its
-            own namespaced mount path, then APPENDS an entry to
-            manifest.json['sources'] rather than overwriting it. Run
-            /process again for each additional evidence item in the case.
-            The agent queries across all of them at once and every event
-            comes back tagged with which source it came from."""
+            Evidence_Type branches processing:
+              PC / Storage - disk image: EWF mount if needed, decrypt if
+                needed, run log2timeline for a plaso timeline (unchanged
+                from before).
+              mobile - Android (adb backup .ab via android-backup-extractor
+                -> ALEAPP, or an already-extracted/tar/zip/gz Android
+                extraction straight into ALEAPP) or iOS (iLEAPP against an
+                already-decrypted backup directory or filesystem
+                extraction - this does NOT decrypt an encrypted iTunes/
+                Finder backup). No plaso timeline; the raw extracted data
+                is what /kw_search later searches.
+              cloud - a cloud export (e.g. Google Takeout) - extracted if
+                it's a zip, otherwise used as-is. No plaso timeline, no
+                mobile-tool report; just registered for /kw_search.
+
+            Multi-source: each call processes ONE evidence item and
+            APPENDS an entry to manifest.json['sources'] rather than
+            overwriting it. Run /process again for each additional
+            evidence item in the case."""
             print("\\n=== Evidence Processing ===")
 
             manifest_path = case_dir / "evidence_index" / "manifest.json"
@@ -899,117 +1297,329 @@ def write_cli():
                       f"re-run /process with a distinct label.")
                 return
 
-            storage_root = prompt_evidence_storage_root(default=meta.get("evidence_storage_root", ""))
-            source_root = Path(storage_root) / case_dir.name / source_id
+            type_input = input("Evidence type - (M)obile, (C)loud, (P)C, or (S)torage [P]: ").strip().lower()
+            type_map = {"m": "mobile", "mobile": "mobile", "c": "cloud", "cloud": "cloud",
+                        "p": "PC", "pc": "PC", "s": "Storage", "storage": "Storage", "": "PC"}
+            evidence_type = type_map.get(type_input, "PC")
+
+            storage_root = prompt_storage_path(
+                "Evidence mount/read location for this source (read-only)",
+                default=meta.get("evidence_mount_root", ""))
+            output_root = prompt_storage_path(
+                "Output storage location for this source (timeline, report, etc.)",
+                default=meta.get("output_storage_root", ""),
+                avoid=Path(storage_root), avoid_label="evidence mount location")
+            mount_source_root = Path(storage_root) / case_dir.name / source_id
+            output_source_root = Path(output_root) / case_dir.name / source_id
 
             logger.log_action("evidence_processing_started",
                                {"source_id": source_id, "image_path": image_path,
-                                "storage_root": storage_root})
+                                "evidence_type": evidence_type,
+                                "mount_root": storage_root, "output_root": output_root})
 
-            print("Computing SHA-256 of the evidence image for chain of custody "
-                  "(may take a while for large images)...")
+            print("Computing SHA-256 of the evidence for chain of custody "
+                  "(may take a while for large evidence)...")
             digest = evidence_tool.compute_sha256(image_path)
             logger.log_action("evidence_hash_computed",
                                {"source_id": source_id, "image_path": image_path, "sha256": digest})
             print(f"SHA-256: {digest}")
 
-            mount_root = source_root / "mnt"
+            mount_root = mount_source_root / "mnt"
             mount_root.mkdir(parents=True, exist_ok=True)
-            working_path = image_path
+            output_source_root.mkdir(parents=True, exist_ok=True)
 
-            if Path(image_path).suffix.lower() in (".e01", ".ex01"):
-                ewf_mount = mount_root / "ewf"
-                print("Mounting EWF (E01) image read-only...")
-                try:
-                    evidence_tool.mount_ewf(image_path, str(ewf_mount))
+            enc = "none"
+            plaso_storage_file = None
+            leapp_report_path = None
+            mobile_platform = None
+            final_path = image_path
+
+            if evidence_type in ("PC", "Storage"):
+                working_path = image_path
+                if Path(image_path).suffix.lower() in (".e01", ".ex01"):
+                    ewf_mount = mount_root / "ewf"
+                    print("Mounting EWF (E01) image read-only...")
+                    try:
+                        evidence_tool.mount_ewf(image_path, str(ewf_mount))
+                        logger.log_action("evidence_mounted",
+                                           {"source_id": source_id, "type": "ewf", "mount_point": str(ewf_mount)})
+                        candidates = list(ewf_mount.glob("ewf1"))
+                        working_path = str(candidates[0]) if candidates else str(ewf_mount)
+                    except Exception as exc:
+                        logger.log_action("evidence_mount_failed",
+                                           {"source_id": source_id, "type": "ewf", "error": str(exc)})
+                        print(f"EWF mount failed: {exc}")
+                        return
+
+                enc = input("Is this volume encrypted? (none/bitlocker/luks) [none]: ").strip().lower() or "none"
+                final_path = working_path
+
+                if enc == "bitlocker":
+                    cred_type = input("Credential type - (p)assword or (r)ecovery key? [p]: ").strip().lower()
+                    cred_type = "recovery_key" if cred_type == "r" else "password"
+                    credential = getpass.getpass("BitLocker credential (input hidden, never logged): ")
+                    bde_mount = mount_root / "bde"
+                    print("Mounting BitLocker volume (credential used once, never stored)...")
+                    try:
+                        evidence_tool.mount_bitlocker(working_path, str(bde_mount), credential, cred_type)
+                    except Exception as exc:
+                        logger.log_action("evidence_decrypt_failed",
+                                           {"source_id": source_id, "type": "bitlocker", "error": str(exc)})
+                        print(f"BitLocker mount failed: {exc}")
+                        return
+                    logger.log_action("evidence_decrypted",
+                                       {"source_id": source_id, "type": "bitlocker", "credential_provided": True})
+                    final_mount = mount_root / "final"
+                    bde1 = bde_mount / "bde1"
+                    evidence_tool.mount_ntfs(str(bde1), str(final_mount))
                     logger.log_action("evidence_mounted",
-                                       {"source_id": source_id, "type": "ewf", "mount_point": str(ewf_mount)})
-                    candidates = list(ewf_mount.glob("ewf1"))
-                    working_path = str(candidates[0]) if candidates else str(ewf_mount)
-                except Exception as exc:
-                    logger.log_action("evidence_mount_failed",
-                                       {"source_id": source_id, "type": "ewf", "error": str(exc)})
-                    print(f"EWF mount failed: {exc}")
+                                       {"source_id": source_id, "type": "ntfs_decrypted", "mount_point": str(final_mount)})
+                    final_path = str(final_mount)
+                elif enc == "luks":
+                    passphrase = getpass.getpass("LUKS passphrase (input hidden, never logged): ")
+                    mapper_name = f"dfir_{case_dir.name}_{source_id}"
+                    print("Opening LUKS volume read-only (credential used once, never stored)...")
+                    try:
+                        mapped = evidence_tool.mount_luks(working_path, mapper_name, passphrase)
+                    except Exception as exc:
+                        logger.log_action("evidence_decrypt_failed",
+                                           {"source_id": source_id, "type": "luks", "error": str(exc)})
+                        print(f"LUKS open failed: {exc}")
+                        return
+                    logger.log_action("evidence_decrypted",
+                                       {"source_id": source_id, "type": "luks", "credential_provided": True})
+                    final_mount = mount_root / "final"
+                    evidence_tool.mount_generic(mapped, str(final_mount))
+                    logger.log_action("evidence_mounted",
+                                       {"source_id": source_id, "type": "luks_decrypted", "mount_point": str(final_mount)})
+                    final_path = str(final_mount)
+                elif enc != "none":
+                    print(f"Unsupported encryption type '{enc}' - mount/decrypt it manually, "
+                          f"then re-run /process pointing at the decrypted path.")
                     return
 
-            enc = input("Is this volume encrypted? (none/bitlocker/luks) [none]: ").strip().lower() or "none"
-            final_path = working_path
-
-            if enc == "bitlocker":
-                cred_type = input("Credential type - (p)assword or (r)ecovery key? [p]: ").strip().lower()
-                cred_type = "recovery_key" if cred_type == "r" else "password"
-                credential = getpass.getpass("BitLocker credential (input hidden, never logged): ")
-                bde_mount = mount_root / "bde"
-                print("Mounting BitLocker volume (credential used once, never stored)...")
+                storage_file = output_source_root / f"{source_id}.plaso"
+                print(f"Running log2timeline against {final_path} -> {storage_file} "
+                      f"(this can take a long time on large evidence)...")
+                logger.log_action("plaso_processing_started", {"source_id": source_id, "source_path": final_path})
                 try:
-                    evidence_tool.mount_bitlocker(working_path, str(bde_mount), credential, cred_type)
+                    plaso_tool.run_log2timeline(final_path, str(storage_file))
                 except Exception as exc:
-                    logger.log_action("evidence_decrypt_failed",
-                                       {"source_id": source_id, "type": "bitlocker", "error": str(exc)})
-                    print(f"BitLocker mount failed: {exc}")
+                    logger.log_action("plaso_processing_failed", {"source_id": source_id, "error": str(exc)})
+                    print(f"log2timeline failed: {exc}")
                     return
-                logger.log_action("evidence_decrypted",
-                                   {"source_id": source_id, "type": "bitlocker", "credential_provided": True})
-                final_mount = mount_root / "final"
-                bde1 = bde_mount / "bde1"
-                evidence_tool.mount_ntfs(str(bde1), str(final_mount))
-                logger.log_action("evidence_mounted",
-                                   {"source_id": source_id, "type": "ntfs_decrypted", "mount_point": str(final_mount)})
-                final_path = str(final_mount)
-            elif enc == "luks":
-                passphrase = getpass.getpass("LUKS passphrase (input hidden, never logged): ")
-                mapper_name = f"dfir_{case_dir.name}_{source_id}"
-                print("Opening LUKS volume read-only (credential used once, never stored)...")
-                try:
-                    mapped = evidence_tool.mount_luks(working_path, mapper_name, passphrase)
-                except Exception as exc:
-                    logger.log_action("evidence_decrypt_failed",
-                                       {"source_id": source_id, "type": "luks", "error": str(exc)})
-                    print(f"LUKS open failed: {exc}")
-                    return
-                logger.log_action("evidence_decrypted",
-                                   {"source_id": source_id, "type": "luks", "credential_provided": True})
-                final_mount = mount_root / "final"
-                evidence_tool.mount_generic(mapped, str(final_mount))
-                logger.log_action("evidence_mounted",
-                                   {"source_id": source_id, "type": "luks_decrypted", "mount_point": str(final_mount)})
-                final_path = str(final_mount)
-            elif enc != "none":
-                print(f"Unsupported encryption type '{enc}' - mount/decrypt it manually, "
-                      f"then re-run /process pointing at the decrypted path.")
-                return
+                plaso_storage_file = str(storage_file)
+                logger.log_action("plaso_processing_completed",
+                                   {"source_id": source_id, "storage_file": plaso_storage_file})
 
-            storage_file = source_root / f"{source_id}.plaso"
-            print(f"Running log2timeline against {final_path} -> {storage_file} "
-                  f"(this can take a long time on large evidence)...")
-            logger.log_action("plaso_processing_started", {"source_id": source_id, "source_path": final_path})
-            try:
-                plaso_tool.run_log2timeline(final_path, str(storage_file))
-            except Exception as exc:
-                logger.log_action("plaso_processing_failed", {"source_id": source_id, "error": str(exc)})
-                print(f"log2timeline failed: {exc}")
-                return
-            logger.log_action("plaso_processing_completed",
-                               {"source_id": source_id, "storage_file": str(storage_file)})
+            elif evidence_type == "mobile":
+                platform_input = input("Mobile platform - (A)ndroid or (I)OS: ").strip().lower()
+                mobile_platform = "android" if platform_input.startswith("a") else "ios"
+                suffix = Path(image_path).suffix.lower()
+
+                if mobile_platform == "android":
+                    if suffix == ".ab":
+                        print("Extracting adb backup (.ab) via android-backup-extractor...")
+                        ab_password = getpass.getpass(
+                            "adb backup password if encrypted, else press Enter (never logged): ") or None
+                        extract_dir = mount_root / "android_extracted"
+                        try:
+                            mobile_backup_tool.extract_android_backup(image_path, str(extract_dir), ab_password)
+                        except Exception as exc:
+                            logger.log_action("mobile_extraction_failed",
+                                               {"source_id": source_id, "error": str(exc)})
+                            print(f"android-backup-extractor failed: {exc}")
+                            return
+                        logger.log_action("mobile_backup_extracted",
+                                           {"source_id": source_id, "platform": "android"})
+                        aleapp_input, input_type = str(extract_dir), "fs"
+                    else:
+                        aleapp_input = image_path
+                        input_type = {"tar": "tar", "zip": "zip", "gz": "gz", "tgz": "gz"}.get(
+                            suffix.lstrip("."), "fs")
+                    report_dir = output_source_root / "aleapp_report"
+                    print(f"Running ALEAPP against {aleapp_input} (type={input_type})...")
+                    try:
+                        mobile_backup_tool.run_aleapp(aleapp_input, str(report_dir), input_type)
+                    except Exception as exc:
+                        logger.log_action("aleapp_failed", {"source_id": source_id, "error": str(exc)})
+                        print(f"ALEAPP failed: {exc}")
+                        return
+                    leapp_report_path = str(report_dir)
+                    final_path = aleapp_input
+                    logger.log_action("aleapp_completed",
+                                       {"source_id": source_id, "report_path": leapp_report_path})
+                else:
+                    input_type = {"tar": "tar", "zip": "zip", "gz": "gz", "tgz": "gz"}.get(
+                        suffix.lstrip("."), "fs")
+                    report_dir = output_source_root / "ileapp_report"
+                    print("NOTE: iLEAPP does not decrypt an encrypted iTunes/Finder backup - "
+                          "this must already be a decrypted backup directory or filesystem extraction.")
+                    print(f"Running iLEAPP against {image_path} (type={input_type})...")
+                    try:
+                        mobile_backup_tool.run_ileapp(image_path, str(report_dir), input_type)
+                    except Exception as exc:
+                        logger.log_action("ileapp_failed", {"source_id": source_id, "error": str(exc)})
+                        print(f"iLEAPP failed: {exc}")
+                        return
+                    leapp_report_path = str(report_dir)
+                    final_path = image_path
+                    logger.log_action("ileapp_completed",
+                                       {"source_id": source_id, "report_path": leapp_report_path})
+
+            elif evidence_type == "cloud":
+                if Path(image_path).suffix.lower() == ".zip":
+                    print("Extracting cloud export archive...")
+                    extract_dir = mount_root / "cloud_extracted"
+                    extract_dir.mkdir(parents=True, exist_ok=True)
+                    try:
+                        with zipfile.ZipFile(image_path) as zf:
+                            zf.extractall(extract_dir)
+                    except Exception as exc:
+                        logger.log_action("cloud_extraction_failed",
+                                           {"source_id": source_id, "error": str(exc)})
+                        print(f"Archive extraction failed: {exc}")
+                        return
+                    final_path = str(extract_dir)
+                    logger.log_action("cloud_export_extracted", {"source_id": source_id})
+                else:
+                    final_path = image_path
 
             manifest["sources"].append({
                 "source_id": source_id, "label": source_id, "image_path": image_path,
-                "sha256": digest, "encryption": enc, "final_mount": final_path,
-                "storage_root": storage_root,
-                "plaso_storage_file": str(storage_file),
+                "sha256": digest, "evidence_type": evidence_type, "encryption": enc,
+                "final_mount": final_path,
+                "mount_root": storage_root, "output_root": output_root,
+                "plaso_storage_file": plaso_storage_file,
+                "mobile_platform": mobile_platform,
+                "leapp_report_path": leapp_report_path,
                 "processed_at": datetime.now(timezone.utc).isoformat(),
             })
             manifest_path.write_text(json.dumps(manifest, indent=2))
             logger.log_action("evidence_source_registered",
-                               {"source_id": source_id, "total_sources": len(manifest["sources"])})
-            print(f"\\nProcessing complete. Source \'{source_id}\' registered "
+                               {"source_id": source_id, "evidence_type": evidence_type,
+                                "total_sources": len(manifest["sources"])})
+            print(f"\\nProcessing complete. Source \'{source_id}\' ({evidence_type}) registered "
                   f"({len(manifest[\'sources\'])} total for this case).")
-            print(f"Evidence mount and timeline written to: {source_root}")
+            print(f"Read from: {mount_source_root}")
+            print(f"Output written to: {output_source_root}")
+            if leapp_report_path:
+                print(f"LEAPP report: {leapp_report_path}")
             print("(Only case metadata, logs, and findings live under /opt/dfir-agent - "
-                  "evidence itself stays at the storage root you chose.)")
-            print("The agent's plaso_query_timeline tool automatically queries "
-                  "all registered sources and tags results by source_id - "
-                  "run /process again for any additional evidence items.")
+                  "nothing is ever written back to the evidence mount or source.)")
+            print("The agent's plaso_query_timeline tool automatically queries all "
+                  "plaso-backed sources; /kw_search covers all source types uniformly. "
+                  "Run /process again for any additional evidence items.")
+
+
+        def handle_keyword_search(case_dir: Path, meta: dict, logger):
+            """Search all processed evidence sources for keyword.txt terms,
+            including extracting PST/OST/EDB mail containers first, and
+            export every responsive file with SHA-256 + name recorded.
+            Entirely deterministic - never routes through the LLM."""
+            print("\\n=== Keyword Search ===")
+
+            keywords_path = case_dir / "keywords.txt"
+            if not keywords_path.exists():
+                keywords_path.write_text(
+                    "# One search term or regex per line. Lines starting with "
+                    "# are ignored.\\n# Example:\\nconfidential\\nssn|social security\\n"
+                )
+                print(f"No keywords.txt found - created a template at {keywords_path}. "
+                      f"Edit it with your search terms, then re-run /kw_search.")
+                logger.log_action("keywords_template_created", {"path": str(keywords_path)})
+                return
+
+            keywords = keyword_search_tool.load_keywords(str(keywords_path))
+            if not keywords:
+                print(f"{keywords_path} has no active terms (all blank/commented). "
+                      f"Add terms and re-run /kw_search.")
+                return
+            print(f"Loaded {len(keywords)} search term(s) from {keywords_path}")
+
+            manifest_path = case_dir / "evidence_index" / "manifest.json"
+            manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {"sources": []}
+            if not manifest["sources"]:
+                print("No evidence has been processed for this case yet - run /process first.")
+                return
+
+            exports_root = prompt_storage_path(
+                "Export destination for responsive files",
+                default=meta.get("output_storage_root", ""))
+            exports_root_path = Path(exports_root) / case_dir.name / "exports"
+            for sub in ("docs", "pics", "vids", "emails"):
+                (exports_root_path / sub).mkdir(parents=True, exist_ok=True)
+
+            logger.log_action("kw_search_started",
+                               {"n_keywords": len(keywords), "n_sources": len(manifest["sources"]),
+                                "exports_root": str(exports_root_path)})
+
+            export_manifest_path = exports_root_path / "export_manifest.jsonl"
+            total_exported = {"docs": 0, "pics": 0, "vids": 0, "emails": 0}
+
+            for src in manifest["sources"]:
+                source_id = src["source_id"]
+                mount_tree = src.get("final_mount", "")
+                if not mount_tree or not Path(mount_tree).exists():
+                    print(f"Skipping source '{source_id}' - mount tree not found "
+                          f"({mount_tree!r}). Re-mount if needed.")
+                    continue
+                print(f"\\nSearching source '{source_id}' at {mount_tree}...")
+
+                # Extract any PST/OST/EDB/mbox containers first so their
+                # contents are searchable too.
+                containers = keyword_search_tool.find_email_containers(mount_tree)
+                extraction_roots = []
+                for c in containers:
+                    extract_dir = exports_root_path / "_extraction_work" / source_id / Path(c["path"]).stem
+                    print(f"  Extracting {c['kind']} container: {c['path']}")
+                    try:
+                        if c["kind"] == "pst_ost":
+                            keyword_search_tool.extract_pst_ost(c["path"], str(extract_dir))
+                        elif c["kind"] == "edb":
+                            keyword_search_tool.extract_edb(c["path"], str(extract_dir))
+                        else:  # mbox - Google Takeout / Google Vault Gmail export
+                            keyword_search_tool.extract_mbox(c["path"], str(extract_dir))
+                        extraction_roots.append(str(extract_dir))
+                        logger.log_action("email_container_extracted",
+                                           {"source_id": source_id, "container": c["path"], "kind": c["kind"]})
+                    except Exception as exc:
+                        logger.log_action("email_container_extraction_failed",
+                                           {"source_id": source_id, "container": c["path"], "error": str(exc)})
+                        print(f"    extraction failed: {exc}")
+
+                # Exclude container files from the raw mount-tree search
+                # since their contents are searched separately, post
+                # extraction, above - otherwise a container would be
+                # double-counted as both a raw blob and its extracted
+                # messages.
+                container_excludes = ["*.pst", "*.ost", "*.edb", "*.mbox"]
+                search_targets = [(mount_tree, container_excludes)]
+                search_targets += [(root, None) for root in extraction_roots]
+
+                for root, excludes in search_targets:
+                    hits = keyword_search_tool.search_tree_for_keywords(root, keywords, excludes)
+                    for hit in hits:
+                        try:
+                            record = keyword_search_tool.export_responsive_file(
+                                hit["file_path"], str(exports_root_path), source_id, hit["matched_keyword"])
+                        except Exception as exc:
+                            logger.log_action("kw_search_export_failed",
+                                               {"source_id": source_id, "file_path": hit["file_path"],
+                                                "error": str(exc)})
+                            continue
+                        with export_manifest_path.open("a") as f:
+                            f.write(json.dumps(record) + "\\n")
+                        logger.log_action("file_exported", record)
+                        total_exported[record["subfolder"]] += 1
+                        print(f"  exported [{record[\'subfolder\']}] {record[\'exported_filename\']} "
+                              f"(matched {record[\'matched_keyword\']!r}, sha256 {record[\'sha256\'][:16]}...)")
+
+            logger.log_action("kw_search_completed", {"exported_counts": total_exported})
+            print(f"\\nSearch complete. Exported: docs={total_exported[\'docs\']}, "
+                  f"pics={total_exported[\'pics\']}, vids={total_exported[\'vids\']}, "
+                  f"emails={total_exported[\'emails\']}")
+            print(f"Exports and manifest at: {exports_root_path}")
 
 
         def generate_report(case_dir: Path, meta: dict, playbook: dict, logger) -> Path:
@@ -1130,6 +1740,10 @@ def write_cli():
 
                 if user_input == "/process":
                     handle_process_evidence(case_dir, meta, logger)
+                    continue
+
+                if user_input == "/kw_search":
+                    handle_keyword_search(case_dir, meta, logger)
                     continue
 
                 if user_input == "/report":
@@ -1255,7 +1869,7 @@ def write_cli():
         if __name__ == "__main__":
             main()
         '''))
-    os.chmod(INSTALL_ROOT / "cli.py", 0o755)
+    os.chmod(INSTALL_ROOT / "dfir_cli.py", 0o755)
 
 
 def write_desktop_launcher():
@@ -1265,7 +1879,7 @@ def write_desktop_launcher():
         Type=Application
         Name=DFIR Agent Console
         Comment=Interactive HOTL DFIR agent - case intake, tool calls, findings
-        Exec=x-terminal-emulator -T "DFIR Agent Console" -e {VENV_DIR}/bin/python {INSTALL_ROOT}/cli.py
+        Exec=x-terminal-emulator -T "DFIR Agent Console" -e {VENV_DIR}/bin/python {INSTALL_ROOT}/dfir_cli.py
         Icon=utilities-terminal
         Terminal=false
         Categories=System;Security;
@@ -1765,12 +2379,12 @@ def write_readme():
     files following the same schema: id/question/checks/[negative_requires_all_checks])
         - `logs/`      - global install/system log (not case-specific).
         - `agent.py`   - agent-loop skeleton; wire up your tool-calling logic here.
-        - `cli.py`     - interactive prompt interface / desktop console. Starting a
+        - `dfir_cli.py`     - interactive prompt interface / desktop console. Starting a
                          new case interactively prompts for case reference details
                          and creates the case directory automatically.
         - `.env`       - CLAUDE_API_KEY (chmod 600, root-only).
 
-        ## Case directory layout (created per case by cli.py)
+        ## Case directory layout (created per case by dfir_cli.py)
             cases/<case_id>/
               case_meta.json              - case reference, examiner, type, dates
               logs/
@@ -1784,7 +2398,7 @@ def write_readme():
         ## Desktop console
         A launcher ("DFIR Agent Console") is installed to the applications menu
         (and to the invoking user's Desktop, if present). It opens a terminal
-        running `cli.py`, which will:
+        running `dfir_cli.py`, which will:
           1. Offer to resume the active case or start a new one.
           2. On new case, interactively prompt for case reference number,
              examiner, org, case type (from the playbook library), description,
@@ -1794,7 +2408,7 @@ def write_readme():
              turn logged to the appropriate case log stream.
 
         You can also launch it directly without the desktop shortcut:
-            /opt/dfir-agent/venv/bin/python /opt/dfir-agent/cli.py
+            /opt/dfir-agent/venv/bin/python /opt/dfir-agent/dfir_cli.py
 
         ## Mounting evidence read-only (example, E01 image)
             ewfmount -X allow_other image.E01 /opt/dfir-agent/evidence/mnt_ewf
@@ -1824,6 +2438,12 @@ def main():
         action="store_true",
         help="Skip apt package installation (useful for re-runs).",
     )
+    parser.add_argument(
+        "--skip-mobile-tools",
+        action="store_true",
+        help="Skip cloning/building ALEAPP, iLEAPP, and android-backup-extractor "
+             "(useful for re-runs, or if mobile evidence support isn't needed).",
+    )
     args = parser.parse_args()
 
     require_root()
@@ -1838,13 +2458,17 @@ def main():
         install_system_deps()
     create_dirs()
     create_venv_and_python_deps()
+    if not args.skip_mobile_tools:
+        install_mobile_forensic_tools()
     write_env_file(api_key)
     write_playbooks()
     write_tool_stubs()
     write_evidence_tool()
+    write_keyword_search_tool()
+    write_mobile_backup_tool()
     write_case_logger()
     write_agent_skeleton()
-    write_cli()
+    write_dfir_cli()
     write_desktop_launcher()
     write_readme()
 
