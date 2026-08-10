@@ -1,5 +1,5 @@
 # FORVM
-***(c) 2026, Shane D. Shook, All Rights Reserved***
+**(c) 2026, Shane D. Shook, All Rights Reserved**
 
 **FORVM** (Forensic VM) is an agentic, human-on-the-loop (HOTL) DFIR
 workstation. It combines standard open-source forensic tooling (plaso,
@@ -20,19 +20,19 @@ and toolset the build script produces.
 
 ## What dfir.py does
 
-dfir.py is the deployed system: an interactive console (`cli.py`) backed
+dfir.py is the deployed system: an interactive console (`dfir_cli.py`) backed
 by an agent loop (`agent.py`) that has read-only tool access to a fixed
 set of forensic utilities. At a high level, a session looks like this:
 
 1. Open (or resume) a **case**: case reference, examiner, org, case
    type, and description are captured interactively.
-2. **Process evidence**: mount an image read-only (decrypting first if
-   it's BitLocker- or LUKS-encrypted), hash it for chain of custody, and
-   build a plaso timeline from it, all written to an external storage
-   root you choose (never the VM's own disk). Repeatable per evidence
-   item, so a case with a workstation image *and* a USB image processes
-   both, and every later citation is attributed to the specific source
-   it came from.
+2. **Process evidence**: mount an image read-only from one location
+   (decrypting first if it's BitLocker- or LUKS-encrypted), hash it for
+   chain of custody, and build a plaso timeline written to a SEPARATE
+   output location, never back to the evidence mount or source, and
+   never to the VM's own disk. Repeatable per evidence item, so a case
+   with a workstation image *and* a USB image processes both, and every
+   later citation is attributed to the specific source it came from.
 3. **Run the case's playbook**: a fixed set of investigative questions
    (see *Skills Catalog* below) that the agent works through one at a
    time, querying plaso/Volatility/tshark/bulk_extractor/YARA as needed,
@@ -66,7 +66,9 @@ not just produced quickly.
 │                                  writes to your chosen external storage root instead
 ├── cases/
 │   └── <case_id>/
-│       ├── case_meta.json        case reference, examiner, type, evidence_storage_root, dates
+│       ├── case_meta.json        case reference, examiner, type,
+│       │                          evidence_mount_root, output_storage_root, dates
+│       ├── keywords.txt          search terms for /kw_search (one per line, # comments)
 │       ├── evidence_index/
 │       │   └── manifest.json     one entry per processed evidence source, pointing at
 │       │                          wherever that source's mount + .plaso file actually live
@@ -87,6 +89,10 @@ not just produced quickly.
 │   │                              volatility's in-memory yarascan)
 │   ├── evidence_tool.py          mount/decrypt/hash: deterministic,
 │   │                              never exposed to the LLM
+│   ├── keyword_search_tool.py    grep-based search, PST/OST/EDB extraction,
+│   │                              export + hashing: also never exposed to the LLM
+│   ├── mobile_backup_tool.py     Android/iOS backup extraction (ALEAPP/iLEAPP,
+│   │                              android-backup-extractor): also never exposed to the LLM
 │   ├── case_logger.py            hash-chained three-log-stream writer
 │   └── audit_log.py
 ├── playbooks/                    the skills catalog, see below
@@ -94,18 +100,28 @@ not just produced quickly.
 │   ├── malware_process_ioc.yaml
 │   └── host_compromise.yaml
 ├── agent.py                      the tool-calling loop, caching, validation
-├── cli.py                        the interactive console
+├── dfir_cli.py                  the interactive console
 └── .env                          CLAUDE_API_KEY (chmod 600, root-only)
 ```
 
-Evidence itself lives wherever you point `/process`, typically an
-external, NAS, or network-mounted volume, never the VM's own disk:
+Evidence is mounted read-only from one location, and all processing
+output (plaso timelines and anything else generated during `/process`)
+is written to a completely SEPARATE location, chosen independently.
+Nothing is ever written back to the evidence mount or the evidence
+source itself:
 
 ```
-<evidence_storage_root>/<case_id>/<source_id>/
-├── mnt/                          read-only mount tree (EWF/BitLocker/LUKS as applicable)
+<evidence_mount_root>/<case_id>/<source_id>/
+└── mnt/                          read-only mount tree (EWF/BitLocker/LUKS as applicable)
+
+<output_storage_root>/<case_id>/<source_id>/
 └── <source_id>.plaso             plaso timeline for this evidence source
 ```
+
+`dfir_cli.py` prompts for both locations separately (at case creation, and
+again per source during `/process`, defaulting to the case-level
+choice) and refuses a path that overlaps the other, so the mount tree
+and the output tree can never collide.
 
 A desktop launcher ("DFIR Agent Console") is installed to the
 applications menu and, if run via `sudo`, to the invoking user's Desktop.
@@ -122,19 +138,26 @@ applications menu and, if run via `sudo`, to the invoking user's Desktop.
   build.
 - **Disk space:** evidence storage is deliberately *not* tied to the
   VM's own disk. At case creation (and again, overridable, at each
-  `/process` run) you're prompted for an **evidence storage root**: an
-  external, NAS, or network-mounted path where evidence mounts and
-  plaso timelines are written. `cli.py` checks whether the path you give
+  `/process` run) you're prompted for two separate locations: an
+  **evidence mount location** (read-only; where evidence images are
+  mounted from) and an **output storage location** (where plaso
+  timelines and other processing output are written). The two are
+  never allowed to overlap, and nothing is ever written back to the
+  evidence mount or source. `dfir_cli.py` also checks whether either path
   resolves onto the VM's own filesystem and warns (without blocking) if
-  so, since the expectation is that evidence never lives on the VM
-  itself. Only case metadata, logs, and findings (all small) are
-  stored under `/opt/dfir-agent`.
+  so, since the expectation is that neither evidence nor its outputs
+  live on the VM itself. Only case metadata, logs, and findings (all
+  small) are stored under `/opt/dfir-agent`.
 
 ### Installed via `apt`
 `build-essential`, `git`, `curl`, `wget`, `python3`/`pip`/`venv`/`dev`,
 `libewf-dev`/`ewf-tools` (E01 support), `afflib-tools` (AFF support),
 `sleuthkit` (TSK), `testdisk` (photorec), `yara`, `tshark`, `tcpdump`,
-`cryptsetup` (LUKS), `ntfs-3g`, `docker.io`/`docker-compose-v2`
+`cryptsetup` (LUKS), `ntfs-3g`, `pst-utils` (readpst, for PST/OST mail
+containers, falls back to a source-build note if unavailable),
+`libesedb-utils` (esedbexport, for EDB/Exchange ESE databases, same
+fallback behavior), `python3-tk`/`default-jre` (ALEAPP/
+android-backup-extractor dependencies), `docker.io`/`docker-compose-v2`
 (optional, for Timesketch), `jq`, `bulk-extractor` (falls back to a
 source-build note if unavailable in a given release's repos), and
 `libbde-utils` (BitLocker support, same fallback behavior).
@@ -142,6 +165,16 @@ source-build note if unavailable in a given release's repos), and
 ### Installed via `pip` (into a dedicated venv at `/opt/dfir-agent/venv`)
 `plaso`, `volatility3`, `anthropic`, `pyyaml`, `pandas`,
 `timesketch-import-client`, `python-dotenv`.
+
+### Installed via git clone (mobile forensic tooling)
+ALEAPP and iLEAPP (the [LEAPP family](https://leapps.org/), open source
+and actively maintained) are cloned into `tools/vendor/` and their own
+`requirements.txt` installed into the venv. android-backup-extractor is
+cloned and built via its gradle wrapper for extracting adb backup (.ab)
+files. Each step is wrapped so a failure doesn't abort the whole
+install; mobile evidence support just won't be available until resolved
+manually. Skip this step entirely with `--skip-mobile-tools` if it
+isn't needed.
 
 ### Not included
 Timesketch itself (docker-compose stack) and Zeek are deliberately left
@@ -158,7 +191,7 @@ sudo python3 build_dfir_vm.py --claude-api-key sk-ant-...
 sudo CLAUDE_API_KEY=sk-ant-... python3 build_dfir_vm.py
 
 source /opt/dfir-agent/venv/bin/activate
-python3 /opt/dfir-agent/cli.py
+python3 /opt/dfir-agent/dfir_cli.py
 ```
 
 ---
@@ -171,7 +204,8 @@ Typing `/help` (or `/?`) inside the console prints this list at any time:
 |---|---|
 | `/help`, `/?` | Show the command list. |
 | `/case` | Create a new case and switch the running session to it; no restart needed. |
-| `/process` | Mount an evidence source read-only (decrypting BitLocker or LUKS volumes first if needed), hash it for chain of custody, and build its plaso timeline. Run once per evidence item; each gets its own labeled `source_id` and storage file. Writes to the external evidence storage root you chose at case creation (overridable per source), never to the VM's own disk. Entirely deterministic: never routes through the LLM, and credentials are never written to any log. |
+| `/process` | Process one evidence item - prompts for Evidence Type (mobile/cloud/PC/Storage) and branches accordingly: PC/Storage mounts a disk image (decrypting if needed) and builds a plaso timeline; mobile extracts an Android adb backup or runs ALEAPP/iLEAPP against the extraction; cloud unpacks an export archive (e.g. Google Takeout) if zipped. Run once per evidence item; each gets its own labeled `source_id`. Read location and output location are always chosen separately and can never overlap; neither is ever the VM's own disk. Entirely deterministic: never routes through the LLM, and credentials are never written to any log. |
+| `/kw_search` | Search every processed evidence source against the terms in `keywords.txt` (creates a template on first run if missing), including extracting PST/OST/EDB/mbox mail containers first (mbox covers Google Takeout/Vault Gmail exports) so their contents are searchable too. Works uniformly across all Evidence Types - PC/Storage mounts, mobile extractions, and cloud exports. Every responsive file is copied to an export destination you choose, classified into `docs`/`pics`/`vids`/`emails` by extension, hashed (SHA-256), and recorded in both an export manifest and the case's audit log. Entirely deterministic: never routes through the LLM. |
 | `/playbook` | List every question in the current case's playbook. |
 | `/findings` | Show all findings recorded so far for this case. |
 | `/run <id>` | Run (or re-run fresh) a specific playbook question. |
@@ -185,6 +219,86 @@ Typing `/help` (or `/?`) inside the console prints this list at any time:
 Any input starting with `/` that isn't one of the above is rejected with
 a pointer back to `/help`, rather than being silently forwarded to the
 model as a question.
+
+---
+
+## Evidence types
+
+`/process` prompts for an **Evidence Type** per source, which determines
+how it's processed:
+
+- **PC / Storage** - a disk image (workstation, external drive, USB).
+  Mounted (EWF if `.E01`/`.Ex01`), decrypted if BitLocker or LUKS, and
+  built into a plaso timeline. This is the original flow, unchanged.
+- **mobile** - prompts for platform (Android or iOS):
+  - Android: an adb backup (`.ab`) is unpacked via
+    android-backup-extractor first; an already-extracted directory or a
+    `.tar`/`.zip`/`.gz` extraction goes straight to ALEAPP.
+  - iOS: run against an already-decrypted iTunes/Finder backup directory
+    or a filesystem extraction. **This does not decrypt an encrypted
+    backup itself** - iLEAPP has no built-in handling for Apple's backup
+    encryption, so provide a decrypted directory or an unencrypted
+    extraction.
+  - No plaso timeline is produced for mobile sources; the raw extracted
+    data is what `/kw_search` later searches, and the ALEAPP/iLEAPP HTML/
+    TSV report is kept alongside it for reference.
+- **cloud** - a cloud export such as Google Takeout. A `.zip` is
+  extracted automatically; anything else is used as-is. No plaso
+  timeline or mobile-tool report is produced; the source is registered
+  directly for `/kw_search`, which already handles mbox mail (Takeout's
+  Gmail format) and plain JSON/HTML content within it.
+
+Every evidence type shares the same read/output location separation and
+same-filesystem safety check described above, and every source -
+regardless of type - is searchable by `/kw_search` uniformly, since that
+command works off each source's `final_mount` path rather than assuming
+a disk-image layout.
+
+---
+
+## Keyword search
+
+`/kw_search` reads search terms from `keywords.txt` in the case
+directory (one term or regex per line; lines starting with `#` are
+ignored). If the file doesn't exist, `/kw_search` creates a template
+and stops so you can fill it in before the first real run.
+
+It searches every evidence source registered for the case via `grep`
+across the mounted content, including anything extracted from PST/OST
+mail containers (`readpst`), EDB/Exchange databases (`esedbexport`), or
+mbox files (Python's stdlib `mailbox` module) found within the mount
+tree. mbox covers Google Takeout and most Google Vault Gmail exports
+(Vault can also export to PST, already covered by the PST/OST path);
+each message is split out individually before searching, so a match
+inside a multi-gigabyte mbox exports just that message, not the whole
+container. EDB extraction yields raw ESE table data for search
+purposes, not fully reconstructed message threads; treat EDB hits as
+leads pointing at raw records rather than polished emails. True
+Exchange mailbox reconstruction from EDB typically needs specialized
+tooling beyond what's open-source here.
+
+Every responsive file is copied to an export destination you choose
+(prompted the same way as the evidence/output locations, and checked
+against the VM's own filesystem the same way) and classified by
+extension into one of four subfolders:
+
+```
+<export_destination>/<case_id>/exports/
+├── docs/
+├── pics/
+├── vids/
+├── emails/
+└── export_manifest.jsonl
+```
+
+Each exported file is renamed with a short SHA-256 prefix to avoid
+collisions between same-named files from different sources, without
+losing the original filename. Every export is recorded twice: once in
+`export_manifest.jsonl` (original path, source, matched keyword,
+exported filename, SHA-256) and once as a `file_exported` entry in the
+case's hash-chained `processing_actions.jsonl`, so the export record
+carries the same chain-of-custody guarantees as everything else in the
+case.
 
 ---
 
@@ -233,7 +347,7 @@ it, plus two optional validation flags:
 | Anti-forensic activity | plaso (event log clearing, timestomping via MFT SI/FN mismatch) |
 
 Adding a fourth playbook is just dropping a new `<name>.yaml` file
-following this same schema into `playbooks/`. `cli.py` discovers
+following this same schema into `playbooks/`. `dfir_cli.py` discovers
 playbooks dynamically at case-creation time, no code changes required.
 
 ---
