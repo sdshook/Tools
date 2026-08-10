@@ -727,6 +727,39 @@ def write_cli():
             return sorted(p.name for p in CASES_DIR.iterdir() if p.is_dir())
 
 
+        def is_same_filesystem_as_vm_root(path: Path) -> bool:
+            """Best-effort check that a chosen storage path isn't secretly
+            on the VM's own disk (e.g. a directory under /opt or /home that
+            resolves to the root filesystem rather than a mounted external
+            or network volume)."""
+            try:
+                return os.stat(path).st_dev == os.stat("/").st_dev
+            except OSError:
+                return False
+
+
+        def prompt_evidence_storage_root(default: str = "") -> str:
+            while True:
+                storage_root = input(
+                    "Evidence storage root - external/NAS/network path where "
+                    "mounted evidence and plaso timelines will be written "
+                    f"(never the VM's own disk){f\' [{default}]\' if default else \'\'}: "
+                ).strip() or default
+                if not storage_root:
+                    print("Required - evidence artifacts are never written under /opt/dfir-agent.")
+                    continue
+                path = Path(storage_root)
+                path.mkdir(parents=True, exist_ok=True)
+                if is_same_filesystem_as_vm_root(path):
+                    confirm = input(
+                        f"WARNING: {storage_root!r} appears to be on the same filesystem "
+                        f"as the VM itself, not a separate/external volume. Use it anyway? [y/N]: "
+                    ).strip().lower()
+                    if confirm != "y":
+                        continue
+                return storage_root
+
+
         def prompt_new_case() -> Path:
             print("\\n=== New Case Intake ===")
             case_ref = input("Case reference number: ").strip()
@@ -739,6 +772,7 @@ def write_cli():
                 case_type = input(f"Not found. Choose one of {playbooks}: ").strip()
             description = input("Brief case description: ").strip()
             evidence_note = input("Evidence source(s) (paths - will be mounted read-only): ").strip()
+            evidence_storage_root = prompt_evidence_storage_root()
 
             case_id = case_ref.replace(" ", "_") or datetime.now(timezone.utc).strftime("case_%Y%m%dT%H%M%SZ")
             case_dir = CASES_DIR / case_id
@@ -756,6 +790,7 @@ def write_cli():
                 "case_type": case_type,
                 "description": description,
                 "evidence_note": evidence_note,
+                "evidence_storage_root": evidence_storage_root,
                 "opened_at": datetime.now(timezone.utc).isoformat(),
             }
             (case_dir / "case_meta.json").write_text(json.dumps(meta, indent=2))
@@ -802,8 +837,12 @@ def write_cli():
                                 per evidence item - each gets its own
                                 labeled source_id and storage file, and
                                 results are combined with attribution when
-                                the agent queries. Never routes through the
-                                LLM, and credentials are never logged.
+                                the agent queries. Mounts and timelines are
+                                written to the external storage root you
+                                choose (prompted at case creation, and
+                                overridable per source) - never to the VM's
+                                own disk. Never routes through the LLM, and
+                                credentials are never logged.
           /playbook            List questions in this case's playbook.
           /findings            Show all findings recorded so far.
           /run <id>            Run a playbook question (or re-run it fresh).
@@ -860,8 +899,12 @@ def write_cli():
                       f"re-run /process with a distinct label.")
                 return
 
+            storage_root = prompt_evidence_storage_root(default=meta.get("evidence_storage_root", ""))
+            source_root = Path(storage_root) / case_dir.name / source_id
+
             logger.log_action("evidence_processing_started",
-                               {"source_id": source_id, "image_path": image_path})
+                               {"source_id": source_id, "image_path": image_path,
+                                "storage_root": storage_root})
 
             print("Computing SHA-256 of the evidence image for chain of custody "
                   "(may take a while for large images)...")
@@ -870,7 +913,7 @@ def write_cli():
                                {"source_id": source_id, "image_path": image_path, "sha256": digest})
             print(f"SHA-256: {digest}")
 
-            mount_root = case_dir / "evidence_index" / "mnt" / source_id
+            mount_root = source_root / "mnt"
             mount_root.mkdir(parents=True, exist_ok=True)
             working_path = image_path
 
@@ -936,7 +979,7 @@ def write_cli():
                       f"then re-run /process pointing at the decrypted path.")
                 return
 
-            storage_file = case_dir / "evidence_index" / f"{source_id}.plaso"
+            storage_file = source_root / f"{source_id}.plaso"
             print(f"Running log2timeline against {final_path} -> {storage_file} "
                   f"(this can take a long time on large evidence)...")
             logger.log_action("plaso_processing_started", {"source_id": source_id, "source_path": final_path})
@@ -952,6 +995,7 @@ def write_cli():
             manifest["sources"].append({
                 "source_id": source_id, "label": source_id, "image_path": image_path,
                 "sha256": digest, "encryption": enc, "final_mount": final_path,
+                "storage_root": storage_root,
                 "plaso_storage_file": str(storage_file),
                 "processed_at": datetime.now(timezone.utc).isoformat(),
             })
@@ -960,6 +1004,9 @@ def write_cli():
                                {"source_id": source_id, "total_sources": len(manifest["sources"])})
             print(f"\\nProcessing complete. Source \'{source_id}\' registered "
                   f"({len(manifest[\'sources\'])} total for this case).")
+            print(f"Evidence mount and timeline written to: {source_root}")
+            print("(Only case metadata, logs, and findings live under /opt/dfir-agent - "
+                  "evidence itself stays at the storage root you chose.)")
             print("The agent's plaso_query_timeline tool automatically queries "
                   "all registered sources and tags results by source_id - "
                   "run /process again for any additional evidence items.")
