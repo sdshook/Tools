@@ -13,14 +13,15 @@ a case.
 
 Everything here is provisioned by a single build script
 (`build_dfir_vm.py`) onto a clean Ubuntu 22.04/24.04 VM. The resulting
-system is referred to below as **dfir.py**: the running console, agent,
-and toolset the build script produces.
+system is referred to below as **the FORVM console** - the running
+console (`dfir_cli.py`), agent, and toolset the build script produces.
 
 ---
 
-## What dfir.py does
+## What the FORVM console does
 
-dfir.py is the deployed system: an interactive console (`dfir_cli.py`) backed
+The FORVM console is the deployed system: an interactive console
+(`dfir_cli.py`) backed
 by an agent loop (`agent.py`) that has read-only tool access to a fixed
 set of forensic utilities. At a high level, a session looks like this:
 
@@ -51,7 +52,8 @@ set of forensic utilities. At a high level, a session looks like this:
 
 Every tool call, every agent decision, and every word exchanged with the
 examiner is logged to the case directory in three separate,
-hash-chained files (see *Logging & Chain of Custody* below). dfir.py is
+hash-chained files (see *Logging & Chain of Custody* below). The FORVM
+console is
 built around the assumption that findings may need to be defended later,
 not just produced quickly.
 
@@ -100,7 +102,7 @@ not just produced quickly.
 │   ├── malware_process_ioc.yaml
 │   └── host_compromise.yaml
 ├── agent.py                      the tool-calling loop, caching, validation
-├── dfir_cli.py                  the interactive console
+├── dfir_cli.py                   the interactive console
 └── .env                          CLAUDE_API_KEY (chmod 600, root-only)
 ```
 
@@ -183,7 +185,7 @@ extra log-format reconciliation Zeek would require.
 
 ---
 
-## Running dfir.py
+## Running the FORVM console
 
 ```bash
 sudo python3 build_dfir_vm.py --claude-api-key sk-ant-...
@@ -354,15 +356,25 @@ playbooks dynamically at case-creation time, no code changes required.
 
 ## Validation architecture
 
-dfir.py treats "the agent said so" as insufficient on its own. Every
+The FORVM console treats "the agent said so" as insufficient on its own. Every
 finding is subject to:
 
 - **Citation discipline**: every claim must be backed by a specific
   tool-returned `result_ref`, traceable through `tool_calls.jsonl`.
-- **Plaso-first, minimum three queries**: for any plaso-required check,
-  the agent must try at least three differently-scoped queries before
-  concluding plaso lacks the answer; a single narrow empty result is
-  never sufficient grounds to move on.
+- **Plaso-first, targeted, minimum three queries**: for any plaso-required
+  check, an unfiltered plaso_query_timeline call returns every event
+  across every evidence source, which is truncated for real evidence -
+  the agent is required to use the `filter_expression` parameter
+  (psort's real filter syntax) rather than dump-and-hope: `data_type`,
+  `filename`, and `sha256_hash` are genuinely filterable; `parser`,
+  `message`, `source`, and `source_short` are not - plaso removed
+  `parser` from its filter engine entirely.
+  At least three differently-scoped calls,
+  with at least one genuinely filtered, are required before *any*
+  conclusion on that check - supported, not_supported, or inconclusive.
+  Finding a match on the first unfiltered query is not grounds to stop
+  early; a single narrow empty result is never sufficient grounds to
+  move on either.
 - **Native extraction fallback**: if plaso and the other bound tools
   genuinely can't answer a check, the agent proposes an exact tool and
   command (`suggest_native_extraction`) for the human examiner to run,
@@ -409,7 +421,7 @@ any log, file, or return value that could end up logged.
 
 ## Design principle: HOTL, not autonomous
 
-dfir.py's agent is built to do exhaustive, well-cited legwork and
+The FORVM console's agent is built to do exhaustive, well-cited legwork and
 surface it for review, not to conclude a case on its own. Mounting,
 decryption, and timeline construction (`/process`) are deterministic
 infrastructure operations that never touch the LLM. Report drafts
