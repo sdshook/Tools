@@ -781,21 +781,83 @@ def write_tool_stubs():
         which evidence item it came from.
         """
         import json
+        import os
+        import shutil
         import subprocess
+        import sys
+        import tempfile
         from pathlib import Path
 
+        def _venv_env():
+            """Prepend the running venv's bin/ to PATH for the subprocess.
+            Needed because pip-installed console scripts (log2timeline,
+            psort, vol) only exist in venv/bin - and the desktop launcher
+            invokes {venv}/bin/python directly rather than through an
+            activated shell, so ambient PATH won't include it. Deriving
+            from sys.executable works regardless of how this process was
+            started. Confirmed necessary against a real pip-installed
+            plaso: subprocess.run(["psort", ...]) raised FileNotFoundError
+            without this."""
+            env = os.environ.copy()
+            venv_bin = str(Path(sys.executable).parent)
+            env["PATH"] = venv_bin + os.pathsep + env.get("PATH", "")
+            return env
+
         def run_log2timeline(image_path: str, storage_file: str) -> str:
-            cmd = ["log2timeline.py", storage_file, image_path]
-            subprocess.run(cmd, check=True)
+            # Current plaso versions install the console-script entrypoint
+            # as "log2timeline" (no .py extension) - confirmed against a
+            # real pip-installed plaso 20260720. --storage-file is the
+            # explicit flag rather than relying on positional ordering.
+            # --status_view none avoids a curses status display that
+            # can misbehave with no controlling TTY under subprocess.
+            cmd = ["log2timeline", "--storage-file", storage_file,
+                   "--status_view", "none", image_path]
+            subprocess.run(cmd, check=True, env=_venv_env())
             return storage_file
 
         def query_timeline(storage_file: str, output_format: str = "json_line",
-                            date_filter: str | None = None) -> str:
-            cmd = ["psort.py", "-o", output_format, storage_file]
+                            date_filter: str | None = None,
+                            filter_expression: str | None = None) -> str:
+            # psort's json_line output requires an explicit -w OUTPUT_FILE -
+            # confirmed against a real run; it does not write to stdout.
+            # --status_view none avoids the same curses issue as above.
+            #
+            # IMPORTANT: psort refuses to write to an output path that
+            # already exists ("ERROR: Output file already exists").
+            # tempfile.NamedTemporaryFile() creates the file immediately,
+            # which caused every real run to fail deterministically with
+            # that error - confirmed by inspecting actual stdout, which an
+            # earlier version of this function wasn't checking (only
+            # stderr, which was empty, making it look like an intermittent
+            # timing issue when it was actually this same conflict every
+            # time). Fix: reserve a temp DIRECTORY, not a file, and build
+            # a path inside it that psort creates itself.
+            #
+            # filter_expression is a psort FILTER positional argument
+            # (e.g. "data_type is 'fs:stat' and filename contains 'x'"),
+            # confirmed against real plaso: 'data_type', 'filename', and
+            # 'sha256_hash' are genuinely filterable attributes; 'parser',
+            # 'message', 'source', and 'source_short' are NOT (they are
+            # output-only fields - 'parser' was fully removed from the
+            # filter engine as of plaso 20230724, confirmed both by
+            # official docs and by testing 'parser is ...' against real
+            # data that should have matched and got zero results). The
+            # FILTER argument must come AFTER the storage file path.
+            tmp_dir = tempfile.mkdtemp()
+            out_path = str(Path(tmp_dir) / "psort_output.jsonl")
+            cmd = ["psort", "-o", output_format, "-w", out_path, "--status_view", "none"]
             if date_filter:
                 cmd += ["--slice", date_filter]
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-            return result.stdout
+            cmd.append(storage_file)
+            if filter_expression:
+                cmd.append(filter_expression)
+
+            try:
+                subprocess.run(cmd, check=True, capture_output=True, text=True, env=_venv_env())
+                content = Path(out_path).read_text()
+            finally:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            return content
 
         def parse_json_lines(raw_output: str) -> list[dict]:
             events = []
@@ -815,20 +877,27 @@ def write_tool_stubs():
                 return {"sources": []}
             return json.loads(manifest_path.read_text())
 
-        def query_case_timeline(case_dir: str, date_filter: str | None = None) -> list[dict]:
+        def query_case_timeline(case_dir: str, date_filter: str | None = None,
+                                 filter_expression: str | None = None) -> list[dict]:
             """Query across ALL evidence sources processed for this case.
             This is the entry point the agent should always use - it never
             needs to know individual storage file paths. Every returned
             event carries _evidence_source_id and _evidence_source_label
             so the agent (and the human reviewer) can attribute a finding
-            to the specific evidence item it came from."""
+            to the specific evidence item it came from.
+
+            ALWAYS prefer passing filter_expression once the relevant
+            data_type/filename pattern is known - an unfiltered call
+            returns the ENTIRE timeline across every source, which for
+            real evidence can be tens of thousands of events."""
             manifest = load_manifest(case_dir)
             tagged_events = []
             for src in manifest.get("sources", []):
                 storage_file = src.get("plaso_storage_file")
                 if not storage_file or not Path(storage_file).exists():
                     continue
-                raw = query_timeline(storage_file, date_filter=date_filter)
+                raw = query_timeline(storage_file, date_filter=date_filter,
+                                      filter_expression=filter_expression)
                 for event in parse_json_lines(raw):
                     event["_evidence_source_id"] = src.get("source_id")
                     event["_evidence_source_label"] = src.get("label")
@@ -839,13 +908,26 @@ def write_tool_stubs():
     (tools_dir / "volatility_tool.py").write_text(textwrap.dedent('''\
         """Wraps volatility3 plugins with JSON output for clean agent citations."""
         import json
+        import os
         import subprocess
+        import sys
+        from pathlib import Path
+
+        def _venv_env():
+            """See plaso_tool.py's _venv_env for why this is needed: vol
+            is a pip-installed console script that only lives in venv/bin,
+            and the desktop launcher invokes {venv}/bin/python directly
+            without activating the venv, so ambient PATH won't find it."""
+            env = os.environ.copy()
+            venv_bin = str(Path(sys.executable).parent)
+            env["PATH"] = venv_bin + os.pathsep + env.get("PATH", "")
+            return env
 
         def run_plugin(memory_image: str, plugin: str, extra_args: list[str] | None = None) -> list[dict]:
             cmd = ["vol", "-f", memory_image, "-r", "json", plugin]
             if extra_args:
                 cmd += extra_args
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True, env=_venv_env())
             return json.loads(result.stdout)
 
         def get_process_tree(memory_image: str) -> list[dict]:
@@ -1961,12 +2043,31 @@ def write_agent_skeleton():
         3. You only have READ access to evidence. Never attempt to write,
            delete, or modify anything via a tool call.
         4. Plaso is the primary evidence source for this investigation.
-           For any check requiring plaso, try at least three differently
-           -scoped plaso_query_timeline calls (a different date_filter, a
-           wider time window, or no filter at all) before concluding
-           plaso cannot answer it - a single narrow, empty-handed query
-           is not sufficient grounds to move on. Only after genuinely
-           exhausting reasonable plaso queries should you fall back to
+           Prefer a targeted filter_expression over dumping the whole
+           timeline: an unfiltered plaso_query_timeline call returns
+           EVERY event across every evidence source, which for real
+           evidence can be tens of thousands of events and will be
+           truncated before you see all of it. Verified filterable
+           attributes are data_type, filename, and sha256_hash (e.g.
+           data_type is 'fs:stat' and filename contains 'confidential').
+           parser, message, source, and source_short are NOT filterable
+           (plaso removed 'parser' from its filter engine entirely) -
+           do not attempt to filter on them, it will silently return
+           zero results even when matching data exists. A reasonable
+           pattern: your FIRST plaso_query_timeline call for a check can
+           be broad or date-scoped to discover what's actually present
+           (data_type values, filenames), then use filter_expression on
+           subsequent calls to narrow to what's relevant. For ANY check
+           requiring plaso, make at least three differently-scoped calls
+           (varying filter_expression and/or date_filter) and use
+           filter_expression on at least one of them BEFORE concluding -
+           this applies no matter which way the answer comes out.
+           Finding a match on your first, unfiltered query is not
+           grounds to stop early and report "supported"; you still must
+           corroborate with properly scoped follow-up queries. Repeating
+           unfiltered or identically-scoped queries does not count as
+           genuine investigation. Only after genuinely exhausting
+           reasonable plaso queries should you fall back to
            the other bound tools (volatility, tshark, bulk_extractor,
            yara) where the playbook check calls for them.
         5. If, after that, a required artifact still cannot be answered
@@ -2020,10 +2121,14 @@ def write_agent_skeleton():
         TOOLS = [
             {
                 "name": "plaso_query_timeline",
-                "description": "Query the processed plaso timeline(s) for this case (psort), optionally filtered to a date/time slice. Automatically queries EVERY evidence source registered for this case and tags each returned event with which source it came from - you never need to know or supply a storage file path. Returns events with source file, parser, and offset for citation. This is the PRIMARY tool - try multiple differently-scoped queries before concluding it lacks the answer.",
+                "description": "Query the processed plaso timeline(s) for this case (psort). Automatically queries EVERY evidence source registered for this case and tags each returned event with which source it came from - you never need to know or supply a storage file path. ALWAYS prefer filter_expression once you know what to look for - an unfiltered call returns the entire timeline across every source, which is truncated for real evidence and wastes both tokens and turns. Use an unfiltered or date-scoped call only as an initial exploratory step to see what data_type values and filenames are actually present.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
+                        "filter_expression": {
+                            "type": "string",
+                            "description": "A psort filter expression to scope the query, e.g. data_type is 'fs:stat' and filename contains 'confidential'. Verified filterable attributes: data_type, filename, sha256_hash (and other artifact-specific data fields). NOT filterable: parser, message, source, source_short - these are output-only fields and will silently return zero results even when matching data exists. Operators: is, contains, and, or.",
+                        },
                         "date_filter": {"type": "string", "description": "Optional psort --slice filter, e.g. '2026-01-15 00:00:00'"},
                     },
                 },
@@ -2107,7 +2212,8 @@ def write_agent_skeleton():
         def dispatch_tool(name: str, tool_input: dict, case_dir: Path):
             if name == "plaso_query_timeline":
                 return plaso_tool.query_case_timeline(
-                    str(case_dir), date_filter=tool_input.get("date_filter"))
+                    str(case_dir), date_filter=tool_input.get("date_filter"),
+                    filter_expression=tool_input.get("filter_expression"))
             if name == "volatility_run_plugin":
                 return volatility_tool.run_plugin(
                     tool_input["memory_image"], tool_input["plugin"], tool_input.get("extra_args"))
@@ -2206,6 +2312,7 @@ def write_agent_skeleton():
             negative_requires_all = question.get("negative_requires_all_checks", False)
             checks_invoked = set()
             plaso_query_count = 0
+            plaso_filter_used = False
             native_suggestions = []
 
             prior_finding = load_finding(case_dir, question["id"]) if mode == "verify" else None
@@ -2231,21 +2338,38 @@ def write_agent_skeleton():
                             "Provide your final answer as the fenced JSON block described in the system prompt."})
                         continue
 
-                    # Enforce plaso-first looping: don't accept a non-"supported"
-                    # conclusion on a plaso-required check after only one narrow
-                    # query, unless the model already proposed a native
-                    # extraction to cover the gap.
-                    if ("plaso" in checks_required and plaso_query_count < 3
-                            and finding.get("finding") in ("not_supported", "inconclusive")
-                            and not native_suggestions):
-                        logger.log_action("plaso_coverage_insufficient_retry_requested",
-                                           {"id": question["id"], "plaso_query_count": plaso_query_count})
-                        messages.append({"role": "user", "content":
-                            f"You've only queried plaso {plaso_query_count} time(s) for this question. "
-                            f"A minimum of 3 differently-scoped plaso_query_timeline calls is required "
-                            f"before concluding, or call suggest_native_extraction if plaso genuinely "
-                            f"cannot cover this artifact."})
-                        continue
+                    # Enforce plaso-first looping for ANY conclusion (not
+                    # just negative/inconclusive) on a plaso-required check,
+                    # unless the model already proposed a native extraction
+                    # to cover a genuine gap. A "supported" finding reached
+                    # via a single unfiltered dump is still under-verified -
+                    # tightened deliberately so efficient, targeted psort
+                    # usage is required regardless of which way the answer
+                    # comes out, not just when the answer is negative.
+                    if "plaso" in checks_required and not native_suggestions:
+                        if plaso_query_count < 3:
+                            logger.log_action("plaso_coverage_insufficient_retry_requested",
+                                               {"id": question["id"], "plaso_query_count": plaso_query_count,
+                                                "finding": finding.get("finding")})
+                            messages.append({"role": "user", "content":
+                                f"You've only queried plaso {plaso_query_count} time(s) for this question. "
+                                f"A minimum of 3 differently-scoped plaso_query_timeline calls is required "
+                                f"before concluding - this applies regardless of whether your answer is "
+                                f"supported, not_supported, or inconclusive - or call "
+                                f"suggest_native_extraction if plaso genuinely cannot cover this artifact."})
+                            continue
+                        if not plaso_filter_used:
+                            logger.log_action("plaso_no_filter_expression_used",
+                                               {"id": question["id"], "plaso_query_count": plaso_query_count,
+                                                "finding": finding.get("finding")})
+                            messages.append({"role": "user", "content":
+                                "None of your plaso_query_timeline calls used filter_expression. "
+                                "Now that you've seen what data_type values and filenames are present, "
+                                "run at least one properly filtered query (e.g. data_type is '...' and "
+                                "filename contains '...') before concluding - this applies even to a "
+                                "supported finding. Repeating unfiltered dumps does not count as "
+                                "narrowing the investigation."})
+                            continue
 
                     if (finding.get("finding") == "not_supported" and negative_requires_all
                             and not checks_required.issubset(checks_invoked)):
@@ -2335,10 +2459,28 @@ def write_agent_skeleton():
                         checks_invoked.add(category)
                         if tu.name == "plaso_query_timeline":
                             plaso_query_count += 1
+                            if tu.input.get("filter_expression"):
+                                plaso_filter_used = True
                         if tu.name == "suggest_native_extraction":
                             native_suggestions.append({**tu.input, "result_ref": record["entry_hash"][:16]})
-                        payload = {"result_ref": record["entry_hash"][:16], "data": result}
-                        content = json.dumps(payload, default=str)[:8000]
+
+                        # Cap by event COUNT rather than blindly truncating the
+                        # JSON string - character truncation can cut mid-object
+                        # and hand the model invalid JSON. An unfiltered plaso
+                        # query can return thousands of events; capping here
+                        # also makes the cost of skipping filter_expression
+                        # concrete rather than theoretical.
+                        MAX_EVENTS = 40
+                        data_for_payload = result
+                        truncated_note = None
+                        if isinstance(result, list) and len(result) > MAX_EVENTS:
+                            truncated_note = (f"Showing {MAX_EVENTS} of {len(result)} total results - "
+                                               f"narrow with filter_expression to see the rest.")
+                            data_for_payload = result[:MAX_EVENTS]
+                        payload = {"result_ref": record["entry_hash"][:16], "data": data_for_payload}
+                        if truncated_note:
+                            payload["truncated"] = truncated_note
+                        content = json.dumps(payload, default=str)
                         tool_results.append({"type": "tool_result", "tool_use_id": tu.id, "content": content})
                     except Exception as exc:
                         logger.log_tool_call(category, tu.name, tu.input, f"error: {exc}")
