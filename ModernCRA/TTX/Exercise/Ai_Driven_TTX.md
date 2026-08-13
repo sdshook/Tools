@@ -606,7 +606,14 @@ END OF SESSION RECORD
 ============================================================
 ```
 
-**At the conclusion of the simulation, always present both the Executive Summary and Scorecard and the complete Session Record. Offer to provide all deliverables in a single consolidated text block that can be copied or downloaded.**
+**At the conclusion of the simulation:**
+
+1. Present a brief summary indicating the exercise is complete
+2. Ask the user: *"Would you like to download the reports? Please select a format: (A) Word document (.docx), (B) PDF, or (C) Markdown (.md)"*
+3. Generate and provide the deliverables in the requested format:
+   - **Executive Summary and Scorecard** -- Complete scoring document
+   - **Session Record** -- Full Q&A transcript
+4. If the platform supports file generation, create downloadable files. Otherwise, provide the formatted content in a clearly marked code block that can be easily copied and saved.
 
 ---
 
