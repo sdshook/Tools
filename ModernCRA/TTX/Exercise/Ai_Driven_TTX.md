@@ -79,7 +79,85 @@ Gather details about the specific breach scenario.
 
 ---
 
-## Phase 4: Regulatory & Legal Analysis
+## Phase 4: Organizational Verification and Research
+
+Before proceeding with analysis, verify the accuracy of organizational information provided. Participants are often not fully informed about their organization's regulatory posture, contractual obligations, or operational dependencies.
+
+### 4.1 Research the Organization
+
+If the organization name was provided, conduct research to gather or verify:
+
+**Public Information:**
+- Corporate structure: Public/private status, exchange listings, recent SEC filings
+- Industry classification and regulatory sector (financial services, healthcare, critical infrastructure, etc.)
+- Recent news: Prior incidents, M&A activity, regulatory actions, leadership changes
+- Publicly stated security commitments or certifications
+
+**Regulatory Footprint:**
+- Applicable regulations based on industry and jurisdictions served
+- Known regulatory relationships or consent decrees
+- Data protection registrations (EU DPAs, state AG registrations)
+
+**Supply Chain Position:**
+- Major customers (if publicly known)
+- Industry position: Upstream provider, downstream consumer, or both
+- Critical infrastructure designations
+
+### 4.2 Verification Questions
+
+Present findings to the participant and ask verification questions to fill gaps or correct assumptions:
+
+**Corporate and Regulatory:**
+- "Based on my research, [Organization] appears to be [public/private] and operates in [industry]. Is this correct?"
+- "I found references to [specific regulations, certifications, or prior incidents]. Can you confirm or clarify?"
+- "Are there regulatory obligations or consent decrees I should be aware of that are not publicly documented?"
+
+**Operational:**
+- "You mentioned [X] customers would be affected. Can you confirm the approximate breakdown by industry or regulatory sensitivity (healthcare, financial services, government)?"
+- "Are any of your customers themselves critical infrastructure providers or subject to heightened notification requirements?"
+- "You indicated [insurance coverage details]. Have you verified these limits with your risk management or legal team, or are these estimates?"
+
+**Supply Chain:**
+- "If your services were unavailable for [timeframe], which downstream customers would face the most severe impact?"
+- "Are there contractual SLAs with financial penalties that would be triggered? What are the thresholds?"
+- "Do any customer contracts include security breach notification requirements shorter than regulatory minimums?"
+
+**Communications:**
+- "Who is the designated incident spokesperson? Has this person received media training?"
+- "Is there an existing crisis communications plan, or would this be developed ad hoc?"
+- "For a material incident, who has authority to approve public statements and regulatory filings?"
+
+### 4.3 Gap Identification
+
+Identify information gaps that could affect scoring accuracy:
+
+| Topic | Status | Impact on Exercise |
+|-------|--------|-------------------|
+| Insurance coverage details | [Verified / Estimated / Unknown] | [High / Medium / Low] |
+| Contractual SLA obligations | [Verified / Estimated / Unknown] | [High / Medium / Low] |
+| Regulatory notification deadlines | [Verified / Estimated / Unknown] | [High / Medium / Low] |
+| Customer industry breakdown | [Verified / Estimated / Unknown] | [High / Medium / Low] |
+| Incident response authority chain | [Verified / Estimated / Unknown] | [High / Medium / Low] |
+
+For any item marked "Unknown" with "High" impact:
+- Recommend the participant consult the appropriate internal authority (Legal, Risk, Compliance, Finance) before finalizing decisions
+- Note in the final scorecard that scoring was based on incomplete information
+
+### 4.4 Confirmation Loop
+
+Before proceeding to analysis phases, confirm:
+
+*"Based on our discussion and my research, here is my understanding of your organization's profile:*
+
+*[Summary of verified organizational details]*
+
+*Please confirm this is accurate, or provide corrections. Once confirmed, I will proceed with regulatory analysis and playbook generation based on these facts."*
+
+Do not proceed until the participant confirms the organizational profile is accurate or provides corrections.
+
+---
+
+## Phase 5: Regulatory & Legal Analysis
 
 Based on jurisdictions and data types, conduct deep research:
 
@@ -102,24 +180,24 @@ If information is insufficient for accurate analysis, ask clarifying questions b
 
 ---
 
-## Phase 5: Response Playbook
+## Phase 6: Response Playbook
 
 Generate a structured playbook organized by phase:
 
-### 5.1 Detection & Initial Assessment
+### 6.1 Detection & Initial Assessment
 - Validate that a breach occurred
 - Scope: affected systems, data types, jurisdictions
 - Severity classification: Critical / High / Medium / Low
 - Immediate containment actions required
 
-### 5.2 Containment & Investigation
+### 6.2 Containment & Investigation
 - System isolation procedures
 - Account/credential freeze actions
 - Forensic evidence preservation
 - Root cause hypotheses and investigation priorities
 - Chain of custody documentation
 
-### 5.3 Recovery & Remediation
+### 6.3 Recovery & Remediation
 - Technical remediation: patching, malware removal, credential rotation
 - Vendor actions if third-party involvement
 - Backup restoration and integrity verification
@@ -128,11 +206,11 @@ Generate a structured playbook organized by phase:
 
 ---
 
-## Phase 6: Impact Assessment
+## Phase 7: Impact Assessment
 
 Evaluate cascading effects based on organizational profile.
 
-### 6.1 Supply Chain Impact
+### 7.1 Supply Chain Impact
 
 **Downstream Propagation:**
 - Customers directly affected by outage or data compromise
@@ -151,7 +229,7 @@ Evaluate cascading effects based on organizational profile.
 - Indemnification triggers and caps
 - Audit right activations and compliance costs
 
-### 6.2 Market & Investor Impact (Public Companies)
+### 7.2 Market & Investor Impact (Public Companies)
 
 **Stock Price Scenarios:**
 - Model potential movement based on comparable incidents
@@ -163,7 +241,7 @@ Evaluate cascading effects based on organizational profile.
 - Upstream supplier concern propagation
 - Sector contagion and peer valuation effects
 
-### 6.3 Litigation & Insurance Exposure
+### 7.3 Litigation & Insurance Exposure
 
 **Litigation Risk Map:**
 
@@ -207,7 +285,7 @@ Evaluate cascading effects based on organizational profile.
 - Side A/B/C coverage applicability
 - Allocation between covered and uncovered claims
 
-### 6.4 Integrated Impact Scoring
+### 7.4 Integrated Impact Scoring
 
 Generate consolidated scores across dimensions:
 
@@ -221,11 +299,11 @@ Generate consolidated scores across dimensions:
 
 ---
 
-## Phase 7: Communications Strategy
+## Phase 8: Communications Strategy
 
 Orchestrate stakeholder communications with precise sequencing.
 
-### 7.1 Activation & Sequencing
+### 8.1 Activation & Sequencing
 
 **Pre-Disclosure (Holding Period):**
 1. Internal alignment: Executive and board briefing
@@ -240,7 +318,7 @@ Orchestrate stakeholder communications with precise sequencing.
 4. Social media monitoring activation
 5. Employee talking points distribution
 
-### 7.2 Communications Drafts
+### 8.2 Communications Drafts
 
 Generate three distinct communications:
 
@@ -264,7 +342,7 @@ Generate three distinct communications:
 - Demonstrates responsive action
 - Expresses concern without admitting liability
 
-### 7.3 Media Strategy
+### 8.3 Media Strategy
 
 **Spokesperson Designation:**
 - CEO for major incidents
@@ -290,7 +368,7 @@ Generate three distinct communications:
 - Customer/partner public criticism
 - Analyst downgrades
 
-### 7.4 Ongoing Communications
+### 8.4 Ongoing Communications
 
 - Update cadence: Daily, at milestones, or as material facts emerge
 - Channel strategy by audience
@@ -299,9 +377,9 @@ Generate three distinct communications:
 
 ---
 
-## Phase 8: Timeline & Accountability
+## Phase 9: Timeline & Accountability
 
-### 8.1 Response Timeline
+### 9.1 Response Timeline
 
 | Milestone | Target | Key Actions |
 |-----------|--------|-------------|
@@ -311,7 +389,7 @@ Generate three distinct communications:
 | Day 7 | 1 week | Customer notifications, press statement if needed, remediation underway |
 | Week 4 | 30 days | Post-incident review, lessons learned, control improvements initiated |
 
-### 8.2 Stakeholder Responsibility Matrix
+### 9.2 Stakeholder Responsibility Matrix
 
 | Role | Owns | Approves | Informed |
 |------|------|----------|----------|
@@ -324,7 +402,7 @@ Generate three distinct communications:
 
 ---
 
-## Phase 9: Deliverables Package
+## Phase 10: Deliverables Package
 
 Compile final outputs:
 
