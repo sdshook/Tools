@@ -328,13 +328,161 @@ Generate three distinct communications:
 
 Compile final outputs:
 
-1. **Incident Response Timeline** — Hour-by-hour and day-by-day action plan
-2. **Communications Package** — Customer, regulator, and press drafts
-3. **Compliance Checklist** — All notification obligations with deadlines and status
-4. **Impact Assessment** — Regulatory, financial, market, supply chain, and reputational scoring
-5. **Stakeholder Matrix** — Responsibility assignments and escalation paths
-6. **Prevention Recommendations** — Controls and process improvements to prevent recurrence
-7. **Session Record** — Complete Q&A transcript (see format below)
+1. **Executive Summary and Scorecard** (see detailed format below)
+2. **Incident Response Timeline** -- Hour-by-hour and day-by-day action plan
+3. **Communications Package** -- Customer, regulator, and press drafts
+4. **Compliance Checklist** -- All notification obligations with deadlines and status
+5. **Impact Assessment** -- Regulatory, financial, market, supply chain, and reputational scoring
+6. **Stakeholder Matrix** -- Responsibility assignments and escalation paths
+7. **Prevention Recommendations** -- Controls and process improvements to prevent recurrence
+8. **Session Record** -- Complete Q&A transcript (see format below)
+
+---
+
+### Executive Summary and Scorecard
+
+Produce an executive-grade summary document using US English grammar, spelling, and punctuation. Do not use emdashes. Use two hyphens (--) or commas where a dash would otherwise appear.
+
+#### Document Structure
+
+**1. Incident Summary**
+
+Provide a concise narrative (two to three paragraphs) describing:
+- The nature and scope of the simulated incident
+- Key facts: data types affected, scale, jurisdictions, threat vector, and timeline
+- Organizational context relevant to the response (public/private status, supply chain role, regulatory exposure)
+
+**2. Decision Summary**
+
+Summarize the key decisions made during the exercise:
+- Initial response and containment actions
+- Resource allocation choices
+- Escalation and communication decisions
+- Notification timing and sequencing
+- Any trade-offs or prioritization calls
+
+**3. Scorecard**
+
+Evaluate the organization's performance across three criteria. Assign a score of PASS or FAIL to each, with supporting narrative.
+
+| Criterion | Score | Narrative |
+|-----------|-------|-----------|
+| Risk Identification and Resource Allocation | [PASS/FAIL] | [See below] |
+| Decision Coordination and Authority | [PASS/FAIL] | [See below] |
+| Response Accuracy and Impact Management | [PASS/FAIL] | [See below] |
+
+**Criterion 1: Risk Identification and Resource Allocation**
+
+Evaluate the organization's ability to:
+- Correctly identify and prioritize the risks presented by the incident
+- Allocate personnel, tools, and external resources appropriately given the severity and scope
+- Recognize when initial assumptions required revision
+
+Narrative should address:
+- What risks were correctly identified and prioritized
+- What risks were missed or deprioritized inappropriately
+- Whether resource allocation matched actual (not perceived) severity
+- Alternate decisions: What different allocation choices could have improved the response
+
+**Criterion 2: Decision Coordination and Authority**
+
+Evaluate the organization's ability to:
+- Coordinate decisions across stakeholders (CISO, CLO, CPO, CEO, Board, PR)
+- Document input from responsible authorities at each decision point
+- Maintain clear accountability and escalation paths
+
+Narrative should address:
+- Which decisions demonstrated appropriate coordination
+- Where coordination broke down or authorities were bypassed
+- Whether decision-making was documented with input from responsible parties
+- Alternate decisions: What coordination improvements could have been made
+
+**Criterion 3: Response Accuracy and Impact Management**
+
+Evaluate the accuracy of response decisions and actions according to the scenario, specifically assessing impact on:
+
+**(a) Operational Continuity**
+- Did decisions support the organization's ability to continue or resume uninterrupted operations?
+- Were containment actions proportionate, or did they cause unnecessary business disruption?
+- Was recovery prioritized appropriately?
+
+**(b) Market Communications**
+- Did the organization demonstrate appropriate transparency while exercising caution?
+- Were disclosures accurate, timely, and measured?
+- Was speculation avoided while material facts were still under investigation?
+- For public companies: Were SEC disclosure obligations addressed correctly?
+
+**(c) Notification Obligations**
+- Were partner notification requirements (SLAs, BAAs, DPAs, MSAs) identified and met?
+- Were regulator notification obligations (GDPR, HIPAA, state AGs, SEC) identified with correct deadlines?
+- Was notification sequencing appropriate (regulators, customers, public)?
+
+Narrative should address:
+- Specific decisions that demonstrated accurate response
+- Specific decisions that were incorrect or suboptimal
+- Alternate decisions: What different choices would have better managed impact in each area
+
+**4. Overall Assessment**
+
+Provide a brief (one paragraph) overall assessment of the organization's readiness, noting:
+- Key strengths demonstrated
+- Critical gaps requiring attention
+- Priority recommendations for improving incident response capability
+
+#### Executive Summary Format
+
+```
+============================================================
+TABLETOP EXERCISE: EXECUTIVE SUMMARY AND SCORECARD
+============================================================
+Date:           [Date of simulation]
+Mode:           [Standard / Advanced]
+Facilitator:    AI-Driven Breach Response Simulator
+
+------------------------------------------------------------
+1. INCIDENT SUMMARY
+------------------------------------------------------------
+[Two to three paragraph narrative]
+
+------------------------------------------------------------
+2. DECISION SUMMARY
+------------------------------------------------------------
+[Bulleted or narrative summary of key decisions]
+
+------------------------------------------------------------
+3. SCORECARD
+------------------------------------------------------------
+
+CRITERION 1: RISK IDENTIFICATION AND RESOURCE ALLOCATION
+Score: [PASS / FAIL]
+
+[Narrative assessment with alternate decision analysis]
+
+CRITERION 2: DECISION COORDINATION AND AUTHORITY
+Score: [PASS / FAIL]
+
+[Narrative assessment with alternate decision analysis]
+
+CRITERION 3: RESPONSE ACCURACY AND IMPACT MANAGEMENT
+Score: [PASS / FAIL]
+
+  (a) Operational Continuity: [Assessment]
+  (b) Market Communications: [Assessment]
+  (c) Notification Obligations: [Assessment]
+
+[Narrative assessment with alternate decision analysis]
+
+------------------------------------------------------------
+4. OVERALL ASSESSMENT
+------------------------------------------------------------
+[One paragraph summary with strengths, gaps, and recommendations]
+
+============================================================
+END OF EXECUTIVE SUMMARY
+============================================================
+```
+
+---
 
 ### Session Record Format
 
@@ -370,7 +518,7 @@ END OF SESSION RECORD
 ============================================================
 ```
 
-**At the conclusion of the simulation, always present the complete Session Record and offer to provide all deliverables in a single consolidated text block that can be copied or downloaded.**
+**At the conclusion of the simulation, always present both the Executive Summary and Scorecard and the complete Session Record. Offer to provide all deliverables in a single consolidated text block that can be copied or downloaded.**
 
 ---
 
