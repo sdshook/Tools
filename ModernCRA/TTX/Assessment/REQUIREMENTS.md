@@ -1,27 +1,28 @@
 # Requirements and Prerequisites
 
-All five scripts are read-only (no Set-/New-/Remove-/Add- cmdlets), target
+All nine scripts are read-only (no Set-/New-/Remove-/Add- cmdlets), target
 PowerShell 5.1+ (tested on 7.4.6, validated for 5.1 compatibility since
-that's the more common runtime for RSAT/EMS/Veeam environments), and were
-functionally tested end to end against stub/mock cmdlets before delivery,
-including edge cases (never-rotated passwords, orphaned GPOs, forwarding
-rules, audit bypass, expired API credentials, single-item API results),
-not just syntax-checked.
+that's the more common runtime for RSAT/EMS/Veeam/AD FS environments), and
+were functionally tested end to end against stub/mock cmdlets before
+delivery, including edge cases, not just syntax-checked.
 
-The two REST API scripts (Tenable.SC, AlienVault) output raw JSON rather
-than curated CSV. Those APIs' data shape can vary by client configuration
-in ways the AD/Exchange/Veeam cmdlets don't, so guessing field names or
-running several separately-filtered queries at collection time would put
-schema risk on whoever runs the script. Raw JSON removes that risk
-entirely; filtering and interpretation happen downstream during analysis
-against the same complete data instead.
+The REST API and event-log scripts (Tenable.SC, AlienVault, CyberArk PVWA,
+AD FS) output raw JSON rather than curated CSV. Those APIs' and event
+schemas can vary by client configuration and server version in ways the
+AD/Exchange/Veeam cmdlets don't, so guessing field names or running
+several separately-filtered queries at collection time would put schema
+risk on whoever runs the script. Raw JSON removes that risk entirely;
+filtering and interpretation happen downstream during analysis against the
+same complete data instead.
 
 No credentials or secrets are ever written to output. The Veeam script's
-credential inventory exports usernames only, verified during testing.
+credential inventory exports usernames only. The CyberArk script exports
+account metadata only; no vault passwords are requested or returned by the
+API calls made.
 
 DC, Exchange, and Veeam output plain CSV, readable directly in Excel.
-Tenable.SC and AlienVault output raw JSON, readable in any text editor or
-via `ConvertFrom-Json` in PowerShell.
+Tenable.SC, AlienVault, CyberArk, and both AD FS scripts output raw JSON,
+readable in any text editor or via `ConvertFrom-Json` in PowerShell.
 
 ---
 
@@ -197,3 +198,177 @@ collection windows.
 | `-ClientSecret` | Yes | | From the API client created above |
 | `-OutputPath` | No | Timestamped folder, current directory | |
 | `-LookbackDays` | No | 30 | Query window for alarms/events |
+
+---
+
+## 6. ZT_ADFS_Collection.ps1
+
+**Module:** `ADFS`, hard-required via `#Requires`. Present by default on
+every AD FS server; not available remotely without the federation proxy
+tools. Run this script on the AD FS server itself — not a member server
+or workstation.
+
+**Access:** account with AD FS read/audit rights. Local administrator on
+the AD FS server is the simplest option; a delegated account is sufficient
+if it has been granted AD FS audit role access explicitly.
+
+**Event log dependency:** step 9 (observed authentication events) requires
+Security event log read access and AD FS auditing enabled at the farm
+level. If auditing is off, step 9 writes an `_UNAVAILABLE` file noting
+the gap and the rest of the script completes normally. To check the
+current audit level without changing it: `Get-AdfsProperties |
+Select-Object AuditLevel`. An `AuditLevel` of `None` means no events
+will be present regardless of log read access.
+
+**Output is raw JSON.** Every `Get-Adfs*` cmdlet returns the full object
+exactly as the server reports it, including nested structures that CSV
+would flatten into useless `System.Object[]` strings. X.509 certificate
+objects and Windows event log records are the two exceptions — both carry
+non-serializable handles; those sections extract the fields that are
+actually usable (thumbprint, subject, not-after date; TimeCreated, Id,
+Message) rather than attempting a full object dump.
+
+**Run context:** the AD FS server, or a federation proxy server with the
+ADFS module installed.
+
+| Parameter | Required | Default | Notes |
+|---|---|---|---|
+| `-OutputPath` | No | Timestamped folder, current directory | |
+| `-EventLogDays` | No | 30 | Lookback window for step 9 auth events |
+| `-JsonDepth` | No | 8 | ConvertTo-Json depth; increase if nested objects truncate |
+
+---
+
+## 7. ZT_ADFS_SSO_Usage_Analysis.ps1
+
+**Module:** `ADFS`, hard-required. Same constraint as script 6 — run on
+the AD FS server directly.
+
+**Optional:** `ActiveDirectory` (RSAT) for the account cross-reference
+step (step 2). If the AD FS server does not have RSAT installed, pass
+`-SkipADCorrelation` to skip that step; the event-log collection (step 3)
+still runs and is the primary output of this script.
+
+**Event log dependency:** same as script 6. AD FS auditing must be enabled
+for step 3 to return data. Without it, step 3 produces an `_UNAVAILABLE`
+file and the script still completes.
+
+**Output is raw JSON.** Authentication events are stored as the full raw
+XML string (via `.ToXml()`) rather than parsed field extractions. AD FS
+audit event schema field names are not consistent across server versions
+and audit levels, so baking in field-name assumptions at collection time
+would produce silently empty columns on a mismatched version. The raw XML
+is parseable offline once the actual field names for this deployment are
+known.
+
+**Run context:** the AD FS server, with the same account as script 6.
+
+| Parameter | Required | Default | Notes |
+|---|---|---|---|
+| `-OutputPath` | No | Timestamped folder, current directory | |
+| `-EventLogDays` | No | 90 | Lookback window for auth event collection |
+| `-SkipADCorrelation` | No | Off | Skip the AD account cross-reference if RSAT is not present |
+| `-JsonDepth` | No | 10 | ConvertTo-Json depth |
+
+---
+
+## 8. ZT_CyberArk_Collection.ps1
+
+**Module:** none. Uses only built-in `Invoke-RestMethod` against the PVWA
+REST API. Tested against PVWA REST API v12+ URL conventions; endpoint
+paths can shift slightly between versions — verify against the PVWA's own
+Swagger/API reference at `https://<pvwa>/PasswordVault/swagger` if a call
+returns 404.
+
+**Access:** a PVWA account with the **Auditor** role, or a custom role
+with at minimum: List Safes, View Safe Details, List Accounts, View
+Accounts, View Safe Members. A dedicated read-only auditor account is
+strongly preferred over an admin account. Credentials are prompted
+interactively via `Get-Credential` and are not written anywhere.
+
+**Auth type:** `-AuthType` defaults to `CyberArk` (native vault
+authentication). Change to `LDAP`, `RADIUS`, or `Windows` if the auditor
+account authenticates via those methods. RADIUS authentication will prompt
+for an OTP code during the `Get-Credential` step — the OTP is passed as
+part of the password field, separated by a comma, per CyberArk's RADIUS
+convention.
+
+**Network:** HTTPS (443) reachability to the PVWA from the machine running
+the script.
+
+**Fully paginated.** The accounts endpoint loops in 1,000-record pages
+until the API returns a partial page, so the export contains every vaulted
+account, not just the first page.
+
+**Output is raw JSON.** The PVWA API's account object schema — especially
+the nested `secretManagement` and `platformAccountProperties` structures —
+varies by platform configuration and PVWA version. Raw JSON preserves
+whatever the API returns, including those nested structures; a curated CSV
+would flatten or lose them.
+
+**No passwords are returned.** The PVWA API does not return credential
+values on account list or detail endpoints; this script makes no attempt
+to retrieve them.
+
+| Parameter | Required | Default | Notes |
+|---|---|---|---|
+| `-PVWAUrl` | Yes | | Full base URL, e.g. `https://pvwa.contoso.com/PasswordVault` |
+| `-AuthType` | No | `CyberArk` | `CyberArk`, `LDAP`, `RADIUS`, or `Windows` |
+| `-OutputPath` | No | Timestamped folder, current directory | |
+| `-JsonDepth` | No | 10 | ConvertTo-Json depth |
+
+---
+
+## 9. ZT_SafeNet_RADIUS_Collection.ps1
+
+**Two independent parts.** Run whichever applies to the deployment — often
+both, but from different machines. Pass `-SkipSAS` to run Part B only, or
+`-SkipNPS` to run Part A only.
+
+**Part A — SafeNet Authentication Service (SAS) API**
+
+**Module:** none. Uses only built-in `Invoke-RestMethod`.
+
+**Access:** SAS admin account with read-only / reporting access.
+
+**API path caveat:** the `-SASBaseUrl` default matches the common
+on-premises BSIDCA REST interface. Thales/SafeNet does not have a single
+universal API path across on-premises SAS, SAS Cloud, and SafeNet Trusted
+Access (STA). Verify the correct base URL against the SAS Admin Guide for
+this specific deployment before running. If API calls return 404, the
+manual fallback is a console export from the SAS Admin Console: Token
+Status report and User Enrollment report. Note in findings that automated
+collection was not possible and the reason.
+
+**Network:** HTTPS reachability to the SAS instance.
+
+**Part B — NPS/RADIUS Accounting Logs**
+
+**Run context:** the NPS server fronting VPN or other RADIUS-authenticated
+access. Not a general-purpose host — `netsh nps export` and the Security
+event log queries in Part B are only meaningful on the NPS server itself.
+
+**Access:** local administrator, or Security Event Log read access on the
+NPS server.
+
+**Event log dependency:** Part B's accounting events (event IDs 6272/6273)
+require NPS accounting logging to the Security log to be enabled. If
+logging is off, Part B writes an `_UNAVAILABLE` file noting the gap and
+the NPS policy XML export (via `netsh`) still runs. The absence of NPS
+accounting logs is itself a finding — without them, VPN MFA enforcement
+cannot be verified against observed logon behavior.
+
+**Output:** Part A outputs raw JSON (SAS API responses exactly as returned).
+Part B outputs the NPS policy as a native XML export and security event
+log records as minimally-extracted JSON (TimeCreated, Id, Message) — raw
+EventLogRecord objects carry non-serializable handles, so a full object
+dump is not possible; the three extracted fields are what's analyzable.
+
+| Parameter | Required | Default | Notes |
+|---|---|---|---|
+| `-SASBaseUrl` | Conditional | | Required for Part A. Leave blank or use `-SkipSAS` to skip Part A |
+| `-SkipSAS` | No | Off | Skip Part A entirely |
+| `-SkipNPS` | No | Off | Skip Part B entirely |
+| `-NPSLogDays` | No | 30 | Lookback window for Part B event log query |
+| `-OutputPath` | No | Timestamped folder, current directory | |
+| `-JsonDepth` | No | 8 | ConvertTo-Json depth for Part A |
