@@ -35,6 +35,8 @@ Bitbucket, use ONE of:
   (a) Repository/Project/Workspace Access Token (Bitbucket Cloud):
       --token <access-token>
       Passed as "x-token-auth:<token>", no separate username needed.
+      Select only Read permission on the Repositories scope when creating
+      it; this tool only ever reads (clones), no write access is needed.
       Repository-level tokens are available on free/Standard plans;
       Project and Workspace-level tokens require a Premium plan.
 
@@ -42,9 +44,31 @@ Bitbucket, use ONE of:
       --username <bitbucket-username> --api-token <api-token>
       This is the current, non-deprecated replacement for the old
       Bitbucket "App Password" credential (App Passwords were fully
-      retired by Bitbucket in June 2026 and no longer work). Create one
-      from Atlassian account settings, not from the Bitbucket repository
-      settings. Available on any account tier, including free.
+      retired by Bitbucket in June 2026 and no longer work).
+
+      Create the token from Atlassian account settings, not the Bitbucket
+      repository or workspace settings:
+        1. Atlassian account settings > Security tab > "Create and manage
+           API tokens"
+        2. Click "Create API token with scopes" (NOT the plain "Create API
+           token" button, that creates an unscoped token that will
+           authenticate but fail with "you may not have access" errors on
+           every git operation)
+        3. Select "Bitbucket" as the app
+        4. Select the read:repository:bitbucket scope. This tool only
+           ever reads (clones), so no write scope is needed or should be
+           granted.
+        5. Set a name and expiry, then generate. New tokens can take up to
+           a minute to start working.
+
+      --username must be your actual Bitbucket username, not your email
+      address and not your display name. Find it at
+      bitbucket.org/account/settings/, under "Bitbucket profile settings",
+      labeled "Username" (this is confirmed by live testing; some
+      Atlassian documentation suggests email works here, it did not in
+      practice for git clone specifically).
+
+      Available on any Bitbucket account tier, including free.
 
   (c) Personal Access Token (Bitbucket Server / Data Center, self-hosted):
       --username <any-non-empty-string> --api-token <personal-access-token>
@@ -122,7 +146,7 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timezone
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 
 def run_command(cmd, cwd=None):
@@ -171,6 +195,15 @@ def build_authenticated_url(repo_url, platform, token=None, username=None, api_t
     Inject platform-appropriate credentials into an HTTPS clone URL, without
     ever printing or logging the credential itself.
 
+    Every credential component is percent-encoded (via urllib.parse.quote)
+    before being embedded in the URL. This matters in practice: Bitbucket
+    Personal API Tokens are often used with an email address as the
+    username, and an unescaped "@" in that email is indistinguishable from
+    the "@" that separates credentials from the host, so git misparses the
+    URL entirely (it will try to read part of the token as a port number).
+    Percent-encoding avoids that ambiguity regardless of what characters
+    the username or token happen to contain.
+
     GitHub: token is injected directly as "https://<token>@host/...".
     Bitbucket with a token: uses the "x-token-auth:<token>@" convention
       (Bitbucket Cloud repository/project/workspace access tokens).
@@ -200,12 +233,18 @@ def build_authenticated_url(repo_url, platform, token=None, username=None, api_t
     if platform == "github":
         if not token:
             raise ValueError("GitHub authentication requires --token.")
-        return repo_url.replace("https://", f"https://{token}@", 1)
+        return repo_url.replace("https://", f"https://{quote(token, safe='')}@", 1)
 
     if platform == "bitbucket":
         if token:
-            return repo_url.replace("https://", f"https://x-token-auth:{token}@", 1)
-        return repo_url.replace("https://", f"https://{username}:{api_token}@", 1)
+            return repo_url.replace(
+                "https://", f"https://x-token-auth:{quote(token, safe='')}@", 1
+            )
+        return repo_url.replace(
+            "https://",
+            f"https://{quote(username, safe='')}:{quote(api_token, safe='')}@",
+            1,
+        )
 
     raise ValueError(
         f"Cannot apply credentials without a known platform. Got: {platform!r}. "
@@ -235,7 +274,8 @@ def main():
     parser.add_argument(
         "--username",
         default=None,
-        help="Bitbucket username (used together with --api-token)",
+        help="Bitbucket username, not email (find it at "
+             "bitbucket.org/account/settings/); used together with --api-token",
     )
     parser.add_argument(
         "--api-token",
