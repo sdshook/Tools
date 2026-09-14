@@ -1,4 +1,4 @@
-# forensic_repo_collect.py
+# Readme for forensic_repo_collect.py
 
 (c) 2026, Shane D. Shook, All Rights Reserved
 
@@ -26,7 +26,7 @@ Running the script produces three items in the specified output directory:
 ```
 python3 forensic_repo_collect.py <repo_url> <output_dir> \
     [--platform github|bitbucket] \
-    [--token TOKEN | --username USER --app-password PASSWORD]
+    [--token TOKEN | --username USER --api-token TOKEN]
 ```
 
 See the comment header inside the script for full run syntax, authentication options for each platform, examples, and requirements.
