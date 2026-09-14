@@ -1,4 +1,4 @@
-# SIPCompare: Forensic Code Similarity Analysis Tool
+# Readme for SIPCompare: Forensic Code Similarity Analysis Tool
 
 © 2025 Shane D. Shook, All Rights Reserved
 
@@ -41,18 +41,27 @@ pip install tree-sitter==0.21.3 tree-sitter-languages==1.10.2
 
 ### Two subcommands
 
-SIPCompare now has two subcommands instead of one flat invocation: `snapshot` (compare two codebases as they exist now, the original workflow) and `history` (compare two repositories' full commit histories). Run `python SIPCompare.py snapshot --help` or `python SIPCompare.py history --help` for the complete option list of each.
+SIPCompare has two subcommands: `snapshot` (compare two codebases at a single point in time) and `history` (compare two repositories' full commit histories, many commits per side, rather than one point in time). Both accept a plain directory, a `.bundle` file, or a bare mirror directory as input. Run `python SIPCompare.py snapshot --help` or `python SIPCompare.py history --help` for the complete option list of each.
 
 ### Usage Examples: snapshot mode
 
+`--repoA`/`--repoB` each accept a plain directory, a `.bundle` file, or a bare mirror directory. When a bundle or mirror is given, the ref to extract (branch, tag, or commit) defaults to `HEAD` and can be set explicitly with `--refA`/`--refB`.
+
 ```bash
-# Standard forensic analysis
+# Standard forensic analysis, two ordinary checkout directories
 python SIPCompare.py snapshot --repoA /path/to/suspected --repoB /path/to/original \
                      --threshold 0.6 --embedding-model graphcodebert \
                      --parallel 4 --output evidence.zip
+
+# Directly from two collected bundles, no separate checkout step
+python SIPCompare.py snapshot --repoA repo_A_evidence.bundle --repoB repo_B_evidence.bundle
+
+# A specific ref from each bundle
+python SIPCompare.py snapshot --repoA a.bundle --repoB b.bundle \
+                     --refA main --refB feature/renamed-copy
 ```
 
-**Key options**: `--repoA`/`--repoB` (required directory paths), `--threshold` (0-1, default: 0.50), `--embedding-model` (mini/graphcodebert/codet5), `--parallel` (processes, default: 1), `--output` (evidence filename), `--no-statistical`, `--verbose`. Cross-language pairs are detected automatically by file extension and weighted accordingly. There is no separate flag for it, it is a standard part of every comparison.
+**Key options**: `--repoA`/`--repoB` (required, a directory, a `.bundle` file, or a bare mirror directory), `--refA`/`--refB` (ref to extract when `--repoA`/`--repoB` is a bundle or mirror, default: `HEAD`), `--threshold` (0-1, default: 0.50), `--embedding-model` (mini/graphcodebert/codet5), `--parallel` (processes, default: 1), `--output` (evidence filename), `--no-statistical`, `--verbose`. Cross-language pairs are detected automatically by file extension and weighted accordingly. There is no separate flag for it, it is a standard part of every comparison.
 
 ### Usage Examples: history mode
 
