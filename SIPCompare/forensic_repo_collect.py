@@ -32,16 +32,22 @@ GitHub:
       Standard GitHub PAT with read access to the repository.
 
 Bitbucket, use ONE of:
-  (a) App Password (Bitbucket Cloud, most common):
-      --username <bitbucket-username> --app-password <app-password>
-      Requires "Repositories: Read" scope only.
-
-  (b) Repository/Project/Workspace Access Token (Bitbucket Cloud, newer):
+  (a) Repository/Project/Workspace Access Token (Bitbucket Cloud):
       --token <access-token>
       Passed as "x-token-auth:<token>", no separate username needed.
+      Repository-level tokens are available on free/Standard plans;
+      Project and Workspace-level tokens require a Premium plan.
+
+  (b) Personal API Token (Bitbucket Cloud):
+      --username <bitbucket-username> --api-token <api-token>
+      This is the current, non-deprecated replacement for the old
+      Bitbucket "App Password" credential (App Passwords were fully
+      retired by Bitbucket in June 2026 and no longer work). Create one
+      from Atlassian account settings, not from the Bitbucket repository
+      settings. Available on any account tier, including free.
 
   (c) Personal Access Token (Bitbucket Server / Data Center, self-hosted):
-      --username <any-non-empty-string> --app-password <personal-access-token>
+      --username <any-non-empty-string> --api-token <personal-access-token>
       Server/Data Center accepts the PAT as the password field with an
       arbitrary (often ignored) username; confirm the exact convention with
       the repository owner's Bitbucket admin, as this can vary by version.
@@ -54,7 +60,7 @@ RUN SYNTAX
 ----------
     python3 forensic_repo_collect.py <repo_url> <output_dir> \\
         [--platform github|bitbucket] \\
-        [--token TOKEN | --username USER --app-password PASSWORD]
+        [--token TOKEN | --username USER --api-token TOKEN]
 
     <repo_url>        HTTPS clone URL of the repository
                        e.g. https://github.com/ownername/reponame.git
@@ -66,8 +72,8 @@ RUN SYNTAX
                          required for self-hosted instances that don't
                          contain "github" or "bitbucket" in the hostname.
     --token             GitHub PAT, or Bitbucket Cloud access token
-    --username          Bitbucket username (used with --app-password)
-    --app-password      Bitbucket App Password or Server/Data Center PAT
+    --username          Bitbucket username (used with --api-token)
+    --api-token         Bitbucket Personal API Token or Server/Data Center PAT
 
 EXAMPLES
 --------
@@ -77,13 +83,13 @@ EXAMPLES
         ./evidence/widget-engine \\
         --token ghp_xxxxxxxxxxxxxxxxxxxx
 
-    # Bitbucket Cloud, App Password
+    # Bitbucket Cloud, Personal API Token
     python3 forensic_repo_collect.py \\
         https://bitbucket.org/acmecorp/widget-engine.git \\
         ./evidence/widget-engine \\
-        --username jdoe --app-password ATBBxxxxxxxxxxxxxxxx
+        --username jdoe --api-token ATATTxxxxxxxxxxxxxxxx
 
-    # Bitbucket Cloud, access token
+    # Bitbucket Cloud, repository access token
     python3 forensic_repo_collect.py \\
         https://bitbucket.org/acmecorp/widget-engine.git \\
         ./evidence/widget-engine \\
@@ -93,7 +99,7 @@ EXAMPLES
     python3 forensic_repo_collect.py \\
         https://git.internal.acmecorp.com/scm/project/widget-engine.git \\
         ./evidence/widget-engine \\
-        --platform bitbucket --username jdoe --app-password <PAT>
+        --platform bitbucket --username jdoe --api-token <PAT>
 
 REQUIREMENTS
 ------------
@@ -160,7 +166,7 @@ def detect_platform(repo_url):
     return None
 
 
-def build_authenticated_url(repo_url, platform, token=None, username=None, app_password=None):
+def build_authenticated_url(repo_url, platform, token=None, username=None, api_token=None):
     """
     Inject platform-appropriate credentials into an HTTPS clone URL, without
     ever printing or logging the credential itself.
@@ -168,22 +174,24 @@ def build_authenticated_url(repo_url, platform, token=None, username=None, app_p
     GitHub: token is injected directly as "https://<token>@host/...".
     Bitbucket with a token: uses the "x-token-auth:<token>@" convention
       (Bitbucket Cloud repository/project/workspace access tokens).
-    Bitbucket with username + app_password: uses the standard
-      "username:password@" convention (App Passwords, or Server/Data
-      Center Personal Access Tokens depending on server configuration).
+    Bitbucket with username + api_token: uses the standard
+      "username:secret@" convention (Bitbucket Personal API Tokens, the
+      current replacement for the now-retired App Password credential, or
+      Server/Data Center Personal Access Tokens depending on server
+      configuration).
     No credentials supplied: returns the URL unchanged (assumes local
       credentials are already configured).
     """
-    if token and (username or app_password):
+    if token and (username or api_token):
         raise ValueError(
-            "Use either --token, or --username/--app-password together, not both."
+            "Use either --token, or --username/--api-token together, not both."
         )
-    if username and not app_password:
-        raise ValueError("--username requires --app-password.")
-    if app_password and not username:
-        raise ValueError("--app-password requires --username.")
+    if username and not api_token:
+        raise ValueError("--username requires --api-token.")
+    if api_token and not username:
+        raise ValueError("--api-token requires --username.")
 
-    if not (token or username or app_password):
+    if not (token or username or api_token):
         return repo_url
 
     if not repo_url.startswith("https://"):
@@ -197,7 +205,7 @@ def build_authenticated_url(repo_url, platform, token=None, username=None, app_p
     if platform == "bitbucket":
         if token:
             return repo_url.replace("https://", f"https://x-token-auth:{token}@", 1)
-        return repo_url.replace("https://", f"https://{username}:{app_password}@", 1)
+        return repo_url.replace("https://", f"https://{username}:{api_token}@", 1)
 
     raise ValueError(
         f"Cannot apply credentials without a known platform. Got: {platform!r}. "
@@ -227,19 +235,20 @@ def main():
     parser.add_argument(
         "--username",
         default=None,
-        help="Bitbucket username (used together with --app-password)",
+        help="Bitbucket username (used together with --api-token)",
     )
     parser.add_argument(
-        "--app-password",
+        "--api-token",
         default=None,
-        help="Bitbucket App Password, or Server/Data Center Personal Access Token",
+        help="Bitbucket Personal API Token (current replacement for the "
+             "retired App Password), or Server/Data Center Personal Access Token",
     )
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
     platform = args.platform or detect_platform(args.repo_url)
-    if platform is None and (args.token or args.username or args.app_password):
+    if platform is None and (args.token or args.username or args.api_token):
         print(
             "ERROR: could not auto-detect the hosting platform from the URL, "
             "and credentials were provided. Pass --platform github or "
@@ -270,7 +279,7 @@ def main():
         platform=platform,
         token=args.token,
         username=args.username,
-        app_password=args.app_password,
+        api_token=args.api_token,
     )
     print("Cloning full mirror (branches, tags, refs)...")
     run_command(["git", "clone", "--mirror", clone_url, mirror_path])
@@ -306,8 +315,8 @@ def main():
         auth_method = "GitHub Personal Access Token"
     elif args.token and platform == "bitbucket":
         auth_method = "Bitbucket access token (x-token-auth)"
-    elif args.username and args.app_password:
-        auth_method = "Bitbucket username + app password / PAT"
+    elif args.username and args.api_token:
+        auth_method = "Bitbucket Personal API Token / Server PAT"
     else:
         auth_method = "Pre-configured local credentials (SSH key or credential helper)"
 
