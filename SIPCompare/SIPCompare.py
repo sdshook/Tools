@@ -3,22 +3,42 @@
 SIPCompare: Advanced Forensic Multi-Language Semantic Code Similarity Tool
 © 2025 Shane D. Shook, All Rights Reserved
 
-A comprehensive tool for detecting software intellectual property theft and code plagiarism
-with advanced obfuscation resistance, statistical analysis, and forensic-quality reporting.
+A comprehensive tool for detecting whether Company B has stolen, copied, or
+misused Company A's source code, evidenced by structural, syntactic, or
+semantic similarity, either in a current codebase snapshot or in the
+COMMIT HISTORY of two repositories (often the more telling signal, since a
+theft frequently shows up as a single large or contextually revealing
+commit rather than a gradual drift).
+
+Two subcommands:
+
+  snapshot   Compare two directories of source code as they exist right now.
+             This is the original SIPCompare workflow.
+
+  history    Compare the full commit HISTORIES of two collected repositories
+             (git bundles or mirror directories, e.g. from a forensic
+             collection script). Runs in two phases:
+               Phase 1 (exact-content match): git content-hashes every file
+                 version ("blob") in each history; any shared hash means
+                 byte-identical code existed in BOTH histories, and git can
+                 identify the exact commit/author/date it first appeared on
+                 each side, establishing precedence.
+               Phase 2 (fuzzy match on a bounded, targeted commit selection)
+                 (by default, commits touching whatever files Phase 1
+                 flagged), using the same similarity engine as snapshot mode,
+                 run directly against extracted historical snapshots.
 
 Example CLI usage:
-    python SIPCompare.py --repoA /path/to/repo1 --repoB /path/to/repo2 --threshold 0.8 --embedding-model graphcodebert --output evidence_package.zip --parallel 4
+    # Compare two codebases as they exist today
+    python SIPCompare.py snapshot --repoA /path/to/repo1 --repoB /path/to/repo2 \\
+        --threshold 0.8 --embedding-model graphcodebert --output evidence_package.zip --parallel 4
 
-Options:
-    --repoA            Path to first repository
-    --repoB            Path to second repository  
-    --threshold        Similarity threshold (0-1), default 0.75
-    --embedding-model  'mini', 'graphcodebert', or 'codet5', default 'graphcodebert'
-    --output           Output ZIP forensic evidence package, default 'evidence_package.zip'
-    --parallel         Number of parallel processes, default 1
-    --granularity      Analysis granularity: 'file', 'function', 'block', default 'file'
-    --statistical      Enable statistical significance testing, default True
-    --cross-language   Enable cross-language detection, default False
+    # Compare two repositories' full commit histories
+    python SIPCompare.py history --repoA client_repo.bundle --repoB competitor_repo.bundle \\
+        --output-dir ./history_analysis --threshold 0.6
+
+Run `python SIPCompare.py snapshot --help` or `python SIPCompare.py history --help`
+for the full option list of each subcommand.
 """
 
 import os, re, hashlib, json, csv, datetime, zipfile, logging, warnings
@@ -39,6 +59,9 @@ except ImportError:
 import difflib
 import pickle
 import multiprocessing as mp
+import subprocess
+import shutil
+import tempfile
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -132,8 +155,8 @@ class EmbeddingManager:
             from sentence_transformers import SentenceTransformer
             self.models['mini'] = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
             logger.info("Loaded MiniLM model")
-        except ImportError:
-            logger.warning("SentenceTransformers not available")
+        except Exception as e:
+            logger.warning(f"SentenceTransformers/MiniLM not available: {e}")
         
         try:
             from transformers import AutoTokenizer, AutoModel
@@ -313,7 +336,7 @@ class ASTAnalyzer:
     def _extract_regex_features(self, code: str, language: str) -> Dict[str, Any]:
         """Fallback regex-based feature extraction"""
         features = {
-            'control_structures': self._regex_control_structures(code),
+            'control_structures': self._regex_control_structures(code, language),
             'function_patterns': self._regex_function_patterns(code, language),
             'variable_patterns': self._regex_variable_patterns(code, language),
             'import_patterns': self._regex_import_patterns(code, language),
@@ -347,15 +370,31 @@ class ASTAnalyzer:
         return node_types
     
     def _extract_control_structures(self, node, code: str) -> List[str]:
-        """Extract control flow structures"""
+        """
+        Extract control flow structures.
+
+        NOTE: previously this truncated each structure's raw source text to
+        a fixed 100 characters before scrub_control_structures() replaced
+        identifiers/literals with generic placeholders. Because identifier
+        names vary in length, that truncation boundary landed at a
+        different point in each file's text even for structurally identical
+        code, so two true Type-2 (renamed-identifier) clones could produce
+        two different truncated-then-scrubbed strings and fail to match as
+        a set, even though structural_hash (which ignores text entirely)
+        correctly identified them as the same shape. Capturing the full
+        node text here, and scrubbing it afterward, makes the two signals
+        consistent with each other.
+        """
         control_structures = []
         
         def traverse(n):
             if n.type in ['if_statement', 'while_statement', 'for_statement', 
                          'switch_statement', 'try_statement', 'with_statement']:
                 structure_code = code[n.start_byte:n.end_byte]
-                # Normalize the structure
-                normalized = re.sub(r'\s+', ' ', structure_code[:100])  # First 100 chars
+                # Normalize whitespace only. No character truncation, so the
+                # subsequent identifier/literal scrub sees the complete
+                # structure and produces a length-independent result.
+                normalized = re.sub(r'\s+', ' ', structure_code)
                 control_structures.append(f"{n.type}:{normalized}")
             
             for child in n.children:
@@ -383,14 +422,21 @@ class ASTAnalyzer:
         return signatures
     
     def _extract_variable_declarations(self, node, code: str) -> List[str]:
-        """Extract variable declarations"""
+        """
+        Extract variable declarations.
+
+        NOTE: previously truncated to 50 raw characters before scrubbing,
+        which has the same identifier-length-dependent truncation-boundary
+        problem fixed in _extract_control_structures. Truncating only to
+        the first line (not a fixed character count) avoids that.
+        """
         declarations = []
         
         def traverse(n):
             if n.type in ['variable_declaration', 'assignment', 'augmented_assignment']:
                 decl_code = code[n.start_byte:n.end_byte]
-                # Normalize declaration
-                normalized = re.sub(r'\s+', ' ', decl_code.split('\n')[0][:50])
+                # Normalize declaration. First line only, no character cap.
+                normalized = re.sub(r'\s+', ' ', decl_code.split('\n')[0])
                 declarations.append(normalized)
             
             for child in n.children:
@@ -452,16 +498,37 @@ class ASTAnalyzer:
         traverse(node)
         return metrics
     
-    def _regex_control_structures(self, code: str) -> List[str]:
-        """Regex-based control structure extraction"""
-        patterns = [
-            r'\bif\s*\([^)]*\)',
-            r'\bwhile\s*\([^)]*\)',
-            r'\bfor\s*\([^)]*\)',
-            r'\bswitch\s*\([^)]*\)',
-            r'\btry\s*\{',
-            r'\bcatch\s*\([^)]*\)'
-        ]
+    def _regex_control_structures(self, code: str, language: str) -> List[str]:
+        """
+        Regex-based control structure extraction.
+
+        NOTE: Python does not wrap conditions in parentheses ("if x:" rather
+        than "if (x)"), so the C-style patterns below never match Python
+        control structures. This previously caused structural_similarity and
+        control_flow_similarity to silently collapse to 0.0 for Python files
+        whenever tree-sitter wasn't available. Python now gets its own
+        colon-terminated pattern set instead of being routed through the
+        C-style patterns.
+        """
+        if language == '.py':
+            patterns = [
+                r'\bif\s+[^:]+:',
+                r'\belif\s+[^:]+:',
+                r'\bwhile\s+[^:]+:',
+                r'\bfor\s+[^:]+:',
+                r'\btry\s*:',
+                r'\bexcept[^:]*:',
+                r'\bwith\s+[^:]+:',
+            ]
+        else:
+            patterns = [
+                r'\bif\s*\([^)]*\)',
+                r'\bwhile\s*\([^)]*\)',
+                r'\bfor\s*\([^)]*\)',
+                r'\bswitch\s*\([^)]*\)',
+                r'\btry\s*\{',
+                r'\bcatch\s*\([^)]*\)'
+            ]
         
         structures = []
         for pattern in patterns:
@@ -525,6 +592,43 @@ class ASTAnalyzer:
 # Global AST analyzer
 ast_analyzer = ASTAnalyzer()
 
+def scrub_identifier_text(strings: List[str], identifier_map: Dict[str, str]) -> List[str]:
+    """
+    Replace known identifiers and numeric literals in a list of extracted
+    source-text strings with generic placeholders, so comparisons based on
+    these strings measure CODE SHAPE rather than literal text.
+
+    Used for control_structures, function_signatures, and
+    variable_declarations. All three are captured as literal source text
+    by both the tree-sitter path and the regex fallback path, so without
+    this scrub, structurally identical code that differs only by
+    identifier name (a renamed-identifier / Type-2 clone) never matches
+    when compared as sets of strings. This is independent of, and in
+    addition to, canonicalizing identifiers for token comparison (see
+    CodeNormalizer). That pipeline only ever touches normalized_code, not
+    these separately-extracted structural feature strings.
+
+    Deliberately NOT applied to call_patterns: a call target name (e.g.
+    "print", "json.load") is exactly the signal functional_similarity's
+    call-sequence comparison relies on, so scrubbing it away would remove
+    real API-usage evidence rather than noise.
+    """
+    if not strings:
+        return strings
+
+    # Longest-first so multi-word identifiers aren't partially replaced by
+    # a shorter identifier that happens to be a substring.
+    sorted_identifiers = sorted(identifier_map.keys(), key=len, reverse=True)
+
+    scrubbed = []
+    for text in strings:
+        s = text
+        for identifier in sorted_identifiers:
+            s = re.sub(r'\b' + re.escape(identifier) + r'\b', 'VAR', s)
+        s = re.sub(r'\b\d+\.?\d*\b', 'NUM', s)
+        scrubbed.append(s)
+    return scrubbed
+
 # ----------------------------
 # Advanced Code Normalization and Obfuscation Resistance
 # ----------------------------
@@ -534,7 +638,7 @@ class CodeNormalizer:
     def __init__(self):
         self.identifier_counter = 0
         self.reserved_words = {
-            '.py': {'def', 'class', 'if', 'else', 'elif', 'for', 'while', 'try', 'except', 'import', 'from', 'return'},
+            '.py': {'def', 'class', 'if', 'else', 'elif', 'for', 'while', 'try', 'except', 'import', 'from', 'return', 'self', 'cls'},
             '.java': {'public', 'private', 'class', 'interface', 'if', 'else', 'for', 'while', 'try', 'catch', 'import', 'return'},
             '.js': {'function', 'var', 'let', 'const', 'if', 'else', 'for', 'while', 'try', 'catch', 'import', 'return'},
             '.c': {'int', 'char', 'float', 'double', 'if', 'else', 'for', 'while', 'return', 'include'},
@@ -593,6 +697,70 @@ class CodeNormalizer:
         
         return code
     
+    def _extract_function_parameters(self, code: str, language: str) -> Set[str]:
+        """
+        Extract function/method parameter names so they can be canonicalized
+        along with other identifiers.
+
+        Previously, only def/class names, assignment targets, and call
+        targets were canonicalized. Parameter names (e.g. renaming
+        "transaction_amount" to "amt") passed through untouched, so a
+        rename-the-parameters obfuscation attempt fully evaded the
+        token-similarity signal even though every other identifier in the
+        file was being normalized correctly.
+        """
+        param_names = set()
+
+        if language == '.py':
+            # def name(param1, param2: int, param3=default, *args, **kwargs):
+            for match in re.finditer(r'\bdef\s+\w+\s*\(([^)]*)\)\s*:', code):
+                param_names.update(self._split_param_list(match.group(1)))
+
+        elif language in ['.java', '.c', '.cpp', '.cs']:
+            # (Type name, Type name = default, Type[] name, Type* name)
+            for match in re.finditer(
+                r'(?:public|private|protected)?\s*(?:static)?\s*\w+\s+\w+\s*\(([^)]*)\)\s*\{',
+                code
+            ):
+                for raw_param in match.group(1).split(','):
+                    raw_param = raw_param.split('=')[0].strip()
+                    if not raw_param:
+                        continue
+                    # Last whitespace-separated token is the parameter name;
+                    # strip trailing array/pointer markers.
+                    tokens = raw_param.replace('[]', ' [] ').replace('*', ' * ').split()
+                    if tokens:
+                        name = tokens[-1].strip('[]* ')
+                        if name:
+                            param_names.add(name)
+
+        elif language == '.js':
+            for match in re.finditer(r'function\s*\w*\s*\(([^)]*)\)', code):
+                param_names.update(self._split_param_list(match.group(1)))
+            # Arrow functions: (a, b) => ... or a => ...
+            for match in re.finditer(r'\(([^)]*)\)\s*=>', code):
+                param_names.update(self._split_param_list(match.group(1)))
+
+        return param_names
+
+    def _split_param_list(self, param_list: str) -> Set[str]:
+        """
+        Split a comma-separated parameter list into bare identifier names,
+        stripping type annotations, default values, and *args/**kwargs markers.
+        """
+        names = set()
+        for raw_param in param_list.split(','):
+            raw_param = raw_param.strip()
+            if not raw_param:
+                continue
+            # Drop default value, then type annotation
+            raw_param = raw_param.split('=')[0].split(':')[0].strip()
+            # Strip *args / **kwargs markers and any destructuring braces
+            raw_param = raw_param.lstrip('*').strip('{}[] ')
+            if raw_param and raw_param.isidentifier():
+                names.add(raw_param)
+        return names
+
     def _extract_identifiers(self, code: str, language: str) -> Dict[str, str]:
         """Extract and create canonical mapping for identifiers"""
         identifier_map = {}
@@ -637,6 +805,11 @@ class CodeNormalizer:
                     all_identifiers.update(m for m in match if m and m not in reserved)
                 elif match and match not in reserved:
                     all_identifiers.add(match)
+
+        # Function/method parameter names. See _extract_function_parameters
+        # for why this is necessary in addition to the patterns above.
+        param_names = self._extract_function_parameters(code, language)
+        all_identifiers.update(n for n in param_names if n not in reserved)
         
         # Create canonical mapping
         sorted_identifiers = sorted(all_identifiers)
@@ -1213,6 +1386,17 @@ def process_single_file(file_path: str, embedding_model: str) -> Optional[CodeFe
         
         # Extract structural features
         structural_features = ast_analyzer.extract_structural_features(raw_code, language)
+
+        # Scrub identifiers/literals out of extracted structural-feature text
+        # so comparisons based on it measure shape rather than literal text.
+        # see scrub_identifier_text for why this is necessary in addition to
+        # normalized_code's own canonicalization. Deliberately not applied to
+        # call_patterns (see that function's docstring for why).
+        for key in ('control_structures', 'function_signatures', 'variable_declarations'):
+            if key in structural_features:
+                structural_features[key] = scrub_identifier_text(
+                    structural_features[key], identifier_map
+                )
         
         # Extract metadata
         metadata = extract_comprehensive_metadata(raw_code, language, structural_features)
@@ -1261,10 +1445,9 @@ def process_single_file(file_path: str, embedding_model: str) -> Optional[CodeFe
 class SimilarityEngine:
     """Advanced similarity analysis with multiple algorithms and statistical validation"""
     
-    def __init__(self, statistical_analysis: bool = True, cross_language: bool = False):
+    def __init__(self, statistical_analysis: bool = True):
         self.clone_detector = CloneDetector()
         self.statistical_analyzer = StatisticalAnalyzer() if statistical_analysis else None
-        self.cross_language = cross_language
         
         # Language-aware similarity weights for forensic accuracy
         self.similarity_weights = {
@@ -1323,8 +1506,10 @@ class SimilarityEngine:
             data_flow_sim = self._calculate_data_flow_similarity(file_a, file_b)
             functional_sim = self._calculate_functional_similarity(file_a, file_b)
             
-            # Determine if this is cross-language comparison
-            is_cross_language = (file_a.language != file_b.language) or self.cross_language
+            # Cross-language detection is a standard part of the analysis,
+            # not an optional mode: any pair of files in different languages
+            # automatically gets the cross-language weighting scheme below.
+            is_cross_language = (file_a.language != file_b.language)
             
             # Select appropriate weights based on language comparison type
             if is_cross_language:
@@ -1755,7 +1940,6 @@ class ForensicReporter:
         report_data = {
             "metadata": {
                 "tool": "SIPCompare",
-                "version": "2.0",
                 "timestamp": self.report_timestamp,
                 "repository_a": repo_a_path,
                 "repository_b": repo_b_path,
@@ -1941,7 +2125,7 @@ class ForensicReporter:
             "CHAIN OF CUSTODY DOCUMENTATION",
             "=" * 50,
             "",
-            f"Analysis Tool: SIPCompare v2.0",
+            f"Analysis Tool: SIPCompare",
             f"Analysis Date: {self.report_timestamp}",
             f"Total Evidence Files: {len(set([m.file_a for m in matches] + [m.file_b for m in matches]))}",
             f"Total Matches: {len(matches)}",
@@ -1979,6 +2163,381 @@ class ForensicReporter:
         return '\n'.join(custody_parts)
 
 # ----------------------------
+# Git History Comparison (history subcommand)
+# ----------------------------
+# Ported from the standalone history_compare.py orchestration script.
+# Previously this called SIPCompare as a subprocess per commit pair and
+# parsed its output ZIP; now that it lives in the same process, Phase 2
+# calls analyze_repositories() directly and gets SimilarityResult objects
+# back. No subprocess, no ZIP parsing.
+
+HISTORY_DEFAULT_EXTENSIONS = {
+    ".py", ".cpp", ".c", ".h", ".hpp", ".java", ".js", ".ts", ".go",
+    ".rs", ".cs", ".php", ".rb", ".swift", ".kt", ".scala", ".sql",
+}
+
+
+def _run_git(cmd: List[str], cwd: Optional[str] = None, check: bool = True) -> str:
+    """Run a git subprocess command, capturing output."""
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    if check and result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed: {' '.join(cmd)}\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+        )
+    return result.stdout
+
+
+def ensure_mirror(path: str, work_dir: str, label: str) -> str:
+    """
+    Accept either a .bundle file or an existing mirror directory and return
+    a path to a usable bare mirror. Bundles are unbundled (git clone --mirror)
+    into work_dir, which also verifies the bundle's integrity as a side effect.
+    """
+    if os.path.isdir(path):
+        logger.info(f"[{label}] Using existing mirror directory: {path}")
+        return path
+
+    if os.path.isfile(path) and path.endswith(".bundle"):
+        mirror_path = os.path.join(work_dir, f"{label}_mirror.git")
+        logger.info(f"[{label}] Unbundling {path} -> {mirror_path}")
+        _run_git(["git", "clone", "--mirror", path, mirror_path])
+        return mirror_path
+
+    raise ValueError(f"--repo{label} must be a .bundle file or a mirror directory: {path}")
+
+
+def build_blob_inventory(mirror_path: str, extensions: set, min_size: int, label: str) -> Dict[str, Dict]:
+    """
+    Walk every object reachable from --all refs, keep only blobs whose
+    associated path matches the extension filter, and return:
+        { blob_hash: {"size": int, "paths": set(str)} }
+    """
+    logger.info(f"[{label}] Enumerating objects across full history...")
+    raw = _run_git(["git", "rev-list", "--objects", "--all"], cwd=mirror_path)
+    lines = [l for l in raw.splitlines() if l.strip()]
+
+    hash_to_paths: Dict[str, set] = {}
+    for line in lines:
+        parts = line.split(" ", 1)
+        if len(parts) != 2:
+            continue
+        obj_hash, obj_path = parts
+        _, ext = os.path.splitext(obj_path)
+        if ext.lower() in extensions:
+            hash_to_paths.setdefault(obj_hash, set()).add(obj_path)
+
+    if not hash_to_paths:
+        logger.info(f"[{label}] No objects matched the extension filter.")
+        return {}
+
+    logger.info(f"[{label}] Checking object types/sizes for {len(hash_to_paths)} candidate objects...")
+    batch_input = "\n".join(hash_to_paths.keys())
+    result = subprocess.run(
+        ["git", "cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+        cwd=mirror_path, input=batch_input, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"git cat-file --batch-check failed: {result.stderr}")
+
+    inventory = {}
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 3:
+            continue
+        obj_hash, obj_type, obj_size = fields
+        if obj_type != "blob":
+            continue
+        size = int(obj_size)
+        if size < min_size:
+            continue
+        inventory[obj_hash] = {"size": size, "paths": hash_to_paths[obj_hash]}
+
+    logger.info(f"[{label}] {len(inventory)} blobs retained after type/size filtering.")
+    return inventory
+
+
+def find_introducing_commit(mirror_path: str, blob_hash: str) -> Optional[Dict[str, str]]:
+    """Find the earliest commit that introduced a given blob hash."""
+    output = subprocess.run(
+        ["git", "log", "--all", "--reverse", "--diff-filter=A",
+         "--format=%H|%ai|%an|%ae", f"--find-object={blob_hash}"],
+        cwd=mirror_path, capture_output=True, text=True,
+    ).stdout
+    lines = [l for l in output.splitlines() if l.strip()]
+    if not lines:
+        output = subprocess.run(
+            ["git", "log", "--all", "--reverse",
+             "--format=%H|%ai|%an|%ae", f"--find-object={blob_hash}"],
+            cwd=mirror_path, capture_output=True, text=True,
+        ).stdout
+        lines = [l for l in output.splitlines() if l.strip()]
+        if not lines:
+            return None
+
+    commit_hash, commit_date, author_name, author_email = lines[0].split("|", 3)
+    return {"commit": commit_hash, "date": commit_date, "author": author_name, "email": author_email}
+
+
+def run_history_phase1(mirror_a: str, mirror_b: str, extensions: set, min_size: int, output_dir: str) -> List[Dict]:
+    """Exact-content cross-history match. Returns the list of match records."""
+    logger.info("=== PHASE 1: Exact-content history match ===")
+    inv_a = build_blob_inventory(mirror_a, extensions, min_size, "repoA")
+    inv_b = build_blob_inventory(mirror_b, extensions, min_size, "repoB")
+
+    shared_hashes = set(inv_a.keys()) & set(inv_b.keys())
+    logger.info(f"Shared blob hashes across both histories: {len(shared_hashes)}")
+
+    matches = []
+    for blob_hash in sorted(shared_hashes):
+        commit_a = find_introducing_commit(mirror_a, blob_hash)
+        commit_b = find_introducing_commit(mirror_b, blob_hash)
+
+        precedence = "UNKNOWN"
+        if commit_a and commit_b:
+            precedence = "repoA_first" if commit_a["date"] < commit_b["date"] else (
+                "repoB_first" if commit_b["date"] < commit_a["date"] else "same_timestamp"
+            )
+
+        matches.append({
+            "blob_sha1": blob_hash,
+            "size_bytes": inv_a[blob_hash]["size"],
+            "paths_repoA": sorted(inv_a[blob_hash]["paths"]),
+            "paths_repoB": sorted(inv_b[blob_hash]["paths"]),
+            "earliest_commit_repoA": commit_a,
+            "earliest_commit_repoB": commit_b,
+            "precedence": precedence,
+        })
+
+    out_path = os.path.join(output_dir, "phase1_exact_matches.json")
+    with open(out_path, "w") as f:
+        json.dump({
+            "generated_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "total_shared_blobs": len(matches),
+            "matches": matches,
+        }, f, indent=2)
+
+    logger.info(f"Phase 1 complete: {len(matches)} exact-content matches written to {out_path}")
+    return matches
+
+
+def get_commit_log(mirror_path: str, path_filter: Optional[str] = None) -> List[Tuple[str, str]]:
+    """Return [(commit_hash, iso_date)] for the mirror, oldest first."""
+    cmd = ["git", "log", "--all", "--reverse", "--format=%H|%ai"]
+    if path_filter:
+        cmd += ["--follow", "--", path_filter]
+    output = subprocess.run(cmd, cwd=mirror_path, capture_output=True, text=True).stdout
+    commits = []
+    for line in output.splitlines():
+        if "|" not in line:
+            continue
+        h, d = line.split("|", 1)
+        commits.append((h, d))
+    return commits
+
+
+def select_commits_from_exact_matches(mirror_path: str, matches: List[Dict], side_key: str, label: str) -> List[Tuple[str, str]]:
+    """Given Phase 1 matches, trace the full history of each flagged path on this side."""
+    flagged_paths = set()
+    for m in matches:
+        flagged_paths.update(m[f"paths_{side_key}"])
+
+    if not flagged_paths:
+        return []
+
+    commit_set = {}
+    for path in flagged_paths:
+        for commit_hash, commit_date in get_commit_log(mirror_path, path_filter=path):
+            commit_set[commit_hash] = commit_date
+
+    selected = sorted(commit_set.items(), key=lambda kv: kv[1])
+    logger.info(f"[{label}] {len(selected)} commits selected from history of {len(flagged_paths)} flagged path(s).")
+    return selected
+
+
+def select_commits_time_sampled(mirror_path: str, max_commits: int, label: str) -> List[Tuple[str, str]]:
+    """Fallback: evenly sample commits across the full history by index."""
+    all_commits = get_commit_log(mirror_path)
+    if not all_commits:
+        return []
+    if len(all_commits) <= max_commits:
+        selected = all_commits
+    else:
+        step = len(all_commits) / max_commits
+        indices = sorted(set(int(i * step) for i in range(max_commits)))
+        selected = [all_commits[i] for i in indices]
+    logger.info(f"[{label}] {len(selected)} commits time-sampled from {len(all_commits)} total.")
+    return selected
+
+
+def extract_commit_snapshot(mirror_path: str, commit_hash: str, dest_dir: str):
+    """Extract a read-only snapshot of a single commit from a bare mirror via `git archive`."""
+    os.makedirs(dest_dir, exist_ok=True)
+    archive_proc = subprocess.Popen(["git", "archive", commit_hash], cwd=mirror_path, stdout=subprocess.PIPE)
+    tar_proc = subprocess.Popen(["tar", "-x", "-C", dest_dir], stdin=archive_proc.stdout)
+    archive_proc.stdout.close()
+    tar_proc.communicate()
+    archive_proc.wait()
+    if archive_proc.returncode != 0 or tar_proc.returncode != 0:
+        raise RuntimeError(f"Failed to extract snapshot for commit {commit_hash}")
+
+
+def run_history_phase2(mirror_a: str, mirror_b: str, phase1_matches: List[Dict], args, output_dir: str):
+    """
+    Fuzzy match across a bounded, targeted commit selection, calling the
+    similarity engine directly (in-process) against extracted historical
+    snapshots, with one full evidence package per commit pair, plus an
+    aggregated timeline CSV across all pairs.
+    """
+    logger.info("=== PHASE 2: Fuzzy match on limited commit selection ===")
+
+    if args.commitsA:
+        commits_a = [(h.strip(), None) for h in args.commitsA.split(",") if h.strip()]
+        logger.info(f"[repoA] Using {len(commits_a)} explicitly specified commits.")
+    elif phase1_matches:
+        commits_a = select_commits_from_exact_matches(mirror_a, phase1_matches, "repoA", "repoA")
+        if not commits_a:
+            commits_a = select_commits_time_sampled(mirror_a, args.max_commits_per_side, "repoA")
+    else:
+        commits_a = select_commits_time_sampled(mirror_a, args.max_commits_per_side, "repoA")
+
+    if args.commitsB:
+        commits_b = [(h.strip(), None) for h in args.commitsB.split(",") if h.strip()]
+        logger.info(f"[repoB] Using {len(commits_b)} explicitly specified commits.")
+    elif phase1_matches:
+        commits_b = select_commits_from_exact_matches(mirror_b, phase1_matches, "repoB", "repoB")
+        if not commits_b:
+            commits_b = select_commits_time_sampled(mirror_b, args.max_commits_per_side, "repoB")
+    else:
+        commits_b = select_commits_time_sampled(mirror_b, args.max_commits_per_side, "repoB")
+
+    with open(os.path.join(output_dir, "phase2_commit_selection.json"), "w") as f:
+        json.dump({
+            "commits_repoA": [{"commit": h, "date": d} for h, d in commits_a],
+            "commits_repoB": [{"commit": h, "date": d} for h, d in commits_b],
+        }, f, indent=2)
+
+    total_pairs = len(commits_a) * len(commits_b)
+    logger.info(f"Commit selection: {len(commits_a)} (repoA) x {len(commits_b)} (repoB) = {total_pairs} pairs")
+
+    if total_pairs == 0:
+        logger.info("No commits selected on one or both sides. Skipping Phase 2.")
+        return
+
+    if total_pairs > args.max_pairs and not args.force:
+        raise RuntimeError(
+            f"Phase 2 would run {total_pairs} comparisons, exceeding --max-pairs={args.max_pairs}. "
+            f"Narrow the selection (--commitsA/--commitsB, or a smaller --max-commits-per-side) "
+            f"or pass --force to proceed anyway."
+        )
+
+    snapshots_dir = os.path.join(output_dir, "phase2_snapshots")
+    runs_dir = os.path.join(output_dir, "phase2_runs")
+    os.makedirs(snapshots_dir, exist_ok=True)
+    os.makedirs(runs_dir, exist_ok=True)
+
+    logger.info("Extracting commit snapshots...")
+    snap_paths_a = {}
+    for h, _ in commits_a:
+        dest = os.path.join(snapshots_dir, "repoA", h)
+        extract_commit_snapshot(mirror_a, h, dest)
+        snap_paths_a[h] = dest
+
+    snap_paths_b = {}
+    for h, _ in commits_b:
+        dest = os.path.join(snapshots_dir, "repoB", h)
+        extract_commit_snapshot(mirror_b, h, dest)
+        snap_paths_b[h] = dest
+
+    timeline_rows = []
+    pair_num = 0
+    for commit_a, date_a in commits_a:
+        for commit_b, date_b in commits_b:
+            pair_num += 1
+            logger.info(f"[{pair_num}/{total_pairs}] Comparing {commit_a[:10]} vs {commit_b[:10]}...")
+            pair_dir = os.path.join(runs_dir, f"{commit_a[:10]}_vs_{commit_b[:10]}")
+            os.makedirs(pair_dir, exist_ok=True)
+            zip_out = os.path.join(pair_dir, "evidence_package.zip")
+
+            try:
+                matches = analyze_repositories(
+                    repo_a_path=snap_paths_a[commit_a],
+                    repo_b_path=snap_paths_b[commit_b],
+                    threshold=args.threshold,
+                    embedding_model=args.embedding_model,
+                    parallel_workers=1,
+                    enable_statistical=True,
+                    output_zip=zip_out,
+                )
+                if matches:
+                    row = {
+                        "commit_a": commit_a, "date_a": date_a,
+                        "commit_b": commit_b, "date_b": date_b,
+                        "total_matches": len(matches),
+                        "strong_evidence": sum(1 for m in matches if m.evidence_strength == "STRONG"),
+                        "moderate_evidence": sum(1 for m in matches if m.evidence_strength == "MODERATE"),
+                        "weak_evidence": sum(1 for m in matches if m.evidence_strength == "WEAK"),
+                        "obfuscation_detected": sum(1 for m in matches if m.obfuscation_detected),
+                        "average_similarity": float(np.mean([m.overall_similarity for m in matches])),
+                        "error": "",
+                    }
+                else:
+                    row = {"commit_a": commit_a, "date_a": date_a, "commit_b": commit_b, "date_b": date_b,
+                           "total_matches": "", "strong_evidence": "", "moderate_evidence": "",
+                           "weak_evidence": "", "obfuscation_detected": "", "average_similarity": "",
+                           "error": "no matches above threshold"}
+            except Exception as e:
+                row = {"commit_a": commit_a, "date_a": date_a, "commit_b": commit_b, "date_b": date_b,
+                       "total_matches": "", "strong_evidence": "", "moderate_evidence": "",
+                       "weak_evidence": "", "obfuscation_detected": "", "average_similarity": "",
+                       "error": str(e)[:300]}
+
+            timeline_rows.append(row)
+
+    timeline_path = os.path.join(output_dir, "phase2_similarity_timeline.csv")
+    fieldnames = ["commit_a", "date_a", "commit_b", "date_b", "total_matches",
+                  "strong_evidence", "moderate_evidence", "weak_evidence",
+                  "obfuscation_detected", "average_similarity", "error"]
+    with open(timeline_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for row in timeline_rows:
+            writer.writerow(row)
+
+    logger.info(f"Phase 2 complete: {len(timeline_rows)} commit-pair comparisons written to {timeline_path}")
+
+
+def run_history_comparison(args) -> int:
+    """Entry point for the `history` subcommand."""
+    if args.history_mode in ("fuzzy-only", "both") and not (0.0 <= args.threshold <= 1.0):
+        logger.error(f"Threshold must be between 0.0 and 1.0, got: {args.threshold}")
+        return 1
+
+    extensions = (
+        {e.strip().lower() for e in args.extensions.split(",")}
+        if args.extensions else HISTORY_DEFAULT_EXTENSIONS
+    )
+
+    os.makedirs(args.output_dir, exist_ok=True)
+    work_dir = tempfile.mkdtemp(prefix="sipcompare_history_")
+
+    try:
+        mirror_a = ensure_mirror(args.repoA, work_dir, "A")
+        mirror_b = ensure_mirror(args.repoB, work_dir, "B")
+
+        phase1_matches = []
+        if args.history_mode in ("exact-only", "both"):
+            phase1_matches = run_history_phase1(mirror_a, mirror_b, extensions, args.min_blob_size, args.output_dir)
+
+        if args.history_mode in ("fuzzy-only", "both"):
+            run_history_phase2(mirror_a, mirror_b, phase1_matches, args, args.output_dir)
+
+        logger.info(f"All done. Reports written to {args.output_dir}")
+        return 0
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
+# ----------------------------
 # Main Analysis Engine
 # ----------------------------
 def analyze_repositories(repo_a_path: str, repo_b_path: str, 
@@ -1986,7 +2545,6 @@ def analyze_repositories(repo_a_path: str, repo_b_path: str,
                         embedding_model: str = 'graphcodebert',
                         parallel_workers: int = 1,
                         enable_statistical: bool = True,
-                        cross_language: bool = False,
                         output_zip: str = 'evidence_package.zip') -> List[SimilarityResult]:
     """
     Main analysis function with enhanced capabilities
@@ -2003,7 +2561,7 @@ def analyze_repositories(repo_a_path: str, repo_b_path: str,
     Returns:
         List of similarity results
     """
-    logger.info("Starting SIPCompare v2.0 analysis...")
+    logger.info("Starting SIPCompare analysis...")
     logger.info(f"Repository A: {repo_a_path}")
     logger.info(f"Repository B: {repo_b_path}")
     logger.info(f"Threshold: {threshold}")
@@ -2026,9 +2584,11 @@ def analyze_repositories(repo_a_path: str, repo_b_path: str,
     logger.info(f"Processed {len(repo_a_files)} files from Repository A")
     logger.info(f"Processed {len(repo_b_files)} files from Repository B")
     
-    # Perform similarity analysis
+    # Perform similarity analysis. Cross-language pairs are detected and
+    # weighted automatically inside SimilarityEngine, as a standard part
+    # of the analysis rather than an opt-in mode.
     logger.info("Phase 2: Performing similarity analysis...")
-    similarity_engine = SimilarityEngine(statistical_analysis=enable_statistical, cross_language=cross_language)
+    similarity_engine = SimilarityEngine(statistical_analysis=enable_statistical)
     matches = similarity_engine.compare_repositories(
         repo_a_files, repo_b_files, threshold, enable_statistical
     )
@@ -2044,7 +2604,6 @@ def analyze_repositories(repo_a_path: str, repo_b_path: str,
         'embedding_model': embedding_model,
         'parallel_workers': parallel_workers,
         'statistical_analysis': enable_statistical,
-        'tool_version': '2.0'
     }
     
     reporter = ForensicReporter()
@@ -2072,87 +2631,121 @@ def analyze_repositories(repo_a_path: str, repo_b_path: str,
 # ----------------------------
 # Command Line Interface
 # ----------------------------
-def main():
-    """Enhanced command line interface"""
-    import argparse
-    
-    parser = argparse.ArgumentParser(
-        description="SIPCompare v2.0: Advanced Forensic Multi-Language Semantic Code Similarity Tool",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Basic analysis
-  python SIPCompare.py --repoA /path/to/repo1 --repoB /path/to/repo2
-  
-  # High-sensitivity analysis with parallel processing
-  python SIPCompare.py --repoA /path/to/repo1 --repoB /path/to/repo2 \\
-                       --threshold 0.6 --parallel 4 --embedding-model graphcodebert
-  
-  # Cross-language analysis
-  python SIPCompare.py --repoA /path/to/python_repo --repoB /path/to/java_repo \\
-                       --cross-language --embedding-model codet5
-        """
-    )
-    
-    # Required arguments
-    parser.add_argument("--repoA", required=True, 
-                       help="Path to first repository")
-    parser.add_argument("--repoB", required=True, 
-                       help="Path to second repository")
-    
-    # Analysis parameters
+def _add_snapshot_arguments(parser):
+    parser.add_argument("--repoA", required=True, help="Path to first repository (a directory)")
+    parser.add_argument("--repoB", required=True, help="Path to second repository (a directory)")
     parser.add_argument("--threshold", type=float, default=0.50,
-                       help="Similarity threshold (0-1), default: 0.50 (lowered for better cross-language detection)")
+                       help="Similarity threshold (0-1), default: 0.50")
     parser.add_argument("--embedding-model", type=str, default='graphcodebert',
                        choices=['mini', 'graphcodebert', 'codet5'],
                        help="Embedding model to use, default: graphcodebert")
-    
-    # Performance options
     parser.add_argument("--parallel", type=int, default=1,
                        help="Number of parallel processes, default: 1")
-    
-    # Analysis options
     parser.add_argument("--no-statistical", action='store_true',
                        help="Disable statistical significance testing")
-    parser.add_argument("--cross-language", action='store_true',
-                       help="Enable cross-language detection (experimental)")
-    
-    # Output options
     parser.add_argument("--output", type=str, default='evidence_package.zip',
                        help="Output forensic evidence package, default: evidence_package.zip")
-    parser.add_argument("--verbose", action='store_true',
-                       help="Enable verbose logging")
-    
+    parser.add_argument("--verbose", action='store_true', help="Enable verbose logging")
+
+
+def _add_history_arguments(parser):
+    parser.add_argument("--repoA", required=True,
+                       help="Bundle file or mirror directory for repo A (e.g. from a forensic collection script)")
+    parser.add_argument("--repoB", required=True,
+                       help="Bundle file or mirror directory for repo B")
+    parser.add_argument("--output-dir", required=True, help="Directory for reports and working files")
+    parser.add_argument("--history-mode", choices=["exact-only", "fuzzy-only", "both"], default="both",
+                       help="Which phase(s) to run, default: both")
+    parser.add_argument("--extensions", default=None,
+                       help="Comma-separated extensions for Phase 1, e.g. .py,.java (default: common source extensions)")
+    parser.add_argument("--min-blob-size", type=int, default=20,
+                       help="Skip blobs smaller than this many bytes in Phase 1, default: 20")
+    parser.add_argument("--commitsA", default=None, help="Explicit comma-separated commit hashes for repo A")
+    parser.add_argument("--commitsB", default=None, help="Explicit comma-separated commit hashes for repo B")
+    parser.add_argument("--max-commits-per-side", type=int, default=15,
+                       help="Cap on auto-selected commits per side in the fallback strategy, default: 15")
+    parser.add_argument("--max-pairs", type=int, default=200,
+                       help="Safety cap on total Phase-2 comparisons, default: 200")
+    parser.add_argument("--force", action="store_true", help="Bypass the --max-pairs safety cap")
+    parser.add_argument("--threshold", type=float, default=0.6,
+                       help="Similarity threshold for Phase 2, default: 0.6")
+    parser.add_argument("--embedding-model", type=str, default='mini',
+                       choices=['mini', 'graphcodebert', 'codet5'],
+                       help="Embedding model for Phase 2, default: mini (fastest, for screening many commit pairs)")
+    parser.add_argument("--verbose", action='store_true', help="Enable verbose logging")
+
+
+def main():
+    """Command line interface with snapshot and history subcommands"""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="SIPCompare: Advanced Forensic Multi-Language Semantic Code Similarity Tool",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Compare two codebases as they exist today
+  python SIPCompare.py snapshot --repoA /path/to/repo1 --repoB /path/to/repo2 \\
+                       --threshold 0.6 --parallel 4 --embedding-model graphcodebert
+
+  # Cross-language snapshot comparison (detected and weighted automatically)
+  python SIPCompare.py snapshot --repoA /path/to/python_repo --repoB /path/to/java_repo \\
+                       --embedding-model codet5
+
+  # Compare two repositories' full commit histories (bundles or mirror dirs)
+  python SIPCompare.py history --repoA client_repo.bundle --repoB competitor_repo.bundle \\
+                       --output-dir ./history_analysis --threshold 0.6
+
+  # History: exact-content match only (fast, no fuzzy pass)
+  python SIPCompare.py history --repoA a.bundle --repoB b.bundle \\
+                       --output-dir ./out --history-mode exact-only
+        """
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    snapshot_parser = subparsers.add_parser(
+        "snapshot", help="Compare two codebase directories as they exist now"
+    )
+    _add_snapshot_arguments(snapshot_parser)
+
+    history_parser = subparsers.add_parser(
+        "history", help="Compare the full commit histories of two collected repositories"
+    )
+    _add_history_arguments(history_parser)
+
     args = parser.parse_args()
-    
-    # Configure logging level
+
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
-    
-    # Validate arguments
+
+    if args.command == "snapshot":
+        return _run_snapshot(args)
+    elif args.command == "history":
+        return _run_history(args)
+
+
+def _run_snapshot(args) -> int:
     if not os.path.exists(args.repoA):
         logger.error(f"Repository A path does not exist: {args.repoA}")
         return 1
-    
+
     if not os.path.exists(args.repoB):
         logger.error(f"Repository B path does not exist: {args.repoB}")
         return 1
-    
+
     if not (0.0 <= args.threshold <= 1.0):
         logger.error(f"Threshold must be between 0.0 and 1.0, got: {args.threshold}")
         return 1
-    
+
     if args.parallel < 1:
         logger.error(f"Parallel workers must be >= 1, got: {args.parallel}")
         return 1
-    
-    # Adjust parallel workers based on system capabilities
+
     max_workers = min(args.parallel, mp.cpu_count())
     if max_workers != args.parallel:
         logger.warning(f"Reducing parallel workers from {args.parallel} to {max_workers} (system limit)")
-    
+
     try:
-        # Run analysis
         matches = analyze_repositories(
             repo_a_path=args.repoA,
             repo_b_path=args.repoB,
@@ -2160,21 +2753,19 @@ Examples:
             embedding_model=args.embedding_model,
             parallel_workers=max_workers,
             enable_statistical=not args.no_statistical,
-            cross_language=args.cross_language,
             output_zip=args.output
         )
-        
-        # Exit with appropriate code
+
         if matches:
             strong_matches = sum(1 for m in matches if m.evidence_strength == "STRONG")
             if strong_matches > 0:
                 logger.warning("Strong evidence of code similarity detected!")
-                return 2  # Strong evidence exit code
+                return 2
             else:
-                return 0  # Normal completion
+                return 0
         else:
-            return 0  # No matches found
-            
+            return 0
+
     except KeyboardInterrupt:
         logger.info("Analysis interrupted by user")
         return 130
@@ -2184,6 +2775,21 @@ Examples:
             import traceback
             traceback.print_exc()
         return 1
+
+
+def _run_history(args) -> int:
+    try:
+        return run_history_comparison(args)
+    except KeyboardInterrupt:
+        logger.info("Analysis interrupted by user")
+        return 130
+    except Exception as e:
+        logger.error(f"History analysis failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+
 
 if __name__ == "__main__":
     exit(main())
