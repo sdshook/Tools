@@ -504,7 +504,7 @@ For NVIDIA GPU acceleration:
 
 # Common Usage Examples
 
-These examples work across all platforms (adjust paths as needed). SIPCompare has two subcommands: `snapshot` (compare two codebases as they exist now) and `history` (compare two repositories' full commit histories, using bundles produced by `forensic_repo_collect.py`).
+These examples work across all platforms (adjust paths as needed). SIPCompare has two subcommands: `snapshot` (compare two codebases at a single point in time) and `history` (compare two repositories' full commit histories, many commits per side). Both accept a plain directory, a `.bundle` file, or a bare mirror directory (such as those produced by `forensic_repo_collect.py`) for `--repoA`/`--repoB`.
 
 ## Basic Commands
 
@@ -541,6 +541,13 @@ python SIPCompare.py snapshot --repoA /path/to/python_repo --repoB /path/to/java
 ### Large Repository Analysis (optimized for speed)
 ```bash
 python SIPCompare.py snapshot --repoA /path/to/large_repo1 --repoB /path/to/large_repo2 --parallel 8 --embedding-model mini --threshold 0.8
+```
+
+### Snapshot Analysis Directly From Collected Bundles
+`--repoA`/`--repoB` accept a `.bundle` file or a bare mirror directory directly, no separate checkout step needed. The ref extracted defaults to `HEAD` and can be set explicitly with `--refA`/`--refB`:
+```bash
+python SIPCompare.py snapshot --repoA repo_A_evidence.bundle --repoB repo_B_evidence.bundle
+python SIPCompare.py snapshot --repoA a.bundle --repoB b.bundle --refA main --refB feature/renamed-copy
 ```
 
 ### Collecting a Repository for History Analysis
