@@ -2540,6 +2540,90 @@ def run_history_comparison(args) -> int:
 # ----------------------------
 # Main Analysis Engine
 # ----------------------------
+def resolve_default_ref(mirror_or_bundle_path: str, requested_ref: str, label: str) -> str:
+    """
+    Resolve the ref to extract, handling the case where HEAD is a stale
+    symref pointing at a branch that doesn't exist (e.g. a bare repo whose
+    HEAD was never updated after its default branch was renamed or first
+    created). If the caller explicitly requested something other than the
+    default "HEAD", that request is honored as-is. If "HEAD" doesn't
+    resolve, falls back to the sole branch if there is exactly one, and
+    raises a clear, actionable error if there are multiple candidates to
+    choose from.
+    """
+    if requested_ref != "HEAD":
+        return requested_ref
+
+    check = subprocess.run(
+        ["git", "rev-parse", "--verify", "-q", "HEAD"],
+        cwd=mirror_or_bundle_path, capture_output=True, text=True,
+    )
+    if check.returncode == 0:
+        return "HEAD"
+
+    branches_out = subprocess.run(
+        ["git", "for-each-ref", "--format=%(refname:short)", "refs/heads"],
+        cwd=mirror_or_bundle_path, capture_output=True, text=True,
+    ).stdout
+    branches = [b for b in branches_out.splitlines() if b.strip()]
+
+    if len(branches) == 1:
+        logger.warning(
+            f"[{label}] HEAD does not resolve to an existing branch (stale symref); "
+            f"falling back to the sole branch '{branches[0]}'."
+        )
+        return branches[0]
+
+    raise ValueError(
+        f"[{label}] HEAD does not resolve and there are {len(branches)} candidate "
+        f"branches ({', '.join(branches) or 'none'}). Specify which one to use "
+        f"explicitly with --refA/--refB."
+    )
+
+
+def is_bare_mirror(path: str) -> bool:
+    """Detect whether a directory is a bare git mirror (e.g. produced by --mirror clone)."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--is-bare-repository"],
+        cwd=path, capture_output=True, text=True,
+    )
+    return result.returncode == 0 and result.stdout.strip() == "true"
+
+
+def resolve_snapshot_source(path: str, ref: str, work_dir: str, label: str) -> str:
+    """
+    Let snapshot mode accept a .bundle file, a bare mirror directory, or an
+    ordinary checkout directory interchangeably. Bundles and bare mirrors
+    are extracted at the requested ref (default HEAD) via `git archive`,
+    the same mechanism history mode already uses for commit snapshots,
+    into a temporary checkout that gets cleaned up after analysis.
+
+    Doing this extraction inside the tool itself, straight from a
+    hash-verified bundle, avoids a separate manual `git clone`/`git
+    checkout` step that would otherwise sit outside the tool's own audit
+    trail. Ordinary directories are returned unchanged, so existing
+    snapshot-mode usage is unaffected.
+    """
+    if os.path.isfile(path) and path.endswith(".bundle"):
+        mirror_path = os.path.join(work_dir, f"{label}_mirror.git")
+        logger.info(f"[{label}] Unbundling {path} -> {mirror_path}")
+        _run_git(["git", "clone", "--mirror", path, mirror_path])
+        resolved_ref = resolve_default_ref(mirror_path, ref, label)
+        checkout_path = os.path.join(work_dir, f"{label}_checkout")
+        logger.info(f"[{label}] Extracting ref '{resolved_ref}' -> {checkout_path}")
+        extract_commit_snapshot(mirror_path, resolved_ref, checkout_path)
+        return checkout_path
+
+    if os.path.isdir(path) and is_bare_mirror(path):
+        resolved_ref = resolve_default_ref(path, ref, label)
+        checkout_path = os.path.join(work_dir, f"{label}_checkout")
+        logger.info(f"[{label}] Extracting ref '{resolved_ref}' from bare mirror {path} -> {checkout_path}")
+        extract_commit_snapshot(path, resolved_ref, checkout_path)
+        return checkout_path
+
+    return path
+
+
 def analyze_repositories(repo_a_path: str, repo_b_path: str, 
                         threshold: float = 0.75, 
                         embedding_model: str = 'graphcodebert',
@@ -2632,8 +2716,16 @@ def analyze_repositories(repo_a_path: str, repo_b_path: str,
 # Command Line Interface
 # ----------------------------
 def _add_snapshot_arguments(parser):
-    parser.add_argument("--repoA", required=True, help="Path to first repository (a directory)")
-    parser.add_argument("--repoB", required=True, help="Path to second repository (a directory)")
+    parser.add_argument("--repoA", required=True,
+                       help="Path to first repository: a directory, a .bundle file, or a bare mirror directory")
+    parser.add_argument("--repoB", required=True,
+                       help="Path to second repository: a directory, a .bundle file, or a bare mirror directory")
+    parser.add_argument("--refA", default="HEAD",
+                       help="Ref (branch, tag, or commit) to extract from --repoA if it is a .bundle "
+                            "file or bare mirror, default: HEAD. Ignored for ordinary directories.")
+    parser.add_argument("--refB", default="HEAD",
+                       help="Ref to extract from --repoB if it is a .bundle file or bare mirror, "
+                            "default: HEAD. Ignored for ordinary directories.")
     parser.add_argument("--threshold", type=float, default=0.50,
                        help="Similarity threshold (0-1), default: 0.50")
     parser.add_argument("--embedding-model", type=str, default='graphcodebert',
@@ -2692,6 +2784,13 @@ Examples:
   python SIPCompare.py snapshot --repoA /path/to/python_repo --repoB /path/to/java_repo \\
                        --embedding-model codet5
 
+  # Snapshot comparison directly from collected bundles, no manual checkout
+  python SIPCompare.py snapshot --repoA repo_A_evidence.bundle --repoB repo_B_evidence.bundle
+
+  # Snapshot comparison of a specific ref from each bundle
+  python SIPCompare.py snapshot --repoA a.bundle --repoB b.bundle \\
+                       --refA main --refB feature/renamed-copy
+
   # Compare two repositories' full commit histories (bundles or mirror dirs)
   python SIPCompare.py history --repoA client_repo.bundle --repoB competitor_repo.bundle \\
                        --output-dir ./history_analysis --threshold 0.6
@@ -2745,10 +2844,14 @@ def _run_snapshot(args) -> int:
     if max_workers != args.parallel:
         logger.warning(f"Reducing parallel workers from {args.parallel} to {max_workers} (system limit)")
 
+    work_dir = tempfile.mkdtemp(prefix="sipcompare_snapshot_")
     try:
+        repo_a_path = resolve_snapshot_source(args.repoA, args.refA, work_dir, "repoA")
+        repo_b_path = resolve_snapshot_source(args.repoB, args.refB, work_dir, "repoB")
+
         matches = analyze_repositories(
-            repo_a_path=args.repoA,
-            repo_b_path=args.repoB,
+            repo_a_path=repo_a_path,
+            repo_b_path=repo_b_path,
             threshold=args.threshold,
             embedding_model=args.embedding_model,
             parallel_workers=max_workers,
@@ -2775,6 +2878,8 @@ def _run_snapshot(args) -> int:
             import traceback
             traceback.print_exc()
         return 1
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 
 def _run_history(args) -> int:
