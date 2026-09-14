@@ -1,5 +1,7 @@
 # SIPCompare Multi-Platform Setup Guide
 
+(c) 2026, Shane D. Shook, All Rights Reserved
+
 Complete step-by-step instructions for configuring Windows 11, macOS, and Ubuntu Linux to run SIPCompare.py successfully.
 
 ## Table of Contents
@@ -34,7 +36,7 @@ Complete step-by-step instructions for configuring your Windows 11 system to run
 
 2. **Install Python**:
    - Run the downloaded installer (`python-3.12.x-amd64.exe`)
-   - ⚠️ **CRITICAL**: Check "Add Python to PATH" at the bottom of the installer
+   - CRITICAL: Check "Add Python to PATH" at the bottom of the installer
    - Click "Install Now"
    - Wait for installation to complete (2-5 minutes)
    - Click "Close" when finished
@@ -62,7 +64,7 @@ Complete step-by-step instructions for configuring your Windows 11 system to run
 2. **Install Git**:
    - Run the installer (`Git-2.x.x-64-bit.exe`)
    - Use default settings for most options
-   - **Important**: Choose "Git from the command line and also from 3rd-party software"
+   - Important: Choose "Git from the command line and also from 3rd-party software"
    - Complete installation
 
 3. **Verify Git Installation**:
@@ -99,18 +101,18 @@ Complete step-by-step instructions for configuring your Windows 11 system to run
    cd C:\SIPCompare
    ```
 
-3. **Download SIPCompare** (choose one method):
+3. **Download the toolset** (choose one method):
 
-   **Method A: Clone from Repository** (if you have access):
+   **Method A: Clone from Repository**:
    ```cmd
-   git clone https://github.com/sdshook/Audit.git
-   cd Audit
-   copy SIPCompare.py C:\SIPCompare\
+   git clone https://github.com/sdshook/Tools.git
+   copy Tools\SIPCompare\SIPCompare.py C:\SIPCompare\
+   copy Tools\SIPCompare\forensic_repo_collect.py C:\SIPCompare\
    cd C:\SIPCompare
    ```
 
    **Method B: Manual Download**:
-   - Download `SIPCompare.py` directly to `C:\SIPCompare\`
+   - Download `SIPCompare.py` and `forensic_repo_collect.py` directly to `C:\SIPCompare\`
 
 4. **Create Virtual Environment** (Recommended):
    ```cmd
@@ -149,9 +151,10 @@ Complete step-by-step instructions for configuring your Windows 11 system to run
 
 5. **Install Tree-sitter for Enhanced Analysis**:
    ```cmd
-   pip install tree-sitter==0.20.4
-   pip install tree-sitter-languages==1.9.1
+   pip install tree-sitter==0.21.3
+   pip install tree-sitter-languages==1.10.2
    ```
+   These exact versions matter: `tree-sitter` releases newer than `0.21.x` change an internal API that `tree-sitter-languages` doesn't yet support. See Troubleshooting if you hit a version-related error.
 
 ### Optional: GPU Support (NVIDIA GPUs only)
 
@@ -267,17 +270,18 @@ xcode-select --install
    cd ~/SIPCompare
    ```
 
-2. **Download SIPCompare** (choose one method):
+2. **Download the toolset** (choose one method):
 
    **Method A: Clone from Repository**:
    ```bash
-   git clone https://github.com/sdshook/Audit.git
-   cp Audit/SIPCompare.py ~/SIPCompare/
+   git clone https://github.com/sdshook/Tools.git
+   cp Tools/SIPCompare/SIPCompare.py ~/SIPCompare/
+   cp Tools/SIPCompare/forensic_repo_collect.py ~/SIPCompare/
    cd ~/SIPCompare
    ```
 
    **Method B: Manual Download**:
-   - Download `SIPCompare.py` to `~/SIPCompare/`
+   - Download `SIPCompare.py` and `forensic_repo_collect.py` to `~/SIPCompare/`
 
 3. **Create Virtual Environment**:
    ```bash
@@ -310,9 +314,10 @@ xcode-select --install
 
 4. **Install Tree-sitter**:
    ```bash
-   pip install tree-sitter==0.20.4
-   pip install tree-sitter-languages==1.9.1
+   pip install tree-sitter==0.21.3
+   pip install tree-sitter-languages==1.10.2
    ```
+   These exact versions matter: `tree-sitter` releases newer than `0.21.x` change an internal API that `tree-sitter-languages` doesn't yet support. See Troubleshooting if you hit a version-related error.
 
 ### Optional: Apple Silicon Optimization
 
@@ -413,17 +418,18 @@ git --version
    cd ~/SIPCompare
    ```
 
-2. **Download SIPCompare** (choose one method):
+2. **Download the toolset** (choose one method):
 
    **Method A: Clone from Repository**:
    ```bash
-   git clone https://github.com/sdshook/Audit.git
-   cp Audit/SIPCompare.py ~/SIPCompare/
+   git clone https://github.com/sdshook/Tools.git
+   cp Tools/SIPCompare/SIPCompare.py ~/SIPCompare/
+   cp Tools/SIPCompare/forensic_repo_collect.py ~/SIPCompare/
    cd ~/SIPCompare
    ```
 
    **Method B: Manual Download**:
-   - Download `SIPCompare.py` to `~/SIPCompare/`
+   - Download `SIPCompare.py` and `forensic_repo_collect.py` to `~/SIPCompare/`
 
 3. **Create Virtual Environment**:
    ```bash
@@ -461,9 +467,10 @@ git --version
 
 5. **Install Tree-sitter**:
    ```bash
-   pip install tree-sitter==0.20.4
-   pip install tree-sitter-languages==1.9.1
+   pip install tree-sitter==0.21.3
+   pip install tree-sitter-languages==1.10.2
    ```
+   These exact versions matter: `tree-sitter` releases newer than `0.21.x` change an internal API that `tree-sitter-languages` doesn't yet support. See Troubleshooting if you hit a version-related error.
 
 ### Optional: GPU Support (NVIDIA GPUs)
 
@@ -497,7 +504,7 @@ For NVIDIA GPU acceleration:
 
 # Common Usage Examples
 
-These examples work across all platforms (adjust paths as needed):
+These examples work across all platforms (adjust paths as needed). SIPCompare has two subcommands: `snapshot` (compare two codebases as they exist now) and `history` (compare two repositories' full commit histories, using bundles produced by `forensic_repo_collect.py`).
 
 ## Basic Commands
 
@@ -515,25 +522,38 @@ cd ~/SIPCompare
 source sipcompare_env/bin/activate
 ```
 
-### Basic Analysis
+### Basic Snapshot Analysis
 ```bash
-python SIPCompare.py --repoA /path/to/repo1 --repoB /path/to/repo2
+python SIPCompare.py snapshot --repoA /path/to/repo1 --repoB /path/to/repo2
 ```
 
 ### High-Accuracy Forensic Analysis
 ```bash
-python SIPCompare.py --repoA /path/to/suspected --repoB /path/to/original --threshold 0.6 --embedding-model graphcodebert --parallel 4 --verbose --output evidence.zip
+python SIPCompare.py snapshot --repoA /path/to/suspected --repoB /path/to/original --threshold 0.6 --embedding-model graphcodebert --parallel 4 --verbose --output evidence.zip
 ```
 
-### Cross-Language Detection
+### Cross-Language Comparison
+Cross-language pairs are detected automatically by file extension and weighted accordingly. There is no separate flag for it, it is a standard part of every comparison. `codet5` tends to perform best for cross-language pairs:
 ```bash
-python SIPCompare.py --repoA /path/to/python_repo --repoB /path/to/java_repo --cross-language --embedding-model codet5
+python SIPCompare.py snapshot --repoA /path/to/python_repo --repoB /path/to/java_repo --embedding-model codet5
 ```
 
 ### Large Repository Analysis (optimized for speed)
 ```bash
-python SIPCompare.py --repoA /path/to/large_repo1 --repoB /path/to/large_repo2 --parallel 8 --embedding-model mini --threshold 0.8
+python SIPCompare.py snapshot --repoA /path/to/large_repo1 --repoB /path/to/large_repo2 --parallel 8 --embedding-model mini --threshold 0.8
 ```
+
+### Collecting a Repository for History Analysis
+`forensic_repo_collect.py` collects a GitHub or Bitbucket repository into a mirror bundle first. See `FRC_Readme.md` for full details.
+```bash
+python forensic_repo_collect.py https://github.com/acmecorp/widget-engine.git ./evidence/widget-engine --token <PAT>
+```
+
+### Comparing Two Repositories' Full Commit Histories
+```bash
+python SIPCompare.py history --repoA client_repo.bundle --repoB competitor_repo.bundle --output-dir ./history_analysis --threshold 0.6
+```
+See `python SIPCompare.py history --help` for the full option list, including `--history-mode exact-only` for a fast first screen.
 
 ## Test Installation Script
 
@@ -559,10 +579,10 @@ success_count = 0
 for name, module in dependencies:
     try:
         __import__(module)
-        print(f"✓ {name} - OK")
+        print(f"OK  {name}")
         success_count += 1
     except ImportError as e:
-        print(f"✗ {name} - MISSING ({e})")
+        print(f"MISSING  {name} ({e})")
 
 print("=" * 50)
 print(f"Dependencies installed: {success_count}/{len(dependencies)}")
@@ -591,6 +611,8 @@ Run with:
 python test_setup.py
 ```
 
+Note: having these packages installed confirms SIPCompare will run, but the AI embedding models (`mini`, `graphcodebert`, `codet5`) still need to download their pretrained weights from Hugging Face (`huggingface.co`) the first time each is used. If that host isn't reachable, SIPCompare degrades gracefully to token, structural, and control-flow analysis rather than crashing, but semantic similarity will read `0.0` until the models can download.
+
 ---
 
 # Troubleshooting
@@ -610,20 +632,24 @@ python test_setup.py
 **Solutions**:
 ```bash
 # Reduce parallel workers
-python SIPCompare.py --repoA repo1 --repoB repo2 --parallel 2
+python SIPCompare.py snapshot --repoA repo1 --repoB repo2 --parallel 2
 
 # Use lightweight model
-python SIPCompare.py --repoA repo1 --repoB repo2 --embedding-model mini
+python SIPCompare.py snapshot --repoA repo1 --repoB repo2 --embedding-model mini
 ```
+For history mode, lower `--max-commits-per-side` or `--max-pairs` instead.
 
-### Issue: Tree-sitter installation fails
+### Issue: Tree-sitter installation fails, or `TypeError: __init__() takes exactly 1 argument (2 given)` on startup
+This specific error means `tree-sitter` and `tree-sitter-languages` are mismatched versions, `tree-sitter` releases newer than `0.21.x` change an internal API that `tree-sitter-languages` doesn't yet support.
+
 **Solutions**:
 ```bash
-# Method 1: Upgrade build tools
-pip install --upgrade setuptools wheel
+# Method 1: Pin the compatible versions
+pip install tree-sitter==0.21.3 tree-sitter-languages==1.10.2
 
-# Method 2: Install without cache
-pip install tree-sitter==0.20.4 --no-cache-dir
+# Method 2: Upgrade build tools, then retry
+pip install --upgrade setuptools wheel
+pip install tree-sitter==0.21.3 --no-cache-dir
 
 # Method 3: Install system dependencies (Linux)
 sudo apt install -y python3-dev
@@ -635,14 +661,21 @@ sudo apt install -y python3-dev
 - Check that repositories contain supported file types
 - Use absolute paths
 
+### Issue: "argument command: invalid choice"
+SIPCompare requires a subcommand. Add `snapshot` (compare two codebases now) or `history` (compare full commit histories) right after `SIPCompare.py`:
+```bash
+python SIPCompare.py snapshot --repoA repo1 --repoB repo2
+```
+
 ### Issue: Slow performance on first run
 **Expected Behavior**:
-- First run downloads AI models (1-3 GB)
+- First run downloads AI models (1-3 GB) from Hugging Face
 - Models are cached for subsequent runs
 - **Cache locations**:
   - **Windows**: `C:\Users\[Username]\.cache\huggingface`
   - **macOS**: `~/.cache/huggingface`
   - **Linux**: `~/.cache/huggingface`
+- If Hugging Face isn't reachable (offline or firewalled environment), SIPCompare still runs using token, structural, and control-flow analysis; semantic similarity will read `0.0` until the models can download.
 
 ## Platform-Specific Issues
 
@@ -686,7 +719,7 @@ sudo apt install -y nvidia-driver-535
 
 ### Windows
 - Use SSD storage for better I/O performance
-- Disable Windows Defender real-time scanning for SIPCompare directory
+- Disable Windows Defender real-time scanning for the SIPCompare directory
 - Use Windows Terminal instead of Command Prompt
 
 ### macOS
@@ -698,7 +731,7 @@ sudo apt install -y nvidia-driver-535
 - Use `htop` to monitor system resources
 - Consider using `nice` to adjust process priority:
   ```bash
-  nice -n 10 python SIPCompare.py --repoA repo1 --repoB repo2
+  nice -n 10 python SIPCompare.py snapshot --repoA repo1 --repoB repo2
   ```
 - For servers: Use `screen` or `tmux` for long-running analyses
 
@@ -715,7 +748,3 @@ sudo apt install -y nvidia-driver-535
 - **Storage**: SSD with 20GB+ free space
 - **CPU**: Quad-core 3.0GHz or better
 - **GPU**: NVIDIA GPU with 4GB+ VRAM (optional, for better performance)
-
----
-
-**Setup Complete!** Your system is now configured to run SIPCompare.py successfully across Windows 11, macOS, and Ubuntu Linux. For additional support or advanced configuration, refer to the main SIPCompare documentation.
