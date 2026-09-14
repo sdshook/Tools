@@ -5,38 +5,101 @@ forensic_repo_collect.py
 
 PURPOSE
 -------
-Forensically collects a GitHub repository for expert-witness / litigation use.
+Forensically collects a GitHub or Bitbucket repository for code analysis.
+The collection mechanics (mirror clone, bundle, hash,
+chain-of-custody log) are identical regardless of host, since git itself
+doesn't care which platform it's talking to. The only real difference
+between hosts is how authentication is supplied, which this script detects
+and handles automatically.
 Produces:
-  1. A full mirror clone (all branches, tags, refs, reflog)
+  1. A full mirror clone (all branches, tags, refs)
   2. A single-file git bundle (immutable artifact suitable for evidence)
-  3. SHA-256 hashes of the bundle, computed immediately after creation
+  3. SHA-256 hash of the bundle, computed immediately after creation
   4. A JSON chain-of-custody log with timestamps, hashes, and repo metadata
+
+PLATFORM DETECTION
+-------------------
+By default, the platform is auto-detected from the repository URL's
+hostname (anything containing "github" is treated as GitHub, anything
+containing "bitbucket" is treated as Bitbucket). For self-hosted GitHub
+Enterprise or Bitbucket Server/Data Center instances, where the hostname
+won't contain either name, pass --platform explicitly.
+
+AUTHENTICATION. READ THIS FIRST
+---------------------------------
+GitHub:
+  --token <personal-access-token>
+      Standard GitHub PAT with read access to the repository.
+
+Bitbucket, use ONE of:
+  (a) App Password (Bitbucket Cloud, most common):
+      --username <bitbucket-username> --app-password <app-password>
+      Requires "Repositories: Read" scope only.
+
+  (b) Repository/Project/Workspace Access Token (Bitbucket Cloud, newer):
+      --token <access-token>
+      Passed as "x-token-auth:<token>", no separate username needed.
+
+  (c) Personal Access Token (Bitbucket Server / Data Center, self-hosted):
+      --username <any-non-empty-string> --app-password <personal-access-token>
+      Server/Data Center accepts the PAT as the password field with an
+      arbitrary (often ignored) username; confirm the exact convention with
+      the repository owner's Bitbucket admin, as this can vary by version.
+
+If no credentials are supplied, the script assumes credentials are already
+configured locally (e.g. SSH key or a stored git credential helper) and
+clones as-is.
 
 RUN SYNTAX
 ----------
-    python3 forensic_repo_collect.py <repo_url> <output_dir> [--token TOKEN]
+    python3 forensic_repo_collect.py <repo_url> <output_dir> \\
+        [--platform github|bitbucket] \\
+        [--token TOKEN | --username USER --app-password PASSWORD]
 
-    <repo_url>    HTTPS clone URL of the repository
-                  e.g. https://github.com/ownername/reponame.git
-    <output_dir>  Directory where the mirror, bundle, and logs will be written
-                  (will be created if it does not exist)
-    --token       Optional. A GitHub Personal Access Token with read access,
-                  provided by the repository owner. If omitted,
-                  the script assumes credentials are already configured
-                  (e.g. via git credential manager or SSH key).
+    <repo_url>        HTTPS clone URL of the repository
+                       e.g. https://github.com/ownername/reponame.git
+                       e.g. https://bitbucket.org/workspace/reponame.git
+    <output_dir>       Directory where the mirror, bundle, and logs will be
+                        written (created if it does not exist)
+    --platform          Optional. "github" or "bitbucket". If omitted, the
+                         platform is auto-detected from the URL's hostname;
+                         required for self-hosted instances that don't
+                         contain "github" or "bitbucket" in the hostname.
+    --token             GitHub PAT, or Bitbucket Cloud access token
+    --username          Bitbucket username (used with --app-password)
+    --app-password      Bitbucket App Password or Server/Data Center PAT
 
-EXAMPLE
--------
+EXAMPLES
+--------
+    # GitHub
     python3 forensic_repo_collect.py \\
         https://github.com/acmecorp/widget-engine.git \\
         ./evidence/widget-engine \\
         --token ghp_xxxxxxxxxxxxxxxxxxxx
 
+    # Bitbucket Cloud, App Password
+    python3 forensic_repo_collect.py \\
+        https://bitbucket.org/acmecorp/widget-engine.git \\
+        ./evidence/widget-engine \\
+        --username jdoe --app-password ATBBxxxxxxxxxxxxxxxx
+
+    # Bitbucket Cloud, access token
+    python3 forensic_repo_collect.py \\
+        https://bitbucket.org/acmecorp/widget-engine.git \\
+        ./evidence/widget-engine \\
+        --token BBTKxxxxxxxxxxxxxxxx
+
+    # Self-hosted Bitbucket Server, platform not auto-detectable from hostname
+    python3 forensic_repo_collect.py \\
+        https://git.internal.acmecorp.com/scm/project/widget-engine.git \\
+        ./evidence/widget-engine \\
+        --platform bitbucket --username jdoe --app-password <PAT>
+
 REQUIREMENTS
 ------------
     - Python 3.8+
     - git installed and on PATH
-    - Network access to github.com
+    - Network access to the repository host
 
 NOTE ON CHAIN OF CUSTODY
 -------------------------
@@ -53,6 +116,7 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 
 def run_command(cmd, cwd=None):
@@ -80,35 +144,112 @@ def sha256_of_file(filepath):
     return hasher.hexdigest()
 
 
-def build_authenticated_url(repo_url, token):
+def detect_platform(repo_url):
     """
-    Inject a token into an HTTPS GitHub URL for authenticated cloning,
-    without ever printing or logging the token itself.
+    Auto-detect the hosting platform from the repository URL's hostname.
+    Returns "github", "bitbucket", or None if it can't be determined
+    (e.g. a self-hosted instance with a custom domain), in which case the
+    caller must supply --platform explicitly.
     """
-    if not token:
+    hostname = urlparse(repo_url).hostname or ""
+    hostname = hostname.lower()
+    if "github" in hostname:
+        return "github"
+    if "bitbucket" in hostname:
+        return "bitbucket"
+    return None
+
+
+def build_authenticated_url(repo_url, platform, token=None, username=None, app_password=None):
+    """
+    Inject platform-appropriate credentials into an HTTPS clone URL, without
+    ever printing or logging the credential itself.
+
+    GitHub: token is injected directly as "https://<token>@host/...".
+    Bitbucket with a token: uses the "x-token-auth:<token>@" convention
+      (Bitbucket Cloud repository/project/workspace access tokens).
+    Bitbucket with username + app_password: uses the standard
+      "username:password@" convention (App Passwords, or Server/Data
+      Center Personal Access Tokens depending on server configuration).
+    No credentials supplied: returns the URL unchanged (assumes local
+      credentials are already configured).
+    """
+    if token and (username or app_password):
+        raise ValueError(
+            "Use either --token, or --username/--app-password together, not both."
+        )
+    if username and not app_password:
+        raise ValueError("--username requires --app-password.")
+    if app_password and not username:
+        raise ValueError("--app-password requires --username.")
+
+    if not (token or username or app_password):
         return repo_url
+
     if not repo_url.startswith("https://"):
-        raise ValueError("Token-based auth requires an https:// clone URL.")
-    return repo_url.replace("https://", f"https://{token}@", 1)
+        raise ValueError("Credential-based auth requires an https:// clone URL.")
+
+    if platform == "github":
+        if not token:
+            raise ValueError("GitHub authentication requires --token.")
+        return repo_url.replace("https://", f"https://{token}@", 1)
+
+    if platform == "bitbucket":
+        if token:
+            return repo_url.replace("https://", f"https://x-token-auth:{token}@", 1)
+        return repo_url.replace("https://", f"https://{username}:{app_password}@", 1)
+
+    raise ValueError(
+        f"Cannot apply credentials without a known platform. Got: {platform!r}. "
+        "Pass --platform github or --platform bitbucket explicitly."
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Forensically collect a GitHub repository (mirror clone, bundle, hash)."
+        description="Forensically collect a GitHub or Bitbucket repository (mirror clone, bundle, hash)."
     )
     parser.add_argument("repo_url", help="HTTPS clone URL of the repository")
     parser.add_argument("output_dir", help="Directory to write evidence artifacts into")
     parser.add_argument(
+        "--platform",
+        choices=["github", "bitbucket"],
+        default=None,
+        help="Hosting platform. Auto-detected from the URL hostname if omitted; "
+             "required for self-hosted instances that don't contain "
+             "'github' or 'bitbucket' in the hostname.",
+    )
+    parser.add_argument(
         "--token",
         default=None,
-        help="Optional GitHub Personal Access Token for authentication",
+        help="GitHub Personal Access Token, or Bitbucket Cloud access token",
+    )
+    parser.add_argument(
+        "--username",
+        default=None,
+        help="Bitbucket username (used together with --app-password)",
+    )
+    parser.add_argument(
+        "--app-password",
+        default=None,
+        help="Bitbucket App Password, or Server/Data Center Personal Access Token",
     )
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Timestamp for this collection run (UTC, ISO 8601) — used throughout the
-    # chain-of-custody record so the evidence log matches courtroom-friendly
+    platform = args.platform or detect_platform(args.repo_url)
+    if platform is None and (args.token or args.username or args.app_password):
+        print(
+            "ERROR: could not auto-detect the hosting platform from the URL, "
+            "and credentials were provided. Pass --platform github or "
+            "--platform bitbucket explicitly.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Timestamp for this collection run (UTC, ISO 8601), used throughout the
+    # chain-of-custody record so the evidence log follows standard forensic
     # timestamp conventions.
     collection_start = datetime.now(timezone.utc).isoformat()
 
@@ -118,18 +259,24 @@ def main():
     bundle_path = os.path.abspath(os.path.join(args.output_dir, "repo_evidence.bundle"))
     log_path = os.path.join(args.output_dir, "chain_of_custody.json")
 
-    print(f"[{collection_start}] Starting forensic collection...")
+    print(f"[{collection_start}] Starting forensic collection ({platform or 'unspecified platform'})...")
 
     # Step 1: Authenticate + full mirror clone.
-    # --mirror captures ALL refs: branches, tags, and the reflog — this is the
-    # forensically complete equivalent of "everything git knows about this repo",
-    # not just the commit history shown by `git log`.
-    clone_url = build_authenticated_url(args.repo_url, args.token)
+    # --mirror captures ALL refs: branches and tags, the forensically
+    # complete equivalent of "everything git knows about this repo", not
+    # just the commit history shown by `git log`.
+    clone_url = build_authenticated_url(
+        args.repo_url,
+        platform=platform,
+        token=args.token,
+        username=args.username,
+        app_password=args.app_password,
+    )
     print("Cloning full mirror (branches, tags, refs)...")
     run_command(["git", "clone", "--mirror", clone_url, mirror_path])
 
     # Step 2: Package the mirror into a single-file bundle.
-    # A bundle is a single immutable file — easier to hash, store, and
+    # A bundle is a single immutable file, easier to hash, store, and
     # transfer than a directory of git internals.
     print("Creating git bundle (single-file evidentiary artifact)...")
     run_command(["git", "bundle", "create", bundle_path, "--all"], cwd=mirror_path)
@@ -153,11 +300,24 @@ def main():
     except RuntimeError:
         ref_count = "UNKNOWN"
 
+    # Determine which auth method was used, for the record (never the
+    # credential itself).
+    if args.token and platform == "github":
+        auth_method = "GitHub Personal Access Token"
+    elif args.token and platform == "bitbucket":
+        auth_method = "Bitbucket access token (x-token-auth)"
+    elif args.username and args.app_password:
+        auth_method = "Bitbucket username + app password / PAT"
+    else:
+        auth_method = "Pre-configured local credentials (SSH key or credential helper)"
+
     # Step 5: Write the chain-of-custody log.
-    # This JSON file is the record you'd attach to your expert declaration:
+    # This JSON file is the forensic record documenting the collection:
     # who collected it, when, from where, and the hash that proves integrity.
     chain_of_custody = {
         "repository_url": args.repo_url,
+        "repository_platform": platform or "unspecified",
+        "authentication_method": auth_method,
         "collection_start_utc": collection_start,
         "hash_computed_utc": hash_timestamp,
         "bundle_file": os.path.abspath(bundle_path),
@@ -177,6 +337,7 @@ def main():
         json.dump(chain_of_custody, f, indent=2)
 
     print("\nCollection complete.")
+    print(f"  Platform:          {platform or 'unspecified'}")
     print(f"  Bundle:            {bundle_path}")
     print(f"  SHA-256:           {bundle_hash}")
     print(f"  Chain-of-custody:  {log_path}")
