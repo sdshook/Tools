@@ -1,0 +1,70 @@
+# net-bandit configuration. Every key is optional; omitted keys use the defaults.
+
+[general]
+data_dir = "C:\\ProgramData\\net-bandit"   # SQLite store, signing key, alerts.jsonl
+poll_interval = 2.0                      # seconds between collector polls
+
+[llm]
+analyze_model = "claude-sonnet-5-5"      # misses: full analysis + entry compilation
+verify_model = "claude-haiku-5-5"        # differential checks and uncompilable classes
+max_tokens = 2000
+api_key_file = ""                        # e.g. C:\\ProgramData\\net-bandit\\api.key (ACL: SYSTEM + Administrators)
+daily_token_budget = 2000000             # beyond this, misses are logged as "unknown" for review
+diff_sample_rate_pending = 0.25          # share of pending-entry hits re-checked
+price_input_per_mtok = 0.0               # fill in from current API pricing for cost estimates
+price_output_per_mtok = 0.0
+
+[cache]
+approval_mode = "manual"                 # "manual": entries start pending until you approve; "auto"
+confidence_threshold = 0.7               # entry results below this are treated as misses
+no_compile_retry_minutes = 60            # after the model declines to compile a class, use cheap verify calls
+demote_min_disagreements = 2
+demote_disagreement_rate = 0.2
+
+[spotcheck]                              # adaptive re-checking of approved entries' cache hits
+mode = "bandit"                          # bandit (Thompson sampling) | fixed
+fixed_rate = 0.05                        # used when mode = "fixed"
+floor = 0.01                             # never re-check less than 1% of an entry's hits
+risk_floor = 0.05                        # floor for risky classes (non-benign, unsigned, privileged, masquerade-shaped)
+ceiling = 0.5
+prior_checks = 10                        # how strongly to hold the starting belief
+prior_disagree_rate = 0.05               # starting belief: 5% disagreement, same as fixed mode
+half_life_days = 7                       # old evidence fades, so checks slowly rise again
+gain = 1.0
+
+[eventlog]
+target = "security"                      # security | application | none
+fallback_to_application = false          # if the Security log can't be written, use Application instead
+source = "net-bandit"
+register_source = true                   # installs the event source (needs elevation once)
+log_novelty_above = 0.9                  # also log benign events this novel (0 = off)
+
+[isolation]                              # where model-written checks execute (never in the agent itself)
+mode = "auto"                            # auto (AppContainer, then restricted token) | appcontainer | restricted
+allow_unisolated = false                 # if no sandbox works, disable cached checks rather than run them unsandboxed
+timeout_ms = 1000                        # a check that takes longer gets its worker killed and restarted
+worker_memory_mb = 256
+max_restarts_per_minute = 10
+
+[resources]
+background_mode = true                   # PROCESS_MODE_BACKGROUND_BEGIN: low CPU, I/O and memory priority
+low_memory_priority = true               # our pages are trimmed before the OS's and apps'
+eco_qos = true                           # hybrid CPUs: steer the agent to efficiency cores
+cpu_affinity = []                        # e.g. [14, 15] to confine the agent to two logical CPUs
+cpu_rate_cap_percent = 5.0               # job-object hard cap on CPU use (0 = off)
+memory_limit_mb = 512                    # job-object memory ceiling (0 = off)
+working_set_max_mb = 0                   # hard working-set cap, e.g. 128 (0 = off)
+decision_retention_days = 14             # prune old decision records daily
+self_report_minutes = 10                 # log the agent's working set and CPU time
+
+[sources]
+event_log = true                         # wevtapi.dll subscriptions
+tcp_table = true                         # iphlpapi.dll GetExtendedTcpTable (set false if Sysmon EID 3 covers you)
+process_snapshot = "auto"                # Toolhelp32 polling: auto (only without Sysmon/4688) | always | never
+signatures = true                        # wintrust.dll Authenticode + catalog lookups
+skip_baseline = true                     # ignore processes/sockets that already exist at startup
+
+# Override the default channels and XPath queries if needed:
+# [sources.channels]
+# "Security" = "*[System[(EventID=4688 or EventID=4625)]]"
+# "Microsoft-Windows-Sysmon/Operational" = "*[System[(EventID=1)]]"
